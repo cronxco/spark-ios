@@ -1,0 +1,7 @@
+[defaults]
+url = https://sentry.cronx.co/
+org = cronx
+project = spark-ios
+
+[auth]
+# Populate via SENTRY_AUTH_TOKEN in CI / local shell. Never commit.

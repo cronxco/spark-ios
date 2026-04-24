@@ -1,0 +1,75 @@
+name: iOS CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.0.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "$DEVELOPER_DIR"
+          xcodebuild -version
+          swift --version
+
+      - name: Install tuist
+        run: |
+          curl -Ls https://install.tuist.io | bash
+
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Developer/Xcode/DerivedData
+          key: ${{ runner.os }}-deriveddata-${{ hashFiles('Project.swift', 'Packages/**/Package.swift') }}
+          restore-keys: |
+            ${{ runner.os }}-deriveddata-
+
+      - name: Cache SPM packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            ~/.swiftpm
+          key: ${{ runner.os }}-spm-${{ hashFiles('Packages/**/Package.swift', 'Packages/**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Generate Xcode project
+        run: tuist generate --no-open
+
+      - name: Build + test SparkKit
+        working-directory: Packages/SparkKit
+        run: swift test --parallel
+
+      - name: Build + test SparkApp
+        run: |
+          xcodebuild \
+            -workspace Spark.xcworkspace \
+            -scheme SparkApp \
+            -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            test \
+          | xcbeautify --renderer github-actions || exit ${PIPESTATUS[0]}
+
+      - name: Upload xcresult on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcresult-${{ github.run_id }}
+          path: ~/Library/Developer/Xcode/DerivedData/**/Logs/Test/*.xcresult
