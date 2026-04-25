@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import Sentry
 import SparkKit
 import SwiftData
 
@@ -72,6 +73,7 @@ final class AppModel {
             lastError = nil
         } catch {
             lastError = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+            SentrySDK.capture(error: error)
         }
     }
 

@@ -18,6 +18,8 @@ public final class AuthenticationService: NSObject, Sendable {
     private let tokenStore: KeychainTokenStore
     private let apiClient: APIClient
     private let callbackScheme = "spark"
+    // Retained for the duration of the OAuth web session; released on completion.
+    nonisolated(unsafe) private var activeSession: ASWebAuthenticationSession?
 
     public init(
         environment: APIEnvironment = .current(),
@@ -41,7 +43,8 @@ public final class AuthenticationService: NSObject, Sendable {
             let session = ASWebAuthenticationSession(
                 url: authorizeURL,
                 callbackURLScheme: callbackScheme
-            ) { url, error in
+            ) { [weak self] url, error in
+                self?.activeSession = nil
                 if let error {
                     if (error as NSError).code == ASWebAuthenticationSessionError.canceledLogin.rawValue {
                         continuation.resume(throwing: AuthenticationError.cancelled)
@@ -58,6 +61,7 @@ public final class AuthenticationService: NSObject, Sendable {
             }
             session.presentationContextProvider = AnchorProvider(anchor: presentationAnchor)
             session.prefersEphemeralWebBrowserSession = false
+            activeSession = session
             session.start()
         }
 
