@@ -2,7 +2,7 @@ import Foundation
 
 public enum AuthEndpoint {
     /// POST /oauth/token — exchange an authorisation code for an access token.
-    /// Note: this endpoint lives at the root of the site, not under /api/v1/mobile.
+    /// Note: this endpoint lives under /api, not /api/v1/mobile.
     public static func exchange(code: String, verifier: String) -> Endpoint<TokenResponse> {
         let body: [String: String] = [
             "grant_type": "authorization_code",

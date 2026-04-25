@@ -16,8 +16,8 @@ public enum APIError: Error, Sendable {
 /// - automatic 401 → token refresh → retry once
 /// - exponential backoff on transport errors (0.5s / 1s / 2s)
 ///
-/// Auth URLs (the `/oauth/*` endpoints) live at the site root, not under the
-/// mobile API prefix — callers pass `absoluteBase` to target them.
+/// Auth URLs (the `/oauth/*` endpoints) live under `/api`, not under the
+/// mobile API prefix `/api/v1/mobile` — callers pass `absoluteBase` to target them.
 public actor APIClient {
     private let environment: APIEnvironment
     private let session: URLSession
@@ -49,7 +49,7 @@ public actor APIClient {
         try await perform(endpoint, absoluteBase: false, allowRefresh: true)
     }
 
-    /// Hit an endpoint whose path is rooted at the site (not `/api/v1/mobile`).
+    /// Hit an endpoint whose path is rooted at `/api` (not `/api/v1/mobile`).
     /// Used for the OAuth token endpoints.
     public func requestSiteRoot<Response>(_ endpoint: Endpoint<Response>) async throws -> Response {
         try await perform(endpoint, absoluteBase: true, allowRefresh: false)
@@ -145,8 +145,7 @@ public actor APIClient {
         if absoluteBase {
             base = environment.baseURL
                 .deletingLastPathComponent() // /api/v1
-                .deletingLastPathComponent() // /api
-                .deletingLastPathComponent() // site root
+                .deletingLastPathComponent() // /api (oauth lives here, not at site root)
         } else {
             base = environment.baseURL
         }
