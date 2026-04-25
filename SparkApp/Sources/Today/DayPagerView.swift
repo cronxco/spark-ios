@@ -18,19 +18,10 @@ struct DayPagerView: View {
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
-            .navigationTitle(dates.first(where: { $0.offset == selectedOffset })?.label ?? "Today")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        Task { await appModel.signOut() }
-                    } label: {
-                        Image(systemName: "rectangle.portrait.and.arrow.right")
-                    }
-                }
-            }
+            .ignoresSafeArea(edges: .top)
+            .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: EventRoute.self) { route in
-                EventDetailPlaceholderView(eventId: route.id)
+                EventDetailView(eventId: route.id)
             }
         }
         .onChange(of: appModel.pendingRoute) { _, route in
@@ -67,20 +58,6 @@ struct DayPagerView: View {
 
 struct EventRoute: Hashable {
     let id: String
-}
-
-struct EventDetailPlaceholderView: View {
-    let eventId: String
-
-    var body: some View {
-        EmptyState(
-            systemImage: "sparkles",
-            title: "Event detail",
-            message: "Event \(eventId) — detail view lands in Phase 2."
-        )
-        .navigationTitle("Event")
-        .navigationBarTitleDisplayMode(.inline)
-    }
 }
 
 private struct DayKey: Identifiable, Hashable {

@@ -9,6 +9,7 @@ struct SparkApp: App {
     @State private var model = AppModel.shared
 
     init() {
+        SparkFonts.registerBundledFonts()
         SparkObservability.start()
     }
 

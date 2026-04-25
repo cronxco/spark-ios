@@ -202,7 +202,16 @@ let sparkApp: Target = .target(
         .target(name: "SparkIntents"),
         .target(name: "SparkNotificationService"),
     ],
-    settings: sharedSettings(bundleId: bundleIdBase)
+    settings: .settings(
+        base: baseSettings.merging([
+            "PRODUCT_BUNDLE_IDENTIFIER": .string(bundleIdBase),
+            "ASSETCATALOG_COMPILER_APPICON_NAME": "SparkIcon",
+        ]),
+        configurations: [
+            .debug(name: "Debug"),
+            .release(name: "Release"),
+        ]
+    )
 )
 
 let sparkWidgets: Target = .target(

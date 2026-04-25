@@ -17,7 +17,10 @@ let package = Package(
         .target(
             name: "SparkUI",
             dependencies: ["SparkKit"],
-            path: "Sources/SparkUI"
+            path: "Sources/SparkUI",
+            resources: [
+                .process("Resources"),
+            ]
         ),
         .testTarget(
             name: "SparkUITests",

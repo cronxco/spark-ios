@@ -6,40 +6,59 @@ import SwiftUI
 struct TodayView: View {
     let date: Date
     @Environment(AppModel.self) private var appModel
-    @Environment(\.modelContext) private var modelContext
     @State private var viewModel: TodayViewModel?
+    @State private var showCheckIn = false
 
     var body: some View {
+        let snapshot = TodaySnapshot(summary: viewModel?.cached, date: date)
+
         ScrollView {
             VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-                header
+                hero(snapshot: snapshot)
 
-                if let summary = viewModel?.cached {
-                    content(for: summary)
-                } else if viewModel?.networkState == .loading {
-                    loadingPlaceholders
-                } else if case .error(let message) = viewModel?.networkState {
-                    EmptyState(
-                        systemImage: "exclamationmark.triangle.fill",
-                        title: "Couldn't load today",
-                        message: message,
-                        actionTitle: "Retry",
-                        action: { Task { await viewModel?.refresh() } }
-                    )
-                } else {
-                    loadingPlaceholders
+                anomalyPill(for: snapshot)
+
+                if let health = snapshot.health, health.hasSleep {
+                    SleepCard(health: health)
                 }
 
-                Text("History heatmap coming soon")
-                    .font(SparkTypography.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, SparkSpacing.xl)
+                if shouldShowActivityMoneyRow(snapshot) {
+                    HStack(alignment: .top, spacing: SparkSpacing.md) {
+                        if let activity = snapshot.activity, activity.hasAny {
+                            ActivityCard(activity: activity)
+                        }
+                        if let money = snapshot.money, money.hasAny {
+                            MoneyCard(money: money)
+                        }
+                    }
+                }
+
+                if let media = snapshot.media, media.hasAny {
+                    MediaCard(media: media)
+                }
+
+                if let next = snapshot.knowledge?.nextCalendarEvent {
+                    UpNextCard(event: next)
+                }
+
+                CheckInCard(status: snapshot.checkInStatus) {
+                    showCheckIn = true
+                }
+
+                if !snapshot.hasAnyDomainData {
+                    loadingOrEmptyState
+                }
+
+                HeatmapSection(rows: snapshot.heatmapRows)
+                    .padding(.top, SparkSpacing.md)
             }
-            .padding(SparkSpacing.lg)
+            .padding(.horizontal, SparkSpacing.lg)
+            .padding(.vertical, SparkSpacing.xl)
         }
-        .background(Color.sparkSurface.ignoresSafeArea())
+        .scrollContentBackground(.hidden)
+        .background(TodayBackground(snapshot.timeOfDay))
         .refreshable { await viewModel?.refresh() }
+        .sheet(isPresented: $showCheckIn) { CheckInPlaceholderView() }
         .task(id: date) {
             if viewModel == nil {
                 viewModel = TodayViewModel(
@@ -52,133 +71,119 @@ struct TodayView: View {
         }
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.xs) {
-            Text(Greeting.for(date: date))
-                .font(SparkTypography.titleStrong)
-            Text(Self.dateLabel.string(from: date))
-                .font(SparkTypography.bodyStrong)
+    // MARK: - Hero
+
+    private func hero(snapshot: TodaySnapshot) -> some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+            Text(snapshot.dateLabel.uppercased())
+                .font(SparkTypography.monoSmall)
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+
+            Text(heroTitle(snapshot: snapshot))
+                .font(SparkFonts.display(.largeTitle, weight: .bold))
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+
+            if let subtitle = heroSubtitle(snapshot: snapshot) {
+                Text(subtitle)
+                    .font(SparkTypography.body)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func heroTitle(snapshot: TodaySnapshot) -> String {
+        if Calendar.current.isDateInToday(date) {
+            return "\(snapshot.timeOfDay.greeting),\n\(firstName)."
+        } else if Calendar.current.isDateInYesterday(date) {
+            return "Yesterday."
+        } else {
+            return snapshot.dateLabel
         }
     }
 
+    private var firstName: String {
+        // TODO: source from /me endpoint when Settings → Profile lands.
+        "Will"
+    }
+
+    private func heroSubtitle(snapshot: TodaySnapshot) -> String? {
+        var parts: [String] = []
+        if let dur = snapshot.health?.sleepDurationMinutes {
+            parts.append("slept \(dur / 60)h \(dur % 60)m")
+        }
+        if let steps = snapshot.activity?.steps {
+            parts.append("walked \(formatSteps(steps)) steps")
+        }
+        if let display = snapshot.money?.spentTodayDisplay {
+            parts.append("spent \(display)")
+        }
+        guard !parts.isEmpty else { return nil }
+        return "You " + parts.joined(separator: ", ") + " so far."
+    }
+
+    private func formatSteps(_ count: Int) -> String {
+        if count >= 1_000 {
+            return String(format: "%.1fk", Double(count) / 1_000)
+        }
+        return String(count)
+    }
+
+    // MARK: - Anomaly pill
+
     @ViewBuilder
-    private func content(for summary: DaySummary) -> some View {
-        if !summary.sections.hasAnyContent {
+    private func anomalyPill(for snapshot: TodaySnapshot) -> some View {
+        if snapshot.anomalies.isEmpty {
+            StatusPill(.ok, message: "Baselines holding", trailing: "0 anomalies")
+        } else {
+            StatusPill(
+                .warning,
+                message: snapshot.anomalies.first?.description ?? "Anomaly detected",
+                trailing: "\(snapshot.anomalies.count) anomal\(snapshot.anomalies.count == 1 ? "y" : "ies")"
+            )
+        }
+    }
+
+    private func shouldShowActivityMoneyRow(_ snapshot: TodaySnapshot) -> Bool {
+        (snapshot.activity?.hasAny ?? false) || (snapshot.money?.hasAny ?? false)
+    }
+
+    // MARK: - Loading / empty
+
+    @ViewBuilder
+    private var loadingOrEmptyState: some View {
+        switch viewModel?.networkState {
+        case .loading:
+            VStack(spacing: SparkSpacing.md) {
+                LoadingShimmerCard()
+                LoadingShimmerCard()
+            }
+        case .error(let msg):
+            EmptyState(
+                systemImage: "exclamationmark.triangle.fill",
+                title: "Couldn't load today",
+                message: msg,
+                actionTitle: "Retry"
+            ) { Task { await viewModel?.refresh() } }
+        default:
             EmptyState(
                 systemImage: "sparkles",
                 title: "Nothing yet for today",
                 message: "We'll fill this in as integrations sync."
             )
-        } else {
-            LazyVStack(spacing: SparkSpacing.md) {
-                ForEach(domainRows(from: summary.sections)) { row in
-                    MetricCard(
-                        title: row.title,
-                        value: row.value,
-                        unit: row.unit,
-                        caption: row.caption
-                    )
-                }
-            }
-
-            if !summary.anomalies.isEmpty {
-                VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                    Text("Anomalies")
-                        .font(SparkTypography.titleStrong)
-                    ForEach(summary.anomalies) { anomaly in
-                        EventRow(
-                            title: anomaly.metric ?? "Anomaly",
-                            subtitle: anomaly.description,
-                            timestamp: anomaly.detectedAt ?? .now,
-                            iconSystemName: "exclamationmark.triangle.fill",
-                            tintColor: .sparkWarning
-                        )
-                    }
-                }
-                .padding(.top, SparkSpacing.md)
-            }
-        }
-    }
-
-    private var loadingPlaceholders: some View {
-        VStack(spacing: SparkSpacing.md) {
-            LoadingShimmerCard()
-            LoadingShimmerCard()
-            LoadingShimmerCard()
-        }
-    }
-
-    private func domainRows(from sections: DaySummary.Sections) -> [DomainRow] {
-        let all: [(String, [String: AnyCodable]?)] = [
-            ("Health", sections.health),
-            ("Activity", sections.activity),
-            ("Money", sections.money),
-            ("Media", sections.media),
-            ("Knowledge", sections.knowledge),
-        ]
-        return all.compactMap { (title, payload) -> DomainRow? in
-            guard let payload, !payload.isEmpty else { return nil }
-            let summaryLine = payload.compactMap { key, value -> String? in
-                guard let rendered = value.renderForCard() else { return nil }
-                return "\(key.replacingOccurrences(of: "_", with: " ")): \(rendered)"
-            }.prefix(3).joined(separator: " · ")
-            return DomainRow(
-                id: title,
-                title: title,
-                value: payload.count.description,
-                unit: payload.count == 1 ? "signal" : "signals",
-                caption: summaryLine.isEmpty ? nil : summaryLine
-            )
-        }
-    }
-
-    private struct DomainRow: Identifiable {
-        let id: String
-        let title: String
-        let value: String
-        let unit: String?
-        let caption: String?
-    }
-
-    private static let dateLabel: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "EEEE, d MMM"
-        return f
-    }()
-}
-
-private enum Greeting {
-    static func `for`(date: Date) -> String {
-        let hour = Calendar.current.component(.hour, from: date)
-        switch hour {
-        case 5 ..< 12: return "Good morning"
-        case 12 ..< 18: return "Good afternoon"
-        case 18 ..< 23: return "Good evening"
-        default: return "Hello"
         }
     }
 }
 
-private extension DaySummary.Sections {
-    var hasAnyContent: Bool {
-        [health, activity, money, media, knowledge]
-            .contains { ($0?.isEmpty == false) }
-    }
-}
-
-private extension AnyCodable {
-    /// Lightweight renderer so we can pull a short display string out of the
-    /// dynamic-shape sections payload without a full typed model (Phase 2).
-    func renderForCard() -> String? {
-        switch value {
-        case .null: return nil
-        case .bool(let v): return v ? "yes" : "no"
-        case .int(let v): return String(v)
-        case .double(let v): return String(format: "%.1f", v)
-        case .string(let v): return v
-        case .array(let v): return v.isEmpty ? nil : "\(v.count) items"
-        case .object: return nil
-        }
+private extension TodaySnapshot {
+    var hasAnyDomainData: Bool {
+        (health?.hasSleep ?? false)
+            || (activity?.hasAny ?? false)
+            || (money?.hasAny ?? false)
+            || (media?.hasAny ?? false)
+            || (knowledge?.hasAny ?? false)
     }
 }

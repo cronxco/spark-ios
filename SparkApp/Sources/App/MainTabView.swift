@@ -12,12 +12,20 @@ struct MainTabView: View {
                 .tabItem { Label("Today", systemImage: "sun.max.fill") }
                 .tag(Tab.today)
 
-            ComingSoonTab(title: "Timeline", systemImage: "clock")
-                .tabItem { Label("Timeline", systemImage: "clock") }
-                .tag(Tab.timeline)
+            ComingSoonTab(title: "Map", systemImage: "map")
+                .tabItem { Label("Map", systemImage: "map") }
+                .tag(Tab.map)
 
-            ComingSoonTab(title: "Settings", systemImage: "gear")
-                .tabItem { Label("Settings", systemImage: "gear") }
+            ComingSoonTab(title: "Search", systemImage: "magnifyingglass")
+                .tabItem { Label("Search", systemImage: "magnifyingglass") }
+                .tag(Tab.search)
+
+            ComingSoonTab(title: "Notifications", systemImage: "bell")
+                .tabItem { Label("Inbox", systemImage: "bell") }
+                .tag(Tab.notifications)
+
+            SettingsPlaceholderView()
+                .tabItem { Label("Settings", systemImage: "gearshape") }
                 .tag(Tab.settings)
         }
         .onChange(of: model.pendingRoute) { _, new in
@@ -26,7 +34,9 @@ struct MainTabView: View {
         }
     }
 
-    enum Tab: Hashable { case today, timeline, settings }
+    enum Tab: Hashable {
+        case today, map, search, notifications, settings
+    }
 }
 
 private struct ComingSoonTab: View {
