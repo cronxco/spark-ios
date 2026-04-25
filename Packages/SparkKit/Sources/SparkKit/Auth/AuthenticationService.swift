@@ -18,8 +18,11 @@ public final class AuthenticationService: NSObject, Sendable {
     private let tokenStore: KeychainTokenStore
     private let apiClient: APIClient
     private let callbackScheme = "spark"
-    // Retained for the duration of the OAuth web session; released on completion.
+    // Both retained for the duration of the OAuth web session; released on completion.
     nonisolated(unsafe) private var activeSession: ASWebAuthenticationSession?
+    // presentationContextProvider is a weak property on ASWebAuthenticationSession, so we must
+    // hold a strong reference here or it is deallocated before start() is called.
+    nonisolated(unsafe) private var activeAnchorProvider: AnchorProvider?
 
     public init(
         environment: APIEnvironment = .current(),
@@ -45,6 +48,7 @@ public final class AuthenticationService: NSObject, Sendable {
                 callbackURLScheme: callbackScheme
             ) { [weak self] url, error in
                 self?.activeSession = nil
+                self?.activeAnchorProvider = nil
                 if let error {
                     if (error as NSError).code == ASWebAuthenticationSessionError.canceledLogin.rawValue {
                         continuation.resume(throwing: AuthenticationError.cancelled)
@@ -59,8 +63,10 @@ public final class AuthenticationService: NSObject, Sendable {
                 }
                 continuation.resume(returning: url)
             }
-            session.presentationContextProvider = AnchorProvider(anchor: presentationAnchor)
+            let anchorProvider = AnchorProvider(anchor: presentationAnchor)
+            session.presentationContextProvider = anchorProvider
             session.prefersEphemeralWebBrowserSession = false
+            activeAnchorProvider = anchorProvider
             activeSession = session
             session.start()
         }
