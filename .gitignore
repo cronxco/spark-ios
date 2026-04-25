@@ -23,6 +23,7 @@ Package.resolved
 # Local env / secrets
 .env
 .env.local
+docs/plans
 
 # macOS
 .DS_Store

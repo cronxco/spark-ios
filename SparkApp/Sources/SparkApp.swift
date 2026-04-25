@@ -24,22 +24,38 @@ struct SparkApp: App {
 }
 
 enum SparkObservability {
-    static let dsn = "https://ef59ff58e715b792543b367d5dcc8748@sentry.cronx.co/10"
+    static let dsn = "https://1583f3671989ff49f2e578e5cef8ace9@sentry.cronx.co/5"
 
     static func start() {
         SentrySDK.start { options in
             options.dsn = dsn
             options.environment = APIEnvironment.current().name
             options.releaseName = releaseName()
+
+            // Error monitoring
+            options.enableCrashHandler = true
+            options.enableWatchdogTerminationTracking = true
+            options.attachScreenshot = true
+            options.attachViewHierarchy = true
+            options.enableTimeToFullDisplayTracing = true
+
+            // Logging (captures OSLog output)
+            options.enableLogs = true
+
             #if DEBUG
             options.debug = true
             options.tracesSampleRate = 1.0
+            options.configureProfiling = {
+                $0.sessionSampleRate = 1.0
+                $0.lifecycle = .trace
+            }
             #else
             options.tracesSampleRate = 0.2
+            options.configureProfiling = {
+                $0.sessionSampleRate = 0.1
+                $0.lifecycle = .trace
+            }
             #endif
-            options.attachScreenshot = true
-            options.attachViewHierarchy = false
-            options.enableTimeToFullDisplayTracing = true
         }
     }
 
