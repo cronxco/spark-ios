@@ -6,7 +6,7 @@ public enum APIError: Error, Sendable {
     case transport(Error)
     case unauthorized
     case notModified
-    case httpStatus(Int, Data?)
+    case httpStatus(Int, Data?, URL)
     case decoding(Error)
     case noData
 }
@@ -101,7 +101,7 @@ public actor APIClient {
         }
 
         guard (200..<300).contains(http.statusCode) else {
-            throw APIError.httpStatus(http.statusCode, data)
+            throw APIError.httpStatus(http.statusCode, data, url)
         }
 
         if let etag = http.value(forHTTPHeaderField: "ETag") {
@@ -143,22 +143,48 @@ public actor APIClient {
     private func buildURL<Response>(endpoint: Endpoint<Response>, absoluteBase: Bool) throws -> URL {
         let base: URL
         if absoluteBase {
-            base = environment.baseURL
-                .deletingLastPathComponent() // /api/v1
-                .deletingLastPathComponent() // /api
-                .deletingLastPathComponent() // site root
+            base = oauthSiteRootURL()
         } else {
             base = environment.baseURL
         }
         guard var components = URLComponents(url: base, resolvingAgainstBaseURL: false) else {
             throw APIError.invalidURL
         }
-        components.path += endpoint.path
+        components.path = joinedPath(basePath: components.path, endpointPath: endpoint.path)
         if !endpoint.query.isEmpty {
             components.queryItems = endpoint.query
         }
         guard let url = components.url else { throw APIError.invalidURL }
         return url
+    }
+
+    private func oauthSiteRootURL() -> URL {
+        guard var components = URLComponents(
+            url: environment.oauthAuthorizeURL,
+            resolvingAgainstBaseURL: false
+        ) else {
+            return environment.baseURL
+        }
+        components.path = "/"
+        components.query = nil
+        components.fragment = nil
+        return components.url ?? environment.baseURL
+    }
+
+    private func joinedPath(basePath: String, endpointPath: String) -> String {
+        let normalizedBase = basePath == "/" ? "" : basePath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let normalizedEndpoint = endpointPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+
+        if normalizedBase.isEmpty && normalizedEndpoint.isEmpty {
+            return "/"
+        }
+        if normalizedBase.isEmpty {
+            return "/\(normalizedEndpoint)"
+        }
+        if normalizedEndpoint.isEmpty {
+            return "/\(normalizedBase)"
+        }
+        return "/\(normalizedBase)/\(normalizedEndpoint)"
     }
 }
 

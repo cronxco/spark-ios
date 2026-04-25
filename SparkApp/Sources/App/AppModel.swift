@@ -73,6 +73,9 @@ final class AppModel {
             lastError = nil
         } catch {
             lastError = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+            if case let APIError.httpStatus(status, _, url) = error {
+                SentrySDK.capture(message: "Auth sign-in HTTP error \(status) at \(url.absoluteString)")
+            }
             SentrySDK.capture(error: error)
         }
     }
