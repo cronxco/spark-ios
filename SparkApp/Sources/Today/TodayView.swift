@@ -58,7 +58,14 @@ struct TodayView: View {
         .scrollContentBackground(.hidden)
         .background(TodayBackground(snapshot.timeOfDay))
         .refreshable { await viewModel?.refresh() }
-        .sheet(isPresented: $showCheckIn) { CheckInPlaceholderView() }
+        .sheet(isPresented: $showCheckIn) {
+            let snapshot = TodaySnapshot(summary: viewModel?.cached, date: date)
+            if case .pending(let slot) = snapshot.checkInStatus {
+                CheckInModalView(slot: slot.rawValue, date: date)
+            } else {
+                CheckInModalView(slot: SparkTimeOfDay.from(date: .now).rawValue, date: date)
+            }
+        }
         .task(id: date) {
             if viewModel == nil {
                 viewModel = TodayViewModel(

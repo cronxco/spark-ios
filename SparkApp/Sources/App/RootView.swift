@@ -4,6 +4,9 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppModel.self) private var model
+    @State private var onboardingComplete: Bool = {
+        UserDefaults(suiteName: "group.co.cronx.spark")?.bool(forKey: "onboarding.completed") == true
+    }()
 
     var body: some View {
         Group {
@@ -12,9 +15,13 @@ struct RootView: View {
                 ProgressView()
                     .task { await model.bootstrap() }
             case .loggedOut:
-                LoginView()
+                OnboardingFlow(isComplete: $onboardingComplete)
             case .loggedIn:
-                MainTabView()
+                if onboardingComplete {
+                    MainTabView()
+                } else {
+                    OnboardingFlow(isComplete: $onboardingComplete)
+                }
             }
         }
         .onOpenURL(perform: handle(url:))
@@ -24,7 +31,7 @@ struct RootView: View {
         guard let link = DeepLink.parse(url) else { return }
         switch link {
         case .authCallback:
-            break // ASWebAuthenticationSession owns the callback.
+            break
         case .today(let date):
             model.pendingRoute = .today(date: date)
         case .day(let date):
