@@ -10,7 +10,15 @@ let package = Package(
         .target(
             name: "SparkHealth",
             dependencies: ["SparkKit"],
-            path: "Sources/SparkHealth"
+            path: "Sources/SparkHealth",
+            linkerSettings: [
+                .linkedFramework("HealthKit"),
+            ]
+        ),
+        .testTarget(
+            name: "SparkHealthTests",
+            dependencies: ["SparkHealth"],
+            path: "Tests/SparkHealthTests"
         ),
     ]
 )

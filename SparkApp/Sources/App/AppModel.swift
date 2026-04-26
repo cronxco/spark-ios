@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import Sentry
+import SparkHealth
 import SparkKit
 import SwiftData
 
@@ -45,6 +46,7 @@ final class AppModel {
     let etagCache: ETagCache
     let apiClient: APIClient
     let authService: AuthenticationService
+    let healthPermissions = HealthKitPermissionManager.shared
 
     var session: SessionState = .unknown
     var lastError: String?
@@ -62,12 +64,20 @@ final class AppModel {
     }
 
     func bootstrap() async {
-        if await tokenStore.accessToken() != nil {
+        if let token = await tokenStore.accessToken() {
             session = .loggedIn
             await registerDevice()
+            configureHealthUploader(accessToken: token)
         } else {
             session = .loggedOut
         }
+    }
+
+    private func configureHealthUploader(accessToken: String) {
+        HealthSampleUploader.shared.configure(
+            environment: APIEnvironment.current(),
+            accessToken: accessToken
+        )
     }
 
     private func registerDevice() async {

@@ -1,4 +1,5 @@
 import Sentry
+import SparkHealth
 import SparkKit
 import SparkUI
 import SwiftData
@@ -6,6 +7,7 @@ import SwiftUI
 
 @main
 struct SparkApp: App {
+    @UIApplicationDelegateAdaptor(SparkAppDelegate.self) var appDelegate
     @State private var model = AppModel.shared
 
     init() {
@@ -20,7 +22,24 @@ struct SparkApp: App {
                 .modelContainer(model.container)
                 .tint(.sparkAccent)
                 .sparkDynamicTypeClamp()
+                .task(id: model.session) {
+                    if model.session == .loggedIn {
+                        HealthKitObserver.shared.startObserving()
+                    }
+                }
         }
+    }
+}
+
+/// Temporary AppDelegate adaptor. Handles background URLSession events for
+/// HealthKit sample uploads. Will be consolidated in Week 4 D16.
+final class SparkAppDelegate: NSObject, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication,
+        handleEventsForBackgroundURLSession identifier: String,
+        completionHandler: @escaping @Sendable () -> Void
+    ) {
+        HealthSampleUploader.shared.addCompletionHandler(completionHandler, for: identifier)
     }
 }
 
@@ -57,6 +76,12 @@ enum SparkObservability {
                 $0.lifecycle = .trace
             }
             #endif
+        }
+    }
+
+    static func captureHandled(_ error: Error) {
+        SentrySDK.capture(error: error) { scope in
+            scope.setTag(value: "handled", key: "error_type")
         }
     }
 

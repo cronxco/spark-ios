@@ -19,6 +19,7 @@ func appEntitlements() -> Entitlements {
         "com.apple.developer.associated-domains": .array([.string(associatedDomain)]),
         "com.apple.developer.healthkit": .boolean(true),
         "com.apple.developer.healthkit.access": .array([]),
+        "com.apple.developer.healthkit.background-delivery": .boolean(true),
         "com.apple.security.application-groups": .array([.string(appGroup)]),
         "keychain-access-groups": .array([.string(keychainGroup)]),
     ])
@@ -194,6 +195,7 @@ let sparkApp: Target = .target(
     dependencies: [
         .package(product: "SparkKit"),
         .package(product: "SparkUI"),
+        .package(product: "SparkHealth"),
         .package(product: "Sentry"),
         .target(name: "SparkWidgets"),
         .target(name: "SparkControls"),
