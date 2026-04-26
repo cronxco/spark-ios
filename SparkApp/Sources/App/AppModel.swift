@@ -64,9 +64,19 @@ final class AppModel {
     func bootstrap() async {
         if await tokenStore.accessToken() != nil {
             session = .loggedIn
+            await registerDevice()
         } else {
             session = .loggedOut
         }
+    }
+
+    private func registerDevice() async {
+        #if canImport(UIKit)
+        let name = UIDevice.current.name
+        #else
+        let name = "Unknown"
+        #endif
+        _ = try? await apiClient.request(DevicesEndpoint.register(name: name, platform: "ios"))
     }
 
     func signIn(anchor: ASPresentationAnchorHandle) async {

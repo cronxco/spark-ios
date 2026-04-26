@@ -29,7 +29,7 @@ struct MainTabView: View {
                 .badge(unreadNotifications.count)
                 .tag(Tab.notifications)
 
-            SettingsPlaceholderView()
+            SettingsRootView()
                 .tabItem { Label("Settings", systemImage: "gearshape") }
                 .tag(Tab.settings)
         }
