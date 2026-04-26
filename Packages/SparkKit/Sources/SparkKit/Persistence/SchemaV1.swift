@@ -14,6 +14,7 @@ public enum SparkSchemaV1: VersionedSchema {
             CachedPlace.self,
             CachedMetric.self,
             CachedAnomaly.self,
+            CachedNotification.self,
             SyncCursor.self,
         ]
     }

@@ -10,7 +10,17 @@ struct SettingsPlaceholderView: View {
         NavigationStack {
             Form {
                 Section {
-                    Text("Profile, notifications, integrations, HealthKit scopes, devices, API tokens, About, and Debug land in Week 3 of Phase 2.")
+                    NavigationLink {
+                        IntegrationsListView()
+                    } label: {
+                        Label("Integrations", systemImage: "link")
+                    }
+                } header: {
+                    Text("Connections")
+                }
+
+                Section {
+                    Text("Profile, notifications, HealthKit scopes, devices, API tokens, About, and Debug land in Week 3 of Phase 2.")
                         .font(SparkTypography.bodySmall)
                         .foregroundStyle(.secondary)
                 }

@@ -31,6 +31,16 @@ struct RootView: View {
             model.pendingRoute = .day(date)
         case .event(let id):
             model.pendingRoute = .event(id: id)
+        case .object(let id):
+            model.pendingRoute = .object(id: id)
+        case .block(let id):
+            model.pendingRoute = .block(id: id)
+        case .metric(let identifier):
+            model.pendingRoute = .metric(identifier: identifier)
+        case .place(let id):
+            model.pendingRoute = .place(id: id)
+        case .integration(let service):
+            model.pendingRoute = .integration(service: service)
         }
     }
 }

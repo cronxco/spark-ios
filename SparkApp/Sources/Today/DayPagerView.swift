@@ -6,7 +6,7 @@ struct DayPagerView: View {
     @Environment(AppModel.self) private var appModel
     @State private var selectedOffset: Int = 0
     @State private var dates: [DayKey] = DayKey.defaultWindow()
-    @State private var path: [EventRoute] = []
+    @State private var path: [DetailRoute] = []
 
     var body: some View {
         @Bindable var appModel = appModel
@@ -20,8 +20,21 @@ struct DayPagerView: View {
             .tabViewStyle(.page(indexDisplayMode: .never))
             .ignoresSafeArea(edges: .top)
             .toolbar(.hidden, for: .navigationBar)
-            .navigationDestination(for: EventRoute.self) { route in
-                EventDetailView(eventId: route.id)
+            .navigationDestination(for: DetailRoute.self) { route in
+                switch route {
+                case .event(let id):
+                    EventDetailView(eventId: id)
+                case .object(let id):
+                    ObjectDetailView(objectId: id)
+                case .block(let id):
+                    BlockDetailView(blockId: id)
+                case .metric(let identifier):
+                    MetricDetailView(identifier: identifier)
+                case .place(let id):
+                    PlaceDetailView(placeId: id)
+                case .integration(let service):
+                    IntegrationDetailView(integrationId: service)
+                }
             }
         }
         .onChange(of: appModel.pendingRoute) { _, route in
@@ -40,9 +53,26 @@ struct DayPagerView: View {
         case .day(let date):
             jump(to: date)
         case .event(let id):
-            path.append(EventRoute(id: id))
+            push(.event(id: id))
+        case .object(let id):
+            push(.object(id: id))
+        case .block(let id):
+            push(.block(id: id))
+        case .metric(let identifier):
+            push(.metric(identifier: identifier))
+        case .place(let id):
+            push(.place(id: id))
+        case .integration(let service):
+            push(.integration(service: service))
         }
         appModel.pendingRoute = nil
+    }
+
+    private func push(_ route: DetailRoute) {
+        // Avoid duplicate pushes when the deep link fires twice in quick
+        // succession (Safari sometimes dispatches scene + onOpenURL).
+        if path.last == route { return }
+        path.append(route)
     }
 
     private func jump(to date: Date) {
@@ -56,8 +86,15 @@ struct DayPagerView: View {
     }
 }
 
-struct EventRoute: Hashable {
-    let id: String
+/// Detail destinations pushed onto the Today tab's `NavigationStack`. New
+/// detail surfaces should add a case here and a destination clause above.
+enum DetailRoute: Hashable {
+    case event(id: String)
+    case object(id: String)
+    case block(id: String)
+    case metric(identifier: String)
+    case place(id: String)
+    case integration(service: String)
 }
 
 private struct DayKey: Identifiable, Hashable {

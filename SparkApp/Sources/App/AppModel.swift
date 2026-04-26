@@ -14,6 +14,11 @@ enum AppRoute: Hashable {
     case today(date: Date?)
     case day(Date)
     case event(id: String)
+    case object(id: String)
+    case block(id: String)
+    case metric(identifier: String)
+    case place(id: String)
+    case integration(service: String)
 }
 
 @MainActor

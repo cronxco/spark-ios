@@ -1,9 +1,13 @@
+import SparkKit
 import SparkUI
+import SwiftData
 import SwiftUI
 
 struct MainTabView: View {
     @Environment(AppModel.self) private var model
     @State private var selection: Tab = .today
+    @Query(filter: #Predicate<CachedNotification> { !$0.isRead })
+    private var unreadNotifications: [CachedNotification]
 
     var body: some View {
         @Bindable var model = model
@@ -12,16 +16,17 @@ struct MainTabView: View {
                 .tabItem { Label("Today", systemImage: "sun.max.fill") }
                 .tag(Tab.today)
 
-            ComingSoonTab(title: "Map", systemImage: "map")
+            MapView()
                 .tabItem { Label("Map", systemImage: "map") }
                 .tag(Tab.map)
 
-            ComingSoonTab(title: "Search", systemImage: "magnifyingglass")
+            SearchView()
                 .tabItem { Label("Search", systemImage: "magnifyingglass") }
                 .tag(Tab.search)
 
-            ComingSoonTab(title: "Notifications", systemImage: "bell")
+            NotificationsInboxView()
                 .tabItem { Label("Inbox", systemImage: "bell") }
+                .badge(unreadNotifications.count)
                 .tag(Tab.notifications)
 
             SettingsPlaceholderView()
