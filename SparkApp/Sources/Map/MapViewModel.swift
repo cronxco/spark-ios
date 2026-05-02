@@ -81,6 +81,7 @@ final class MapViewModel {
         } catch APIError.notModified {
             // Cached payload is fine; keep current points.
         } catch {
+            SparkObservability.captureHandled(error)
             logger.error("Map fetch failed: \(String(describing: error))")
             lastError = "Couldn’t load map data."
         }

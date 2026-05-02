@@ -65,12 +65,14 @@ struct OnboardingFlow: View {
 
     private func restoreProgress() {
         guard model.session == .loggedIn else { return }
-        guard let raw = UserDefaults(suiteName: "group.co.cronx.spark")?.string(forKey: "onboarding.lastStep"),
-              let last = Step(rawValue: raw)
-        else { return }
-        // Re-build the path up to and including the last step
+        let savedRaw = UserDefaults(suiteName: "group.co.cronx.spark")?.string(forKey: "onboarding.lastStep")
+        let saved = savedRaw.flatMap(Step.init(rawValue:))
+        // If we just completed sign-in the saved step is .signIn (or nil for a
+        // fresh install). In both cases the session is now loggedIn, so skip
+        // past the sign-in screen to the first post-auth step.
+        let effective: Step = (saved == nil || saved == .signIn) ? .healthKitEssentials : saved!
         let ordered = Step.allCases
-        guard let idx = ordered.firstIndex(of: last) else { return }
+        guard let idx = ordered.firstIndex(of: effective) else { return }
         path = Array(ordered[...idx])
     }
 }

@@ -7,6 +7,8 @@ import SwiftUI
 /// bottom sheet listing the points in the visible region. Pins are
 /// Spark-tinted and tap-routable to detail screens.
 struct MapView: View {
+    var isEmbedded: Bool = false
+
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: MapViewModel?
     @State private var path: [DetailRoute] = []
@@ -33,6 +35,7 @@ struct MapView: View {
                 }
                 .navigationTitle("Map")
                 .navigationBarTitleDisplayMode(.inline)
+                .toolbar(isEmbedded ? .hidden : .visible, for: .navigationBar)
         }
         .task {
             if viewModel == nil {

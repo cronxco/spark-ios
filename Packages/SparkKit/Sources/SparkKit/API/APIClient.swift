@@ -38,7 +38,18 @@ public actor APIClient {
         self.tokenStore = tokenStore
         self.etagCache = etagCache
         self.decoder = JSONDecoder()
-        self.decoder.dateDecodingStrategy = .iso8601
+        self.decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let string = try container.decode(String.self)
+            let withFrac = ISO8601DateFormatter()
+            withFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let d = withFrac.date(from: string) { return d }
+            let plain = ISO8601DateFormatter()
+            plain.formatOptions = [.withInternetDateTime]
+            if let d = plain.date(from: string) { return d }
+            throw DecodingError.dataCorruptedError(in: container,
+                debugDescription: "Cannot parse date: \(string)")
+        }
         self.encoder = JSONEncoder()
         self.encoder.dateEncodingStrategy = .iso8601
     }
@@ -108,6 +119,11 @@ public actor APIClient {
             await etagCache.store(etag, for: url)
         }
 
+        #if DEBUG
+        let bodyPreview = String(data: data, encoding: .utf8) ?? "<binary>"
+        logger.info("[\(endpoint.path, privacy: .public)] HTTP \(http.statusCode, privacy: .public) — \(bodyPreview, privacy: .public)")
+        #endif
+
         if data.isEmpty, let empty = EmptyResponse() as? Response {
             return empty
         }
@@ -115,7 +131,8 @@ public actor APIClient {
         do {
             return try decoder.decode(Response.self, from: data)
         } catch {
-            logger.error("Decoding failed for \(endpoint.path): \(error.localizedDescription)")
+            let bodyString = String(data: data, encoding: .utf8) ?? "<binary>"
+            logger.error("Decoding failed for \(endpoint.path, privacy: .public): \(error.localizedDescription, privacy: .public) — body: \(bodyString, privacy: .public)")
             throw APIError.decoding(error)
         }
     }

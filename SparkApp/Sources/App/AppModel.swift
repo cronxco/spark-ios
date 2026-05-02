@@ -49,6 +49,7 @@ final class AppModel {
     let healthPermissions = HealthKitPermissionManager.shared
 
     var session: SessionState = .unknown
+    var onboardingComplete: Bool
     var lastError: String?
     var pendingRoute: AppRoute?
 
@@ -61,10 +62,12 @@ final class AppModel {
         self.etagCache = etagCache
         self.apiClient = client
         self.authService = AuthenticationService(tokenStore: tokenStore, apiClient: client)
+        self.onboardingComplete = UserDefaults(suiteName: "group.co.cronx.spark")?.bool(forKey: "onboarding.completed") == true
     }
 
     func bootstrap() async {
         if let token = await tokenStore.accessToken() {
+            onboardingComplete = true
             session = .loggedIn
             await registerDevice()
             configureHealthUploader(accessToken: token)

@@ -30,11 +30,11 @@ public struct DaySummary: Codable, Sendable, Hashable {
     }
 
     public struct Sections: Codable, Sendable, Hashable {
-        public let health: [String: AnyCodable]?
-        public let activity: [String: AnyCodable]?
-        public let money: [String: AnyCodable]?
-        public let media: [String: AnyCodable]?
-        public let knowledge: [String: AnyCodable]?
+        public let health: AnyCodable?
+        public let activity: AnyCodable?
+        public let money: AnyCodable?
+        public let media: AnyCodable?
+        public let knowledge: AnyCodable?
     }
 
     public init(

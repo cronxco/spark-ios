@@ -1,5 +1,6 @@
 import SparkKit
 import SparkUI
+import SwiftData
 import SwiftUI
 
 struct DayPagerView: View {
@@ -18,8 +19,9 @@ struct DayPagerView: View {
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
-            .ignoresSafeArea(edges: .top)
+            .ignoresSafeArea()
             .toolbar(.hidden, for: .navigationBar)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .navigationDestination(for: DetailRoute.self) { route in
                 switch route {
                 case .event(let id):
@@ -69,8 +71,6 @@ struct DayPagerView: View {
     }
 
     private func push(_ route: DetailRoute) {
-        // Avoid duplicate pushes when the deep link fires twice in quick
-        // succession (Safari sometimes dispatches scene + onOpenURL).
         if path.last == route { return }
         path.append(route)
     }
@@ -80,14 +80,12 @@ struct DayPagerView: View {
             selectedOffset = match.offset
             return
         }
-        // Outside the default window — rebuild anchored on the requested date.
         dates = DayKey.window(anchor: date)
         selectedOffset = 0
     }
 }
 
-/// Detail destinations pushed onto the Today tab's `NavigationStack`. New
-/// detail surfaces should add a case here and a destination clause above.
+/// Detail destinations pushed onto the Day tab's `NavigationStack`.
 enum DetailRoute: Hashable {
     case event(id: String)
     case object(id: String)
@@ -105,7 +103,7 @@ private struct DayKey: Identifiable, Hashable {
     var id: Int { offset }
 
     static func defaultWindow(anchor: Date = .now, calendar: Calendar = .current) -> [DayKey] {
-        (-7 ... 0).compactMap { offset in
+        (-7 ... 1).compactMap { offset in
             guard let date = calendar.date(byAdding: .day, value: offset, to: anchor) else { return nil }
             return DayKey(offset: offset, date: date, label: Self.label(for: date, offset: offset))
         }
@@ -120,6 +118,7 @@ private struct DayKey: Identifiable, Hashable {
     }
 
     private static func label(for date: Date, offset: Int) -> String {
+        if offset == 1 { return "Tomorrow" }
         if offset == 0 { return "Today" }
         if offset == -1 { return "Yesterday" }
         let formatter = DateFormatter()

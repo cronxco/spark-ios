@@ -23,6 +23,7 @@ final class BlockDetailViewModel {
         } catch APIError.notModified {
             return
         } catch {
+            SparkObservability.captureHandled(error)
             let msg = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
             state = .error(msg)
         }

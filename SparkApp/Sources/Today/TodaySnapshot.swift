@@ -93,14 +93,16 @@ struct HealthSnapshot {
 
     init?(_ payload: [String: AnyCodable]?) {
         guard let payload, !payload.isEmpty else { return nil }
-        sleepScore = payload["sleep_score"]?.intValue
-        sleepDurationMinutes = payload["sleep_duration_minutes"]?.intValue
-        bedtime = payload["bedtime"]?.stringValue
-        wakeTime = payload["wake_time"]?.stringValue
-        restingHeartRate = payload["resting_heart_rate"]?.intValue
-        hrvOvernight = payload["hrv_overnight"]?.intValue
-        deepMinutes = payload["deep_minutes"]?.intValue
-        remMinutes = payload["rem_minutes"]?.intValue
+        sleepScore = payload["sleep_score"]?.objectValue?["score"]?.intValue
+        let durSec = payload["sleep_duration"]?.objectValue?["duration_seconds"]?.intValue
+        sleepDurationMinutes = durSec.map { $0 / 60 }
+        bedtime = nil
+        wakeTime = nil
+        restingHeartRate = nil
+        hrvOvernight = payload["hrv"]?.objectValue?["value"]?.intValue
+        let stages = payload["sleep_duration"]?.objectValue?["stages"]?.objectValue
+        deepMinutes = stages?["Deep Sleep Duration"]?.doubleValue.map { Int($0) / 60 }
+        remMinutes = stages?["REM Sleep Duration"]?.doubleValue.map { Int($0) / 60 }
     }
 }
 
@@ -136,15 +138,19 @@ struct ActivitySnapshot {
 
     init?(_ payload: [String: AnyCodable]?) {
         guard let payload, !payload.isEmpty else { return nil }
-        steps = payload["steps"]?.intValue
-        stepsGoal = payload["steps_goal"]?.intValue ?? 10_000
-        activeCalories = payload["active_calories"]?.intValue
-        activeCaloriesGoal = payload["active_calories_goal"]?.intValue ?? 600
-        exerciseMinutes = payload["exercise_minutes"]?.intValue
-        exerciseGoal = payload["exercise_goal"]?.intValue ?? 30
-        standHours = payload["stand_hours"]?.intValue
-        standGoal = payload["stand_goal"]?.intValue ?? 12
-        lastWorkout = payload["last_workout"]?.stringValue
+        let stepsObj = payload["steps"]?.objectValue
+        steps = stepsObj?["value"]?.intValue
+        stepsGoal = stepsObj?["goal"]?.intValue ?? 10_000
+        let kcalObj = payload["active_energy_kcal"]?.objectValue
+        activeCalories = kcalObj?["value"]?.intValue
+        activeCaloriesGoal = kcalObj?["goal"]?.intValue ?? 600
+        let exObj = payload["exercise_minutes"]?.objectValue
+        exerciseMinutes = exObj?["value"]?.intValue
+        exerciseGoal = exObj?["goal"]?.intValue ?? 30
+        let standObj = payload["stand_hours"]?.objectValue
+        standHours = standObj?["value"]?.intValue
+        standGoal = standObj?["goal"]?.intValue ?? 12
+        lastWorkout = payload["workouts"]?.arrayValue?.first?.objectValue?["name"]?.stringValue
     }
 }
 
@@ -152,49 +158,51 @@ struct MoneySnapshot {
     struct Transaction: Identifiable {
         let id: String
         let merchant: String
-        let amountMinor: Int
+        let amount: Double
+        let currency: String
         let category: String?
         let time: String?
     }
 
-    let spentTodayMinor: Int?
+    let spentToday: Double?
     let currency: String
     let recent: [Transaction]
 
-    var hasAny: Bool { spentTodayMinor != nil || !recent.isEmpty }
+    var hasAny: Bool { spentToday != nil || !recent.isEmpty }
 
     var spentTodayDisplay: String? {
-        guard let spentTodayMinor else { return nil }
-        return Self.format(minor: abs(spentTodayMinor), currency: currency)
+        guard let spentToday else { return nil }
+        return Self.format(amount: abs(spentToday), currency: currency)
     }
 
-    static func format(minor: Int, currency: String) -> String {
-        let value = Double(minor) / 100
+    static func format(amount: Double, currency: String) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
         formatter.currencyCode = currency
         formatter.maximumFractionDigits = 2
-        return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
+        return formatter.string(from: NSNumber(value: amount)) ?? "\(amount)"
     }
 
     init?(_ payload: [String: AnyCodable]?) {
         guard let payload, !payload.isEmpty else { return nil }
-        spentTodayMinor = payload["spent_today_minor"]?.intValue
-        currency = payload["spent_today_currency"]?.stringValue ?? "GBP"
-        let array = payload["recent"]?.arrayValue ?? []
+        spentToday = payload["total_spend"]?.doubleValue
+        let array = payload["transactions"]?.arrayValue ?? []
         recent = array.enumerated().compactMap { idx, item -> Transaction? in
             guard let obj = item.objectValue,
                   let merchant = obj["merchant"]?.stringValue,
-                  let amount = obj["amount_minor"]?.intValue
+                  let amount = obj["amount"]?.doubleValue
             else { return nil }
+            let txId = obj["id"]?.stringValue ?? "tx_\(idx)_\(merchant)"
             return Transaction(
-                id: "tx_\(idx)_\(merchant)",
+                id: txId,
                 merchant: merchant,
-                amountMinor: amount,
+                amount: amount,
+                currency: obj["currency"]?.stringValue ?? "GBP",
                 category: obj["category"]?.stringValue,
                 time: obj["time"]?.stringValue
             )
         }
+        currency = recent.first?.currency ?? "GBP"
     }
 }
 
@@ -233,21 +241,11 @@ struct KnowledgeSnapshot {
 
     init?(_ payload: [String: AnyCodable]?) {
         guard let payload, !payload.isEmpty else { return nil }
-        bookmarksToday = payload["bookmarks_today"]?.intValue
-        newsletterStatus = payload["newsletter_status"]?.stringValue
-        if let event = payload["next_calendar_event"]?.objectValue,
-           let title = event["title"]?.stringValue,
-           let start = event["start"]?.stringValue,
-           let end = event["end"]?.stringValue {
-            nextCalendarEvent = CalendarEvent(
-                title: title,
-                start: start,
-                end: end,
-                location: event["location"]?.stringValue
-            )
-        } else {
-            nextCalendarEvent = nil
-        }
+        let bookmarkArray = payload["bookmarks"]?.arrayValue
+        bookmarksToday = bookmarkArray.map { $0.count }
+        let newsletterArray = payload["newsletters"]?.arrayValue ?? []
+        newsletterStatus = newsletterArray.isEmpty ? nil : "\(newsletterArray.count) newsletters"
+        nextCalendarEvent = nil
     }
 }
 

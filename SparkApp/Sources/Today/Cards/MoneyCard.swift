@@ -32,7 +32,7 @@ struct MoneyCard: View {
                                     .lineLimit(1)
                                     .truncationMode(.tail)
                                 Spacer(minLength: SparkSpacing.sm)
-                                Text(MoneySnapshot.format(minor: abs(tx.amountMinor), currency: money.currency))
+                                Text(MoneySnapshot.format(amount: abs(tx.amount), currency: tx.currency))
                                     .font(SparkTypography.monoSmall)
                                     .foregroundStyle(.secondary)
                                     .monospacedDigit()

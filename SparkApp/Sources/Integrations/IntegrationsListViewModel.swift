@@ -29,6 +29,7 @@ final class IntegrationsListViewModel {
         } catch APIError.notModified {
             return
         } catch {
+            SparkObservability.captureHandled(error)
             logger.error("Integrations list failed: \(String(describing: error))")
             let msg = (error as? LocalizedError)?.errorDescription ?? "Couldn't load integrations."
             state = .error(msg)

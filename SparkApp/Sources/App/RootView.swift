@@ -4,23 +4,21 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppModel.self) private var model
-    @State private var onboardingComplete: Bool = {
-        UserDefaults(suiteName: "group.co.cronx.spark")?.bool(forKey: "onboarding.completed") == true
-    }()
 
     var body: some View {
+        @Bindable var model = model
         Group {
             switch model.session {
             case .unknown:
                 ProgressView()
                     .task { await model.bootstrap() }
             case .loggedOut:
-                OnboardingFlow(isComplete: $onboardingComplete)
+                OnboardingFlow(isComplete: $model.onboardingComplete)
             case .loggedIn:
-                if onboardingComplete {
+                if model.onboardingComplete {
                     MainTabView()
                 } else {
-                    OnboardingFlow(isComplete: $onboardingComplete)
+                    OnboardingFlow(isComplete: $model.onboardingComplete)
                 }
             }
         }

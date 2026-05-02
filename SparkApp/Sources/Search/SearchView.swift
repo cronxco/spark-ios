@@ -30,9 +30,10 @@ struct SearchView: View {
         }
         .searchable(
             text: queryBinding,
-            placement: .navigationBarDrawer(displayMode: .always),
+            placement: .automatic,
             prompt: "Search events, objects, metrics…"
         )
+        .searchToolbarBehavior(.minimize)
         .task {
             if viewModel == nil {
                 viewModel = SearchViewModel(apiClient: appModel.apiClient)

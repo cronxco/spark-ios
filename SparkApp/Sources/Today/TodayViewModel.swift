@@ -28,6 +28,7 @@ final class TodayViewModel {
     func load() async {
         loadCached()
         await revalidate()
+        await loadFeed()
     }
 
     func refresh() async {
@@ -55,10 +56,45 @@ final class TodayViewModel {
             networkState = .idle
         } catch APIError.notModified {
             networkState = .idle
+        } catch APIError.transport(let underlying)
+            where (underlying as? URLError)?.code == .cancelled {
+            // Task cancelled (e.g. page swiped away) — not a user-visible error
+            networkState = .idle
+        } catch is CancellationError {
+            networkState = .idle
         } catch {
+            SparkObservability.captureHandled(error)
             let message = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
             networkState = force ? .error(message) : (cached == nil ? .error(message) : .idle)
         }
+    }
+
+    private func loadFeed() async {
+        guard Calendar.current.isDateInToday(date) else { return }
+        do {
+            let page = try await apiClient.request(FeedEndpoint.feed(limit: 50))
+            let context = ModelContext(container)
+            for event in page.data {
+                context.insert(CachedEvent(
+                    id: event.id,
+                    time: event.time,
+                    service: event.service,
+                    domain: event.domain,
+                    action: event.action,
+                    value: event.value,
+                    unit: event.unit,
+                    url: event.url,
+                    actorTitle: event.actor?.title,
+                    targetTitle: event.target?.title
+                ))
+            }
+            try? context.save()
+        } catch APIError.notModified {
+            // feed unchanged — no action needed
+        } catch is CancellationError {
+        } catch APIError.transport(let underlying)
+            where (underlying as? URLError)?.code == .cancelled {
+        } catch { /* non-fatal */ }
     }
 
     private func persist(_ summary: DaySummary) async throws {

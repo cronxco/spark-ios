@@ -2,62 +2,84 @@ import SparkKit
 import SparkUI
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct TodayView: View {
     let date: Date
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: TodayViewModel?
     @State private var showCheckIn = false
+    @State private var showSettings = false
+    @State private var showNotifications = false
+
+    @Query(filter: #Predicate<CachedNotification> { !$0.isRead })
+    private var unreadNotifications: [CachedNotification]
+    @Query private var allIntegrations: [CachedIntegration]
+
+    private var errorIntegrations: [CachedIntegration] {
+        let healthy: Set<String> = ["up_to_date", "ok", "active", "syncing", "running"]
+        return allIntegrations.filter { !healthy.contains($0.status) }
+    }
 
     var body: some View {
         let snapshot = TodaySnapshot(summary: viewModel?.cached, date: date)
 
-        ScrollView {
-            VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-                hero(snapshot: snapshot)
+        ZStack {
+            TodayBackground(snapshot.timeOfDay)
+                .ignoresSafeArea()
 
-                anomalyPill(for: snapshot)
+            ScrollView {
+                VStack(alignment: .leading, spacing: SparkSpacing.lg) {
+                    hero(snapshot: snapshot)
 
-                if let health = snapshot.health, health.hasSleep {
-                    SleepCard(health: health)
-                }
+                    anomalyPill(for: snapshot)
 
-                if shouldShowActivityMoneyRow(snapshot) {
-                    HStack(alignment: .top, spacing: SparkSpacing.md) {
-                        if let activity = snapshot.activity, activity.hasAny {
-                            ActivityCard(activity: activity)
-                        }
-                        if let money = snapshot.money, money.hasAny {
-                            MoneyCard(money: money)
+                    if let health = snapshot.health, health.hasSleep {
+                        SleepCard(health: health)
+                    }
+
+                    if shouldShowActivityMoneyRow(snapshot) {
+                        HStack(alignment: .top, spacing: SparkSpacing.md) {
+                            if let activity = snapshot.activity, activity.hasAny {
+                                ActivityCard(activity: activity)
+                            }
+                            if let money = snapshot.money, money.hasAny {
+                                MoneyCard(money: money)
+                            }
                         }
                     }
-                }
 
-                if let media = snapshot.media, media.hasAny {
-                    MediaCard(media: media)
-                }
+                    if let media = snapshot.media, media.hasAny {
+                        MediaCard(media: media)
+                    }
 
-                if let next = snapshot.knowledge?.nextCalendarEvent {
-                    UpNextCard(event: next)
-                }
+                    if let next = snapshot.knowledge?.nextCalendarEvent {
+                        UpNextCard(event: next)
+                    }
 
-                CheckInCard(status: snapshot.checkInStatus) {
-                    showCheckIn = true
-                }
+                    CheckInCard(status: snapshot.checkInStatus) {
+                        showCheckIn = true
+                    }
 
-                if !snapshot.hasAnyDomainData {
-                    loadingOrEmptyState
-                }
+                    FeedSection(date: date)
 
-                HeatmapSection(rows: snapshot.heatmapRows)
-                    .padding(.top, SparkSpacing.md)
+                    if !snapshot.hasAnyDomainData {
+                        loadingOrEmptyState
+                    }
+
+                    HeatmapSection(rows: snapshot.heatmapRows)
+                        .padding(.top, SparkSpacing.md)
+                }
+                .padding(.horizontal, SparkSpacing.lg)
+                .padding(.top, deviceSafeAreaTop + SparkSpacing.xl)
+                .padding(.bottom, deviceSafeAreaBottom + 66)
             }
-            .padding(.horizontal, SparkSpacing.lg)
-            .padding(.vertical, SparkSpacing.xl)
+            .scrollContentBackground(.hidden)
+            .refreshable { await viewModel?.refresh() }
+
+            headerButtons
         }
-        .scrollContentBackground(.hidden)
-        .background(TodayBackground(snapshot.timeOfDay))
-        .refreshable { await viewModel?.refresh() }
+        .environment(\.colorScheme, snapshot.timeOfDay.prefersDarkTreatment ? .dark : .light)
         .sheet(isPresented: $showCheckIn) {
             let snapshot = TodaySnapshot(summary: viewModel?.cached, date: date)
             if case .pending(let slot) = snapshot.checkInStatus {
@@ -65,6 +87,12 @@ struct TodayView: View {
             } else {
                 CheckInModalView(slot: SparkTimeOfDay.from(date: .now).rawValue, date: date)
             }
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsRootView()
+        }
+        .sheet(isPresented: $showNotifications) {
+            NotificationsInboxView()
         }
         .task(id: date) {
             if viewModel == nil {
@@ -78,25 +106,71 @@ struct TodayView: View {
         }
     }
 
+    // MARK: - Header buttons
+
+    private var headerButtons: some View {
+        SparkGlassStack(spacing: 0) {
+            HStack(spacing: 0) {
+                Button {
+                    showSettings = true
+                } label: {
+                    Image(systemName: "gearshape")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(errorIntegrations.isEmpty ? Color.primary : Color.sparkError)
+                        .frame(width: 36, height: 36)
+                        .sparkGlass(.circle)
+                }
+                .accessibilityLabel("Settings")
+
+                Rectangle()
+                    .fill(Color.primary.opacity(0.12))
+                    .frame(width: 1, height: 22)
+
+                Button {
+                    showNotifications = true
+                } label: {
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: "bell")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(unreadNotifications.isEmpty ? Color.primary : Color.sparkAccent)
+                            .frame(width: 36, height: 36)
+                            .sparkGlass(.circle)
+                        if !unreadNotifications.isEmpty {
+                            Circle()
+                                .fill(Color.sparkError)
+                                .frame(width: 9, height: 9)
+                                .offset(x: 3, y: -3)
+                        }
+                    }
+                }
+                .accessibilityLabel(
+                    unreadNotifications.isEmpty
+                        ? "Notifications"
+                        : "Notifications, \(unreadNotifications.count) unread"
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .padding(.top, deviceSafeAreaTop + SparkSpacing.xl)
+        .padding(.trailing, SparkSpacing.lg)
+    }
+
     // MARK: - Hero
 
     private func hero(snapshot: TodaySnapshot) -> some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-            Text(snapshot.dateLabel.uppercased())
-                .font(SparkTypography.monoSmall)
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-
+        let isDark = snapshot.timeOfDay.prefersDarkTreatment
+        return VStack(alignment: .leading, spacing: SparkSpacing.sm) {
             Text(heroTitle(snapshot: snapshot))
-                .font(SparkFonts.display(.largeTitle, weight: .bold))
+                .font(SparkFonts.display(.title, weight: .bold))
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
+                .foregroundStyle(isDark ? Color.white : Color.primary)
                 .accessibilityAddTraits(.isHeader)
 
             if let subtitle = heroSubtitle(snapshot: snapshot) {
                 Text(subtitle)
                     .font(SparkTypography.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(isDark ? Color.white.opacity(0.7) : Color.secondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -107,9 +181,24 @@ struct TodayView: View {
             return "\(snapshot.timeOfDay.greeting),\n\(firstName)."
         } else if Calendar.current.isDateInYesterday(date) {
             return "Yesterday."
+        } else if let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: .now),
+                  Calendar.current.isDate(date, inSameDayAs: tomorrow) {
+            return "Tomorrow."
         } else {
             return snapshot.dateLabel
         }
+    }
+
+    private var deviceSafeAreaTop: CGFloat {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }.first?
+            .keyWindow?.safeAreaInsets.top ?? 59
+    }
+
+    private var deviceSafeAreaBottom: CGFloat {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }.first?
+            .keyWindow?.safeAreaInsets.bottom ?? 34
     }
 
     private var firstName: String {
@@ -148,7 +237,9 @@ struct TodayView: View {
         } else {
             StatusPill(
                 .warning,
-                message: snapshot.anomalies.first?.description ?? "Anomaly detected",
+                message: snapshot.anomalies.first?.displayName
+                    ?? snapshot.anomalies.first?.metric
+                    ?? "Anomaly detected",
                 trailing: "\(snapshot.anomalies.count) anomal\(snapshot.anomalies.count == 1 ? "y" : "ies")"
             )
         }

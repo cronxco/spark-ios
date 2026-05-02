@@ -30,6 +30,7 @@ final class EventDetailViewModel {
             // Already loaded — keep current state.
             return
         } catch {
+            SparkObservability.captureHandled(error)
             let message = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
             state = .error(message)
         }

@@ -87,6 +87,7 @@ final class SearchViewModel {
         } catch is CancellationError {
             return
         } catch {
+            SparkObservability.captureHandled(error)
             logger.error("Search failed: \(String(describing: error))")
             state = .error("Couldn't search.")
         }

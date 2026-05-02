@@ -41,6 +41,7 @@ final class NotificationsInboxViewModel {
         } catch APIError.notModified {
             state = .loaded
         } catch {
+            SparkObservability.captureHandled(error)
             logger.error("Notifications fetch failed: \(String(describing: error))")
             state = .error("Couldn't load notifications.")
         }
@@ -56,6 +57,7 @@ final class NotificationsInboxViewModel {
             nextCursor = page.nextCursor
             await persist(page.data, replaceAll: false)
         } catch {
+            SparkObservability.captureHandled(error)
             logger.error("Notifications load-more failed: \(String(describing: error))")
         }
     }
@@ -77,6 +79,7 @@ final class NotificationsInboxViewModel {
             _ = try await apiClient.request(NotificationsEndpoint.markRead(id: id))
             await updateReadFlag(id: id, isRead: true)
         } catch {
+            SparkObservability.captureHandled(error)
             logger.error("markRead failed: \(String(describing: error))")
         }
     }
@@ -97,6 +100,7 @@ final class NotificationsInboxViewModel {
             _ = try await apiClient.request(NotificationsEndpoint.markAllRead())
             await updateAllReadFlag(isRead: true)
         } catch {
+            SparkObservability.captureHandled(error)
             logger.error("markAllRead failed: \(String(describing: error))")
         }
     }
@@ -107,6 +111,7 @@ final class NotificationsInboxViewModel {
             _ = try await apiClient.request(NotificationsEndpoint.delete(id: id))
             await removeCached(id: id)
         } catch {
+            SparkObservability.captureHandled(error)
             logger.error("delete failed: \(String(describing: error))")
         }
     }
