@@ -28,22 +28,22 @@ struct ExploreView: View {
     }
 
     private var sectionPicker: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: SparkSpacing.sm) {
-                ForEach(ExploreSection.allCases, id: \.self) { sec in
-                    Button {
-                        section = sec
-                    } label: {
-                        ExploreSectionChip(sec, isSelected: section == sec)
-                    }
-                    .buttonStyle(.plain)
+        HStack(spacing: SparkSpacing.xs) {
+            ForEach(ExploreSection.allCases, id: \.self) { sec in
+                Button {
+                    section = sec
+                } label: {
+                    ExploreSectionChip(sec, isSelected: section == sec)
                 }
+                .buttonStyle(.plain)
             }
-            .padding(.horizontal, SparkSpacing.lg)
         }
+        .padding(SparkSpacing.xs)
+        .frame(maxWidth: .infinity)
+        .sparkGlass(.capsule, tint: Color.sparkElevated.opacity(0.35))
+        .padding(.horizontal, SparkSpacing.xl)
         .safeAreaPadding(.top)
-        .padding(.vertical, SparkSpacing.sm)
-        .background(.ultraThinMaterial)
+        .padding(.top, SparkSpacing.sm)
     }
 }
 
@@ -61,10 +61,10 @@ enum ExploreSection: CaseIterable {
 
     var icon: String {
         switch self {
-        case .map: "map"
+        case .map: "mappin"
         case .health: "heart.fill"
-        case .metrics: "chart.line.uptrend.xyaxis"
-        case .money: "sterlingsign.circle.fill"
+        case .metrics: "bolt.fill"
+        case .money: "sterlingsign"
         }
     }
 
@@ -93,9 +93,14 @@ private struct ExploreSectionChip: View {
             Text(section.label)
         }
         .font(SparkTypography.captionStrong)
-        .padding(.horizontal, SparkSpacing.md)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, SparkSpacing.sm)
         .padding(.vertical, SparkSpacing.sm)
-        .foregroundStyle(isSelected ? Color.white : section.tint)
-        .sparkGlass(.capsule, tint: isSelected ? section.tint : section.tint.opacity(0.15))
+        .foregroundStyle(isSelected ? Color.sparkTextPrimary : Color.secondary)
+        .background {
+            if isSelected {
+                Capsule().fill(Color.sparkAccent)
+            }
+        }
     }
 }

@@ -39,4 +39,12 @@ final class EventDetailViewModel {
     func retry() async {
         await load()
     }
+
+    func saveNote(_ note: String) async throws {
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        let updated = try await apiClient.request(
+            EventsEndpoint.updateNote(id: eventId, note: trimmed.isEmpty ? nil : trimmed)
+        )
+        state = .loaded(updated)
+    }
 }

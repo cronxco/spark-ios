@@ -14,6 +14,8 @@ public struct EventDetail: Codable, Sendable, Hashable, Identifiable {
     public let tags: [String]
     public let aiSummary: String?
     public let location: Location?
+    public let note: String?
+    public let metadata: [AnyCodable]?
 
     public var id: String { event.id }
 
@@ -23,13 +25,22 @@ public struct EventDetail: Codable, Sendable, Hashable, Identifiable {
         public let subtitle: String?
         public let concept: String?
         public let type: String?
+        public let content: String?
+        public let mediaUrl: String?
 
-        public init(id: String? = nil, title: String, subtitle: String? = nil, concept: String? = nil, type: String? = nil) {
+        enum CodingKeys: String, CodingKey {
+            case id, title, subtitle, concept, type, content
+            case mediaUrl = "media_url"
+        }
+
+        public init(id: String? = nil, title: String, subtitle: String? = nil, concept: String? = nil, type: String? = nil, content: String? = nil, mediaUrl: String? = nil) {
             self.id = id
             self.title = title
             self.subtitle = subtitle
             self.concept = concept
             self.type = type
+            self.content = content
+            self.mediaUrl = mediaUrl
         }
     }
 
@@ -58,8 +69,12 @@ public struct EventDetail: Codable, Sendable, Hashable, Identifiable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case event, actor, target, blocks, related, tags, location
+        case event, actor, target, blocks, related, tags, location, note, metadata
         case aiSummary = "summary_ai"
+    }
+
+    enum NoteAliasCodingKeys: String, CodingKey {
+        case notes
     }
 
     public init(
@@ -70,7 +85,9 @@ public struct EventDetail: Codable, Sendable, Hashable, Identifiable {
         related: [RelatedEvent] = [],
         tags: [String] = [],
         aiSummary: String? = nil,
-        location: Location? = nil
+        location: Location? = nil,
+        note: String? = nil,
+        metadata: [AnyCodable]? = nil
     ) {
         self.event = event
         self.actor = actor
@@ -80,10 +97,13 @@ public struct EventDetail: Codable, Sendable, Hashable, Identifiable {
         self.tags = tags
         self.aiSummary = aiSummary
         self.location = location
+        self.note = note
+        self.metadata = metadata
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        let noteAliases = try decoder.container(keyedBy: NoteAliasCodingKeys.self)
 
         // Backend may return either an EventDetail envelope or a flat Event payload.
         let rootEvent = try container.decodeIfPresent(Event.self, forKey: .event) ?? Event(from: decoder)
@@ -91,16 +111,19 @@ public struct EventDetail: Codable, Sendable, Hashable, Identifiable {
 
         actor = try container.decodeIfPresent(ActorTarget.self, forKey: .actor)
             ?? rootEvent.actor.map {
-                ActorTarget(id: $0.id, title: $0.title, subtitle: nil, concept: $0.concept, type: nil)
+                ActorTarget(id: $0.id, title: $0.title, subtitle: nil, concept: $0.concept, type: nil, mediaUrl: $0.mediaUrl)
             }
         target = try container.decodeIfPresent(ActorTarget.self, forKey: .target)
             ?? rootEvent.target.map {
-                ActorTarget(id: $0.id, title: $0.title, subtitle: nil, concept: $0.concept, type: nil)
+                ActorTarget(id: $0.id, title: $0.title, subtitle: nil, concept: $0.concept, type: nil, mediaUrl: $0.mediaUrl)
             }
         blocks = try container.decodeIfPresent([Block].self, forKey: .blocks) ?? []
         related = try container.decodeIfPresent([RelatedEvent].self, forKey: .related) ?? []
         tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
         aiSummary = try container.decodeIfPresent(String.self, forKey: .aiSummary)
         location = try container.decodeIfPresent(Location.self, forKey: .location)
+        note = try container.decodeIfPresent(String.self, forKey: .note)
+            ?? noteAliases.decodeIfPresent(String.self, forKey: .notes)
+        metadata = try container.decodeIfPresent([AnyCodable].self, forKey: .metadata)
     }
 }

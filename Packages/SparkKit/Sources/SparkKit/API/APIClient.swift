@@ -23,6 +23,7 @@ public actor APIClient {
     private let session: URLSession
     private let tokenStore: KeychainTokenStore
     private let etagCache: ETagCache
+    private let telemetry: APITelemetry
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
     private let logger = Logger(subsystem: "co.cronx.spark", category: "APIClient")
@@ -31,12 +32,14 @@ public actor APIClient {
         environment: APIEnvironment = .current(),
         session: URLSession = .shared,
         tokenStore: KeychainTokenStore,
-        etagCache: ETagCache = ETagCache()
+        etagCache: ETagCache = ETagCache(),
+        telemetry: APITelemetry = .shared
     ) {
         self.environment = environment
         self.session = session
         self.tokenStore = tokenStore
         self.etagCache = etagCache
+        self.telemetry = telemetry
         self.decoder = JSONDecoder()
         self.decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
@@ -71,7 +74,9 @@ public actor APIClient {
     private func perform<Response>(
         _ endpoint: Endpoint<Response>,
         absoluteBase: Bool,
-        allowRefresh: Bool
+        allowRefresh: Bool,
+        attempt: Int = 1,
+        isRefreshRequest: Bool = false
     ) async throws -> Response {
         let url = try buildURL(endpoint: endpoint, absoluteBase: absoluteBase)
         var request = URLRequest(url: url)
@@ -89,29 +94,95 @@ public actor APIClient {
         }
 
         let (data, response): (Data, URLResponse)
+        let metricsCollector = APITaskMetricsCollector()
+        let startedAt = Date()
         do {
-            (data, response) = try await session.data(for: request)
+            (data, response) = try await session.data(for: request, delegate: metricsCollector)
         } catch {
+            await captureTelemetry(
+                operation: "http.client",
+                endpoint: endpoint,
+                request: request,
+                url: url,
+                attempt: attempt,
+                isRefreshRequest: isRefreshRequest,
+                startedAt: startedAt,
+                metrics: metricsCollector.snapshot,
+                outcome: .transportError,
+                errorDescription: String(describing: error)
+            )
             throw APIError.transport(error)
         }
 
         guard let http = response as? HTTPURLResponse else {
+            await captureTelemetry(
+                operation: "http.client",
+                endpoint: endpoint,
+                request: request,
+                url: url,
+                attempt: attempt,
+                isRefreshRequest: isRefreshRequest,
+                startedAt: startedAt,
+                metrics: metricsCollector.snapshot,
+                outcome: .noData,
+                errorDescription: "Response was not HTTPURLResponse"
+            )
             throw APIError.noData
         }
 
         if http.statusCode == 304 {
+            await captureTelemetry(
+                operation: "http.client",
+                endpoint: endpoint,
+                request: request,
+                url: url,
+                attempt: attempt,
+                isRefreshRequest: isRefreshRequest,
+                startedAt: startedAt,
+                response: http,
+                data: data,
+                metrics: metricsCollector.snapshot,
+                outcome: .notModified
+            )
             throw APIError.notModified
         }
 
         if http.statusCode == 401 {
+            await captureTelemetry(
+                operation: "http.client",
+                endpoint: endpoint,
+                request: request,
+                url: url,
+                attempt: attempt,
+                isRefreshRequest: isRefreshRequest,
+                startedAt: startedAt,
+                response: http,
+                data: data,
+                metrics: metricsCollector.snapshot,
+                outcome: .unauthorized
+            )
             if allowRefresh, await tokenStore.hasRefreshToken() {
-                let refreshed = try await refreshAndRetry(endpoint, absoluteBase: absoluteBase)
+                let refreshed = try await refreshAndRetry(endpoint, absoluteBase: absoluteBase, retryAttempt: attempt + 1)
                 return refreshed
             }
             throw APIError.unauthorized
         }
 
         guard (200..<300).contains(http.statusCode) else {
+            await captureTelemetry(
+                operation: "http.client",
+                endpoint: endpoint,
+                request: request,
+                url: url,
+                attempt: attempt,
+                isRefreshRequest: isRefreshRequest,
+                startedAt: startedAt,
+                response: http,
+                data: data,
+                metrics: metricsCollector.snapshot,
+                outcome: .httpError,
+                errorDescription: "HTTP \(http.statusCode)"
+            )
             throw APIError.httpStatus(http.statusCode, data, url)
         }
 
@@ -125,21 +196,65 @@ public actor APIClient {
         #endif
 
         if data.isEmpty, let empty = EmptyResponse() as? Response {
+            await captureTelemetry(
+                operation: "http.client",
+                endpoint: endpoint,
+                request: request,
+                url: url,
+                attempt: attempt,
+                isRefreshRequest: isRefreshRequest,
+                startedAt: startedAt,
+                response: http,
+                data: data,
+                metrics: metricsCollector.snapshot,
+                outcome: .success
+            )
             return empty
         }
 
         do {
-            return try decoder.decode(Response.self, from: data)
+            let decodeStartedAt = Date()
+            let decoded = try decoder.decode(Response.self, from: data)
+            await captureTelemetry(
+                operation: "http.client",
+                endpoint: endpoint,
+                request: request,
+                url: url,
+                attempt: attempt,
+                isRefreshRequest: isRefreshRequest,
+                startedAt: startedAt,
+                response: http,
+                data: data,
+                metrics: metricsCollector.snapshot,
+                outcome: .success,
+                decodeDurationMillis: Date().timeIntervalSince(decodeStartedAt) * 1_000
+            )
+            return decoded
         } catch {
             let bodyString = String(data: data, encoding: .utf8) ?? "<binary>"
             logger.error("Decoding failed for \(endpoint.path, privacy: .public): \(error.localizedDescription, privacy: .public) — body: \(bodyString, privacy: .public)")
+            await captureTelemetry(
+                operation: "http.client",
+                endpoint: endpoint,
+                request: request,
+                url: url,
+                attempt: attempt,
+                isRefreshRequest: isRefreshRequest,
+                startedAt: startedAt,
+                response: http,
+                data: data,
+                metrics: metricsCollector.snapshot,
+                outcome: .decodingError,
+                errorDescription: String(describing: error)
+            )
             throw APIError.decoding(error)
         }
     }
 
     private func refreshAndRetry<Response>(
         _ endpoint: Endpoint<Response>,
-        absoluteBase: Bool
+        absoluteBase: Bool,
+        retryAttempt: Int
     ) async throws -> Response {
         guard let refreshToken = await tokenStore.refreshToken() else {
             throw APIError.unauthorized
@@ -147,14 +262,58 @@ public actor APIClient {
         let tokens = try await perform(
             AuthEndpoint.refresh(refreshToken: refreshToken),
             absoluteBase: true,
-            allowRefresh: false
+            allowRefresh: false,
+            isRefreshRequest: true
         )
         await tokenStore.store(
             access: tokens.accessToken,
             refresh: tokens.refreshToken,
             expiresIn: tokens.expiresIn
         )
-        return try await perform(endpoint, absoluteBase: absoluteBase, allowRefresh: false)
+        return try await perform(endpoint, absoluteBase: absoluteBase, allowRefresh: false, attempt: retryAttempt)
+    }
+
+    private func captureTelemetry<Response>(
+        operation: String,
+        endpoint: Endpoint<Response>,
+        request: URLRequest,
+        url: URL,
+        attempt: Int,
+        isRefreshRequest: Bool,
+        startedAt: Date,
+        response: HTTPURLResponse? = nil,
+        data: Data? = nil,
+        metrics: APITaskMetrics? = nil,
+        outcome: APITelemetryEvent.Outcome,
+        errorDescription: String? = nil,
+        decodeDurationMillis: Double? = nil
+    ) async {
+        let requestHeaders = APITelemetryRedactor.headers(request.allHTTPHeaderFields ?? [:])
+        let responseHeaders = APITelemetryRedactor.headers(response?.stringHeaderFields ?? [:])
+        let contentType = request.value(forHTTPHeaderField: "Content-Type")
+        let responseContentType = response?.value(forHTTPHeaderField: "Content-Type")
+
+        let event = APITelemetryEvent(
+            operation: operation,
+            method: request.httpMethod ?? endpoint.method.rawValue,
+            url: APITelemetryRedactor.url(url),
+            endpointPath: endpoint.path,
+            requiresAuth: endpoint.requiresAuth,
+            attempt: attempt,
+            isRefreshRequest: isRefreshRequest,
+            requestHeaders: requestHeaders,
+            requestBody: APITelemetryRedactor.body(request.httpBody, contentType: contentType),
+            statusCode: response?.statusCode,
+            responseHeaders: responseHeaders,
+            responseBody: APITelemetryRedactor.body(data, contentType: responseContentType),
+            responseSizeBytes: data?.count ?? 0,
+            durationMillis: Date().timeIntervalSince(startedAt) * 1_000,
+            decodeDurationMillis: decodeDurationMillis,
+            metrics: metrics,
+            outcome: outcome,
+            errorDescription: errorDescription
+        )
+        await telemetry.capture(event)
     }
 
     private func buildURL<Response>(endpoint: Endpoint<Response>, absoluteBase: Bool) throws -> URL {
@@ -204,6 +363,15 @@ public actor APIClient {
             return "/\(normalizedBase)"
         }
         return "/\(normalizedBase)/\(normalizedEndpoint)"
+    }
+}
+
+private extension HTTPURLResponse {
+    var stringHeaderFields: [String: String] {
+        Dictionary(uniqueKeysWithValues: allHeaderFields.compactMap { key, value in
+            guard let key = key as? String else { return nil }
+            return (key, String(describing: value))
+        })
     }
 }
 

@@ -27,14 +27,16 @@ struct APIClientTests {
             baseURL: URL(string: "https://test.spark.cronx.co/api/v1/mobile")!,
             oauthAuthorizeURL: URL(string: "https://test.spark.cronx.co/oauth/authorize")!,
             name: "test"
-        )
+        ),
+        telemetry: APITelemetry = APITelemetry()
     ) -> (APIClient, KeychainTokenStore) {
         let tokenStore = makeStore()
         let client = APIClient(
             environment: environment,
             session: makeSession(),
             tokenStore: tokenStore,
-            etagCache: makeCache()
+            etagCache: makeCache(),
+            telemetry: telemetry
         )
         return (client, tokenStore)
     }
@@ -167,5 +169,95 @@ struct APIClientTests {
         let request = try #require(captured.first)
         #expect(request.url?.host == "auth.spark.cronx.co")
         #expect(request.url?.path == "/oauth/token")
+    }
+
+    @Test("telemetry captures request and response metadata with redacted credentials")
+    func telemetryRedactsCredentials() async throws {
+        struct Response: Decodable, Sendable {
+            let safe: String
+            let accessToken: String
+
+            enum CodingKeys: String, CodingKey {
+                case safe
+                case accessToken = "access_token"
+            }
+        }
+
+        let sink = TestTelemetrySink()
+        let telemetry = APITelemetry()
+        await telemetry.setSink(sink)
+        let (client, tokenStore) = makeClient(telemetry: telemetry)
+        await tokenStore.store(access: "bearer-secret", refresh: "refresh-secret", expiresIn: 60)
+
+        let requestBody = """
+        {"content":"hello","refresh_token":"refresh-secret","nested":{"api_key":"key-secret"}}
+        """.data(using: .utf8)!
+        let endpoint = Endpoint<Response>(
+            method: .post,
+            path: "/telemetry",
+            body: requestBody,
+            contentType: "application/json"
+        )
+
+        await StubURLProtocol.set { _ in
+            (
+                Data(#"{"safe":"ok","access_token":"response-secret"}"#.utf8),
+                200,
+                ["Content-Type": "application/json", "Set-Cookie": "session=secret"]
+            )
+        }
+
+        let response = try await client.request(endpoint)
+        #expect(response.safe == "ok")
+
+        let event = try await #require(sink.events().first)
+        #expect(event.outcome == .success)
+        #expect(event.method == "POST")
+        #expect(event.statusCode == 200)
+        #expect(event.requestHeaders["Authorization"] == "<redacted>")
+        #expect(event.responseHeaders["Set-Cookie"] == "<redacted>")
+
+        let capturedRequestBody = String(data: try #require(event.requestBody), encoding: .utf8) ?? ""
+        let capturedResponseBody = String(data: try #require(event.responseBody), encoding: .utf8) ?? ""
+        #expect(capturedRequestBody.contains(#""content":"hello""#))
+        #expect(capturedRequestBody.contains(#""refresh_token":"<redacted>""#))
+        #expect(capturedRequestBody.contains(#""api_key":"<redacted>""#))
+        #expect(capturedResponseBody.contains(#""access_token":"<redacted>""#))
+        #expect(!capturedRequestBody.contains("refresh-secret"))
+        #expect(!capturedResponseBody.contains("response-secret"))
+    }
+
+    @Test("telemetry captures failed HTTP responses")
+    func telemetryCapturesHTTPFailures() async throws {
+        let sink = TestTelemetrySink()
+        let telemetry = APITelemetry()
+        await telemetry.setSink(sink)
+        let (client, _) = makeClient(telemetry: telemetry)
+
+        await StubURLProtocol.set { _ in
+            (Data(#"{"message":"broken"}"#.utf8), 500, ["Content-Type": "application/json"])
+        }
+
+        await #expect(throws: APIError.self) {
+            _ = try await client.request(BriefingEndpoint.today())
+        }
+
+        let event = try await #require(sink.events().first)
+        #expect(event.outcome == .httpError)
+        #expect(event.statusCode == 500)
+        #expect(event.responseSizeBytes == #"{"message":"broken"}"#.utf8.count)
+        #expect(event.durationMillis >= 0)
+    }
+}
+
+private actor TestTelemetrySink: APITelemetrySink {
+    private var captured: [APITelemetryEvent] = []
+
+    func capture(_ event: APITelemetryEvent) {
+        captured.append(event)
+    }
+
+    func events() -> [APITelemetryEvent] {
+        captured
     }
 }
