@@ -48,7 +48,7 @@ struct MapView: View {
     @ViewBuilder
     private var content: some View {
         if let viewModel {
-            MapViewContent(viewModel: viewModel, cameraPosition: $cameraPosition) { point in
+            MapViewContent(viewModel: viewModel, cameraPosition: $cameraPosition, isEmbedded: isEmbedded) { point in
                 handleSelection(point)
             }
         } else {
@@ -75,6 +75,7 @@ struct MapView: View {
 private struct MapViewContent: View {
     @Bindable var viewModel: MapViewModel
     @Binding var cameraPosition: MapCameraPosition
+    let isEmbedded: Bool
     let onSelectPoint: (MapDataPoint) -> Void
 
     @State private var sheetDetent: PresentationDetent = .height(160)
@@ -103,16 +104,72 @@ private struct MapViewContent: View {
             .padding(.horizontal, SparkSpacing.lg)
             .padding(.bottom, SparkSpacing.xxl + SparkSpacing.xxxl)
         }
+        .overlay(alignment: .bottom) {
+            if isEmbedded {
+                EmbeddedMapSummary(points: viewModel.visiblePoints, onSelect: onSelectPoint)
+                    .padding(.horizontal, SparkSpacing.lg)
+                    .padding(.bottom, SparkSpacing.xxl + SparkSpacing.xxxl + 56)
+            }
+        }
         .onMapCameraChange(frequency: .onEnd) { context in
             viewModel.regionDidChange(context.region)
         }
-        .sheet(isPresented: .constant(true)) {
-            MapBottomSheet(points: viewModel.visiblePoints, onSelect: onSelectPoint)
-                .presentationDetents([.height(160), .medium, .large], selection: $sheetDetent)
-                .presentationBackgroundInteraction(.enabled(upThrough: .medium))
-                .presentationDragIndicator(.visible)
-                .interactiveDismissDisabled()
+        .sheet(isPresented: .constant(!isEmbedded)) {
+            if !isEmbedded {
+                MapBottomSheet(points: viewModel.visiblePoints, onSelect: onSelectPoint)
+                    .presentationDetents([.height(160), .medium, .large], selection: $sheetDetent)
+                    .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+                    .presentationDragIndicator(.visible)
+                    .interactiveDismissDisabled()
+            }
         }
+    }
+}
+
+private struct EmbeddedMapSummary: View {
+    let points: [MapDataPoint]
+    let onSelect: (MapDataPoint) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+            HStack {
+                Text("In view")
+                    .font(SparkTypography.bodyStrong)
+                Spacer(minLength: 0)
+                Text("\(points.count)")
+                    .font(SparkTypography.monoSmall)
+                    .foregroundStyle(.secondary)
+            }
+
+            if points.isEmpty {
+                Text("Pan the map to find visits and events.")
+                    .font(SparkTypography.bodySmall)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(points.prefix(3)) { point in
+                    Button {
+                        onSelect(point)
+                    } label: {
+                        HStack(spacing: SparkSpacing.sm) {
+                            Image(systemName: point.kind == .transaction ? "creditcard.fill" : "mappin.and.ellipse")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 18)
+                            Text(point.title)
+                                .font(SparkTypography.bodySmall)
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.right")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(SparkSpacing.md)
+        .sparkGlass(.roundedRect(SparkRadii.lg))
     }
 }
 

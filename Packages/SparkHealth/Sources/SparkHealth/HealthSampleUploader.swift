@@ -18,6 +18,7 @@ public final class HealthSampleUploader: NSObject, @unchecked Sendable {
 
     private let lock = NSLock()
     private var completionHandlers: [String: @Sendable () -> Void] = [:]
+    private var telemetryByTaskIdentifier: [Int: PendingTelemetry] = [:]
     private var environment: APIEnvironment = .current()
     private var accessToken: String?
 
@@ -66,6 +67,13 @@ public final class HealthSampleUploader: NSObject, @unchecked Sendable {
 
         let task = session.uploadTask(with: request, fromFile: tmpURL)
         task.taskDescription = tmpURL.lastPathComponent
+        let pending = PendingTelemetry(
+            startedAt: Date(),
+            request: request,
+            body: body,
+            fileSizeBytes: body.count
+        )
+        lock.withLock { telemetryByTaskIdentifier[task.taskIdentifier] = pending }
         task.resume()
     }
 
@@ -87,6 +95,13 @@ public final class HealthSampleUploader: NSObject, @unchecked Sendable {
     }
 }
 
+private struct PendingTelemetry: Sendable {
+    let startedAt: Date
+    let request: URLRequest
+    let body: Data
+    let fileSizeBytes: Int
+}
+
 // MARK: - URLSessionDelegate
 
 extension HealthSampleUploader: URLSessionDelegate, URLSessionTaskDelegate {
@@ -103,10 +118,58 @@ extension HealthSampleUploader: URLSessionDelegate, URLSessionTaskDelegate {
         task: URLSessionTask,
         didCompleteWithError error: Error?
     ) {
+        let pending = lock.withLock {
+            telemetryByTaskIdentifier.removeValue(forKey: task.taskIdentifier)
+        }
+        if let pending {
+            let response = task.response as? HTTPURLResponse
+            Task {
+                await APITelemetry.shared.capture(
+                    APITelemetryEvent(
+                        operation: "http.client.background_upload",
+                        method: pending.request.httpMethod ?? "POST",
+                        url: APITelemetryRedactor.url(pending.request.url ?? URL(string: "about:blank")!),
+                        endpointPath: "/health/samples",
+                        requiresAuth: true,
+                        requestHeaders: APITelemetryRedactor.headers(pending.request.allHTTPHeaderFields ?? [:]),
+                        requestBody: APITelemetryRedactor.body(pending.body, contentType: pending.request.value(forHTTPHeaderField: "Content-Type")),
+                        statusCode: response?.statusCode,
+                        responseHeaders: APITelemetryRedactor.headers(response?.stringHeaderFields ?? [:]),
+                        responseBody: nil,
+                        responseSizeBytes: pending.fileSizeBytes,
+                        durationMillis: Date().timeIntervalSince(pending.startedAt) * 1_000,
+                        outcome: Self.outcome(response: response, error: error),
+                        errorDescription: error.map { String(describing: $0) }
+                    )
+                )
+            }
+        }
+
         guard let fileName = task.taskDescription else { return }
         if error == nil, (task.response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) ?? false {
             let tmpURL = cacheURL(for: String(fileName.dropLast(5))) // strip .json
             try? FileManager.default.removeItem(at: tmpURL)
         }
+    }
+
+    private nonisolated static func outcome(
+        response: HTTPURLResponse?,
+        error: Error?
+    ) -> APITelemetryEvent.Outcome {
+        if error != nil { return .transportError }
+        guard let response else { return .noData }
+        if (200..<300).contains(response.statusCode) { return .success }
+        if response.statusCode == 401 { return .unauthorized }
+        if response.statusCode == 304 { return .notModified }
+        return .httpError
+    }
+}
+
+private extension HTTPURLResponse {
+    var stringHeaderFields: [String: String] {
+        Dictionary(uniqueKeysWithValues: allHeaderFields.compactMap { key, value in
+            guard let key = key as? String else { return nil }
+            return (key, String(describing: value))
+        })
     }
 }

@@ -17,6 +17,11 @@ public enum MetricsEndpoint {
         }
     }
 
+    /// GET /metrics
+    public static func list() -> Endpoint<[Metric]> {
+        Endpoint(method: .get, path: "/metrics")
+    }
+
     /// GET /metrics/{identifier}?range=…
     public static func detail(identifier: String, range: Range = .thirtyDays) -> Endpoint<MetricDetail> {
         Endpoint(

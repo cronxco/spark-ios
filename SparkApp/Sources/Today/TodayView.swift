@@ -32,30 +32,9 @@ struct TodayView: View {
                 VStack(alignment: .leading, spacing: SparkSpacing.lg) {
                     hero(snapshot: snapshot)
 
+                    StatStripView(snapshot: snapshot)
+
                     anomalyPill(for: snapshot)
-
-                    if let health = snapshot.health, health.hasSleep {
-                        SleepCard(health: health)
-                    }
-
-                    if shouldShowActivityMoneyRow(snapshot) {
-                        HStack(alignment: .top, spacing: SparkSpacing.md) {
-                            if let activity = snapshot.activity, activity.hasAny {
-                                ActivityCard(activity: activity)
-                            }
-                            if let money = snapshot.money, money.hasAny {
-                                MoneyCard(money: money)
-                            }
-                        }
-                    }
-
-                    if let media = snapshot.media, media.hasAny {
-                        MediaCard(media: media)
-                    }
-
-                    if let next = snapshot.knowledge?.nextCalendarEvent {
-                        UpNextCard(event: next)
-                    }
 
                     CheckInCard(status: snapshot.checkInStatus) {
                         showCheckIn = true
@@ -66,9 +45,6 @@ struct TodayView: View {
                     if !snapshot.hasAnyDomainData {
                         loadingOrEmptyState
                     }
-
-                    HeatmapSection(rows: snapshot.heatmapRows)
-                        .padding(.top, SparkSpacing.md)
                 }
                 .padding(.horizontal, SparkSpacing.lg)
                 .padding(.top, deviceSafeAreaTop + SparkSpacing.xl)
@@ -178,14 +154,14 @@ struct TodayView: View {
 
     private func heroTitle(snapshot: TodaySnapshot) -> String {
         if Calendar.current.isDateInToday(date) {
-            return "\(snapshot.timeOfDay.greeting),\n\(firstName)."
+            return "\(firstName),\nyour day so far."
         } else if Calendar.current.isDateInYesterday(date) {
-            return "Yesterday."
+            return "Yesterday\nin review"
         } else if let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: .now),
                   Calendar.current.isDate(date, inSameDayAs: tomorrow) {
-            return "Tomorrow."
+            return "Looking ahead"
         } else {
-            return snapshot.dateLabel
+            return Self.dayTitleFormatter.string(from: date)
         }
     }
 
@@ -202,8 +178,8 @@ struct TodayView: View {
     }
 
     private var firstName: String {
-        // TODO: source from /me endpoint when Settings → Profile lands.
-        "Will"
+        let name = viewModel?.profile?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return name.split(separator: " ").first.map(String.init) ?? "Your"
     }
 
     private func heroSubtitle(snapshot: TodaySnapshot) -> String? {
@@ -220,6 +196,12 @@ struct TodayView: View {
         guard !parts.isEmpty else { return nil }
         return "You " + parts.joined(separator: ", ") + " so far."
     }
+
+    private static let dayTitleFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "EEEE\nd MMMM yyyy"
+        return f
+    }()
 
     private func formatSteps(_ count: Int) -> String {
         if count >= 1_000 {
@@ -243,10 +225,6 @@ struct TodayView: View {
                 trailing: "\(snapshot.anomalies.count) anomal\(snapshot.anomalies.count == 1 ? "y" : "ies")"
             )
         }
-    }
-
-    private func shouldShowActivityMoneyRow(_ snapshot: TodaySnapshot) -> Bool {
-        (snapshot.activity?.hasAny ?? false) || (snapshot.money?.hasAny ?? false)
     }
 
     // MARK: - Loading / empty

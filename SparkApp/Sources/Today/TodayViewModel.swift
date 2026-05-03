@@ -14,6 +14,7 @@ enum TodayNetworkState: Equatable {
 final class TodayViewModel {
     let date: Date
     private(set) var cached: DaySummary?
+    private(set) var profile: UserProfile?
     private(set) var networkState: TodayNetworkState = .idle
 
     private let apiClient: APIClient
@@ -27,6 +28,7 @@ final class TodayViewModel {
 
     func load() async {
         loadCached()
+        await loadProfile()
         await revalidate()
         await loadFeed()
     }
@@ -66,6 +68,14 @@ final class TodayViewModel {
             SparkObservability.captureHandled(error)
             let message = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
             networkState = force ? .error(message) : (cached == nil ? .error(message) : .idle)
+        }
+    }
+
+    private func loadProfile() async {
+        do {
+            profile = try await apiClient.request(MeEndpoint.get())
+        } catch {
+            // Non-fatal: the day can still render with cached/live summary data.
         }
     }
 

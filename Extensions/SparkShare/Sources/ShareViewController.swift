@@ -112,6 +112,22 @@ final class ShareViewController: UIViewController {
         request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
         let config = URLSessionConfiguration.background(withIdentifier: "co.cronx.spark.share.upload")
         config.sharedContainerIdentifier = "group.co.cronx.spark"
+        let fileSize = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        Task {
+            await APITelemetry.shared.capture(
+                APITelemetryEvent(
+                    operation: "http.client.background_upload.schedule",
+                    method: request.httpMethod ?? "POST",
+                    url: APITelemetryRedactor.url(uploadURL),
+                    endpointPath: "/check-ins/media",
+                    requiresAuth: true,
+                    requestHeaders: APITelemetryRedactor.headers(request.allHTTPHeaderFields ?? [:]),
+                    responseSizeBytes: fileSize,
+                    durationMillis: 0,
+                    outcome: .success
+                )
+            )
+        }
         URLSession(configuration: config).uploadTask(with: request, fromFile: fileURL).resume()
     }
 

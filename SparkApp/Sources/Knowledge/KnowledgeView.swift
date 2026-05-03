@@ -193,9 +193,7 @@ private struct KnowledgeItemCard: View {
                         .foregroundStyle(.primary)
 
                     if let tldr = event.tldr {
-                        Text(tldr)
-                            .font(SparkTypography.bodySmall)
-                            .foregroundStyle(.secondary)
+                        RichContentText(text: tldr, font: SparkTypography.bodySmall, foregroundStyle: .secondary)
                             .italic()
                             .lineLimit(2)
                     }

@@ -154,16 +154,16 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
 }
 
 /// Search payload returned by `/search`.
-/// Backend can return either a raw array (`[SearchResult]`) or an envelope
-/// containing the array under a known key.
+/// Backend returns a grouped object: `{ mode, query, events: [...], objects: [...], integrations: [...], metrics: [...] }`.
+/// Legacy flat-array and wrapped-array formats are also accepted for backwards compatibility.
 public struct SearchResponse: Codable, Sendable, Hashable {
     public let results: [SearchResult]
 
     enum CodingKeys: String, CodingKey {
-        case results
-        case data
-        case items
-        case hits
+        // Grouped backend format
+        case events, objects, integrations, metrics
+        // Legacy wrapped formats
+        case results, data, items, hits
     }
 
     public init(results: [SearchResult]) {
@@ -171,34 +171,75 @@ public struct SearchResponse: Codable, Sendable, Hashable {
     }
 
     public init(from decoder: Decoder) throws {
+        // 1. Raw array (must be checked before requesting a keyed container)
         if let direct = try? [SearchResult](from: decoder) {
             results = direct
             return
         }
 
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        if let wrapped = try container.decodeIfPresent([SearchResult].self, forKey: .results) {
-            results = wrapped
+
+        // 2. Grouped backend format: { events: [...], objects: [...], ... }
+        if container.contains(.events) || container.contains(.objects)
+            || container.contains(.integrations) || container.contains(.metrics) {
+            var all: [SearchResult] = []
+
+            for e in (try container.decodeIfPresent([BackendEvent].self, forKey: .events)) ?? [] {
+                all.append(.event(SearchResult.EventHit(
+                    id: e.id ?? "",
+                    title: e.target?.title ?? e.action ?? e.service ?? e.id ?? "",
+                    subtitle: e.domain,
+                    domain: e.domain
+                )))
+            }
+            for o in (try container.decodeIfPresent([BackendObject].self, forKey: .objects)) ?? [] {
+                all.append(.object(SearchResult.ObjectHit(
+                    id: o.id ?? "",
+                    title: o.title ?? o.concept ?? o.id ?? "",
+                    subtitle: o.concept,
+                    concept: o.concept
+                )))
+            }
+            for i in (try container.decodeIfPresent([BackendIntegration].self, forKey: .integrations)) ?? [] {
+                all.append(.integration(SearchResult.IntegrationHit(
+                    id: i.id ?? "",
+                    title: i.name ?? i.service ?? i.id ?? "",
+                    subtitle: i.service,
+                    service: i.service
+                )))
+            }
+            for m in (try container.decodeIfPresent([BackendMetric].self, forKey: .metrics)) ?? [] {
+                all.append(.metric(SearchResult.MetricHit(
+                    identifier: m.identifier ?? "",
+                    title: m.displayName ?? m.identifier ?? "",
+                    subtitle: m.unit,
+                    domain: m.service
+                )))
+            }
+
+            results = all
             return
+        }
+
+        // 3. Legacy wrapped formats
+        if let wrapped = try container.decodeIfPresent([SearchResult].self, forKey: .results) {
+            results = wrapped; return
         }
         if let wrapped = try container.decodeIfPresent([SearchResult].self, forKey: .data) {
-            results = wrapped
-            return
+            results = wrapped; return
         }
         if let wrapped = try container.decodeIfPresent([SearchResult].self, forKey: .items) {
-            results = wrapped
-            return
+            results = wrapped; return
         }
         if let wrapped = try container.decodeIfPresent([SearchResult].self, forKey: .hits) {
-            results = wrapped
-            return
+            results = wrapped; return
         }
 
         throw DecodingError.typeMismatch(
             [SearchResult].self,
             DecodingError.Context(
                 codingPath: decoder.codingPath,
-                debugDescription: "Expected search payload as array or wrapped array under results/data/items/hits."
+                debugDescription: "Expected search payload as grouped object, array, or wrapped array."
             )
         )
     }
@@ -206,5 +247,42 @@ public struct SearchResponse: Codable, Sendable, Hashable {
     public func encode(to encoder: Encoder) throws {
         var single = encoder.singleValueContainer()
         try single.encode(results)
+    }
+}
+
+// MARK: - Private backend compact types
+
+private struct BackendEvent: Decodable {
+    let id: String?
+    let service: String?
+    let domain: String?
+    let action: String?
+    let target: TargetRef?
+    struct TargetRef: Decodable { let title: String? }
+}
+
+private struct BackendObject: Decodable {
+    let id: String?
+    let title: String?
+    let concept: String?
+}
+
+private struct BackendIntegration: Decodable {
+    let id: String?
+    let name: String?
+    let service: String?
+}
+
+private struct BackendMetric: Decodable {
+    let identifier: String?
+    let displayName: String?
+    let unit: String?
+    let service: String?
+
+    enum CodingKeys: String, CodingKey {
+        case identifier
+        case displayName = "display_name"
+        case unit
+        case service
     }
 }
