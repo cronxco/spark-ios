@@ -1,8 +1,11 @@
 import Foundation
 import Observation
 import Sentry
+import SparkHealth
 import SparkKit
+import SparkSync
 import SwiftData
+import WidgetKit
 
 enum SessionState: Equatable {
     case unknown
@@ -14,6 +17,11 @@ enum AppRoute: Hashable {
     case today(date: Date?)
     case day(Date)
     case event(id: String)
+    case object(id: String)
+    case block(id: String)
+    case metric(identifier: String)
+    case place(id: String)
+    case integration(service: String)
 }
 
 @MainActor
@@ -40,8 +48,11 @@ final class AppModel {
     let etagCache: ETagCache
     let apiClient: APIClient
     let authService: AuthenticationService
+    let healthPermissions = HealthKitPermissionManager.shared
+    let reverb: ReverbClient
 
     var session: SessionState = .unknown
+    var onboardingComplete: Bool
     var lastError: String?
     var pendingRoute: AppRoute?
 
@@ -54,14 +65,98 @@ final class AppModel {
         self.etagCache = etagCache
         self.apiClient = client
         self.authService = AuthenticationService(tokenStore: tokenStore, apiClient: client)
+        self.reverb = ReverbClient(tokenStore: tokenStore)
+        self.onboardingComplete = UserDefaults(suiteName: "group.co.cronx.spark")?.bool(forKey: "onboarding.completed") == true
     }
 
     func bootstrap() async {
-        if await tokenStore.accessToken() != nil {
+        if let token = await tokenStore.accessToken() {
+            onboardingComplete = true
             session = .loggedIn
+            await registerDevice()
+            await fetchAndCacheUserId()
+            configureHealthUploader(accessToken: token)
+            consumePendingIntentRoute()
+            await wireReverbHandler()
+            await reverbConnect()
         } else {
             session = .loggedOut
         }
+    }
+
+    private func wireReverbHandler() async {
+        let client = apiClient
+        let cont = container
+        await reverb.addHandler { event in
+            let syncEvents: Set<String> = [
+                "event.created", "event.updated", "event.deleted",
+                "anomaly.raised", "notification.received",
+            ]
+            guard syncEvents.contains(event.eventName) else { return }
+            Task { @MainActor in
+                _ = await DeltaSyncer.sync(using: client, container: cont)
+                WidgetCenter.shared.reloadAllTimelines()
+            }
+        }
+    }
+
+    /// Connect Reverb when the app is in the foreground.
+    /// The user ID is cached in UserDefaults after bootstrap via GET /me.
+    func reverbConnect() async {
+        guard session == .loggedIn else { return }
+        let userId = UserDefaults.sparkAppGroup.string(forKey: "spark.userId") ?? ""
+        guard !userId.isEmpty else { return }
+        await reverb.connect(userId: userId)
+    }
+
+    /// Disconnect Reverb when the app moves to the background.
+    func reverbDisconnect() async {
+        await reverb.disconnect()
+    }
+
+    /// Read a route written by an AppIntent (from the extension process) and
+    /// navigate to it. Consumed once to prevent stale navigation on re-launch.
+    private func consumePendingIntentRoute() {
+        let defaults = UserDefaults(suiteName: "group.co.cronx.spark")
+        guard let raw = defaults?.string(forKey: "spark.pendingRoute") else { return }
+        defaults?.removeObject(forKey: "spark.pendingRoute")
+        let parts = raw.split(separator: ":", maxSplits: 1).map(String.init)
+        guard let kind = parts.first else { return }
+        switch kind {
+        case "today":   pendingRoute = .today(date: nil)
+        case "event":   if let id = parts.last { pendingRoute = .event(id: id) }
+        case "metric":  if let id = parts.last { pendingRoute = .metric(identifier: id) }
+        case "place":   if let id = parts.last { pendingRoute = .place(id: id) }
+        case "search":  break   // SearchView picks up the query separately
+        case "action":
+            if parts.last == "startSleep" {
+                Task { await LiveActivityManager.shared.startSleepActivity(bedtime: .now, targetWakeTime: nil) }
+            } else if parts.last == "endSleep" {
+                Task { await LiveActivityManager.shared.endSleepActivity(score: 0, durationMinutes: 0) }
+            }
+        default: break
+        }
+    }
+
+    private func fetchAndCacheUserId() async {
+        guard let profile = try? await apiClient.request(MeEndpoint.get()) else { return }
+        UserDefaults.sparkAppGroup.set(profile.id, forKey: "spark.userId")
+    }
+
+    private func configureHealthUploader(accessToken: String) {
+        HealthSampleUploader.shared.configure(
+            environment: APIEnvironment.current(),
+            accessToken: accessToken
+        )
+    }
+
+    private func registerDevice() async {
+        #if canImport(UIKit)
+        let name = UIDevice.current.name
+        #else
+        let name = "Unknown"
+        #endif
+        _ = try? await apiClient.request(DevicesEndpoint.register(name: name, platform: "ios"))
     }
 
     func signIn(anchor: ASPresentationAnchorHandle) async {
@@ -73,6 +168,9 @@ final class AppModel {
             lastError = nil
         } catch {
             lastError = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+            if case let APIError.httpStatus(status, _, url) = error {
+                SentrySDK.capture(message: "Auth sign-in HTTP error \(status) at \(url.absoluteString)")
+            }
             SentrySDK.capture(error: error)
         }
     }

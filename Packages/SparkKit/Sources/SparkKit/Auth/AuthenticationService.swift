@@ -1,6 +1,8 @@
 import Foundation
 @preconcurrency import AuthenticationServices
+#if canImport(UIKit)
 import UIKit
+#endif
 
 public enum AuthenticationError: Error, Sendable {
     case cancelled
@@ -20,6 +22,9 @@ public final class AuthenticationService: NSObject, Sendable {
     private let callbackScheme = "spark"
     // Retained for the duration of the OAuth web session; released on completion.
     nonisolated(unsafe) private var activeSession: ASWebAuthenticationSession?
+    // `presentationContextProvider` is weak on `ASWebAuthenticationSession`, so
+    // retain the provider for the full session lifecycle.
+    nonisolated(unsafe) private var activeAnchorProvider: AnchorProvider?
 
     public init(
         environment: APIEnvironment = .current(),
@@ -36,7 +41,7 @@ public final class AuthenticationService: NSObject, Sendable {
         let verifier = PKCE.generateVerifier()
         let challenge = PKCE.challenge(for: verifier)
         let state = PKCE.generateState()
-        let deviceName = UIDevice.current.name
+        let deviceName = currentDeviceName
         let authorizeURL = buildAuthorizeURL(challenge: challenge, state: state, deviceName: deviceName)
 
         let callbackURL: URL = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URL, Error>) in
@@ -45,6 +50,7 @@ public final class AuthenticationService: NSObject, Sendable {
                 callbackURLScheme: callbackScheme
             ) { [weak self] url, error in
                 self?.activeSession = nil
+                self?.activeAnchorProvider = nil
                 if let error {
                     if (error as NSError).code == ASWebAuthenticationSessionError.canceledLogin.rawValue {
                         continuation.resume(throwing: AuthenticationError.cancelled)
@@ -59,8 +65,10 @@ public final class AuthenticationService: NSObject, Sendable {
                 }
                 continuation.resume(returning: url)
             }
-            session.presentationContextProvider = AnchorProvider(anchor: presentationAnchor)
+            let anchorProvider = AnchorProvider(anchor: presentationAnchor)
+            session.presentationContextProvider = anchorProvider
             session.prefersEphemeralWebBrowserSession = false
+            activeAnchorProvider = anchorProvider
             activeSession = session
             session.start()
         }
@@ -108,6 +116,15 @@ public final class AuthenticationService: NSObject, Sendable {
         }
         let state = components.queryItems?.first(where: { $0.name == "state" })?.value
         return (code, state)
+    }
+
+    @MainActor
+    private var currentDeviceName: String {
+#if canImport(UIKit)
+        UIDevice.current.name
+#else
+        ProcessInfo.processInfo.hostName
+#endif
     }
 }
 

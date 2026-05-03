@@ -1,5 +1,2 @@
-import Foundation
-
-/// Placeholder. Populated in Phase 3 with App Intents, Shortcuts,
-/// and the CoreSpotlight indexer.
-public enum SparkIntelligence {}
+// SparkIntelligence — App Intents, Siri shortcuts, and CoreSpotlight indexing.
+// Phase 3: read intents, action intents, AppShortcutsProvider, SpotlightIndexer.

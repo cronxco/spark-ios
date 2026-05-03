@@ -1,6 +1,7 @@
 import Foundation
 
-/// Routable links the Phase 1 app understands.
+/// Routable links the app understands. Mirrors the AASA paths declared in
+/// `public/.well-known/apple-app-site-association` on the backend.
 public enum DeepLink: Sendable, Equatable {
     /// OAuth callback from `ASWebAuthenticationSession`.
     case authCallback(code: String, state: String)
@@ -8,11 +9,17 @@ public enum DeepLink: Sendable, Equatable {
     case today(date: Date?)
     /// Day pager for an arbitrary date (`/day/YYYY-MM-DD`).
     case day(Date)
-    /// Event detail — resolved by id; Phase 2 fills in the detail view.
-    case event(id: String)
 
-    /// Parse an incoming URL against the Phase 1 routing table. Returns nil
-    /// when the URL doesn't match anything we handle on device yet.
+    case event(id: String)
+    case object(id: String)
+    case block(id: String)
+    case metric(identifier: String)
+    case place(id: String)
+    case integration(service: String)
+
+    /// Parse an incoming URL. Returns nil when the URL doesn't match any
+    /// route — caller can fall through to default handling (e.g. opening
+    /// the URL in Safari).
     public static func parse(
         _ url: URL,
         host: String = "spark.cronx.co",
@@ -24,18 +31,35 @@ public enum DeepLink: Sendable, Equatable {
 
         guard url.host == host else { return nil }
 
-        let path = url.path
-        let components = path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+        let parts = url.path
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .map(String.init)
 
-        switch components.first {
+        switch parts.first {
         case "today":
-            return .today(date: components.dropFirst().first.flatMap(Self.date(from:)))
+            return .today(date: parts.dropFirst().first.flatMap(Self.date(from:)))
         case "day":
-            guard components.count >= 2, let date = Self.date(from: components[1]) else { return nil }
+            guard parts.count >= 2, let date = Self.date(from: parts[1]) else { return nil }
             return .day(date)
-        case "event":
-            guard components.count >= 2 else { return nil }
-            return .event(id: components[1])
+        case "events", "event":
+            guard parts.count >= 2 else { return nil }
+            return .event(id: parts[1])
+        case "objects", "object":
+            guard parts.count >= 2 else { return nil }
+            return .object(id: parts[1])
+        case "blocks", "block":
+            guard parts.count >= 2 else { return nil }
+            return .block(id: parts[1])
+        case "metrics", "metric":
+            guard parts.count >= 2 else { return nil }
+            return .metric(identifier: parts[1])
+        case "places", "place":
+            guard parts.count >= 2 else { return nil }
+            return .place(id: parts[1])
+        case "integrations":
+            // /integrations/{service}/details
+            guard parts.count >= 3, parts[2] == "details" else { return nil }
+            return .integration(service: parts[1])
         default:
             return nil
         }

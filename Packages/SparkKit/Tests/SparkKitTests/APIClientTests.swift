@@ -127,4 +127,45 @@ struct APIClientTests {
             _ = try await client.request(BriefingEndpoint.today())
         }
     }
+
+    @Test("site-root requests do not include a double slash")
+    func siteRootPathIsNormalized() async throws {
+        let (client, _) = makeClient()
+        await StubURLProtocol.set { _ in
+            let payload = """
+            {"token_type":"Bearer","access_token":"new","refresh_token":"r-2","expires_in":3600}
+            """.data(using: .utf8)!
+            return (payload, 200, [:])
+        }
+
+        _ = try await client.requestSiteRoot(AuthEndpoint.exchange(code: "abc", verifier: "verifier"))
+
+        let captured = await StubURLProtocol.recorded()
+        let request = try #require(captured.first)
+        #expect(request.url?.path == "/oauth/token")
+    }
+
+    @Test("site-root requests use oauth host when base URL has a trailing slash")
+    func siteRootUsesOAuthHost() async throws {
+        let environment = APIEnvironment(
+            baseURL: URL(string: "https://api.spark.cronx.co/api/v1/mobile/")!,
+            oauthAuthorizeURL: URL(string: "https://auth.spark.cronx.co/oauth/authorize")!,
+            name: "test"
+        )
+        let (client, _) = makeClient(environment: environment)
+
+        await StubURLProtocol.set { _ in
+            let payload = """
+            {"token_type":"Bearer","access_token":"new","refresh_token":"r-2","expires_in":3600}
+            """.data(using: .utf8)!
+            return (payload, 200, [:])
+        }
+
+        _ = try await client.requestSiteRoot(AuthEndpoint.exchange(code: "abc", verifier: "verifier"))
+
+        let captured = await StubURLProtocol.recorded()
+        let request = try #require(captured.first)
+        #expect(request.url?.host == "auth.spark.cronx.co")
+        #expect(request.url?.path == "/oauth/token")
+    }
 }

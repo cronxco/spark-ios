@@ -32,7 +32,7 @@ public actor KeychainTokenStore {
     public init(
         service: String = "co.cronx.spark.oauth",
         account: String = "primary",
-        accessGroup: String? = "co.cronx.spark"
+        accessGroup: String? = nil
     ) {
         self.service = service
         self.account = account

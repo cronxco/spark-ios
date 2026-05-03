@@ -8,10 +8,41 @@ public struct APIEnvironment: Sendable, Hashable {
     public let oauthAuthorizeURL: URL
     public let name: String
 
-    public init(baseURL: URL, oauthAuthorizeURL: URL, name: String) {
+    /// Reverb WebSocket config. `reverbHost` is the bare hostname (no scheme).
+    /// The client connects to `wss://{reverbHost}/app/{reverbAppKey}?protocol=7`.
+    public let reverbHost: String
+    public let reverbAppKey: String
+    public let reverbPort: Int
+    public let reverbUseTLS: Bool
+
+    public init(
+        baseURL: URL,
+        oauthAuthorizeURL: URL,
+        name: String,
+        reverbHost: String = "spark.cronx.co",
+        reverbAppKey: String = "lw0lmvu5kovdvtfycyub",
+        reverbPort: Int = 443,
+        reverbUseTLS: Bool = true
+    ) {
         self.baseURL = baseURL
         self.oauthAuthorizeURL = oauthAuthorizeURL
         self.name = name
+        self.reverbHost = reverbHost
+        self.reverbAppKey = reverbAppKey
+        self.reverbPort = reverbPort
+        self.reverbUseTLS = reverbUseTLS
+    }
+
+    /// WebSocket URL for Reverb, e.g. wss://spark.cronx.co/app/key?protocol=7
+    public var reverbWebSocketURL: URL {
+        let scheme = reverbUseTLS ? "wss" : "ws"
+        return URL(string: "\(scheme)://\(reverbHost):\(reverbPort)/app/\(reverbAppKey)?protocol=7&client=spark-ios&version=1.0")!
+    }
+
+    /// The base HTTP URL for the Reverb host (used for the auth endpoint).
+    public var reverbHTTPBaseURL: URL {
+        let scheme = reverbUseTLS ? "https" : "http"
+        return URL(string: "\(scheme)://\(reverbHost):\(reverbPort)")!
     }
 
     public static let production = APIEnvironment(
@@ -39,10 +70,18 @@ public struct APIEnvironment: Sendable, Hashable {
         else {
             return .production
         }
+        let reverbHost = userDefaults.string(forKey: "spark.env.reverbHost") ?? "spark.cronx.co"
+        let reverbAppKey = userDefaults.string(forKey: "spark.env.reverbAppKey") ?? "lw0lmvu5kovdvtfycyub"
+        let reverbPort = userDefaults.integer(forKey: "spark.env.reverbPort")
+        let reverbUseTLS = userDefaults.object(forKey: "spark.env.reverbUseTLS") as? Bool ?? true
         return APIEnvironment(
             baseURL: baseURL,
             oauthAuthorizeURL: authURL,
-            name: userDefaults.string(forKey: "spark.env.name") ?? "custom"
+            name: userDefaults.string(forKey: "spark.env.name") ?? "custom",
+            reverbHost: reverbHost,
+            reverbAppKey: reverbAppKey,
+            reverbPort: reverbPort > 0 ? reverbPort : 443,
+            reverbUseTLS: reverbUseTLS
         )
     }
 }

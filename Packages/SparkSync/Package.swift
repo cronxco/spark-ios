@@ -10,7 +10,11 @@ let package = Package(
         .target(
             name: "SparkSync",
             dependencies: ["SparkKit"],
-            path: "Sources/SparkSync"
+            path: "Sources/SparkSync",
+            linkerSettings: [
+                .linkedFramework("BackgroundTasks"),
+                .linkedFramework("WidgetKit"),
+            ]
         ),
     ]
 )

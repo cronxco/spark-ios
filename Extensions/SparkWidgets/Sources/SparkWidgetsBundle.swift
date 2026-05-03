@@ -4,6 +4,20 @@ import WidgetKit
 @main
 struct SparkWidgetsBundle: WidgetBundle {
     var body: some Widget {
-        PlumbingSmokeTestWidget()
+        // Home Screen — small
+        SleepScoreWidget()
+        StepsRingWidget()
+        SpendTodayWidget()
+        NextEventWidget()
+        // Home Screen — medium / large
+        TodayGlanceWidget()
+        TodayDashboardWidget()
+        // Lock Screen
+        SleepCircularWidget()
+        StepsCircularWidget()
+        TopMetricRectangularWidget()
+        NextEventInlineWidget()
+        // StandBy
+        StandByWidget()
     }
 }
