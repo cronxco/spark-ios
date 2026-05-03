@@ -1,5 +1,7 @@
-import Foundation
-
-/// Placeholder. Populated in Phase 3 with the Reverb WebSocket client, background
-/// refresh coordinator, silent-push handler, and delta-sync engine.
-public enum SparkSync {}
+/// SparkSync — background refresh, silent push, and real-time WebSocket.
+///
+/// Public surface:
+/// - `DeltaSyncer`         fetch /sync/delta and write to SwiftData
+/// - `BGTaskCoordinator`   BGAppRefreshTask + BGProcessingTask registration
+/// - `SilentPushHandler`   silent push (content-available=1) handler
+/// - `ReverbClient`        Pusher-protocol Reverb WebSocket actor

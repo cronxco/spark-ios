@@ -81,4 +81,26 @@ public struct EventDetail: Codable, Sendable, Hashable, Identifiable {
         self.aiSummary = aiSummary
         self.location = location
     }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        // Backend may return either an EventDetail envelope or a flat Event payload.
+        let rootEvent = try container.decodeIfPresent(Event.self, forKey: .event) ?? Event(from: decoder)
+        event = rootEvent
+
+        actor = try container.decodeIfPresent(ActorTarget.self, forKey: .actor)
+            ?? rootEvent.actor.map {
+                ActorTarget(id: $0.id, title: $0.title, subtitle: nil, concept: $0.concept, type: nil)
+            }
+        target = try container.decodeIfPresent(ActorTarget.self, forKey: .target)
+            ?? rootEvent.target.map {
+                ActorTarget(id: $0.id, title: $0.title, subtitle: nil, concept: $0.concept, type: nil)
+            }
+        blocks = try container.decodeIfPresent([Block].self, forKey: .blocks) ?? []
+        related = try container.decodeIfPresent([RelatedEvent].self, forKey: .related) ?? []
+        tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
+        aiSummary = try container.decodeIfPresent(String.self, forKey: .aiSummary)
+        location = try container.decodeIfPresent(Location.self, forKey: .location)
+    }
 }

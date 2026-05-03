@@ -3,7 +3,9 @@ import Observation
 import Sentry
 import SparkHealth
 import SparkKit
+import SparkSync
 import SwiftData
+import WidgetKit
 
 enum SessionState: Equatable {
     case unknown
@@ -47,6 +49,7 @@ final class AppModel {
     let apiClient: APIClient
     let authService: AuthenticationService
     let healthPermissions = HealthKitPermissionManager.shared
+    let reverb: ReverbClient
 
     var session: SessionState = .unknown
     var onboardingComplete: Bool
@@ -62,6 +65,7 @@ final class AppModel {
         self.etagCache = etagCache
         self.apiClient = client
         self.authService = AuthenticationService(tokenStore: tokenStore, apiClient: client)
+        self.reverb = ReverbClient(tokenStore: tokenStore)
         self.onboardingComplete = UserDefaults(suiteName: "group.co.cronx.spark")?.bool(forKey: "onboarding.completed") == true
     }
 
@@ -70,10 +74,73 @@ final class AppModel {
             onboardingComplete = true
             session = .loggedIn
             await registerDevice()
+            await fetchAndCacheUserId()
             configureHealthUploader(accessToken: token)
+            consumePendingIntentRoute()
+            await wireReverbHandler()
+            await reverbConnect()
         } else {
             session = .loggedOut
         }
+    }
+
+    private func wireReverbHandler() async {
+        let client = apiClient
+        let cont = container
+        await reverb.addHandler { event in
+            let syncEvents: Set<String> = [
+                "event.created", "event.updated", "event.deleted",
+                "anomaly.raised", "notification.received",
+            ]
+            guard syncEvents.contains(event.eventName) else { return }
+            Task { @MainActor in
+                _ = await DeltaSyncer.sync(using: client, container: cont)
+                WidgetCenter.shared.reloadAllTimelines()
+            }
+        }
+    }
+
+    /// Connect Reverb when the app is in the foreground.
+    /// The user ID is cached in UserDefaults after bootstrap via GET /me.
+    func reverbConnect() async {
+        guard session == .loggedIn else { return }
+        let userId = UserDefaults.sparkAppGroup.string(forKey: "spark.userId") ?? ""
+        guard !userId.isEmpty else { return }
+        await reverb.connect(userId: userId)
+    }
+
+    /// Disconnect Reverb when the app moves to the background.
+    func reverbDisconnect() async {
+        await reverb.disconnect()
+    }
+
+    /// Read a route written by an AppIntent (from the extension process) and
+    /// navigate to it. Consumed once to prevent stale navigation on re-launch.
+    private func consumePendingIntentRoute() {
+        let defaults = UserDefaults(suiteName: "group.co.cronx.spark")
+        guard let raw = defaults?.string(forKey: "spark.pendingRoute") else { return }
+        defaults?.removeObject(forKey: "spark.pendingRoute")
+        let parts = raw.split(separator: ":", maxSplits: 1).map(String.init)
+        guard let kind = parts.first else { return }
+        switch kind {
+        case "today":   pendingRoute = .today(date: nil)
+        case "event":   if let id = parts.last { pendingRoute = .event(id: id) }
+        case "metric":  if let id = parts.last { pendingRoute = .metric(identifier: id) }
+        case "place":   if let id = parts.last { pendingRoute = .place(id: id) }
+        case "search":  break   // SearchView picks up the query separately
+        case "action":
+            if parts.last == "startSleep" {
+                Task { await LiveActivityManager.shared.startSleepActivity(bedtime: .now, targetWakeTime: nil) }
+            } else if parts.last == "endSleep" {
+                Task { await LiveActivityManager.shared.endSleepActivity(score: 0, durationMinutes: 0) }
+            }
+        default: break
+        }
+    }
+
+    private func fetchAndCacheUserId() async {
+        guard let profile = try? await apiClient.request(MeEndpoint.get()) else { return }
+        UserDefaults.sparkAppGroup.set(profile.id, forKey: "spark.userId")
     }
 
     private func configureHealthUploader(accessToken: String) {

@@ -57,9 +57,14 @@ func appInfoPlist() -> InfoPlist {
             "Spark writes workouts and mindful sessions you log in the app.",
         "NSLocationWhenInUseUsageDescription":
             "Spark uses your location to tag check-ins and detect place visits.",
+        "BGTaskSchedulerPermittedIdentifiers": [
+            "co.cronx.spark.refresh",
+            "co.cronx.spark.prefetch",
+        ],
         "NSUserActivityTypes": [
             "co.cronx.spark.openToday",
             "co.cronx.spark.openEvent",
+            "com.apple.corespotlight.search-continue",
         ],
         "CFBundleURLTypes": [
             [
@@ -196,6 +201,8 @@ let sparkApp: Target = .target(
         .package(product: "SparkKit"),
         .package(product: "SparkUI"),
         .package(product: "SparkHealth"),
+        .package(product: "SparkIntelligence"),
+        .package(product: "SparkSync"),
         .package(product: "Sentry"),
         .target(name: "SparkWidgets"),
         .target(name: "SparkControls"),
@@ -229,6 +236,7 @@ let sparkWidgets: Target = .target(
     dependencies: [
         .package(product: "SparkKit"),
         .package(product: "SparkUI"),
+        .package(product: "SparkIntelligence"),
     ],
     settings: sharedSettings(bundleId: "\(bundleIdBase).Widgets")
 )
@@ -290,6 +298,7 @@ let sparkIntents: Target = .target(
     entitlements: .file(path: "Extensions/SparkIntents/SparkIntents.entitlements"),
     dependencies: [
         .package(product: "SparkKit"),
+        .package(product: "SparkIntelligence"),
     ],
     settings: sharedSettings(bundleId: "\(bundleIdBase).Intents")
 )

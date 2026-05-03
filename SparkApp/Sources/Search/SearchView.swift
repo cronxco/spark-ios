@@ -2,10 +2,16 @@ import SparkKit
 import SparkUI
 import SwiftUI
 
+private let recentSearchesKey = "spark.search.recents"
+private let maxRecents = 8
+
 struct SearchView: View {
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: SearchViewModel?
     @State private var path: [DetailRoute] = []
+    @State private var recentSearches: [String] = {
+        UserDefaults.standard.stringArray(forKey: recentSearchesKey) ?? []
+    }()
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -87,18 +93,14 @@ struct SearchView: View {
         if let viewModel {
             switch viewModel.state {
             case .idle:
-                EmptyState(
-                    systemImage: "magnifyingglass",
-                    title: "Search Spark",
-                    message: "Try `>` for actions, `#` for tags, `$` for metrics, `@` for integrations, `~` for semantic."
-                )
+                idleState(viewModel: viewModel)
             case .searching:
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             case .results(let items) where items.isEmpty:
                 EmptyState(
-                    systemImage: "questionmark.circle",
-                    title: "No matches",
-                    message: "Try a different word or mode."
+                    systemImage: "magnifyingglass",
+                    title: "No results for \u{201C}\(viewModel.query)\u{201D}",
+                    message: "Try a shorter search or switch mode."
                 )
             case .results:
                 List {
@@ -106,6 +108,7 @@ struct SearchView: View {
                         Section(group.0) {
                             ForEach(group.1) { result in
                                 Button {
+                                    saveRecent(viewModel.query)
                                     handleTap(result)
                                 } label: {
                                     SearchResultRow(result: result)
@@ -126,6 +129,107 @@ struct SearchView: View {
         } else {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    @ViewBuilder
+    private func idleState(viewModel: SearchViewModel) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: SparkSpacing.xl) {
+                // Suggestion chips
+                GlassCard {
+                    VStack(alignment: .leading, spacing: SparkSpacing.md) {
+                        Text("Suggestions")
+                            .font(SparkTypography.captionStrong)
+                            .foregroundStyle(.secondary)
+                        HStack(spacing: SparkSpacing.sm) {
+                            ForEach(suggestions, id: \.label) { suggestion in
+                                Button {
+                                    viewModel.setMode(suggestion.mode)
+                                    viewModel.query = suggestion.prefix
+                                } label: {
+                                    HStack(spacing: SparkSpacing.xs) {
+                                        Image(systemName: suggestion.icon)
+                                        Text(suggestion.label)
+                                    }
+                                    .font(SparkTypography.captionStrong)
+                                    .padding(.horizontal, SparkSpacing.md)
+                                    .padding(.vertical, SparkSpacing.sm)
+                                    .sparkGlass(.capsule, tint: Color.sparkAccent.opacity(0.1))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        Text("Try `>` actions · `#` tags · `$` metrics · `@` integrations · `~` semantic")
+                            .font(SparkTypography.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+
+                // Recent searches
+                if !recentSearches.isEmpty {
+                    GlassCard {
+                        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                            HStack {
+                                Text("Recent")
+                                    .font(SparkTypography.captionStrong)
+                                    .foregroundStyle(.secondary)
+                                Spacer(minLength: 0)
+                                Button("Clear") { clearRecents() }
+                                    .font(SparkTypography.caption)
+                                    .foregroundStyle(Color.sparkAccent)
+                            }
+                            ForEach(recentSearches, id: \.self) { query in
+                                Button {
+                                    viewModel.query = query
+                                } label: {
+                                    HStack(spacing: SparkSpacing.md) {
+                                        Image(systemName: "clock")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                        Text(query)
+                                            .font(SparkTypography.body)
+                                            .foregroundStyle(.primary)
+                                        Spacer(minLength: 0)
+                                        Image(systemName: "arrow.up.left")
+                                            .font(.caption2)
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                    .padding(.vertical, SparkSpacing.xs)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, SparkSpacing.lg)
+            .padding(.vertical, SparkSpacing.lg)
+        }
+    }
+
+    private var suggestions: [(label: String, icon: String, mode: SearchEndpoint.Mode, prefix: String)] {
+        [
+            ("People", "person.2", .default, ""),
+            ("Places", "mappin", .default, ""),
+            ("Metrics", "chart.line.uptrend.xyaxis", .metrics, "$"),
+            ("Tags", "tag", .tags, "#"),
+        ]
+    }
+
+    private func saveRecent(_ query: String) {
+        let clean = query.trimmingCharacters(in: .whitespaces)
+        guard !clean.isEmpty else { return }
+        var updated = recentSearches.filter { $0 != clean }
+        updated.insert(clean, at: 0)
+        if updated.count > maxRecents { updated = Array(updated.prefix(maxRecents)) }
+        recentSearches = updated
+        UserDefaults.standard.set(updated, forKey: recentSearchesKey)
+    }
+
+    private func clearRecents() {
+        recentSearches = []
+        UserDefaults.standard.removeObject(forKey: recentSearchesKey)
     }
 
     private func handleTap(_ result: SearchResult) {
