@@ -1,6 +1,8 @@
 import Foundation
 @preconcurrency import AuthenticationServices
+#if canImport(UIKit)
 import UIKit
+#endif
 
 public enum AuthenticationError: Error, Sendable {
     case cancelled
@@ -39,7 +41,7 @@ public final class AuthenticationService: NSObject, Sendable {
         let verifier = PKCE.generateVerifier()
         let challenge = PKCE.challenge(for: verifier)
         let state = PKCE.generateState()
-        let deviceName = UIDevice.current.name
+        let deviceName = currentDeviceName
         let authorizeURL = buildAuthorizeURL(challenge: challenge, state: state, deviceName: deviceName)
 
         let callbackURL: URL = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URL, Error>) in
@@ -114,6 +116,15 @@ public final class AuthenticationService: NSObject, Sendable {
         }
         let state = components.queryItems?.first(where: { $0.name == "state" })?.value
         return (code, state)
+    }
+
+    @MainActor
+    private var currentDeviceName: String {
+#if canImport(UIKit)
+        UIDevice.current.name
+#else
+        ProcessInfo.processInfo.hostName
+#endif
     }
 }
 

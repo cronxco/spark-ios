@@ -1,6 +1,5 @@
 import Foundation
 @preconcurrency import AuthenticationServices
-import UIKit
 
 public enum IntegrationReauthError: Error, Sendable {
     case cancelled

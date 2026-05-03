@@ -152,3 +152,59 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         public let symbol: String?
     }
 }
+
+/// Search payload returned by `/search`.
+/// Backend can return either a raw array (`[SearchResult]`) or an envelope
+/// containing the array under a known key.
+public struct SearchResponse: Codable, Sendable, Hashable {
+    public let results: [SearchResult]
+
+    enum CodingKeys: String, CodingKey {
+        case results
+        case data
+        case items
+        case hits
+    }
+
+    public init(results: [SearchResult]) {
+        self.results = results
+    }
+
+    public init(from decoder: Decoder) throws {
+        if let direct = try? [SearchResult](from: decoder) {
+            results = direct
+            return
+        }
+
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if let wrapped = try container.decodeIfPresent([SearchResult].self, forKey: .results) {
+            results = wrapped
+            return
+        }
+        if let wrapped = try container.decodeIfPresent([SearchResult].self, forKey: .data) {
+            results = wrapped
+            return
+        }
+        if let wrapped = try container.decodeIfPresent([SearchResult].self, forKey: .items) {
+            results = wrapped
+            return
+        }
+        if let wrapped = try container.decodeIfPresent([SearchResult].self, forKey: .hits) {
+            results = wrapped
+            return
+        }
+
+        throw DecodingError.typeMismatch(
+            [SearchResult].self,
+            DecodingError.Context(
+                codingPath: decoder.codingPath,
+                debugDescription: "Expected search payload as array or wrapped array under results/data/items/hits."
+            )
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var single = encoder.singleValueContainer()
+        try single.encode(results)
+    }
+}

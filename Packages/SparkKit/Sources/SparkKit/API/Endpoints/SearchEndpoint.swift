@@ -35,7 +35,7 @@ public enum SearchEndpoint {
     }
 
     /// GET /search?q=…&mode=…
-    public static func query(text: String, mode: Mode = .default) -> Endpoint<[SearchResult]> {
+    public static func query(text: String, mode: Mode = .default) -> Endpoint<SearchResponse> {
         Endpoint(
             method: .get,
             path: "/search",

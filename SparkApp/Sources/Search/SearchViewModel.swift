@@ -82,8 +82,8 @@ final class SearchViewModel {
     private func performSearch(text: String) async {
         state = .searching
         do {
-            let results = try await apiClient.request(SearchEndpoint.query(text: text, mode: mode))
-            state = .results(results)
+            let response = try await apiClient.request(SearchEndpoint.query(text: text, mode: mode))
+            state = .results(response.results)
         } catch is CancellationError {
             return
         } catch {
