@@ -9,6 +9,7 @@ import SparkKit
 /// Observer queries do not fire on the simulator — test on device.
 public final class HealthKitObserver: @unchecked Sendable {
     public static let shared = HealthKitObserver()
+    public static let uploadEnabledKey = "health.upload.enabled"
 
     private let store = HKHealthStore()
     private let anchorStore = HealthKitAnchorStore.shared
@@ -70,7 +71,11 @@ public final class HealthKitObserver: @unchecked Sendable {
             if let newAnchor {
                 let converted = self.convert(samples: samples ?? [], key: key)
                 if !converted.isEmpty {
-                    self.uploader.upload(samples: converted)
+                    let enabled = UserDefaults(suiteName: "group.co.cronx.sparkapp")?
+                        .bool(forKey: Self.uploadEnabledKey) == true
+                    if enabled {
+                        self.uploader.upload(samples: converted)
+                    }
                     self.anchorStore.save(newAnchor, for: key)
                 }
             }

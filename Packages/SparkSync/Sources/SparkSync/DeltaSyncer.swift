@@ -8,7 +8,7 @@ import SwiftData
 /// All SwiftData operations run on the MainActor so the ModelContext is
 /// never accessed across thread-suspension points.
 public enum DeltaSyncer {
-    private static let logger = Logger(subsystem: "co.cronx.spark", category: "DeltaSyncer")
+    private static let logger = Logger(subsystem: "co.cronx.sparkapp", category: "DeltaSyncer")
 
     /// Fetches new events from the server and applies them to the local cache.
     /// Returns `true` if any records were written, `false` for no-change or error.

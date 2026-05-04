@@ -11,7 +11,6 @@ struct RootView: View {
             switch model.session {
             case .unknown:
                 ProgressView()
-                    .task { await model.bootstrap() }
             case .loggedOut:
                 OnboardingFlow(isComplete: $model.onboardingComplete)
             case .loggedIn:
@@ -22,6 +21,7 @@ struct RootView: View {
                 }
             }
         }
+        .task { await model.bootstrap() }
         .onOpenURL(perform: handle(url:))
     }
 

@@ -2,7 +2,7 @@ import SwiftUI
 import WidgetKit
 
 struct TodayGlanceWidget: Widget {
-    let kind = "co.cronx.spark.widgets.today-glance"
+    let kind = "co.cronx.sparkapp.widgets.today-glance"
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: SparkTimelineProvider()) { entry in

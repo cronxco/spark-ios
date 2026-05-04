@@ -52,6 +52,7 @@ struct FlintView: View {
             }
             .navigationTitle("Flint")
             .navigationBarTitleDisplayMode(.large)
+            .sparkAppBackground()
         }
     }
 }

@@ -4,8 +4,9 @@ import ProjectDescription
 
 let appIdentifierPrefix = "$(AppIdentifierPrefix)"
 let organizationName = "Cronx"
-let bundleIdBase = "co.cronx.spark"
-let appGroup = "group.co.cronx.spark"
+let developmentTeam = "SHZS45BR7Q" // William Scott
+let bundleIdBase = "co.cronx.sparkapp"
+let appGroup = "group.co.cronx.sparkapp"
 let keychainGroup = "\(appIdentifierPrefix)\(bundleIdBase)"
 let associatedDomain = "applinks:spark.cronx.co"
 let iosDeploymentTarget: DeploymentTargets = .iOS("26.0")
@@ -58,17 +59,17 @@ func appInfoPlist() -> InfoPlist {
         "NSLocationWhenInUseUsageDescription":
             "Spark uses your location to tag check-ins and detect place visits.",
         "BGTaskSchedulerPermittedIdentifiers": [
-            "co.cronx.spark.refresh",
-            "co.cronx.spark.prefetch",
+            "co.cronx.sparkapp.refresh",
+            "co.cronx.sparkapp.prefetch",
         ],
         "NSUserActivityTypes": [
-            "co.cronx.spark.openToday",
-            "co.cronx.spark.openEvent",
+            "co.cronx.sparkapp.openToday",
+            "co.cronx.sparkapp.openEvent",
             "com.apple.corespotlight.search-continue",
         ],
         "CFBundleURLTypes": [
             [
-                "CFBundleURLName": "co.cronx.spark.oauth",
+                "CFBundleURLName": "co.cronx.sparkapp.oauth",
                 "CFBundleURLSchemes": ["spark"],
             ],
         ],
@@ -169,7 +170,7 @@ let baseSettings: SettingsDictionary = [
     "GCC_TREAT_WARNINGS_AS_ERRORS": "YES",
     "ENABLE_USER_SCRIPT_SANDBOXING": "YES",
     "CODE_SIGN_STYLE": "Automatic",
-    "DEVELOPMENT_TEAM": "$(DEVELOPMENT_TEAM)",
+    "DEVELOPMENT_TEAM": .string(developmentTeam),
 ]
 
 func sharedSettings(bundleId: String) -> Settings {

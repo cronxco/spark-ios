@@ -4,43 +4,23 @@ import SwiftUI
 
 struct MoneyExploreView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(\.colorScheme) private var colorScheme
     @State private var viewModel: MoneyExploreViewModel?
     @State private var path: [DetailRoute] = []
 
     var body: some View {
         NavigationStack(path: $path) {
             ScrollView {
-                VStack(spacing: SparkSpacing.lg) {
-                    if let vm = viewModel {
-                        switch vm.loadState {
-                        case .idle:
-                            shimmerPlaceholder
-                        case .loading where vm.spend == nil:
-                            shimmerPlaceholder
-                        case .error(let msg) where vm.spend == nil:
-                            EmptyState(
-                                systemImage: "exclamationmark.triangle.fill",
-                                title: "Couldn't load money data",
-                                message: msg,
-                                actionTitle: "Retry"
-                            ) { Task { await vm.refresh() } }
-                        default:
-                            spendingOverviewCard(vm: vm)
-                            if let spend = vm.spend, !spend.topMerchants.isEmpty {
-                                topMerchantsCard(merchants: spend.topMerchants, currency: spend.currency)
-                            }
-                            transactionsCard(vm: vm)
-                        }
-                    } else {
-                        shimmerPlaceholder
-                    }
+                VStack(alignment: .leading, spacing: SparkSpacing.lg) {
+                    pageHeader
+                        .padding(.horizontal, SparkSpacing.lg)
+
+                    content
                 }
-                .padding(.horizontal, SparkSpacing.lg)
-                .padding(.vertical, SparkSpacing.xl)
+                .padding(.top, SparkSpacing.xl)
+                .padding(.bottom, SparkSpacing.xl)
             }
-            .background(Color.sparkSurface.ignoresSafeArea())
-            .navigationTitle("Money")
-            .navigationBarTitleDisplayMode(.large)
+            .sparkAppBackground()
             .navigationDestination(for: DetailRoute.self) { route in
                 switch route {
                 case .event(let id):
@@ -61,114 +41,235 @@ struct MoneyExploreView: View {
         }
     }
 
-    // MARK: - Spending overview
+    @ViewBuilder
+    private var content: some View {
+        if let vm = viewModel {
+            switch vm.loadState {
+            case .idle:
+                shimmerPlaceholder
+                    .padding(.horizontal, SparkSpacing.lg)
+            case .loading where vm.spend == nil:
+                shimmerPlaceholder
+                    .padding(.horizontal, SparkSpacing.lg)
+            case .error(let msg) where vm.spend == nil:
+                EmptyState(
+                    systemImage: "exclamationmark.triangle.fill",
+                    title: "Couldn't load money data",
+                    message: msg,
+                    actionTitle: "Retry"
+                ) { Task { await vm.refresh() } }
+                .padding(.horizontal, SparkSpacing.lg)
+            default:
+                spendingHeroCard(vm: vm)
+                    .padding(.horizontal, SparkSpacing.lg)
 
-    private func spendingOverviewCard(vm: MoneyExploreViewModel) -> some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: SparkSpacing.md) {
-                GlassCardHeader(
-                    icon: "sterlingsign.circle.fill",
-                    tint: .domainMoney,
-                    title: "Spending Overview"
-                )
-                if let spend = vm.spend {
-                    HStack(spacing: SparkSpacing.sm) {
-                        SpendingPeriodCell(
-                            period: "Today",
-                            amount: formatAmount(spend.total, currency: spend.currency)
-                        )
-                        SpendingPeriodCell(
-                            period: "Transactions",
-                            amount: "\(spend.transactionCount)"
-                        )
-                    }
-                } else {
-                    HStack(spacing: SparkSpacing.sm) {
-                        SpendingPeriodCell(period: "Today", amount: "—")
-                        SpendingPeriodCell(period: "Transactions", amount: "—")
-                    }
+                if let spend = vm.spend, !spend.topMerchants.isEmpty {
+                    merchantsSection(merchants: spend.topMerchants, currency: spend.currency)
+                        .padding(.horizontal, SparkSpacing.lg)
                 }
+
+                transactionsSection(vm: vm)
+                    .padding(.horizontal, SparkSpacing.lg)
             }
+        } else {
+            shimmerPlaceholder
+                .padding(.horizontal, SparkSpacing.lg)
         }
     }
 
-    // MARK: - Top merchants
+    private var pageHeader: some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.xs) {
+            Text("Money")
+                .font(SparkTypography.heroXL)
+                .foregroundStyle(headerTextColor)
+            Text(headerSubtitle)
+                .font(SparkTypography.bodySmall)
+                .foregroundStyle(.secondary)
+        }
+    }
 
-    private func topMerchantsCard(merchants: [SpendWidget.Merchant], currency: String) -> some View {
-        GlassCard {
+    private func spendingHeroCard(vm: MoneyExploreViewModel) -> some View {
+        GlassCard(radius: 22, padding: SparkSpacing.xl) {
             VStack(alignment: .leading, spacing: SparkSpacing.md) {
-                GlassCardHeader(icon: "cart.fill", tint: .domainMoney, title: "Top Merchants")
-                VStack(spacing: 0) {
-                    ForEach(merchants, id: \.id) { merchant in
-                        HStack(spacing: SparkSpacing.md) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(merchant.name)
-                                    .font(SparkTypography.body)
-                                Text("\(merchant.count) transaction\(merchant.count == 1 ? "" : "s")")
-                                    .font(SparkTypography.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer(minLength: SparkSpacing.sm)
-                            Text(formatAmount(merchant.total, currency: currency))
-                                .font(SparkTypography.bodyStrong)
+                HStack(alignment: .top, spacing: SparkSpacing.sm) {
+                    VStack(alignment: .leading, spacing: SparkSpacing.xs) {
+                        HStack(spacing: SparkSpacing.sm) {
+                            Image(systemName: "sterlingsign.circle.fill")
+                                .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(Color.domainMoney)
+                            Text("Daily Spend")
+                                .font(SparkTypography.bodyStrong)
+                                .foregroundStyle(headerTextColor)
                         }
-                        .padding(.vertical, SparkSpacing.sm)
-                        if merchant.id != merchants.last?.id {
-                            Divider().opacity(0.5)
+
+                        if let spend = vm.spend {
+                            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                                Text(formatAmount(spend.total, currency: spend.currency))
+                                    .font(SparkFonts.display(.largeTitle, weight: .bold))
+                                    .foregroundStyle(Color.domainMoney)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.7)
+
+                                HStack(spacing: 3) {
+                                    Image(systemName: "arrow.left.arrow.right")
+                                        .font(.caption2)
+                                    Text("\(spend.transactionCount) transactions")
+                                        .font(SparkTypography.monoSmall)
+                                }
+                                .foregroundStyle(Color.sparkSuccess)
+                            }
+                        } else {
+                            LoadingShimmerCard()
+                                .frame(width: 140, height: 74)
                         }
                     }
+
+                    Spacer(minLength: SparkSpacing.md)
+
+                    Image(systemName: "wallet.pass.fill")
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(Color.domainMoney)
+                        .frame(width: 48, height: 48)
+                        .background {
+                            Circle().fill(Color.domainMoney.opacity(0.12))
+                        }
+                }
+
+                HStack(spacing: SparkSpacing.sm) {
+                    MoneyStatCell(
+                        title: "Merchants",
+                        value: "\(vm.spend?.topMerchants.count ?? 0)"
+                    )
+                    MoneyStatCell(
+                        title: "Feed",
+                        value: "\(vm.transactions.count)"
+                    )
                 }
             }
         }
     }
 
-    // MARK: - Transactions
+    private func merchantsSection(merchants: [SpendWidget.Merchant], currency: String) -> some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.md) {
+            Text("Top merchants")
+                .font(SparkTypography.monoSmall)
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
 
-    private func transactionsCard(vm: MoneyExploreViewModel) -> some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: SparkSpacing.md) {
-                GlassCardHeader(
-                    icon: "list.bullet.rectangle",
-                    tint: .domainMoney,
-                    title: "Recent Transactions"
-                )
-                if vm.transactions.isEmpty {
+            VStack(spacing: SparkSpacing.sm) {
+                ForEach(merchants, id: \.id) { merchant in
+                    MoneyMerchantRow(merchant: merchant, currency: currency)
+                }
+            }
+        }
+    }
+
+    private func transactionsSection(vm: MoneyExploreViewModel) -> some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.md) {
+            Text("Recent transactions")
+                .font(SparkTypography.monoSmall)
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+
+            if vm.transactions.isEmpty {
+                GlassCard(radius: SparkRadii.lg, padding: SparkSpacing.lg) {
                     EmptyState(
                         systemImage: "creditcard",
                         title: "No transactions yet",
                         message: "Connect a bank integration to see your transactions here."
                     )
-                } else {
-                    LazyVStack(spacing: 0) {
-                        ForEach(vm.transactions) { event in
-                            Button {
-                                path.append(.event(id: event.id))
-                            } label: {
-                                TransactionRow(event: event)
-                            }
-                            .buttonStyle(.plain)
-                            if event.id != vm.transactions.last?.id {
-                                Divider().opacity(0.5)
-                            }
+                }
+            } else {
+                VStack(spacing: SparkSpacing.sm) {
+                    ForEach(vm.transactions) { event in
+                        Button {
+                            path.append(.event(id: event.id))
+                        } label: {
+                            MoneyTransactionRow(event: event)
                         }
+                        .buttonStyle(.plain)
                     }
                 }
             }
         }
     }
 
-    // MARK: - Shimmer placeholder
-
     private var shimmerPlaceholder: some View {
-        VStack(spacing: SparkSpacing.lg) {
-            LoadingShimmerCard().frame(height: 120)
-            LoadingShimmerCard().frame(height: 180)
-            LoadingShimmerCard().frame(height: 200)
+        VStack(spacing: SparkSpacing.sm) {
+            LoadingShimmerCard().frame(height: 198)
+            LoadingShimmerCard().frame(height: 104)
+            LoadingShimmerCard().frame(height: 104)
+            LoadingShimmerCard().frame(height: 104)
         }
     }
 
-    // MARK: - Helpers
+    private func formatAmount(_ value: Double, currency: String) -> String {
+        let symbol: String = switch currency {
+        case "GBP": "£"
+        case "EUR": "€"
+        case "USD": "$"
+        default: currency + " "
+        }
+        return "\(symbol)\(String(format: "%.2f", value))"
+    }
+
+    private var headerTextColor: Color {
+        colorScheme == .dark ? Color.spark100 : Color.sparkTextPrimary
+    }
+
+    private var headerSubtitle: String {
+        switch viewModel?.loadState {
+        case .loaded:
+            let count = viewModel?.transactions.count ?? 0
+            return "\(count) recent transaction\(count == 1 ? "" : "s")"
+        case .error:
+            return "Money data unavailable"
+        case .loading:
+            return "Loading spending signals"
+        case .idle, .none:
+            return "Spending and transaction signals"
+        }
+    }
+}
+
+private struct MoneyMerchantRow: View {
+    let merchant: SpendWidget.Merchant
+    let currency: String
+
+    var body: some View {
+        HStack(spacing: SparkSpacing.md) {
+            Image(systemName: "cart.fill")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(
+                    RoundedRectangle(cornerRadius: SparkRadii.sm)
+                        .fill(Color.domainMoney)
+                )
+
+            VStack(alignment: .leading, spacing: SparkSpacing.xs) {
+                Text(merchant.name)
+                    .font(SparkTypography.bodySmall)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text("\(merchant.count) transaction\(merchant.count == 1 ? "" : "s")")
+                    .font(SparkTypography.monoSmall)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: SparkSpacing.sm)
+
+            Text(formatAmount(merchant.total, currency: currency))
+                .font(SparkFonts.display(.title3, weight: .bold))
+                .foregroundStyle(Color.domainMoney)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .padding(.horizontal, SparkSpacing.lg)
+        .frame(height: 92)
+        .sparkGlass(.roundedRect(20))
+    }
 
     private func formatAmount(_ value: Double, currency: String) -> String {
         let symbol: String = switch currency {
@@ -181,9 +282,7 @@ struct MoneyExploreView: View {
     }
 }
 
-// MARK: - Transaction row
-
-private struct TransactionRow: View {
+private struct MoneyTransactionRow: View {
     let event: Event
 
     private var merchant: String {
@@ -204,22 +303,24 @@ private struct TransactionRow: View {
 
     var body: some View {
         HStack(spacing: SparkSpacing.md) {
-            ZStack {
-                Circle()
-                    .fill(Color.domainMoney.opacity(0.12))
-                    .frame(width: 36, height: 36)
-                Image(systemName: "sterlingsign")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color.domainMoney)
-            }
+            Image(systemName: "sterlingsign")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(
+                    RoundedRectangle(cornerRadius: SparkRadii.sm)
+                        .fill(Color.domainMoney)
+                )
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: SparkSpacing.xs) {
                 Text(merchant)
-                    .font(SparkTypography.body)
+                    .font(SparkTypography.bodySmall)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
                 if let time = event.time {
                     Text(time.formatted(date: .abbreviated, time: .omitted))
-                        .font(SparkTypography.caption)
+                        .font(SparkTypography.monoSmall)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -228,31 +329,33 @@ private struct TransactionRow: View {
 
             if !amount.isEmpty {
                 Text(amount)
-                    .font(SparkTypography.bodyStrong)
-                    .foregroundStyle(.primary)
+                    .font(SparkFonts.display(.title3, weight: .bold))
+                    .foregroundStyle(Color.domainMoney)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
             }
 
             Image(systemName: "chevron.right")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
-        .padding(.vertical, SparkSpacing.sm)
+        .padding(.horizontal, SparkSpacing.lg)
+        .frame(height: 92)
         .contentShape(Rectangle())
+        .sparkGlass(.roundedRect(20))
     }
 }
 
-// MARK: - Spending period cell
-
-private struct SpendingPeriodCell: View {
-    let period: String
-    let amount: String
+private struct MoneyStatCell: View {
+    let title: String
+    let value: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.xxs) {
-            Text(amount)
+            Text(value)
                 .font(SparkTypography.titleStrong)
                 .foregroundStyle(.primary)
-            Text(period)
+            Text(title)
                 .font(SparkTypography.caption)
                 .foregroundStyle(.secondary)
         }

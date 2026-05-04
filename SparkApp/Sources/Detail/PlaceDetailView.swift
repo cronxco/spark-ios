@@ -57,7 +57,7 @@ struct PlaceDetailView: View {
             }
             .padding(SparkSpacing.lg)
         }
-        .background(Color.sparkSurface.ignoresSafeArea())
+        .sparkAppBackground()
         .navigationTitle("Place")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: placeId) {

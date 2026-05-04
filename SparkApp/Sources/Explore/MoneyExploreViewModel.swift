@@ -13,7 +13,7 @@ final class MoneyExploreViewModel {
     private(set) var loadState: LoadState = .idle
 
     private let apiClient: APIClient
-    private let logger = Logger(subsystem: "co.cronx.spark", category: "MoneyExplore")
+    private let logger = Logger(subsystem: "co.cronx.sparkapp", category: "MoneyExplore")
 
     init(apiClient: APIClient) {
         self.apiClient = apiClient

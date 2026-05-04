@@ -14,7 +14,7 @@ final class LiveActivityManager {
     private var dailyActivity: Activity<DailyActivityAttributes>?
     private var tokenTasks: [String: Task<Void, Never>] = [:]
 
-    private nonisolated let logger = Logger(subsystem: "co.cronx.spark", category: "LiveActivity")
+    private nonisolated let logger = Logger(subsystem: "co.cronx.sparkapp", category: "LiveActivity")
 
     // MARK: - Sleep LA
 

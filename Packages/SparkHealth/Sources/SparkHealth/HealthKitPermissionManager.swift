@@ -24,7 +24,7 @@ public final class HealthKitPermissionManager {
     public private(set) var advancedState: AuthState = .notDetermined
 
     private let store = HKHealthStore()
-    private let defaults = UserDefaults(suiteName: "group.co.cronx.spark")
+    private let defaults = UserDefaults(suiteName: "group.co.cronx.sparkapp")
 
     public static let shared = HealthKitPermissionManager()
 

@@ -7,8 +7,22 @@ public enum DevicesEndpoint {
     }
 
     /// POST /devices — register this device. Returns the created record.
-    public static func register(name: String, platform: String) -> Endpoint<RegisteredDevice> {
-        let body = try? JSONEncoder().encode(RegisterRequest(name: name, platform: platform))
+    public static func register(
+        name: String,
+        platform: String,
+        apnsToken: String,
+        appEnvironment: String,
+        appVersion: String,
+        bundleId: String,
+        osVersion: String
+    ) -> Endpoint<RegisteredDevice> {
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        let body = try? encoder.encode(RegisterRequest(
+            name: name, platform: platform,
+            apnsToken: apnsToken, appEnvironment: appEnvironment,
+            appVersion: appVersion, bundleId: bundleId, osVersion: osVersion
+        ))
         return Endpoint(method: .post, path: "/devices", body: body, contentType: "application/json")
     }
 
@@ -20,5 +34,10 @@ public enum DevicesEndpoint {
     private struct RegisterRequest: Encodable {
         let name: String
         let platform: String
+        let apnsToken: String
+        let appEnvironment: String
+        let appVersion: String
+        let bundleId: String
+        let osVersion: String
     }
 }

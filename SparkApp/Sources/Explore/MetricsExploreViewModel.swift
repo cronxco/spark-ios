@@ -15,7 +15,7 @@ final class MetricsExploreViewModel {
     private(set) var metadataState: MetadataState = .idle
 
     private let apiClient: APIClient
-    private let logger = Logger(subsystem: "co.cronx.spark", category: "MetricsExplore")
+    private let logger = Logger(subsystem: "co.cronx.sparkapp", category: "MetricsExplore")
 
     init(apiClient: APIClient) {
         self.apiClient = apiClient

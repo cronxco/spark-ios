@@ -91,7 +91,7 @@ final class ShareViewController: UIViewController {
 
     private func shareImageData(_ data: Data) {
         let dir = FileManager.default
-            .containerURL(forSecurityApplicationGroupIdentifier: "group.co.cronx.spark")?
+            .containerURL(forSecurityApplicationGroupIdentifier: "group.co.cronx.sparkapp")?
             .appendingPathComponent("ShareUploads", isDirectory: true)
             ?? FileManager.default.temporaryDirectory
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -110,8 +110,8 @@ final class ShareViewController: UIViewController {
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
-        let config = URLSessionConfiguration.background(withIdentifier: "co.cronx.spark.share.upload")
-        config.sharedContainerIdentifier = "group.co.cronx.spark"
+        let config = URLSessionConfiguration.background(withIdentifier: "co.cronx.sparkapp.share.upload")
+        config.sharedContainerIdentifier = "group.co.cronx.sparkapp"
         let fileSize = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         Task {
             await APITelemetry.shared.capture(
@@ -156,8 +156,8 @@ final class ShareViewController: UIViewController {
     private func syncAccessToken() -> String? {
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
-            kSecAttrService: "co.cronx.spark.accessToken",
-            kSecAttrAccessGroup: "$(AppIdentifierPrefix)co.cronx.spark",
+            kSecAttrService: "co.cronx.sparkapp.accessToken",
+            kSecAttrAccessGroup: "$(AppIdentifierPrefix)co.cronx.sparkapp",
             kSecReturnData: true,
             kSecMatchLimit: kSecMatchLimitOne,
         ]

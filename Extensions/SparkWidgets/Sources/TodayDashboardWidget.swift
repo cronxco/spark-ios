@@ -5,7 +5,7 @@ import SwiftUI
 import WidgetKit
 
 struct TodayDashboardWidget: Widget {
-    let kind = "co.cronx.spark.widgets.today-dashboard"
+    let kind = "co.cronx.sparkapp.widgets.today-dashboard"
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: SparkTimelineProvider()) { entry in

@@ -96,18 +96,14 @@ tuist generate
 
 This creates `Spark.xcworkspace`. Open in Xcode 26.
 
-### Provisioning (Personal Team Setup)
+### Provisioning
 
 Each target shares:
-- **App Group**: `group.co.cronx.spark`
+- **App Group**: `group.co.cronx.sparkapp`
 - **Keychain access group**: `$(AppIdentifierPrefix)co.cronx.spark`
 - **Associated domain**: `applinks:spark.cronx.co`
 
-In Xcode, for each target:
-1. Select target → Signing & Capabilities → pick your Team
-2. Xcode auto-registers App Group, Keychain Sharing, Associated Domains, Push Notifications, HealthKit
-
-No Project.swift changes needed; `DEVELOPMENT_TEAM` is auto-read from Xcode user settings.
+The William Scott development team is declared in `Project.swift`, so `tuist generate` preserves signing automatically. Xcode can then auto-register App Group, Keychain Sharing, Associated Domains, Push Notifications, and HealthKit as needed.
 
 ## Build & Test Commands
 
@@ -167,7 +163,7 @@ xcodebuild \
 To point at a local backend instead of `spark.cronx.co`, write to the shared App Group `UserDefaults`:
 
 ```swift
-let defaults = UserDefaults(suiteName: "group.co.cronx.spark")!
+let defaults = UserDefaults(suiteName: "group.co.cronx.sparkapp")!
 defaults.set("http://192.168.1.42:8000/api/v1/mobile", forKey: "spark.env.baseURL")
 defaults.set("http://192.168.1.42:8000/oauth/authorize", forKey: "spark.env.oauthURL")
 defaults.set("lan", forKey: "spark.env.name")
@@ -403,4 +399,3 @@ If backend changes compact resource format:
 - **SwiftData docs**: https://developer.apple.com/swiftdata/
 - **ActivityKit docs**: https://developer.apple.com/activitykit/
 - **Liquid Glass**: iOS 26 Glass Effect (`GlassEffectContainer`, `.glassEffect()`)
-

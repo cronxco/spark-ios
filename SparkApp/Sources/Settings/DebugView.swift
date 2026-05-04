@@ -29,7 +29,7 @@ struct DebugView: View {
 
             Section("Onboarding") {
                 Button("Force re-onboard") {
-                    let defaults = UserDefaults(suiteName: "group.co.cronx.spark")
+                    let defaults = UserDefaults(suiteName: "group.co.cronx.sparkapp")
                     defaults?.set(false, forKey: "onboarding.completed")
                     defaults?.removeObject(forKey: "onboarding.lastStep")
                     statusMessage = "Onboarding reset — restart app."
@@ -42,7 +42,7 @@ struct DebugView: View {
                     Text("OSLog is not queryable in-app without entitlements.")
                         .font(SparkTypography.bodySmall)
                         .foregroundStyle(.secondary)
-                    Text("Open Console.app on Mac and filter by subsystem: co.cronx.spark")
+                    Text("Open Console.app on Mac and filter by subsystem: co.cronx.sparkapp")
                         .font(SparkTypography.monoSmall)
                         .foregroundStyle(.secondary)
                 }

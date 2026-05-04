@@ -2,7 +2,7 @@ import SwiftUI
 import WidgetKit
 
 struct SleepScoreWidget: Widget {
-    let kind = "co.cronx.spark.widgets.sleep"
+    let kind = "co.cronx.sparkapp.widgets.sleep"
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: SparkTimelineProvider()) { entry in

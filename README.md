@@ -21,11 +21,9 @@ tuist generate
 
 ### Provisioning
 
-Every target shares the App Group `group.co.cronx.spark`, the Keychain access group `$(AppIdentifierPrefix)co.cronx.spark`, and the associated domain `applinks:spark.cronx.co`. If you're running on a personal team:
+Every target uses the William Scott development team declared in `Project.swift`, and shares the App Group `group.co.cronx.sparkapp`, the Keychain access group `$(AppIdentifierPrefix)co.cronx.spark`, and the associated domain `applinks:spark.cronx.co`.
 
-1. In Xcode, select each target → Signing & Capabilities → pick your Team.
-2. Let Xcode regenerate provisioning profiles. The App Group, Keychain Sharing, Associated Domains, Push Notifications, and HealthKit capabilities are already declared — Xcode will just need to register the group IDs under your team.
-3. `DEVELOPMENT_TEAM` is read from your Xcode user settings; no changes to `Project.swift` required.
+After `tuist generate`, Xcode should keep the team selection automatically. The App Group, Keychain Sharing, Associated Domains, Push Notifications, and HealthKit capabilities are already declared in the generated targets.
 
 ### Environment overrides
 

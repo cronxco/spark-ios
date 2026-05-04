@@ -15,7 +15,7 @@ final class IntegrationsListViewModel {
     private(set) var state: LoadState = .loading
 
     private let apiClient: APIClient
-    private let logger = Logger(subsystem: "co.cronx.spark", category: "Integrations")
+    private let logger = Logger(subsystem: "co.cronx.sparkapp", category: "Integrations")
 
     init(apiClient: APIClient) {
         self.apiClient = apiClient

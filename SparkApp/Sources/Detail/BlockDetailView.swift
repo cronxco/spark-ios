@@ -55,7 +55,7 @@ struct BlockDetailView: View {
             }
             .padding(SparkSpacing.lg)
         }
-        .background(Color.sparkSurface.ignoresSafeArea())
+        .sparkAppBackground()
         .navigationTitle("Block")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: blockId) {

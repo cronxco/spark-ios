@@ -65,7 +65,7 @@ struct MetricDetailView: View {
             }
             .padding(SparkSpacing.lg)
         }
-        .background(Color.sparkSurface.ignoresSafeArea())
+        .sparkAppBackground()
         .navigationTitle("Metric")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: identifier) {

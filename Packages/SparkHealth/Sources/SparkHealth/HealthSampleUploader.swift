@@ -6,8 +6,8 @@ import SparkKit
 public final class HealthSampleUploader: NSObject, @unchecked Sendable {
     public static let shared = HealthSampleUploader()
 
-    private static let sessionIdentifier = "co.cronx.spark.health-upload"
-    private static let suiteName = "group.co.cronx.spark"
+    private static let sessionIdentifier = "co.cronx.sparkapp.health-upload"
+    private static let suiteName = "group.co.cronx.sparkapp"
 
     private lazy var session: URLSession = {
         let config = URLSessionConfiguration.background(withIdentifier: Self.sessionIdentifier)

@@ -20,7 +20,7 @@ final class HealthExploreViewModel {
     private(set) var loadState: LoadState = .idle
 
     private let apiClient: APIClient
-    private let logger = Logger(subsystem: "co.cronx.spark", category: "HealthExplore")
+    private let logger = Logger(subsystem: "co.cronx.sparkapp", category: "HealthExplore")
 
     init(apiClient: APIClient) {
         self.apiClient = apiClient

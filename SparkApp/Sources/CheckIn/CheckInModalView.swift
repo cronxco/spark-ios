@@ -142,7 +142,7 @@ struct CheckInModalView: View {
     }
 
     private func persistLocally(_ entry: CheckIn) {
-        let defaults = UserDefaults(suiteName: "group.co.cronx.spark")
+        let defaults = UserDefaults(suiteName: "group.co.cronx.sparkapp")
         let dateKey = Self.dateKey(date)
         let storageKey = "checkin_\(dateKey)_\(slot)"
         let encoder = JSONEncoder()

@@ -35,7 +35,7 @@ public struct IntentService {
     // MARK: - UserDefaults routing (for open-app intents)
 
     public static func setPendingRoute(_ route: String) {
-        UserDefaults(suiteName: "group.co.cronx.spark")?
+        UserDefaults(suiteName: "group.co.cronx.sparkapp")?
             .set(route, forKey: "spark.pendingRoute")
     }
 

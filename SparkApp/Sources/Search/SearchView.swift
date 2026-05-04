@@ -16,6 +16,7 @@ struct SearchView: View {
     var body: some View {
         NavigationStack(path: $path) {
             content
+                .sparkAppBackground()
                 .navigationTitle("Search")
                 .navigationDestination(for: DetailRoute.self) { route in
                     switch route {
@@ -119,6 +120,7 @@ struct SearchView: View {
                     }
                 }
                 .listStyle(.plain)
+                .scrollContentBackground(.hidden)
             case .error(let msg):
                 EmptyState(
                     systemImage: "exclamationmark.triangle.fill",

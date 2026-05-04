@@ -21,7 +21,7 @@ final class SearchViewModel {
     private(set) var state: State = .idle
 
     private let apiClient: APIClient
-    private let logger = Logger(subsystem: "co.cronx.spark", category: "Search")
+    private let logger = Logger(subsystem: "co.cronx.sparkapp", category: "Search")
     private var pendingQuery: Task<Void, Never>?
 
     init(apiClient: APIClient) {

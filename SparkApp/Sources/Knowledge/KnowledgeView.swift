@@ -89,7 +89,7 @@ struct KnowledgeView: View {
             .padding(.vertical, SparkSpacing.xl)
         }
         .refreshable { await viewModel.refresh() }
-        .background(Color.sparkSurface.ignoresSafeArea())
+        .sparkAppBackground()
     }
 
     private func filterRow(viewModel: KnowledgeViewModel) -> some View {
@@ -124,6 +124,7 @@ struct KnowledgeView: View {
             }
             .padding(SparkSpacing.lg)
         }
+        .sparkAppBackground()
     }
 }
 

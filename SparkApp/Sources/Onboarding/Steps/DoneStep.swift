@@ -25,7 +25,7 @@ struct DoneStep: View {
                 Spacer()
 
                 PillButton("Open Today", systemImage: "sun.max.fill") {
-                    let defaults = UserDefaults(suiteName: "group.co.cronx.spark")
+                    let defaults = UserDefaults(suiteName: "group.co.cronx.sparkapp")
                     defaults?.set(true, forKey: "onboarding.completed")
                     onFinish()
                 }

@@ -46,7 +46,7 @@ struct KnowledgeItemDetailView: View {
                 .padding(.bottom, SparkSpacing.xl)
             }
         }
-        .background(Color.sparkSurface.ignoresSafeArea())
+        .sparkAppBackground()
         .navigationBarTitleDisplayMode(.inline)
         .task(id: event.id) {
             await loadDetail()

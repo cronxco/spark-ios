@@ -32,7 +32,7 @@ final class KnowledgeViewModel {
     }
 
     private let apiClient: APIClient
-    private let logger = Logger(subsystem: "co.cronx.spark", category: "Knowledge")
+    private let logger = Logger(subsystem: "co.cronx.sparkapp", category: "Knowledge")
 
     init(apiClient: APIClient) {
         self.apiClient = apiClient

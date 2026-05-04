@@ -11,34 +11,41 @@ struct DayPagerView: View {
 
     var body: some View {
         @Bindable var appModel = appModel
-        NavigationStack(path: $path) {
-            TabView(selection: $selectedOffset) {
-                ForEach(dates) { key in
-                    TodayView(date: key.date)
-                        .tag(key.offset)
+        ZStack {
+            SparkResolvedAppBackground()
+
+            NavigationStack(path: $path) {
+                TabView(selection: $selectedOffset) {
+                    ForEach(dates) { key in
+                        TodayView(date: key.date)
+                            .tag(key.offset)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .ignoresSafeArea()
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbarBackground(.hidden, for: .navigationBar)
+                .navigationDestination(for: DetailRoute.self) { route in
+                    switch route {
+                    case .event(let id):
+                        EventDetailView(eventId: id)
+                    case .object(let id):
+                        ObjectDetailView(objectId: id)
+                    case .block(let id):
+                        BlockDetailView(blockId: id)
+                    case .metric(let identifier):
+                        MetricDetailView(identifier: identifier)
+                    case .place(let id):
+                        PlaceDetailView(placeId: id)
+                    case .integration(let service):
+                        IntegrationDetailView(integrationId: service)
+                    }
                 }
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .ignoresSafeArea()
-            .toolbar(.hidden, for: .navigationBar)
-            .toolbarBackground(.hidden, for: .navigationBar)
-            .navigationDestination(for: DetailRoute.self) { route in
-                switch route {
-                case .event(let id):
-                    EventDetailView(eventId: id)
-                case .object(let id):
-                    ObjectDetailView(objectId: id)
-                case .block(let id):
-                    BlockDetailView(blockId: id)
-                case .metric(let identifier):
-                    MetricDetailView(identifier: identifier)
-                case .place(let id):
-                    PlaceDetailView(placeId: id)
-                case .integration(let service):
-                    IntegrationDetailView(integrationId: service)
-                }
-            }
+            .scrollContentBackground(.hidden)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea()
         .onChange(of: appModel.pendingRoute) { _, route in
             apply(route: route)
         }

@@ -5,12 +5,11 @@ struct ExploreView: View {
     @State private var section: ExploreSection = .map
 
     var body: some View {
-        ZStack(alignment: .top) {
-            currentSectionView
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            sectionPicker
-        }
+        currentSectionView
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                sectionPicker
+            }
     }
 
     @ViewBuilder
@@ -42,8 +41,7 @@ struct ExploreView: View {
         .frame(maxWidth: .infinity)
         .sparkGlass(.capsule, tint: Color.sparkElevated.opacity(0.35))
         .padding(.horizontal, SparkSpacing.xl)
-        .safeAreaPadding(.top)
-        .padding(.top, SparkSpacing.sm)
+        .padding(.bottom, SparkSpacing.sm)
     }
 }
 

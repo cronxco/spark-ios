@@ -55,6 +55,7 @@ final class AppModel {
     var onboardingComplete: Bool
     var lastError: String?
     var pendingRoute: AppRoute?
+    private(set) var profile: UserProfile?
 
     init(container: ModelContainer) {
         self.container = container
@@ -66,7 +67,7 @@ final class AppModel {
         self.apiClient = client
         self.authService = AuthenticationService(tokenStore: tokenStore, apiClient: client)
         self.reverb = ReverbClient(tokenStore: tokenStore)
-        self.onboardingComplete = UserDefaults(suiteName: "group.co.cronx.spark")?.bool(forKey: "onboarding.completed") == true
+        self.onboardingComplete = UserDefaults(suiteName: "group.co.cronx.sparkapp")?.bool(forKey: "onboarding.completed") == true
     }
 
     func bootstrap() async {
@@ -117,7 +118,7 @@ final class AppModel {
     /// Read a route written by an AppIntent (from the extension process) and
     /// navigate to it. Consumed once to prevent stale navigation on re-launch.
     private func consumePendingIntentRoute() {
-        let defaults = UserDefaults(suiteName: "group.co.cronx.spark")
+        let defaults = UserDefaults(suiteName: "group.co.cronx.sparkapp")
         guard let raw = defaults?.string(forKey: "spark.pendingRoute") else { return }
         defaults?.removeObject(forKey: "spark.pendingRoute")
         let parts = raw.split(separator: ":", maxSplits: 1).map(String.init)
@@ -139,8 +140,9 @@ final class AppModel {
     }
 
     private func fetchAndCacheUserId() async {
-        guard let profile = try? await apiClient.request(MeEndpoint.get()) else { return }
-        UserDefaults.sparkAppGroup.set(profile.id, forKey: "spark.userId")
+        guard let fetched = try? await apiClient.request(MeEndpoint.get()) else { return }
+        profile = fetched
+        UserDefaults.sparkAppGroup.set(fetched.id, forKey: "spark.userId")
     }
 
     private func configureHealthUploader(accessToken: String) {
@@ -150,13 +152,31 @@ final class AppModel {
         )
     }
 
-    private func registerDevice() async {
+    func registerDevice() async {
+        guard let apnsToken = UserDefaults.sparkAppGroup.string(forKey: "spark.apnsToken") else { return }
+
         #if canImport(UIKit)
         let name = UIDevice.current.name
+        let osVersion = UIDevice.current.systemVersion
         #else
         let name = "Unknown"
+        let osVersion = "Unknown"
         #endif
-        _ = try? await apiClient.request(DevicesEndpoint.register(name: name, platform: "ios"))
+
+        let info = Bundle.main.infoDictionary
+        let appVersion = info?["CFBundleShortVersionString"] as? String ?? "0.0.0"
+        let bundleId = Bundle.main.bundleIdentifier ?? "co.cronx.sparkapp"
+        #if DEBUG
+        let appEnvironment = "sandbox"
+        #else
+        let appEnvironment = "production"
+        #endif
+
+        _ = try? await apiClient.request(DevicesEndpoint.register(
+            name: name, platform: "ios",
+            apnsToken: apnsToken, appEnvironment: appEnvironment,
+            appVersion: appVersion, bundleId: bundleId, osVersion: osVersion
+        ))
     }
 
     func signIn(anchor: ASPresentationAnchorHandle) async {

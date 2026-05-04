@@ -2,7 +2,7 @@ import SwiftUI
 import WidgetKit
 
 struct SpendTodayWidget: Widget {
-    let kind = "co.cronx.spark.widgets.spend"
+    let kind = "co.cronx.sparkapp.widgets.spend"
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: SparkTimelineProvider()) { entry in

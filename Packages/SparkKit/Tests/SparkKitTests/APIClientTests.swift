@@ -5,7 +5,7 @@ import Testing
 @Suite("APIClient", .serialized)
 struct APIClientTests {
     private func makeStore() -> KeychainTokenStore {
-        let service = "co.cronx.spark.tests.api.\(UUID().uuidString)"
+        let service = "co.cronx.sparkapp.tests.api.\(UUID().uuidString)"
         return KeychainTokenStore(service: service, account: "test", accessGroup: nil)
     }
 

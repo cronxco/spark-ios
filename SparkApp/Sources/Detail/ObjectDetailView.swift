@@ -55,7 +55,7 @@ struct ObjectDetailView: View {
             }
             .padding(SparkSpacing.lg)
         }
-        .background(Color.sparkSurface.ignoresSafeArea())
+        .sparkAppBackground()
         .navigationTitle("Object")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: objectId) {

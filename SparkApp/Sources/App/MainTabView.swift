@@ -8,23 +8,31 @@ struct MainTabView: View {
 
     var body: some View {
         @Bindable var model = model
-        TabView(selection: $selection) {
-            Tab("Day", systemImage: "sun.max.fill", value: AppTab.day) {
-                DayPagerView()
+        ZStack {
+            if selection == .day {
+                SparkResolvedAppBackground()
             }
-            Tab("Explore", systemImage: "safari", value: AppTab.explore) {
-                ExploreView()
-            }
-            Tab("Knowledge", systemImage: "books.vertical.fill", value: AppTab.knowledge) {
-                KnowledgeView()
-            }
-            Tab("Flint", systemImage: "sparkles", value: AppTab.flint) {
-                FlintView()
-            }
-            Tab(value: AppTab.search, role: .search) {
-                SearchView()
+
+            TabView(selection: $selection) {
+                Tab("Day", systemImage: "sun.max.fill", value: AppTab.day) {
+                    DayPagerView()
+                }
+                Tab("Explore", systemImage: "safari", value: AppTab.explore) {
+                    ExploreView()
+                }
+                Tab("Knowledge", systemImage: "books.vertical.fill", value: AppTab.knowledge) {
+                    KnowledgeView()
+                }
+                Tab("Flint", systemImage: "sparkles", value: AppTab.flint) {
+                    FlintView()
+                }
+                Tab(value: AppTab.search, role: .search) {
+                    SearchView()
+                }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea()
         .onChange(of: model.pendingRoute) { _, new in
             guard new != nil else { return }
             selection = .day

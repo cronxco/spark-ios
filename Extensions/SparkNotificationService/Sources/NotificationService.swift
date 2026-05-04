@@ -49,7 +49,7 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
 
     private func downloadAttachment(from url: URL, notificationID: String) async -> UNNotificationAttachment? {
         let cacheDir = FileManager.default
-            .containerURL(forSecurityApplicationGroupIdentifier: "group.co.cronx.spark")?
+            .containerURL(forSecurityApplicationGroupIdentifier: "group.co.cronx.sparkapp")?
             .appendingPathComponent("NotificationMedia", isDirectory: true)
             ?? FileManager.default.temporaryDirectory
 

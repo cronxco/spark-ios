@@ -4,6 +4,8 @@ import SwiftUI
 
 struct ProfileView: View {
     @Environment(AppModel.self) private var appModel
+    @AppStorage("spark.background.mode", store: .sparkAppGroup)
+    private var backgroundMode = SparkAppBackgroundMode.auto.rawValue
     @State private var viewModel: ProfileViewModel?
 
     var body: some View {
@@ -67,10 +69,36 @@ struct ProfileView: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
+
+                GlassCard {
+                    VStack(alignment: .leading, spacing: SparkSpacing.md) {
+                        GlassCardHeader(
+                            icon: "paintpalette.fill",
+                            tint: .sparkAccent,
+                            title: "Appearance"
+                        )
+
+                        Picker("Background", selection: backgroundModeBinding) {
+                            ForEach(SparkAppBackgroundMode.allCases) { mode in
+                                Text(mode.displayName).tag(mode.rawValue)
+                            }
+                        }
+                    }
+                }
             }
             .padding(.horizontal, SparkSpacing.lg)
             .padding(.vertical, SparkSpacing.xl)
         }
         .scrollContentBackground(.hidden)
+    }
+
+    private var backgroundModeBinding: Binding<String> {
+        Binding(
+            get: {
+                SparkAppBackgroundMode(rawValue: backgroundMode)?.rawValue
+                    ?? SparkAppBackgroundMode.auto.rawValue
+            },
+            set: { backgroundMode = $0 }
+        )
     }
 }

@@ -9,7 +9,7 @@ struct KeychainTokenStoreTests {
     /// `accessGroup: nil` sidesteps the signed-entitlement requirement when
     /// running under `swift test` without a provisioning profile.
     private func makeStore() -> KeychainTokenStore {
-        let service = "co.cronx.spark.tests.\(UUID().uuidString)"
+        let service = "co.cronx.sparkapp.tests.\(UUID().uuidString)"
         return KeychainTokenStore(service: service, account: "test", accessGroup: nil)
     }
 

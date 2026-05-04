@@ -5,7 +5,7 @@ import SwiftData
 /// container so the main app, widgets, and other extensions all read/write the
 /// same cache.
 public enum SparkDataStore {
-    public static let appGroupIdentifier = "group.co.cronx.spark"
+    public static let appGroupIdentifier = "group.co.cronx.sparkapp"
     public static let storeFilename = "Spark.sqlite"
 
     public enum StoreError: Error {

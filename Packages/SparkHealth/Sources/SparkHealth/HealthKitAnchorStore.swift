@@ -4,7 +4,7 @@ import HealthKit
 /// Persists HKQueryAnchor per type identifier to App Group UserDefaults.
 /// Encoded with NSKeyedArchiver (HKQueryAnchor is NSSecureCoding).
 public final class HealthKitAnchorStore: Sendable {
-    private static let suiteName = "group.co.cronx.spark"
+    private static let suiteName = "group.co.cronx.sparkapp"
     private static let keyPrefix = "hk.anchor."
 
     public static let shared = HealthKitAnchorStore()

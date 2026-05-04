@@ -62,10 +62,10 @@ struct MetricsExploreView: View {
                     historySection
                         .padding(.horizontal, SparkSpacing.lg)
                 }
-                .padding(.top, 92)
+                .padding(.top, SparkSpacing.xl)
                 .padding(.bottom, SparkSpacing.xl)
             }
-            .background(metricsBackground.ignoresSafeArea())
+            .sparkAppBackground()
             .navigationDestination(for: DetailRoute.self) { route in
                 switch route {
                 case .metric(let identifier):
@@ -248,25 +248,6 @@ struct MetricsExploreView: View {
         let sign = diff >= 0 ? "+" : ""
         if abs(diff) >= 1000 { return "\(sign)\(String(format: "%.1fk", diff / 1000))" }
         return "\(sign)\(diff.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(diff)) : String(format: "%.1f", diff))"
-    }
-
-    private var metricsBackground: some View {
-        ZStack {
-            Color.sparkSurface
-            if colorScheme == .light {
-                LinearGradient(
-                    colors: [Color.ocean100.opacity(0.24), Color.spark100.opacity(0.18), Color.clear],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            } else {
-                LinearGradient(
-                    colors: [Color.ocean800.opacity(0.75), Color.ocean950, Color.black.opacity(0.45)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            }
-        }
     }
 
     private var headerTextColor: Color {

@@ -7,7 +7,7 @@ import WidgetKit
 /// Keychain are reachable from an extension before we start building real
 /// widget content in Phase 3.
 struct PlumbingSmokeTestWidget: Widget {
-    let kind: String = "co.cronx.spark.widgets.plumbing"
+    let kind: String = "co.cronx.sparkapp.widgets.plumbing"
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: PlumbingProvider()) { entry in

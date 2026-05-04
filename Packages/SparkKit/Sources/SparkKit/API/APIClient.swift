@@ -26,7 +26,7 @@ public actor APIClient {
     private let telemetry: APITelemetry
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
-    private let logger = Logger(subsystem: "co.cronx.spark", category: "APIClient")
+    private let logger = Logger(subsystem: "co.cronx.sparkapp", category: "APIClient")
 
     public init(
         environment: APIEnvironment = .current(),

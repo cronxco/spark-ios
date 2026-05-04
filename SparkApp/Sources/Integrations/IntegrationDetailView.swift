@@ -27,7 +27,7 @@ struct IntegrationDetailView: View {
             }
             .padding(SparkSpacing.lg)
         }
-        .background(Color.sparkSurface.ignoresSafeArea())
+        .sparkAppBackground()
         .navigationTitle(viewModel?.state.loadedTitle ?? "Integration")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: integrationId) {

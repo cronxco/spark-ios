@@ -34,7 +34,7 @@ public actor ReverbClient {
     private let environment: APIEnvironment
     private let tokenStore: KeychainTokenStore
     private let session: URLSession
-    private let logger = Logger(subsystem: "co.cronx.spark", category: "ReverbClient")
+    private let logger = Logger(subsystem: "co.cronx.sparkapp", category: "ReverbClient")
 
     private var socketTask: URLSessionWebSocketTask?
     private var receiveLoopTask: Task<Void, Never>?

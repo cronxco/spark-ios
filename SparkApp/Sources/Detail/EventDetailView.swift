@@ -35,7 +35,7 @@ struct EventDetailView: View {
             .padding(.horizontal, SparkSpacing.lg)
             .padding(.vertical, SparkSpacing.lg)
         }
-        .background(Color.sparkSurface.ignoresSafeArea())
+        .sparkAppBackground()
         .navigationBarTitleDisplayMode(.inline)
         .task(id: eventId) {
             if viewModel == nil {

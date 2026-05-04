@@ -51,22 +51,22 @@ public enum SpotlightIndexer {
 
         let eventDesc = FetchDescriptor<CachedEvent>(predicate: #Predicate { $0.lastSyncedAt < cutoff })
         if let stale = try? context.fetch(eventDesc) {
-            identifiers += stale.map { "co.cronx.spark.event.\($0.id)" }
+            identifiers += stale.map { "co.cronx.sparkapp.event.\($0.id)" }
         }
 
         let blockDesc = FetchDescriptor<CachedBlock>(predicate: #Predicate { $0.lastSyncedAt < cutoff })
         if let stale = try? context.fetch(blockDesc) {
-            identifiers += stale.map { "co.cronx.spark.block.\($0.id)" }
+            identifiers += stale.map { "co.cronx.sparkapp.block.\($0.id)" }
         }
 
         let placeDesc = FetchDescriptor<CachedPlace>(predicate: #Predicate { $0.lastSyncedAt < cutoff })
         if let stale = try? context.fetch(placeDesc) {
-            identifiers += stale.map { "co.cronx.spark.place.\($0.id)" }
+            identifiers += stale.map { "co.cronx.sparkapp.place.\($0.id)" }
         }
 
         let integDesc = FetchDescriptor<CachedIntegration>(predicate: #Predicate { $0.lastSyncedAt < cutoff })
         if let stale = try? context.fetch(integDesc) {
-            identifiers += stale.map { "co.cronx.spark.integration.\($0.service)" }
+            identifiers += stale.map { "co.cronx.sparkapp.integration.\($0.service)" }
         }
 
         if !identifiers.isEmpty {
@@ -86,8 +86,8 @@ public enum SpotlightIndexer {
         attrs.lastUsedDate = event.time
         attrs.contentURL = URL(string: "https://spark.cronx.co/events/\(event.id)")
         return CSSearchableItem(
-            uniqueIdentifier: "co.cronx.spark.event.\(event.id)",
-            domainIdentifier: "co.cronx.spark.events",
+            uniqueIdentifier: "co.cronx.sparkapp.event.\(event.id)",
+            domainIdentifier: "co.cronx.sparkapp.events",
             attributeSet: attrs
         )
     }
@@ -100,8 +100,8 @@ public enum SpotlightIndexer {
         attrs.keywords = [block.blockType]
         attrs.contentURL = URL(string: "https://spark.cronx.co/blocks/\(block.id)")
         return CSSearchableItem(
-            uniqueIdentifier: "co.cronx.spark.block.\(block.id)",
-            domainIdentifier: "co.cronx.spark.blocks",
+            uniqueIdentifier: "co.cronx.sparkapp.block.\(block.id)",
+            domainIdentifier: "co.cronx.sparkapp.blocks",
             attributeSet: attrs
         )
     }
@@ -114,8 +114,8 @@ public enum SpotlightIndexer {
         if let lon = place.longitude { attrs.longitude = NSNumber(value: lon) }
         attrs.contentURL = URL(string: "https://spark.cronx.co/places/\(place.id)")
         return CSSearchableItem(
-            uniqueIdentifier: "co.cronx.spark.place.\(place.id)",
-            domainIdentifier: "co.cronx.spark.places",
+            uniqueIdentifier: "co.cronx.sparkapp.place.\(place.id)",
+            domainIdentifier: "co.cronx.sparkapp.places",
             attributeSet: attrs
         )
     }
@@ -127,8 +127,8 @@ public enum SpotlightIndexer {
         attrs.contentURL = URL(string: "https://spark.cronx.co/integrations/\(integration.service)/details")
         // Use service name as identifier (matches DeepLink routing by service).
         return CSSearchableItem(
-            uniqueIdentifier: "co.cronx.spark.integration.\(integration.service)",
-            domainIdentifier: "co.cronx.spark.integrations",
+            uniqueIdentifier: "co.cronx.sparkapp.integration.\(integration.service)",
+            domainIdentifier: "co.cronx.sparkapp.integrations",
             attributeSet: attrs
         )
     }

@@ -25,8 +25,7 @@ struct TodayView: View {
         let snapshot = TodaySnapshot(summary: viewModel?.cached, date: date)
 
         ZStack {
-            TodayBackground(snapshot.timeOfDay)
-                .ignoresSafeArea()
+            SparkResolvedAppBackground()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: SparkSpacing.lg) {
@@ -47,15 +46,18 @@ struct TodayView: View {
                     }
                 }
                 .padding(.horizontal, SparkSpacing.lg)
-                .padding(.top, deviceSafeAreaTop + SparkSpacing.xl)
+                .padding(.top, SparkSpacing.xl + 40)
                 .padding(.bottom, deviceSafeAreaBottom + 66)
             }
             .scrollContentBackground(.hidden)
             .refreshable { await viewModel?.refresh() }
-
-            headerButtons
         }
-        .environment(\.colorScheme, snapshot.timeOfDay.prefersDarkTreatment ? .dark : .light)
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                settingsToolbarButton
+                notificationsToolbarButton
+            }
+        }
         .sheet(isPresented: $showCheckIn) {
             let snapshot = TodaySnapshot(summary: viewModel?.cached, date: date)
             if case .pending(let slot) = snapshot.checkInStatus {
@@ -82,71 +84,60 @@ struct TodayView: View {
         }
     }
 
-    // MARK: - Header buttons
+    // MARK: - Toolbar
 
-    private var headerButtons: some View {
-        SparkGlassStack(spacing: 0) {
-            HStack(spacing: 0) {
-                Button {
-                    showSettings = true
-                } label: {
-                    Image(systemName: "gearshape")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(errorIntegrations.isEmpty ? Color.primary : Color.sparkError)
-                        .frame(width: 36, height: 36)
-                        .sparkGlass(.circle)
-                }
-                .accessibilityLabel("Settings")
-
-                Rectangle()
-                    .fill(Color.primary.opacity(0.12))
-                    .frame(width: 1, height: 22)
-
-                Button {
-                    showNotifications = true
-                } label: {
-                    ZStack(alignment: .topTrailing) {
-                        Image(systemName: "bell")
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(unreadNotifications.isEmpty ? Color.primary : Color.sparkAccent)
-                            .frame(width: 36, height: 36)
-                            .sparkGlass(.circle)
-                        if !unreadNotifications.isEmpty {
-                            Circle()
-                                .fill(Color.sparkError)
-                                .frame(width: 9, height: 9)
-                                .offset(x: 3, y: -3)
-                        }
-                    }
-                }
-                .accessibilityLabel(
-                    unreadNotifications.isEmpty
-                        ? "Notifications"
-                        : "Notifications, \(unreadNotifications.count) unread"
-                )
-            }
+    private var settingsToolbarButton: some View {
+        Button {
+            showSettings = true
+        } label: {
+            Image(systemName: "gearshape")
+                .symbolRenderingMode(.monochrome)
+                .foregroundStyle(errorIntegrations.isEmpty ? Color.primary : Color.sparkError)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-        .padding(.top, deviceSafeAreaTop + SparkSpacing.xl)
-        .padding(.trailing, SparkSpacing.lg)
+        .accessibilityLabel("Settings")
+    }
+
+    private var notificationsToolbarButton: some View {
+        Button {
+            showNotifications = true
+        } label: {
+            notificationsToolbarLabel
+        }
+        .accessibilityLabel(
+            unreadNotifications.isEmpty
+                ? "Notifications"
+                : "Notifications, \(unreadNotifications.count) unread"
+        )
+    }
+
+    @ViewBuilder
+    private var notificationsToolbarLabel: some View {
+        let icon = Image(systemName: "bell")
+            .symbolRenderingMode(.monochrome)
+            .foregroundStyle(unreadNotifications.isEmpty ? Color.primary : Color.sparkAccent)
+
+        if unreadNotifications.isEmpty {
+            icon
+        } else {
+            icon.badge(unreadNotifications.count)
+        }
     }
 
     // MARK: - Hero
 
     private func hero(snapshot: TodaySnapshot) -> some View {
-        let isDark = snapshot.timeOfDay.prefersDarkTreatment
-        return VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
             Text(heroTitle(snapshot: snapshot))
                 .font(SparkFonts.display(.title, weight: .bold))
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
-                .foregroundStyle(isDark ? Color.white : Color.primary)
+                .foregroundStyle(Color.primary)
                 .accessibilityAddTraits(.isHeader)
 
             if let subtitle = heroSubtitle(snapshot: snapshot) {
                 Text(subtitle)
                     .font(SparkTypography.body)
-                    .foregroundStyle(isDark ? Color.white.opacity(0.7) : Color.secondary)
+                    .foregroundStyle(Color.secondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -165,12 +156,6 @@ struct TodayView: View {
         }
     }
 
-    private var deviceSafeAreaTop: CGFloat {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }.first?
-            .keyWindow?.safeAreaInsets.top ?? 59
-    }
-
     private var deviceSafeAreaBottom: CGFloat {
         UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }.first?
@@ -178,7 +163,7 @@ struct TodayView: View {
     }
 
     private var firstName: String {
-        let name = viewModel?.profile?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let name = appModel.profile?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return name.split(separator: " ").first.map(String.init) ?? "Your"
     }
 

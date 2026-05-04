@@ -22,17 +22,26 @@ struct SparkApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environment(model)
-                .modelContainer(model.container)
-                .tint(.sparkAccent)
-                .sparkDynamicTypeClamp()
-                .task(id: model.session) {
-                    if model.session == .loggedIn {
-                        HealthKitObserver.shared.startObserving()
+            ZStack {
+                SparkResolvedAppBackground()
+
+                RootView()
+                    .environment(model)
+                    .modelContainer(model.container)
+                    .tint(.sparkAccent)
+                    .sparkDynamicTypeClamp()
+                    .task(id: model.session) {
+                        if model.session == .loggedIn {
+                            HealthKitObserver.shared.startObserving()
+                        }
                     }
-                }
-                .onContinueUserActivity(CSSearchableItemActionType, perform: handle(spotlightActivity:))
+                    .onContinueUserActivity(CSSearchableItemActionType, perform: handle(spotlightActivity:))
+            }
+            .overlay(alignment: .top) {
+                SparkResolvedStatusBarBackground()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .ignoresSafeArea()
         }
         .onChange(of: scenePhase) { _, phase in
             Task { @MainActor in
@@ -49,11 +58,11 @@ struct SparkApp: App {
     }
 
     /// Spotlight tap handler. Identifiers have the form:
-    /// `co.cronx.spark.{type}.{id}` — parse the type prefix and route.
+    /// `co.cronx.sparkapp.{type}.{id}` — parse the type prefix and route.
     @MainActor
     private func handle(spotlightActivity activity: NSUserActivity) {
         guard let identifier = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String else { return }
-        let prefix = "co.cronx.spark."
+        let prefix = "co.cronx.sparkapp."
         guard identifier.hasPrefix(prefix) else { return }
         let rest = identifier.dropFirst(prefix.count)
         guard let dotRange = rest.firstIndex(of: ".") else { return }
@@ -78,7 +87,18 @@ final class SparkAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
         UNUserNotificationCenter.current().delegate = self
         registerNotificationCategories()
         registerBackgroundTasks()
+        application.registerForRemoteNotifications()
         return true
+    }
+
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
+        UserDefaults.sparkAppGroup.set(hex, forKey: "spark.apnsToken")
+        Task { await AppModel.shared.registerDevice() }
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        SentrySDK.capture(error: error)
     }
 
     func application(
@@ -273,7 +293,7 @@ enum SparkObservability {
         let info = Bundle.main.infoDictionary
         let short = info?["CFBundleShortVersionString"] as? String ?? "0.0.0"
         let build = info?["CFBundleVersion"] as? String ?? "0"
-        return "co.cronx.spark@\(short)+\(build)"
+        return "co.cronx.sparkapp@\(short)+\(build)"
     }
 
     private static var isRunningTests: Bool {

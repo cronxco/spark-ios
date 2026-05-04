@@ -30,7 +30,7 @@ public actor KeychainTokenStore {
     private var cachedTokens: AuthTokens?
 
     public init(
-        service: String = "co.cronx.spark.oauth",
+        service: String = "co.cronx.sparkapp.oauth",
         account: String = "primary",
         accessGroup: String? = nil
     ) {

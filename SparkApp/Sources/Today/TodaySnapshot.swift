@@ -46,7 +46,7 @@ struct TodaySnapshot {
     private static func loadCheckIn(date: Date, slot: SparkTimeOfDay) -> CheckInStatus {
         let dateKey = isoDate(date)
         let key = "checkin_\(dateKey)_\(slot.rawValue)"
-        guard let data = UserDefaults(suiteName: "group.co.cronx.spark")?.data(forKey: key) else {
+        guard let data = UserDefaults(suiteName: "group.co.cronx.sparkapp")?.data(forKey: key) else {
             return .pending(slot: slot)
         }
         let decoder = JSONDecoder()
