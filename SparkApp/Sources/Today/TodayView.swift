@@ -6,6 +6,7 @@ import UIKit
 
 struct TodayView: View {
     let date: Date
+    var showsToolbar = true
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: TodayViewModel?
     @State private var showCheckIn = false
@@ -53,9 +54,11 @@ struct TodayView: View {
             .refreshable { await viewModel?.refresh() }
         }
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                settingsToolbarButton
-                notificationsToolbarButton
+            if showsToolbar {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    settingsToolbarButton
+                    notificationsToolbarButton
+                }
             }
         }
         .sheet(isPresented: $showCheckIn) {
