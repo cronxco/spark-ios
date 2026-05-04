@@ -39,7 +39,7 @@ final class MoneyExploreViewModel {
         do {
             let (spendData, feedData) = try await (spendResult, feedResult)
             spend = spendData
-            transactions = feedData.data
+            transactions = feedData.data.filter { !$0.hidden }
             loadState = .loaded
         } catch {
             SparkObservability.captureHandled(error)

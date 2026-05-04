@@ -33,10 +33,11 @@ struct HealthExploreView: View {
                     metricRows
                         .padding(.horizontal, SparkSpacing.lg)
                 }
-                .padding(.top, SparkSpacing.xl)
+                .padding(.top, SparkSpacing.md)
                 .padding(.bottom, SparkSpacing.xl)
             }
             .sparkAppBackground()
+            .sparkMainNavigationTitle("Health")
             .navigationDestination(for: DetailRoute.self) { route in
                 switch route {
                 case .metric(let identifier):
@@ -50,6 +51,7 @@ struct HealthExploreView: View {
             .refreshable {
                 await viewModel?.refresh()
             }
+            .sparkMainAppToolbar()
         }
         .task {
             if viewModel == nil {
@@ -60,14 +62,7 @@ struct HealthExploreView: View {
     }
 
     private var pageHeader: some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.xs) {
-            Text("Health")
-                .font(SparkTypography.heroXL)
-                .foregroundStyle(headerTextColor)
-            Text(headerSubtitle)
-                .font(SparkTypography.bodySmall)
-                .foregroundStyle(.secondary)
-        }
+        SparkMainPageHeader(title: "Health", subtitle: headerSubtitle)
     }
 
     @ViewBuilder

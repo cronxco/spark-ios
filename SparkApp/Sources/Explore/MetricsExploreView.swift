@@ -62,10 +62,11 @@ struct MetricsExploreView: View {
                     historySection
                         .padding(.horizontal, SparkSpacing.lg)
                 }
-                .padding(.top, SparkSpacing.xl)
+                .padding(.top, SparkSpacing.md)
                 .padding(.bottom, SparkSpacing.xl)
             }
             .sparkAppBackground()
+            .sparkMainNavigationTitle("Metrics")
             .navigationDestination(for: DetailRoute.self) { route in
                 switch route {
                 case .metric(let identifier):
@@ -77,6 +78,7 @@ struct MetricsExploreView: View {
             .refreshable {
                 await viewModel?.refresh(identifiers: allIdentifiers)
             }
+            .sparkMainAppToolbar()
         }
         .task {
             if viewModel == nil {
@@ -89,14 +91,7 @@ struct MetricsExploreView: View {
     // MARK: - Page header
 
     private var pageHeader: some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.xs) {
-            Text("Metrics")
-                .font(SparkTypography.heroXL)
-                .foregroundStyle(headerTextColor)
-            Text(headerSubtitle)
-                .font(SparkTypography.bodySmall)
-                .foregroundStyle(.secondary)
-        }
+        SparkMainPageHeader(title: "Metrics", subtitle: headerSubtitle)
     }
 
     // MARK: - Domain filter

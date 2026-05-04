@@ -68,6 +68,12 @@ struct MetricDetailView: View {
         .sparkAppBackground()
         .navigationTitle("Metric")
         .navigationBarTitleDisplayMode(.inline)
+        .sparkSubViewToolbar(
+            shareItems: metricShareItems,
+            rawTitle: "Raw metric",
+            rawPayload: metricRawPayload,
+            refresh: { await viewModel?.load() }
+        )
         .task(id: identifier) {
             if viewModel == nil {
                 viewModel = MetricDetailViewModel(
@@ -77,6 +83,19 @@ struct MetricDetailView: View {
             }
             await viewModel?.load()
         }
+    }
+
+    private var metricShareItems: [Any] {
+        guard case .loaded(let detail) = viewModel?.state else {
+            return ["Spark Metric: \(identifier)"]
+        }
+        return ["Spark Metric: \(detail.title)"]
+    }
+
+    private var metricRawPayload: String? {
+        guard case .loaded(let detail) = viewModel?.state else { return nil }
+        return SparkPrettyJSON.string(for: detail)
+            ?? SparkPrettyJSON.fallback(entity: "metric", id: detail.id, title: detail.title)
     }
 
     @ViewBuilder

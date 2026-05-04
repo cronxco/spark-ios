@@ -33,9 +33,10 @@ struct MapView: View {
                         IntegrationDetailView(integrationId: service)
                     }
                 }
-                .navigationTitle("Map")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar(isEmbedded ? .hidden : .visible, for: .navigationBar)
+                .sparkMainNavigationTitle("Map")
+                .toolbar(.visible, for: .navigationBar)
+                .toolbarBackground(.hidden, for: .navigationBar)
+                .sparkMainAppToolbar()
         }
         .task {
             if viewModel == nil {

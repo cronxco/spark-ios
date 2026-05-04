@@ -74,6 +74,7 @@ struct SearchResponseDecodingTests {
               "identifier": "oura.sleep_score",
               "display_name": "Sleep Score",
               "service": "oura",
+              "domain": "health",
               "action": "sleep_score",
               "unit": "points",
               "event_count": 30,
@@ -112,6 +113,7 @@ struct SearchResponseDecodingTests {
             #expect(hit.identifier == "oura.sleep_score")
             #expect(hit.title == "Sleep Score")
             #expect(hit.subtitle == "points")
+            #expect(hit.domain == "health")
         } else {
             Issue.record("Expected a metric hit at index 3.")
         }

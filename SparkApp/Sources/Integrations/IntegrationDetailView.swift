@@ -30,6 +30,12 @@ struct IntegrationDetailView: View {
         .sparkAppBackground()
         .navigationTitle(viewModel?.state.loadedTitle ?? "Integration")
         .navigationBarTitleDisplayMode(.inline)
+        .sparkSubViewToolbar(
+            shareItems: integrationShareItems,
+            rawTitle: "Raw integration",
+            rawPayload: integrationRawPayload,
+            refresh: { await viewModel?.load() }
+        )
         .task(id: integrationId) {
             if viewModel == nil {
                 viewModel = IntegrationDetailViewModel(
@@ -39,6 +45,23 @@ struct IntegrationDetailView: View {
             }
             await viewModel?.load()
         }
+    }
+
+    private var integrationShareItems: [Any] {
+        guard case .loaded(let detail) = viewModel?.state else {
+            return ["Spark Integration: \(integrationId)"]
+        }
+        return ["Spark Integration: \(detail.integration.name)"]
+    }
+
+    private var integrationRawPayload: String? {
+        guard case .loaded(let detail) = viewModel?.state else { return nil }
+        return SparkPrettyJSON.string(for: detail)
+            ?? SparkPrettyJSON.fallback(
+                entity: "integration",
+                id: detail.integration.id,
+                title: detail.integration.name
+            )
     }
 
     @ViewBuilder
@@ -155,7 +178,7 @@ struct IntegrationDetailView: View {
     private func pillTone(for status: IntegrationStatus) -> StatusPill.Tone {
         switch status {
         case .upToDate: .ok
-        case .syncing: .neutral
+        case .syncing, .unknown: .neutral
         case .needsReauth, .error: .warning
         }
     }

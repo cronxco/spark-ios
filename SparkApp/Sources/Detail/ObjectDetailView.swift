@@ -58,12 +58,34 @@ struct ObjectDetailView: View {
         .sparkAppBackground()
         .navigationTitle("Object")
         .navigationBarTitleDisplayMode(.inline)
+        .sparkSubViewToolbar(
+            shareItems: objectShareItems,
+            rawTitle: "Raw object",
+            rawPayload: objectRawPayload,
+            refresh: { await viewModel?.load() }
+        )
         .task(id: objectId) {
             if viewModel == nil {
                 viewModel = ObjectDetailViewModel(objectId: objectId, apiClient: appModel.apiClient)
             }
             await viewModel?.load()
         }
+    }
+
+    private var objectShareItems: [Any] {
+        guard case .loaded(let detail) = viewModel?.state else {
+            return ["Spark Object: \(objectId)"]
+        }
+        if let url = detail.object.url.flatMap(URL.init) {
+            return [url]
+        }
+        return ["Spark Object: \(detail.object.title)"]
+    }
+
+    private var objectRawPayload: String? {
+        guard case .loaded(let detail) = viewModel?.state else { return nil }
+        return SparkPrettyJSON.string(for: detail)
+            ?? SparkPrettyJSON.fallback(entity: "object", id: detail.object.id, title: detail.object.title)
     }
 
     @ViewBuilder

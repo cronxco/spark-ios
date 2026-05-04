@@ -5,9 +5,13 @@ import SwiftUI
 
 struct FeedSection: View {
     let date: Date
+    @Environment(AppModel.self) private var appModel
+    @State private var filter: TimelineFilter = .home
+    @State private var showRawFeed = false
+    @State private var rawFeedState: RawFeedState = .idle
     @Query private var allEvents: [CachedEvent]
 
-    private var dayEvents: [CachedEvent] {
+    private var rawDayEvents: [CachedEvent] {
         let cal = Calendar.current
         let start = cal.startOfDay(for: date)
         guard let end = cal.date(byAdding: .day, value: 1, to: start) else { return [] }
@@ -17,6 +21,10 @@ struct FeedSection: View {
                 return t >= start && t < end
             }
             .sorted { ($0.time ?? .distantPast) > ($1.time ?? .distantPast) }
+    }
+
+    private var dayEvents: [CachedEvent] {
+        rawDayEvents.filter(filter.includes)
     }
 
     private var hourGroups: [(hour: Int, events: [CachedEvent])] {
@@ -30,43 +38,280 @@ struct FeedSection: View {
     }
 
     var body: some View {
-        if !dayEvents.isEmpty {
+        if !rawDayEvents.isEmpty {
             VStack(alignment: .leading, spacing: SparkSpacing.md) {
-                HStack(alignment: .center, spacing: SparkSpacing.sm) {
-                    Text("Timeline")
-                        .font(SparkFonts.display(.title2, weight: .bold))
-                    Spacer(minLength: SparkSpacing.sm)
-                    filterPill("All", isSelected: true)
-                    filterPill("£", systemImage: nil)
-                    filterPill(nil, systemImage: "heart.fill")
-                    filterPill(nil, systemImage: "books.vertical.fill")
+                timelineHeader
+
+                if dayEvents.isEmpty {
+                    Text(emptyMessage)
+                        .font(SparkTypography.bodySmall)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, SparkSpacing.sm)
+                } else {
+                    ForEach(hourGroups, id: \.hour) { group in
+                        HourGroup(hour: group.hour, events: group.events)
+                    }
                 }
 
-                ForEach(hourGroups, id: \.hour) { group in
-                    HourGroup(hour: group.hour, events: group.events)
-                }
+                rawFeedButton
+            }
+            .sheet(isPresented: $showRawFeed) {
+                rawFeedSheet
             }
         }
     }
 
-    private func filterPill(_ text: String?, systemImage: String? = nil, isSelected: Bool = false) -> some View {
-        HStack(spacing: SparkSpacing.xxs) {
+    private var timelineHeader: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: SparkSpacing.md) {
+                timelineTitle
+                Spacer(minLength: SparkSpacing.sm)
+                filterButtons
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+
+            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                timelineTitle
+                filterRow
+            }
+        }
+    }
+
+    private var timelineTitle: some View {
+        Text("Timeline")
+            .font(SparkFonts.display(.title2, weight: .bold))
+            .lineLimit(1)
+    }
+
+    private var filterRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            filterButtons
+        }
+    }
+
+    private var filterButtons: some View {
+        HStack(spacing: SparkSpacing.sm) {
+            ForEach(TimelineFilter.allCases, id: \.self) { option in
+                Button {
+                    filter = option
+                } label: {
+                    TimelineFilterChip(
+                        option.label,
+                        systemImage: option.systemImage,
+                        isSelected: filter == option
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(option.accessibilityLabel)
+            }
+        }
+    }
+
+    private var emptyMessage: String {
+        switch filter {
+        case .home:
+            "No home timeline events for this day."
+        case .all:
+            "No timeline events for this day."
+        case .money, .health, .knowledge:
+            "No \(filter.label.lowercased()) events for this day."
+        }
+    }
+
+    private var rawFeedButton: some View {
+        Button {
+            showRawFeed = true
+            if case .loaded = rawFeedState {
+                return
+            }
+            Task { await loadRawFeed() }
+        } label: {
+            HStack(spacing: SparkSpacing.sm) {
+                Image(systemName: "curlybraces")
+                    .font(.caption)
+                Text("Raw feed JSON")
+                    .font(SparkTypography.bodySmall)
+                Spacer(minLength: 0)
+                Text(Self.isoKey(for: date))
+                    .font(SparkTypography.monoSmall)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            .foregroundStyle(.secondary)
+            .padding(SparkSpacing.md)
+            .sparkGlass(.roundedRect(SparkRadii.md))
+        }
+        .buttonStyle(.plain)
+        .padding(.top, SparkSpacing.xs)
+    }
+
+    private var rawFeedSheet: some View {
+        SparkSheetScaffold("Raw feed") {
+            switch rawFeedState {
+            case .idle, .loading:
+                ProgressView()
+                    .frame(maxWidth: .infinity, minHeight: 220)
+            case .loaded(let json):
+                SparkRawPayloadView(text: json)
+            case .error(let message):
+                EmptyState(
+                    systemImage: "exclamationmark.triangle.fill",
+                    title: "Couldn't load raw feed",
+                    message: message,
+                    actionTitle: "Retry"
+                ) { Task { await loadRawFeed() } }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    @MainActor
+    private func loadRawFeed() async {
+        rawFeedState = .loading
+        do {
+            let events = try await fetchAllFeedEvents()
+            rawFeedState = .loaded(prettyJSON(for: events))
+        } catch APIError.notModified {
+            rawFeedState = .error("The feed endpoint returned 304 Not Modified, so no raw response body was available.")
+        } catch {
+            SparkObservability.captureHandled(error)
+            rawFeedState = .error((error as? LocalizedError)?.errorDescription ?? String(describing: error))
+        }
+    }
+
+    private func fetchAllFeedEvents() async throws -> [Event] {
+        var cursor: String?
+        var events: [Event] = []
+
+        repeat {
+            let page = try await appModel.apiClient.request(
+                FeedEndpoint.feed(cursor: cursor, limit: 100, date: Self.isoKey(for: date))
+            )
+            events.append(contentsOf: page.data)
+            cursor = page.hasMore ? page.nextCursor : nil
+        } while cursor != nil
+
+        return events
+    }
+
+    private func prettyJSON(for events: [Event]) -> String {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        guard
+            let data = try? encoder.encode(events),
+            let string = String(data: data, encoding: .utf8)
+        else {
+            return "[]"
+        }
+        return string
+    }
+
+    private static func isoKey(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = .current
+        return formatter.string(from: date)
+    }
+}
+
+private enum RawFeedState {
+    case idle
+    case loading
+    case loaded(String)
+    case error(String)
+}
+
+private enum TimelineFilter: CaseIterable {
+    case home
+    case money
+    case health
+    case knowledge
+    case all
+
+    var label: String {
+        switch self {
+        case .home: "Home"
+        case .money: "Money"
+        case .health: "Health"
+        case .knowledge: "Knowledge"
+        case .all: "All"
+        }
+    }
+
+    var systemImage: String? {
+        switch self {
+        case .money: "sterlingsign.circle.fill"
+        case .health: "heart.fill"
+        case .knowledge: "books.vertical.fill"
+        case .home, .all: nil
+        }
+    }
+
+    var accessibilityLabel: String {
+        switch self {
+        case .all: "Show all timeline events, including hidden events"
+        default: "Show \(label.lowercased()) timeline events"
+        }
+    }
+
+    func includes(_ event: CachedEvent) -> Bool {
+        switch self {
+        case .home:
+            return !event.hidden
+        case .money:
+            return !event.hidden && event.domain == "money"
+        case .health:
+            return !event.hidden && (event.domain == "health" || event.domain == "activity")
+        case .knowledge:
+            return !event.hidden && event.domain == "knowledge"
+        case .all:
+            return true
+        }
+    }
+}
+
+private struct TimelineFilterChip: View {
+    let title: String
+    let systemImage: String?
+    let isSelected: Bool
+
+    init(_ title: String, systemImage: String? = nil, isSelected: Bool) {
+        self.title = title
+        self.systemImage = systemImage
+        self.isSelected = isSelected
+    }
+
+    var body: some View {
+        Group {
             if let systemImage {
                 Image(systemName: systemImage)
-            }
-            if let text {
-                Text(text)
+                    .font(.caption.weight(.semibold))
+                    .frame(width: 16, height: 16)
+                    .accessibilityHidden(true)
+            } else {
+                Text(title)
+                    .font(SparkTypography.captionStrong)
+                    .lineLimit(1)
             }
         }
-        .font(SparkTypography.captionStrong)
-        .foregroundStyle(isSelected ? Color.primary : Color.secondary)
-        .frame(minWidth: 38, minHeight: 38)
-        .padding(.horizontal, text == nil ? 0 : SparkSpacing.sm)
-        .background(.regularMaterial, in: .circle)
-        .overlay {
-            Circle()
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-        }
+            .font(SparkTypography.captionStrong)
+            .frame(minWidth: systemImage == nil ? 0 : 20)
+            .padding(.horizontal, systemImage == nil ? SparkSpacing.md : SparkSpacing.sm)
+            .padding(.vertical, SparkSpacing.xs + 2)
+            .foregroundStyle(isSelected ? Color.sparkTextPrimary : Color.secondary)
+            .background {
+                Capsule()
+                    .fill(isSelected ? Color.spark100 : Color.primary.opacity(0.04))
+            }
+            .overlay {
+                Capsule()
+                    .strokeBorder(Color.primary.opacity(isSelected ? 0 : 0.08), lineWidth: 1)
+            }
     }
 }
 
@@ -152,8 +397,8 @@ private struct RaisedEventCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            if let value = event.value {
-                Text(formattedValue(value, unit: event.unit))
+            if let value = displayValue(for: event) {
+                Text(value)
                     .font(SparkFonts.display(.title3, weight: .bold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
@@ -204,9 +449,9 @@ private struct StandoutEventCard: View {
                 .foregroundStyle(.primary)
                 .lineLimit(2)
 
-            if let value = event.value {
+            if let value = displayValue(for: event) {
                 HStack(spacing: SparkSpacing.xs) {
-                    Text(formattedValue(value, unit: event.unit))
+                    Text(value)
                         .font(SparkFonts.display(.title, weight: .bold))
                         .foregroundStyle(Color.sparkWarning)
                     Circle()
@@ -221,6 +466,9 @@ private struct StandoutEventCard: View {
                 }
                 if event.domain == "money" {
                     tag("money")
+                }
+                if let count = event.blocksCount, count > 0 {
+                    tag("\(count) blocks")
                 }
             }
         }
@@ -264,7 +512,7 @@ private struct WebDigestEventCard: View {
                 Image(systemName: "globe")
                     .font(.system(size: 54, weight: .regular))
                     .foregroundStyle(.white.opacity(0.82))
-                Text(event.value ?? "Web Digest")
+                Text(event.displayName ?? event.value ?? "Web Digest")
                     .font(SparkTypography.captionStrong)
                     .foregroundStyle(.primary)
                     .padding(.horizontal, SparkSpacing.md)
@@ -331,8 +579,8 @@ private struct SubtleEventRow: View {
 
             Spacer(minLength: SparkSpacing.sm)
 
-            if let value = event.value {
-                Text(formattedValue(value, unit: event.unit))
+            if let value = displayValue(for: event) {
+                Text(value)
                     .font(SparkTypography.monoSmall)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -346,32 +594,58 @@ private struct SubtleEventRow: View {
 // MARK: - Helpers
 
 private func metaLine(for event: CachedEvent) -> String {
+    if isBalanceSnapshot(event), event.targetTitle?.isISODateString == true {
+        return event.displayName ?? event.action.humanisedAction
+    }
+
     let actor = event.actorTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
     if let actor, !actor.isEmpty {
-        return "\(event.action.humanisedAction) — \(actor)"
+        return "\(event.displayName ?? event.action.humanisedAction) — \(actor)"
     }
-    return event.action.humanisedAction
+    return event.displayName ?? event.action.humanisedAction
 }
 
 private func primaryTitle(for event: CachedEvent) -> String {
-    event.targetTitle?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+    if isBalanceSnapshot(event), event.targetTitle?.isISODateString == true {
+        return event.actorTitle?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            ?? event.displayName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            ?? event.action.humanisedAction
+    }
+
+    return event.targetTitle?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         ?? event.actorTitle?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        ?? event.displayName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         ?? event.action.humanisedAction
 }
 
+private func isBalanceSnapshot(_ event: CachedEvent) -> Bool {
+    event.action == "had_balance"
+}
+
+private func displayValue(for event: CachedEvent) -> String? {
+    if let displayValue = event.displayValue?.sparkPlainTextFromHTMLFragment.nilIfEmpty {
+        return displayValue
+    }
+    return event.value.map { formattedValue($0, unit: event.unit) }?.sparkPlainTextFromHTMLFragment.nilIfEmpty
+}
+
 private func formattedValue(_ v: String, unit: String?) -> String {
-    guard let u = unit, !u.isEmpty else { return v }
+    let plainValue = v.sparkPlainTextFromHTMLFragment
+    guard let u = unit, !u.isEmpty else { return plainValue }
+    if plainValue.localizedCaseInsensitiveContains(u) {
+        return plainValue
+    }
     let currencyCodes = ["GBP", "USD", "EUR", "JPY"]
     if currencyCodes.contains(u.uppercased()) {
-        if let amount = Double(v.replacingOccurrences(of: ",", with: "")) {
+        if let amount = Double(plainValue.replacingOccurrences(of: ",", with: "")) {
             let fmt = NumberFormatter()
             fmt.numberStyle = .currency
             fmt.currencyCode = u
             fmt.maximumFractionDigits = 2
-            return fmt.string(from: NSNumber(value: amount)) ?? "\(v) \(u)"
+            return fmt.string(from: NSNumber(value: amount)) ?? "\(plainValue) \(u)"
         }
     }
-    return "\(v) \(u)"
+    return "\(plainValue) \(u)"
 }
 
 private func shortTime(_ date: Date) -> String {
@@ -394,5 +668,9 @@ private func domainIcon(_ domain: String) -> String {
 private extension String {
     var nilIfEmpty: String? {
         isEmpty ? nil : self
+    }
+
+    var isISODateString: Bool {
+        range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil
     }
 }

@@ -6,7 +6,7 @@ public enum DevicesEndpoint {
         Endpoint(method: .get, path: "/devices")
     }
 
-    /// POST /devices — register this device. Returns the created record.
+    /// POST /devices — register this device. Success is enough; the app does not consume the response body.
     public static func register(
         name: String,
         platform: String,
@@ -15,7 +15,7 @@ public enum DevicesEndpoint {
         appVersion: String,
         bundleId: String,
         osVersion: String
-    ) -> Endpoint<RegisteredDevice> {
+    ) -> Endpoint<EmptyResponse> {
         let encoder = JSONEncoder()
         encoder.keyEncodingStrategy = .convertToSnakeCase
         let body = try? encoder.encode(RegisterRequest(

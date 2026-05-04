@@ -26,8 +26,17 @@ public enum MetricsEndpoint {
     public static func detail(identifier: String, range: Range = .thirtyDays) -> Endpoint<MetricDetail> {
         Endpoint(
             method: .get,
-            path: "/metrics/\(identifier)",
+            path: "/metrics/\(canonicalIdentifier(identifier))",
             query: [URLQueryItem(name: "range", value: range.rawValue)]
         )
+    }
+
+    public static func canonicalIdentifier(_ identifier: String) -> String {
+        switch identifier {
+        case "sleep.score": "oura.sleep_score"
+        case "health.steps": "oura.steps"
+        case "money.spend": "monzo.spend_daily"
+        default: identifier
+        }
     }
 }

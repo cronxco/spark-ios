@@ -38,6 +38,11 @@ struct ProfileView: View {
     private func profileContent(_ profile: UserProfile) -> some View {
         ScrollView {
             VStack(spacing: SparkSpacing.lg) {
+                SparkSystemScreenHeader(
+                    title: "Profile",
+                    subtitle: "Your Spark account and appearance preferences."
+                )
+
                 GlassCard {
                     VStack(spacing: SparkSpacing.md) {
                         AsyncImage(url: profile.avatarURL) { image in

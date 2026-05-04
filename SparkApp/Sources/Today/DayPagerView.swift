@@ -8,7 +8,6 @@ struct DayPagerView: View {
     @State private var selectedOffset: Int = 0
     @State private var dates: [DayKey] = DayKey.defaultWindow()
     @State private var path: [DetailRoute] = []
-    @GestureState private var dragTranslation: CGFloat = 0
 
     var body: some View {
         @Bindable var appModel = appModel
@@ -19,9 +18,16 @@ struct DayPagerView: View {
                 ZStack {
                     SparkResolvedAppBackground()
 
-                    GeometryReader { proxy in
-                        dayPages(width: proxy.size.width)
+                    TabView(selection: $selectedOffset) {
+                        ForEach(dates) { key in
+                            TodayView(
+                                date: key.date,
+                                showsToolbar: key.offset == selectedOffset
+                            )
+                            .tag(key.offset)
+                        }
                     }
+                    .tabViewStyle(.page(indexDisplayMode: .never))
                     .ignoresSafeArea()
                 }
                 .ignoresSafeArea()
@@ -54,90 +60,6 @@ struct DayPagerView: View {
         .onAppear {
             apply(route: appModel.pendingRoute)
         }
-    }
-
-    private var selectedDay: DayKey {
-        dates.first(where: { $0.offset == selectedOffset }) ?? dates.first ?? DayKey(date: .now, offset: 0)
-    }
-
-    private var visibleDays: [DayKey] {
-        guard let index = dates.firstIndex(where: { $0.offset == selectedOffset }) else {
-            return [selectedDay]
-        }
-
-        let lower = max(dates.startIndex, index - 1)
-        let upper = min(dates.index(before: dates.endIndex), index + 1)
-        return Array(dates[lower ... upper])
-    }
-
-    @ViewBuilder
-    private func dayPages(width: CGFloat) -> some View {
-        let pages = visibleDays
-        let selectedIndex = pages.firstIndex(where: { $0.offset == selectedOffset }) ?? 0
-
-        HStack(spacing: 0) {
-            ForEach(pages) { key in
-                TodayView(date: key.date, showsToolbar: key.offset == selectedOffset)
-                    .frame(width: width)
-            }
-        }
-        .offset(x: -CGFloat(selectedIndex) * width + boundedDragTranslation(width: width))
-        .animation(.interactiveSpring(response: 0.36, dampingFraction: 0.88), value: selectedOffset)
-        .frame(width: width, alignment: .leading)
-        .clipped()
-        .contentShape(Rectangle())
-        .simultaneousGesture(daySwipeGesture(width: width))
-    }
-
-    private func daySwipeGesture(width: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 18, coordinateSpace: .local)
-            .updating($dragTranslation) { value, state, _ in
-                guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                state = value.translation.width
-            }
-            .onEnded { value in
-                let horizontal = value.translation.width
-                guard abs(horizontal) > abs(value.translation.height) else { return }
-
-                let projected = value.predictedEndTranslation.width
-                let threshold = min(max(width * 0.18, 72), 132)
-                let shouldPage = abs(horizontal) > threshold || abs(projected) > threshold * 1.35
-                guard shouldPage else { return }
-
-                let step = horizontal < 0 ? 1 : -1
-                selectAdjacentDay(step: step)
-            }
-    }
-
-    private func boundedDragTranslation(width: CGFloat) -> CGFloat {
-        let hasPrevious = previousDay != nil
-        let hasNext = nextDay != nil
-        if dragTranslation > 0, !hasPrevious {
-            return rubberBand(dragTranslation, limit: width)
-        }
-        if dragTranslation < 0, !hasNext {
-            return -rubberBand(abs(dragTranslation), limit: width)
-        }
-        return dragTranslation
-    }
-
-    private func rubberBand(_ distance: CGFloat, limit: CGFloat) -> CGFloat {
-        let constant = max(limit, 1)
-        return (distance * 0.35 * constant) / (constant + distance * 0.35)
-    }
-
-    private var previousDay: DayKey? {
-        guard let index = dates.firstIndex(where: { $0.offset == selectedOffset }),
-              index > dates.startIndex
-        else { return nil }
-        return dates[dates.index(before: index)]
-    }
-
-    private var nextDay: DayKey? {
-        guard let index = dates.firstIndex(where: { $0.offset == selectedOffset }) else { return nil }
-        let next = dates.index(after: index)
-        guard next < dates.endIndex else { return nil }
-        return dates[next]
     }
 
     private func apply(route: AppRoute?) {
@@ -175,15 +97,6 @@ struct DayPagerView: View {
         }
         dates = DayKey.window(anchor: date)
         selectedOffset = 0
-    }
-
-    private func selectAdjacentDay(step: Int) {
-        guard let index = dates.firstIndex(where: { $0.offset == selectedOffset }) else { return }
-        let next = index + step
-        guard dates.indices.contains(next) else { return }
-        withAnimation(.interactiveSpring(response: 0.36, dampingFraction: 0.88)) {
-            selectedOffset = dates[next].offset
-        }
     }
 }
 

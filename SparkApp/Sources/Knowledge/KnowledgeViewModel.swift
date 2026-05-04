@@ -7,9 +7,9 @@ import SparkKit
 @MainActor
 final class KnowledgeViewModel {
     enum Filter: String, CaseIterable, Identifiable {
+        case reading = "Reading"
+        case personal = "Personal"
         case all = "All"
-        case newsletters = "Newsletters"
-        case webDigests = "Web Digests"
         var id: String { rawValue }
     }
 
@@ -17,17 +17,18 @@ final class KnowledgeViewModel {
         case idle, loading, loaded, error(String)
     }
 
-    var filter: Filter = .all
+    var filter: Filter = .reading
     private(set) var allItems: [Event] = []
     private(set) var loadState: LoadState = .idle
     private var cursor: String?
     private(set) var hasMore: Bool = false
 
     var filteredItems: [Event] {
+        let visible = allItems.filter { !$0.hidden }
         switch filter {
-        case .all: allItems
-        case .newsletters: allItems.filter { $0.service == "newsletter" }
-        case .webDigests: allItems.filter { $0.service == "fetch" }
+        case .reading: return visible.filter { $0.service == "fetch" || $0.service == "newsletter" }
+        case .personal: return visible.filter { $0.service == "outline" || $0.service == "calendar" }
+        case .all: return visible
         }
     }
 

@@ -58,12 +58,31 @@ struct BlockDetailView: View {
         .sparkAppBackground()
         .navigationTitle("Block")
         .navigationBarTitleDisplayMode(.inline)
+        .sparkSubViewToolbar(
+            shareItems: blockShareItems,
+            rawTitle: "Raw block",
+            rawPayload: blockRawPayload,
+            refresh: { await viewModel?.load() }
+        )
         .task(id: blockId) {
             if viewModel == nil {
                 viewModel = BlockDetailViewModel(blockId: blockId, apiClient: appModel.apiClient)
             }
             await viewModel?.load()
         }
+    }
+
+    private var blockShareItems: [Any] {
+        guard case .loaded(let detail) = viewModel?.state else {
+            return ["Spark Block: \(blockId)"]
+        }
+        return ["Spark Block: \(detail.block.title)"]
+    }
+
+    private var blockRawPayload: String? {
+        guard case .loaded(let detail) = viewModel?.state else { return nil }
+        return SparkPrettyJSON.string(for: detail)
+            ?? SparkPrettyJSON.fallback(entity: "block", id: detail.block.id, title: detail.block.title)
     }
 
     @ViewBuilder

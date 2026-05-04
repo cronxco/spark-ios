@@ -4,17 +4,18 @@ import SwiftUI
 
 struct KnowledgeView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(\.colorScheme) private var colorScheme
     @State private var viewModel: KnowledgeViewModel?
     @State private var path: [Event] = []
 
     var body: some View {
         NavigationStack(path: $path) {
             content
-                .navigationTitle("Knowledge")
-                .navigationBarTitleDisplayMode(.large)
+                .sparkMainNavigationTitle("Knowledge")
                 .navigationDestination(for: Event.self) { event in
                     KnowledgeItemDetailView(event: event)
                 }
+                .sparkMainAppToolbar()
         }
         .task {
             if viewModel == nil {
@@ -36,6 +37,9 @@ struct KnowledgeView: View {
     private func mainContent(viewModel: KnowledgeViewModel) -> some View {
         ScrollView {
             VStack(spacing: SparkSpacing.lg) {
+                pageHeader(viewModel: viewModel)
+                    .padding(.horizontal, SparkSpacing.lg)
+
                 filterRow(viewModel: viewModel)
                     .padding(.horizontal, SparkSpacing.lg)
 
@@ -86,7 +90,8 @@ struct KnowledgeView: View {
                     }
                 }
             }
-            .padding(.vertical, SparkSpacing.xl)
+            .padding(.top, SparkSpacing.md)
+            .padding(.bottom, SparkSpacing.xl)
         }
         .refreshable { await viewModel.refresh() }
         .sparkAppBackground()
@@ -99,11 +104,34 @@ struct KnowledgeView: View {
                     Button {
                         viewModel.filter = f
                     } label: {
-                        TagChip(f.rawValue, isGhost: viewModel.filter != f)
+                        KnowledgeFilterChip(filter: f, isSelected: viewModel.filter == f)
                     }
                     .buttonStyle(.plain)
                 }
             }
+        }
+    }
+
+    private func pageHeader(viewModel: KnowledgeViewModel) -> some View {
+        SparkMainPageHeader(title: "Knowledge", subtitle: headerSubtitle(viewModel: viewModel))
+    }
+
+    private var headerTextColor: Color {
+        colorScheme == .dark ? Color.spark100 : Color.sparkTextPrimary
+    }
+
+    private func headerSubtitle(viewModel: KnowledgeViewModel) -> String {
+        switch viewModel.loadState {
+        case .idle:
+            return "Loading your reading"
+        case .loading where viewModel.allItems.isEmpty:
+            return "Loading your reading"
+        case .error where viewModel.allItems.isEmpty:
+            return "Knowledge unavailable"
+        default:
+            let count = viewModel.filteredItems.count
+            let noun = count == 1 ? "item" : "items"
+            return "\(count) \(noun) in \(viewModel.filter.rawValue)"
         }
     }
 
@@ -132,6 +160,9 @@ struct KnowledgeView: View {
 
 private struct KnowledgeItemCard: View {
     let event: Event
+    @Environment(\.colorScheme) private var colorScheme
+
+    private let cardRadius: CGFloat = 20
 
     private var imageUrl: URL? {
         guard let raw = event.target?.mediaUrl else { return nil }
@@ -139,7 +170,7 @@ private struct KnowledgeItemCard: View {
     }
 
     private var title: String {
-        event.target?.title ?? event.action.replacingOccurrences(of: "_", with: " ").capitalized
+        event.target?.title ?? event.displayName ?? event.action.replacingOccurrences(of: "_", with: " ").capitalized
     }
 
     private var source: String {
@@ -150,12 +181,43 @@ private struct KnowledgeItemCard: View {
         switch event.service {
         case "newsletter": "Newsletter"
         case "fetch": "Web Digest"
+        case "outline": "Outline"
+        case "calendar": "Calendar"
         default: event.service.capitalized
         }
     }
 
+    private var serviceIcon: String {
+        switch event.service {
+        case "newsletter": "newspaper.fill"
+        case "fetch": "safari.fill"
+        case "outline": "list.bullet.rectangle.fill"
+        case "calendar": "calendar"
+        default: "books.vertical.fill"
+        }
+    }
+
+    private var accent: Color {
+        let palette: [Color] = [
+            .spark400,
+            .spark500,
+            .ocean300,
+            .ember300,
+            .sparkSuccess,
+            .sparkWarning,
+        ]
+        return palette[stablePaletteIndex % palette.count]
+    }
+
+    private var stablePaletteIndex: Int {
+        let seed = event.id + title + event.service
+        return seed.unicodeScalars.reduce(0) { partial, scalar in
+            (partial &* 31 &+ Int(scalar.value)) & 0x7fffffff
+        }
+    }
+
     var body: some View {
-        GlassCard(padding: 0) {
+        GlassCard(radius: cardRadius, padding: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 Group {
                     if let url = imageUrl {
@@ -202,11 +264,16 @@ private struct KnowledgeItemCard: View {
                     HStack {
                         Text(serviceLabel)
                             .font(SparkTypography.monoSmall)
-                            .foregroundStyle(Color.domainKnowledge)
+                            .foregroundStyle(accent)
                             .padding(.horizontal, SparkSpacing.sm)
                             .padding(.vertical, 3)
-                            .background(Color.domainKnowledge.opacity(0.12))
+                            .background(accent.opacity(colorScheme == .dark ? 0.20 : 0.12))
                             .clipShape(.capsule)
+                        if let count = event.blocksCount, count > 0 {
+                            Text("\(count) blocks")
+                                .font(SparkTypography.monoSmall)
+                                .foregroundStyle(.secondary)
+                        }
                         Spacer(minLength: 0)
                         Image(systemName: "chevron.right")
                             .font(.caption2)
@@ -216,14 +283,57 @@ private struct KnowledgeItemCard: View {
                 .padding(SparkSpacing.lg)
             }
         }
+        .clipShape(RoundedRectangle(cornerRadius: cardRadius, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: cardRadius, style: .continuous))
     }
 
     private var imagePlaceholder: some View {
-        Color.sparkElevated
-            .overlay(
-                Image(systemName: "doc.richtext")
-                    .font(.title)
-                    .foregroundStyle(.tertiary)
-            )
+        Rectangle()
+            .fill(accent.opacity(colorScheme == .dark ? 0.62 : 0.82))
+            .overlay(alignment: .center) {
+                Image(systemName: "books.vertical.fill")
+                    .font(.system(size: 88, weight: .light))
+                    .foregroundStyle(.white.opacity(0.26))
+                    .offset(x: 58, y: 8)
+            }
+            .overlay(alignment: .bottomLeading) {
+                Image(systemName: serviceIcon)
+                    .font(.system(size: 34, weight: .light))
+                    .foregroundStyle(.white.opacity(0.78))
+                    .padding(SparkSpacing.lg)
+            }
+    }
+}
+
+private struct KnowledgeFilterChip: View {
+    let filter: KnowledgeViewModel.Filter
+    let isSelected: Bool
+
+    private var icon: String {
+        switch filter {
+        case .reading: "newspaper.fill"
+        case .personal: "person.crop.circle.fill"
+        case .all: "square.grid.2x2.fill"
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: SparkSpacing.xs) {
+            Image(systemName: icon)
+                .font(.caption2)
+            Text(filter.rawValue)
+        }
+        .font(SparkTypography.captionStrong)
+        .padding(.horizontal, SparkSpacing.md)
+        .padding(.vertical, SparkSpacing.xs + 2)
+        .foregroundStyle(isSelected ? Color.sparkTextPrimary : Color.secondary)
+        .background {
+            Capsule()
+                .fill(isSelected ? Color.spark100 : Color.primary.opacity(0.04))
+        }
+        .overlay {
+            Capsule()
+                .strokeBorder(Color.primary.opacity(isSelected ? 0 : 0.08), lineWidth: 1)
+        }
     }
 }

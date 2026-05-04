@@ -9,7 +9,6 @@ struct EventDetailView: View {
     @State private var viewModel: EventDetailViewModel?
     @State private var showShareSheet = false
     @State private var showDeleteConfirm = false
-    @State private var showMetadata = false
     @State private var showNoteEditor = false
     @State private var noteDraft = ""
     @State private var noteError: String?
@@ -37,6 +36,12 @@ struct EventDetailView: View {
         }
         .sparkAppBackground()
         .navigationBarTitleDisplayMode(.inline)
+        .sparkSubViewToolbar(
+            shareItems: eventShareItems,
+            rawTitle: "Raw event",
+            rawPayload: eventRawPayload,
+            refresh: { await viewModel?.retry() }
+        )
         .task(id: eventId) {
             if viewModel == nil {
                 viewModel = EventDetailViewModel(eventId: eventId, apiClient: appModel.apiClient)
@@ -54,7 +59,7 @@ struct EventDetailView: View {
         }
 
         if !detail.tags.isEmpty {
-            TagChipRow(detail.tags)
+            TagChipRow(detail.tags.names)
         }
 
         if let loc = detail.location {
@@ -72,8 +77,6 @@ struct EventDetailView: View {
         noteSection(for: detail)
 
         quickActionsBar(for: detail)
-
-        metadataButton(for: detail)
     }
 
     // MARK: - Cinematic hero
@@ -87,7 +90,7 @@ struct EventDetailView: View {
                     .textCase(.uppercase)
                     .lineLimit(1)
 
-                Text(detail.event.action.humanisedAction)
+                Text(detail.event.displayName ?? detail.event.action.humanisedAction)
                     .font(SparkTypography.bodySmall)
                     .foregroundStyle(.secondary)
 
@@ -105,9 +108,8 @@ struct EventDetailView: View {
                         .lineLimit(2)
                 }
 
-                if let value = detail.event.value {
-                    let display = formattedHeroValue(value, unit: detail.event.unit)
-                    Text(display)
+                if let value = displayValue(for: detail.event) {
+                    Text(value)
                         .font(SparkFonts.display(.largeTitle, weight: .bold))
                         .foregroundStyle(Color.domainTint(for: detail.event.domain))
                         .lineLimit(1)
@@ -195,7 +197,7 @@ struct EventDetailView: View {
                     .fontWeight(.semibold)
                     .lineLimit(2)
                 if let value = block.value {
-                    Text(value)
+                    Text(value.sparkPlainTextFromHTMLFragment)
                         .font(SparkTypography.bodyStrong)
                         .foregroundStyle(Color.sparkAccent)
                         .lineLimit(1)
@@ -290,8 +292,13 @@ struct EventDetailView: View {
                 .navigationTitle(detail.note?.isEmpty == false ? "Edit note" : "Add note")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { showNoteEditor = false }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            showNoteEditor = false
+                        } label: {
+                            Image(systemName: "xmark")
+                        }
+                        .accessibilityLabel("Close")
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Save") {
@@ -315,55 +322,28 @@ struct EventDetailView: View {
 
     // MARK: - Raw metadata
 
-    private func metadataButton(for detail: EventDetail) -> some View {
-        Button {
-            showMetadata = true
-        } label: {
-            HStack(spacing: SparkSpacing.sm) {
-                Image(systemName: "curlybraces")
-                    .font(.caption)
-                Text("Raw metadata")
-                    .font(SparkTypography.bodySmall)
-                Spacer(minLength: 0)
-                Text(detail.event.id)
-                    .font(SparkTypography.monoSmall)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                Image(systemName: "chevron.right")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
-            .foregroundStyle(.secondary)
-            .padding(SparkSpacing.md)
-            .sparkGlass(.roundedRect(SparkRadii.md))
+    private var eventRawPayload: String? {
+        guard case .loaded(let detail) = viewModel?.state else { return nil }
+        if let metadata = detail.metadata,
+           let json = SparkPrettyJSON.string(for: metadata) {
+            return json
         }
-        .buttonStyle(.plain)
-        .popover(isPresented: $showMetadata) {
-            ScrollView {
-                Text(prettyMetadata(for: detail))
-                    .font(.system(.caption, design: .monospaced))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(SparkSpacing.md)
-            }
-            .frame(minWidth: 320, minHeight: 320)
-            .presentationCompactAdaptation(.sheet)
-        }
+        return SparkPrettyJSON.string(for: detail)
+            ?? SparkPrettyJSON.fallback(
+                entity: "event",
+                id: detail.event.id,
+                title: detail.event.displayName ?? detail.event.action.humanisedAction
+            )
     }
 
-    private func prettyMetadata(for detail: EventDetail) -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        if let metadata = detail.metadata,
-           let data = try? encoder.encode(metadata),
-           let string = String(data: data, encoding: .utf8) {
-            return string
+    private var eventShareItems: [Any] {
+        guard case .loaded(let detail) = viewModel?.state else {
+            return ["Spark Event: \(eventId)"]
         }
-        if let data = try? encoder.encode([detail]),
-           let string = String(data: data, encoding: .utf8) {
-            return string
+        if let url = detail.event.url.flatMap(URL.init) {
+            return [url]
         }
-        return "[]"
+        return [detail.event.displayName ?? detail.event.action.humanisedAction]
     }
     // MARK: - Quick actions bar
 
@@ -377,9 +357,9 @@ struct EventDetailView: View {
         }
         .sheet(isPresented: $showShareSheet) {
             if let url = detail.event.url.flatMap(URL.init) {
-                ShareSheet(items: [url])
+                SparkShareSheet(items: [url])
             } else {
-                ShareSheet(items: [detail.event.action.humanisedAction])
+                SparkShareSheet(items: [detail.event.displayName ?? detail.event.action.humanisedAction])
             }
         }
     }
@@ -421,16 +401,27 @@ struct EventDetailView: View {
     }()
 
     private func formattedHeroValue(_ v: String, unit: String?) -> String {
-        guard let u = unit else { return v }
+        let plainValue = v.sparkPlainTextFromHTMLFragment
+        guard let u = unit else { return plainValue }
+        if plainValue.localizedCaseInsensitiveContains(u) {
+            return plainValue
+        }
         let currencyCodes = ["GBP", "USD", "EUR", "JPY"]
-        if currencyCodes.contains(u.uppercased()), let amount = Double(v) {
+        if currencyCodes.contains(u.uppercased()), let amount = Double(plainValue.replacingOccurrences(of: ",", with: "")) {
             let fmt = NumberFormatter()
             fmt.numberStyle = .currency
             fmt.currencyCode = u
             fmt.maximumFractionDigits = 2
-            return fmt.string(from: NSNumber(value: amount)) ?? "\(v) \(u)"
+            return fmt.string(from: NSNumber(value: amount)) ?? "\(plainValue) \(u)"
         }
-        return "\(v) \(u)"
+        return "\(plainValue) \(u)"
+    }
+
+    private func displayValue(for event: Event) -> String? {
+        if let displayValue = event.displayValue?.sparkPlainTextFromHTMLFragment, !displayValue.isEmpty {
+            return displayValue
+        }
+        return event.value.map { formattedHeroValue($0, unit: event.unit) }?.sparkPlainTextFromHTMLFragment
     }
 }
 
@@ -448,15 +439,4 @@ extension Color {
         default: .sparkAccent
         }
     }
-}
-
-// MARK: - Share sheet bridge
-
-private struct ShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
-    }
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

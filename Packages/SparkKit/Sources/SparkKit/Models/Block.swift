@@ -36,4 +36,27 @@ public struct Block: Codable, Sendable, Hashable, Identifiable {
         self.unit = unit
         self.mediaUrl = mediaUrl
     }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        blockType = try container.decode(String.self, forKey: .blockType)
+        title = try container.decode(String.self, forKey: .title)
+        time = try container.decodeIfPresent(Date.self, forKey: .time)
+        content = try container.decodeIfPresent(String.self, forKey: .content)
+        unit = try container.decodeIfPresent(String.self, forKey: .unit)
+        mediaUrl = try container.decodeIfPresent(String.self, forKey: .mediaUrl)
+
+        if let stringValue = try? container.decodeIfPresent(String.self, forKey: .value) {
+            value = stringValue
+        } else if let intValue = try? container.decodeIfPresent(Int.self, forKey: .value) {
+            value = String(intValue)
+        } else if let doubleValue = try? container.decodeIfPresent(Double.self, forKey: .value) {
+            value = String(doubleValue)
+        } else if let boolValue = try? container.decodeIfPresent(Bool.self, forKey: .value) {
+            value = String(boolValue)
+        } else {
+            value = nil
+        }
+    }
 }

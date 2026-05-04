@@ -30,18 +30,25 @@ struct ExploreView: View {
         HStack(spacing: SparkSpacing.xs) {
             ForEach(ExploreSection.allCases, id: \.self) { sec in
                 Button {
-                    section = sec
+                    withAnimation(.snappy(duration: 0.22)) {
+                        section = sec
+                    }
                 } label: {
                     ExploreSectionChip(sec, isSelected: section == sec)
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(SparkSpacing.xs)
+        .padding(SparkSpacing.sm)
         .frame(maxWidth: .infinity)
-        .sparkGlass(.capsule, tint: Color.sparkElevated.opacity(0.35))
-        .padding(.horizontal, SparkSpacing.xl)
-        .padding(.bottom, SparkSpacing.sm)
+        .sparkGlass(.capsule, tint: Color.sparkElevated.opacity(0.48))
+        .overlay {
+            Capsule()
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.08), radius: 16, x: 0, y: 8)
+        .padding(.horizontal, SparkSpacing.lg)
+        .padding(.bottom, SparkSpacing.xl + SparkSpacing.sm)
     }
 }
 
@@ -93,12 +100,15 @@ private struct ExploreSectionChip: View {
         .font(SparkTypography.captionStrong)
         .frame(maxWidth: .infinity)
         .padding(.horizontal, SparkSpacing.sm)
-        .padding(.vertical, SparkSpacing.sm)
+        .padding(.vertical, SparkSpacing.md)
         .foregroundStyle(isSelected ? Color.sparkTextPrimary : Color.secondary)
         .background {
             if isSelected {
-                Capsule().fill(Color.sparkAccent)
+                Capsule()
+                    .fill(Color.sparkAccent)
+                    .shadow(color: section.tint.opacity(0.24), radius: 10, x: 0, y: 4)
             }
         }
+        .sparkGlass(.capsule, tint: isSelected ? section.tint.opacity(0.16) : Color.clear)
     }
 }

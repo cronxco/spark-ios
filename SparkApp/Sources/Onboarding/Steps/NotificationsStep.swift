@@ -9,51 +9,32 @@ struct NotificationsStep: View {
     @State private var isRequesting = false
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: SparkSpacing.xl) {
-                Spacer().frame(height: SparkSpacing.xl)
-
-                Image(systemName: "bell.fill")
-                    .font(.system(size: 48, weight: .light))
-                    .foregroundStyle(Color.sparkAccent)
-
-                VStack(spacing: SparkSpacing.sm) {
-                    Text("Stay in the loop")
-                        .font(SparkFonts.display(.title, weight: .bold))
-                    Text("Spark can notify you when baselines shift, your digest is ready, or an integration needs attention.")
+        SparkOnboardingScaffold(
+            icon: "bell.fill",
+            title: "Stay in the loop",
+            bodyText: "Spark can notify you when baselines shift, your digest is ready, or an integration needs attention."
+        ) {
+            EmptyView()
+        } actions: {
+            if authStatus == .authorized {
+                HStack {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Color.sparkSuccess)
+                    Text("Notifications enabled")
                         .font(SparkTypography.body)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
                 }
-
-                Spacer()
-
-                VStack(spacing: SparkSpacing.md) {
-                    if authStatus == .authorized {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(Color.sparkSuccess)
-                            Text("Notifications enabled")
-                                .font(SparkTypography.body)
-                        }
-                        PillButton("Continue", systemImage: "arrow.right.circle.fill", action: proceed)
-                    } else {
-                        PillButton("Allow notifications", systemImage: "bell.fill") {
-                            Task { await requestPermission() }
-                        }
-                        .disabled(isRequesting)
-
-                        Button("Skip for now") { proceed() }
-                            .font(SparkTypography.bodySmall)
-                            .foregroundStyle(.secondary)
-                    }
+                PillButton("Continue", systemImage: "arrow.right.circle.fill", action: proceed)
+            } else {
+                PillButton("Allow notifications", systemImage: "bell.fill") {
+                    Task { await requestPermission() }
                 }
-                .padding(.bottom, SparkSpacing.xxl)
+                .disabled(isRequesting)
+
+                Button("Skip for now") { proceed() }
+                    .font(SparkTypography.bodySmall)
+                    .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, SparkSpacing.xl)
         }
-        .scrollContentBackground(.hidden)
-        .background(Color.sparkSurface.ignoresSafeArea())
         .task { await refreshStatus() }
     }
 

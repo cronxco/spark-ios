@@ -11,7 +11,7 @@ public struct EventDetail: Codable, Sendable, Hashable, Identifiable {
     public let target: ActorTarget?
     public let blocks: [Block]
     public let related: [RelatedEvent]
-    public let tags: [String]
+    public let tags: [EventTag]
     public let aiSummary: String?
     public let location: Location?
     public let note: String?
@@ -83,7 +83,7 @@ public struct EventDetail: Codable, Sendable, Hashable, Identifiable {
         target: ActorTarget? = nil,
         blocks: [Block] = [],
         related: [RelatedEvent] = [],
-        tags: [String] = [],
+        tags: [EventTag] = [],
         aiSummary: String? = nil,
         location: Location? = nil,
         note: String? = nil,
@@ -111,15 +111,15 @@ public struct EventDetail: Codable, Sendable, Hashable, Identifiable {
 
         actor = try container.decodeIfPresent(ActorTarget.self, forKey: .actor)
             ?? rootEvent.actor.map {
-                ActorTarget(id: $0.id, title: $0.title, subtitle: nil, concept: $0.concept, type: nil, mediaUrl: $0.mediaUrl)
+                ActorTarget(id: $0.id, title: $0.title, subtitle: nil, concept: $0.concept, type: $0.type, mediaUrl: $0.mediaUrl)
             }
         target = try container.decodeIfPresent(ActorTarget.self, forKey: .target)
             ?? rootEvent.target.map {
-                ActorTarget(id: $0.id, title: $0.title, subtitle: nil, concept: $0.concept, type: nil, mediaUrl: $0.mediaUrl)
+                ActorTarget(id: $0.id, title: $0.title, subtitle: nil, concept: $0.concept, type: $0.type, mediaUrl: $0.mediaUrl)
             }
         blocks = try container.decodeIfPresent([Block].self, forKey: .blocks) ?? []
         related = try container.decodeIfPresent([RelatedEvent].self, forKey: .related) ?? []
-        tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
+        tags = try container.decodeIfPresent([EventTag].self, forKey: .tags) ?? rootEvent.tags
         aiSummary = try container.decodeIfPresent(String.self, forKey: .aiSummary)
         location = try container.decodeIfPresent(Location.self, forKey: .location)
         note = try container.decodeIfPresent(String.self, forKey: .note)

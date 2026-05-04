@@ -18,6 +18,7 @@ struct SearchView: View {
             content
                 .sparkAppBackground()
                 .navigationTitle("Search")
+                .navigationBarTitleDisplayMode(.inline)
                 .navigationDestination(for: DetailRoute.self) { route in
                     switch route {
                     case .event(let id):
@@ -34,6 +35,8 @@ struct SearchView: View {
                         IntegrationDetailView(integrationId: service)
                     }
                 }
+                .sparkMainNavigationTitle("Search")
+                .sparkMainAppToolbar()
         }
         .searchable(
             text: queryBinding,
@@ -58,10 +61,17 @@ struct SearchView: View {
     @ViewBuilder
     private var content: some View {
         VStack(spacing: 0) {
+            SparkMainPageHeader(
+                title: "Search",
+                subtitle: "Find events, entities, metrics, integrations, and tags"
+            )
+            .padding(.horizontal, SparkSpacing.lg)
+            .padding(.top, SparkSpacing.md)
+            .padding(.bottom, SparkSpacing.md)
+
             modePills
                 .padding(.horizontal, SparkSpacing.lg)
                 .padding(.bottom, SparkSpacing.sm)
-            Divider()
             results
         }
     }
@@ -74,7 +84,7 @@ struct SearchView: View {
                     Button {
                         viewModel?.setMode(mode)
                     } label: {
-                        TagChip(pillLabel(for: mode), isGhost: !isActive)
+                        SearchFilterChip(pillLabel(for: mode), isSelected: isActive)
                     }
                     .buttonStyle(.plain)
                 }
@@ -104,23 +114,34 @@ struct SearchView: View {
                     message: "Try a shorter search or switch mode."
                 )
             case .results:
-                List {
-                    ForEach(viewModel.grouped, id: \.0) { group in
-                        Section(group.0) {
-                            ForEach(group.1) { result in
-                                Button {
-                                    saveRecent(viewModel.query)
-                                    handleTap(result)
-                                } label: {
-                                    SearchResultRow(result: result)
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: SparkSpacing.lg) {
+                        ForEach(viewModel.grouped, id: \.0) { group in
+                            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                                Text(group.0)
+                                    .font(SparkTypography.monoSmall)
+                                    .foregroundStyle(.secondary)
+                                    .textCase(.uppercase)
+                                    .padding(.horizontal, SparkSpacing.xs)
+
+                                VStack(spacing: SparkSpacing.sm) {
+                                    ForEach(group.1) { result in
+                                        Button {
+                                            saveRecent(viewModel.query)
+                                            handleTap(result)
+                                        } label: {
+                                            SearchResultRow(result: result)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
                                 }
-                                .buttonStyle(.plain)
                             }
                         }
                     }
+                    .padding(.horizontal, SparkSpacing.lg)
+                    .padding(.top, SparkSpacing.lg)
+                    .padding(.bottom, SparkSpacing.xxxl)
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
             case .error(let msg):
                 EmptyState(
                     systemImage: "exclamationmark.triangle.fill",
@@ -272,7 +293,8 @@ private struct SearchResultRow: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
-        .padding(.vertical, SparkSpacing.xs)
+        .padding(SparkSpacing.md)
+        .sparkGlass(.roundedRect(SparkRadii.lg), tint: Color.sparkElevated.opacity(0.18))
         .contentShape(Rectangle())
     }
 
@@ -298,5 +320,39 @@ private struct SearchResultRow: View {
         case .place: .sparkAccent
         case .intent: .sparkAccent
         }
+    }
+}
+
+private struct SearchFilterChip: View {
+    let label: String
+    let isSelected: Bool
+
+    init(_ label: String, isSelected: Bool) {
+        self.label = label
+        self.isSelected = isSelected
+    }
+
+    var body: some View {
+        Text(label)
+            .font(SparkTypography.captionStrong)
+            .lineLimit(1)
+            .padding(.horizontal, SparkSpacing.md)
+            .padding(.vertical, SparkSpacing.sm)
+            .foregroundStyle(isSelected ? Color.sparkTextPrimary : Color.secondary)
+            .background {
+                if isSelected {
+                    Capsule().fill(Color.sparkAccent)
+                } else {
+                    Capsule().fill(Color.sparkElevated.opacity(0.16))
+                }
+            }
+            .overlay {
+                Capsule()
+                    .strokeBorder(
+                        isSelected ? Color.clear : Color.primary.opacity(0.12),
+                        lineWidth: 1
+                    )
+            }
+            .sparkGlass(.capsule, tint: isSelected ? Color.sparkAccent.opacity(0.18) : Color.clear)
     }
 }

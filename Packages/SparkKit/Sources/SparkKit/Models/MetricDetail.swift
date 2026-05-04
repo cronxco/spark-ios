@@ -96,6 +96,8 @@ extension MetricDetail: Codable {
         let metric: String
         let service: String
         let action: String
+        let displayName: String?
+        let domain: String?
         let unit: String?
         let dailyValues: [DailyValue]
         let summary: Summary?
@@ -127,7 +129,8 @@ extension MetricDetail: Codable {
         }
 
         enum CodingKeys: String, CodingKey {
-            case metric, service, action, unit, summary, baseline
+            case metric, service, action, domain, unit, summary, baseline
+            case displayName = "display_name"
             case dailyValues = "daily_values"
         }
     }
@@ -144,7 +147,7 @@ extension MetricDetail: Codable {
         let api = try APIResponse(from: decoder)
 
         id = api.metric
-        domain = api.service
+        domain = api.domain ?? api.service
         unit = api.unit
         average30d = api.summary?.mean
         compares = nil
@@ -152,7 +155,7 @@ extension MetricDetail: Codable {
         // Derive a human-readable title from the action field.
         // e.g. "had_sleep_score" → "Sleep Score", "had_heart_rate" → "Heart Rate"
         let stripped = api.action.hasPrefix("had_") ? String(api.action.dropFirst(4)) : api.action
-        title = stripped.split(separator: "_").map { $0.capitalized }.joined(separator: " ")
+        title = api.displayName ?? stripped.split(separator: "_").map { $0.capitalized }.joined(separator: " ")
 
         if let lo = api.baseline?.normalLower, let hi = api.baseline?.normalUpper {
             baseline = Baseline(low: lo, high: hi)

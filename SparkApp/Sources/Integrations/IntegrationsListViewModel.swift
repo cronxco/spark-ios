@@ -24,8 +24,8 @@ final class IntegrationsListViewModel {
     func load() async {
         state = .loading
         do {
-            let list = try await apiClient.request(IntegrationsEndpoint.list())
-            state = .loaded(list)
+            let response = try await apiClient.request(IntegrationsEndpoint.list())
+            state = .loaded(response.data)
         } catch APIError.notModified {
             return
         } catch {

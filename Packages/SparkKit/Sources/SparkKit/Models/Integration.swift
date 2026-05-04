@@ -6,7 +6,12 @@ public struct Integration: Codable, Sendable, Hashable, Identifiable {
     public let service: String
     public let name: String
     public let instanceType: String?
-    public let status: String
+    public let status: String?
+
+    public var statusValue: String {
+        guard let status, !status.isEmpty else { return "unknown" }
+        return status
+    }
 
     enum CodingKeys: String, CodingKey {
         case id, service, name, status
@@ -18,7 +23,7 @@ public struct Integration: Codable, Sendable, Hashable, Identifiable {
         service: String,
         name: String,
         instanceType: String? = nil,
-        status: String
+        status: String? = nil
     ) {
         self.id = id
         self.service = service

@@ -17,10 +17,11 @@ struct MoneyExploreView: View {
 
                     content
                 }
-                .padding(.top, SparkSpacing.xl)
+                .padding(.top, SparkSpacing.md)
                 .padding(.bottom, SparkSpacing.xl)
             }
             .sparkAppBackground()
+            .sparkMainNavigationTitle("Money")
             .navigationDestination(for: DetailRoute.self) { route in
                 switch route {
                 case .event(let id):
@@ -32,6 +33,7 @@ struct MoneyExploreView: View {
             .refreshable {
                 await viewModel?.refresh()
             }
+            .sparkMainAppToolbar()
         }
         .task {
             if viewModel == nil {
@@ -78,14 +80,7 @@ struct MoneyExploreView: View {
     }
 
     private var pageHeader: some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.xs) {
-            Text("Money")
-                .font(SparkTypography.heroXL)
-                .foregroundStyle(headerTextColor)
-            Text(headerSubtitle)
-                .font(SparkTypography.bodySmall)
-                .foregroundStyle(.secondary)
-        }
+        SparkMainPageHeader(title: "Money", subtitle: headerSubtitle)
     }
 
     private func spendingHeroCard(vm: MoneyExploreViewModel) -> some View {
@@ -290,15 +285,22 @@ private struct MoneyTransactionRow: View {
     }
 
     private var amount: String {
+        if let displayValue = event.displayValue?.sparkPlainTextFromHTMLFragment, !displayValue.isEmpty {
+            return displayValue
+        }
         guard let value = event.value else { return "" }
+        let plainValue = value.sparkPlainTextFromHTMLFragment
         let unit = event.unit ?? ""
+        if !unit.isEmpty, plainValue.localizedCaseInsensitiveContains(unit) {
+            return plainValue
+        }
         let symbol: String = switch unit {
         case "GBP": "£"
         case "EUR": "€"
         case "USD": "$"
         default: unit.isEmpty ? "" : unit + " "
         }
-        return "\(symbol)\(value)"
+        return "\(symbol)\(plainValue)"
     }
 
     var body: some View {

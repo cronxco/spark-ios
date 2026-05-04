@@ -213,7 +213,7 @@ public struct SearchResponse: Codable, Sendable, Hashable {
                     identifier: m.identifier ?? "",
                     title: m.displayName ?? m.identifier ?? "",
                     subtitle: m.unit,
-                    domain: m.service
+                    domain: m.domain
                 )))
             }
 
@@ -277,12 +277,12 @@ private struct BackendMetric: Decodable {
     let identifier: String?
     let displayName: String?
     let unit: String?
-    let service: String?
+    let domain: String?
 
     enum CodingKeys: String, CodingKey {
         case identifier
         case displayName = "display_name"
         case unit
-        case service
+        case domain
     }
 }

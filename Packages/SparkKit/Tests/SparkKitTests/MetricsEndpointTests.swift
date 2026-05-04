@@ -23,6 +23,13 @@ struct MetricsEndpointTests {
         #expect(range.value == "7d")
     }
 
+    @Test("detail endpoint canonicalizes legacy identifiers")
+    func detailEndpointCanonicalizesLegacyIdentifiers() {
+        #expect(MetricsEndpoint.detail(identifier: "sleep.score").path == "/metrics/oura.sleep_score")
+        #expect(MetricsEndpoint.detail(identifier: "health.steps").path == "/metrics/oura.steps")
+        #expect(MetricsEndpoint.detail(identifier: "money.spend").path == "/metrics/monzo.spend_daily")
+    }
+
     @Test("metric decodes mobile metadata")
     func metricDecodesMobileMetadata() throws {
         let json = """

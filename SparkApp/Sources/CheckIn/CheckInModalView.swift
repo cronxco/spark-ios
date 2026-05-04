@@ -42,14 +42,19 @@ struct CheckInModalView: View {
                 .padding(.vertical, SparkSpacing.xl)
             }
             .scrollContentBackground(.hidden)
-            .background(Color.sparkSurface.ignoresSafeArea())
+            .background(SparkResolvedAppBackground().ignoresSafeArea())
             .navigationTitle("\(slot.capitalized) check-in")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { dismiss() }
-                }
                 ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("Close")
+                }
+                ToolbarItem(placement: .confirmationAction) {
                     Button("Log it") {
                         Task { await logCheckIn() }
                     }

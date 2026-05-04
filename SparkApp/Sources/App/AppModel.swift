@@ -183,6 +183,7 @@ final class AppModel {
         do {
             try await authService.signIn(presentationAnchor: anchor.value)
             session = .loggedIn
+            await fetchAndCacheUserId()
             lastError = nil
         } catch AuthenticationError.cancelled {
             lastError = nil
@@ -198,6 +199,9 @@ final class AppModel {
     func signOut() async {
         await authService.signOut()
         await etagCache.clearAll()
+        profile = nil
+        UserDefaults.sparkAppGroup.removeObject(forKey: "spark.userId")
+        await reverbDisconnect()
         session = .loggedOut
     }
 }

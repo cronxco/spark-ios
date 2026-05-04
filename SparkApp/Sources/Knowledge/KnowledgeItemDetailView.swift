@@ -8,7 +8,7 @@ struct KnowledgeItemDetailView: View {
     @Environment(\.openURL) private var openURL
     @State private var detailState: KnowledgeDetailState = .loading
 
-    private var title: String { event.target?.title ?? event.action }
+    private var title: String { event.target?.title ?? event.displayName ?? event.action }
 
     var body: some View {
         ScrollView {
@@ -48,9 +48,28 @@ struct KnowledgeItemDetailView: View {
         }
         .sparkAppBackground()
         .navigationBarTitleDisplayMode(.inline)
+        .sparkSubViewToolbar(
+            shareItems: knowledgeShareItems,
+            rawTitle: "Raw knowledge item",
+            rawPayload: knowledgeRawPayload,
+            refresh: { await loadDetail() }
+        )
         .task(id: event.id) {
             await loadDetail()
         }
+    }
+
+    private var knowledgeShareItems: [Any] {
+        if let url = event.url.flatMap(URL.init) {
+            return [url]
+        }
+        return ["Spark Knowledge: \(title)"]
+    }
+
+    private var knowledgeRawPayload: String? {
+        guard case .loaded(let payload) = detailState else { return nil }
+        return SparkPrettyJSON.string(for: payload.eventDetail)
+            ?? SparkPrettyJSON.fallback(entity: "knowledge_item", id: event.id, title: title)
     }
 
     // MARK: - Colour block hero
@@ -127,42 +146,23 @@ struct KnowledgeItemDetailView: View {
         let detail = payload.eventDetail
         let blocks = detail.blocks
         let service = detail.event.service
+        let summaryBlock = summaryBlock(service: service, blocks: blocks)
+        let articleBody = articleBodyContent(payload: payload, service: service, blocks: blocks)
 
-        if let summary = summaryText(payload: payload, service: service, blocks: blocks) {
+        if let summary = summaryText(payload: payload, summaryBlock: summaryBlock) {
             summaryCallout(summary)
         }
 
-        let articleText = longerArticleContent(payload: payload, service: service, blocks: blocks)
-        if let body = articleText, !body.isEmpty {
-            ArticleBodyView(text: body)
+        if let articleBody {
+            ArticleBodyView(text: articleBody.text)
         }
 
-        if let takeaways = blockContent(service: service, kind: "key_takeaways", blocks: blocks) {
-            let bullets = takeaways.components(separatedBy: "\n").filter { !$0.isEmpty }
-            if !bullets.isEmpty {
-                GlassCard {
-                    VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                        GlassCardHeader(icon: "list.bullet", tint: .domainKnowledge, title: "Key Takeaways")
-                        VStack(alignment: .leading, spacing: SparkSpacing.xs) {
-                            ForEach(bullets, id: \.self) { bullet in
-                                HStack(alignment: .top, spacing: SparkSpacing.sm) {
-                                    Image(systemName: "checkmark")
-                                        .font(.caption2)
-                                        .foregroundStyle(Color.domainKnowledge)
-                                        .padding(.top, 3)
-                                    Text(bullet)
-                                        .font(SparkTypography.body)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        ForEach(remainingBlocks(blocks, summaryBlock: summaryBlock, articleBody: articleBody)) { block in
+            blockCard(block)
         }
 
         if !detail.tags.isEmpty {
-            TagChipRow(detail.tags)
+            TagChipRow(detail.tags.names)
         }
     }
 
@@ -200,29 +200,129 @@ struct KnowledgeItemDetailView: View {
 
     // MARK: - Helpers
 
-    private func summaryText(payload: KnowledgeDetailPayload, service: String, blocks: [Block]) -> String? {
-        blockContent(service: service, kind: "paragraph_summary", blocks: blocks)
-            ?? blockContent(service: service, kind: "summary_paragraph", blocks: blocks)
-            ?? payload.objectDetail?.aiSummary
-            ?? payload.eventDetail.aiSummary
-            ?? event.tldr
+    @ViewBuilder
+    private func blockCard(_ block: Block) -> some View {
+        if isKeyTakeawaysBlock(block), let content = nonEmpty(block.content) {
+            let bullets = content.components(separatedBy: "\n").compactMap(nonEmpty)
+            if !bullets.isEmpty {
+                GlassCard {
+                    VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                        GlassCardHeader(icon: "list.bullet", tint: .domainKnowledge, title: "Key Takeaways")
+                        VStack(alignment: .leading, spacing: SparkSpacing.xs) {
+                            ForEach(bullets, id: \.self) { bullet in
+                                HStack(alignment: .top, spacing: SparkSpacing.sm) {
+                                    Image(systemName: "checkmark")
+                                        .font(.caption2)
+                                        .foregroundStyle(Color.domainKnowledge)
+                                        .padding(.top, 3)
+                                    Text(bullet)
+                                        .font(SparkTypography.body)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            GlassCard {
+                VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                    GlassCardHeader(
+                        icon: "square.stack.3d.up",
+                        tint: .domainKnowledge,
+                        title: displayTitle(for: block),
+                        trailing: displayType(for: block)
+                    )
+                    if let content = nonEmpty(block.content) {
+                        RichContentText(text: content, font: SparkTypography.body, foregroundStyle: .primary)
+                    }
+                    if let value = nonEmpty(block.value) {
+                        Text([value, block.unit].compactMap(nonEmpty).joined(separator: " "))
+                            .font(SparkTypography.bodyStrong)
+                            .foregroundStyle(.primary)
+                    }
+                }
+            }
+        }
     }
 
-    private func longerArticleContent(payload: KnowledgeDetailPayload, service: String, blocks: [Block]) -> String? {
-        let objectContent = payload.objectDetail?.object.content ?? payload.eventDetail.target?.content
-        let fromBlock = blockContent(service: service, kind: "raw_content", blocks: blocks)
-            ?? blockContent(service: service, kind: "fetch_content", blocks: blocks)
-            ?? blockContent(service: service, kind: "article_body", blocks: blocks)
-        let targetLen = objectContent?.count ?? 0
-        let blockLen = fromBlock?.count ?? 0
-        if targetLen == 0 && blockLen == 0 { return nil }
-        return targetLen >= blockLen ? objectContent : fromBlock
+    private func summaryText(payload: KnowledgeDetailPayload, summaryBlock: Block?) -> String? {
+        summaryBlock.flatMap { nonEmpty($0.content) }
+            ?? nonEmpty(payload.objectDetail?.aiSummary)
+            ?? nonEmpty(payload.eventDetail.aiSummary)
+            ?? nonEmpty(event.tldr)
     }
 
-    private func blockContent(service: String, kind: String, blocks: [Block]) -> String? {
-        let prefixed = "\(service)_\(kind)"
-        return blocks.first { $0.blockType == prefixed }?.content
-            ?? blocks.first { $0.blockType == kind }?.content
+    private func summaryBlock(service: String, blocks: [Block]) -> Block? {
+        blocks.first {
+            !isRawBlock($0)
+                && nonEmpty($0.content) != nil
+                && (blockType($0, matches: "\(service)_summary_paragraph")
+                    || blockType($0, matches: "summary_paragraph")
+                    || blockType($0, matches: "paragraph_summary")
+                    || $0.blockType.lowercased().hasSuffix("_summary_paragraph"))
+        }
+    }
+
+    private func articleBodyContent(payload: KnowledgeDetailPayload, service: String, blocks: [Block]) -> KnowledgeArticleBodyContent? {
+        if let block = blocks.first(where: { block in
+            !isRawBlock(block)
+                && nonEmpty(block.content) != nil
+                && (blockType(block, matches: "\(service)_content")
+                    || blockType(block, matches: "content")
+                    || block.blockType.lowercased().hasSuffix("_content"))
+        }), let text = nonEmpty(block.content) {
+            return KnowledgeArticleBodyContent(text: text, blockID: block.id)
+        }
+
+        if let text = nonEmpty(payload.objectDetail?.object.content) {
+            return KnowledgeArticleBodyContent(text: text, blockID: nil)
+        }
+
+        if let text = nonEmpty(payload.eventDetail.target?.content) {
+            return KnowledgeArticleBodyContent(text: text, blockID: nil)
+        }
+
+        return nil
+    }
+
+    private func remainingBlocks(_ blocks: [Block], summaryBlock: Block?, articleBody: KnowledgeArticleBodyContent?) -> [Block] {
+        blocks.filter { block in
+            if isRawBlock(block) { return false }
+            if block.id == summaryBlock?.id { return false }
+            if block.id == articleBody?.blockID { return false }
+            return nonEmpty(block.content) != nil || nonEmpty(block.value) != nil
+        }
+    }
+
+    private func isRawBlock(_ block: Block) -> Bool {
+        block.blockType.localizedCaseInsensitiveContains("raw")
+    }
+
+    private func isKeyTakeawaysBlock(_ block: Block) -> Bool {
+        let type = block.blockType.lowercased()
+        return type == "key_takeaways" || type.hasSuffix("_key_takeaways")
+    }
+
+    private func blockType(_ block: Block, matches expected: String) -> Bool {
+        block.blockType.caseInsensitiveCompare(expected) == .orderedSame
+    }
+
+    private func displayTitle(for block: Block) -> String {
+        nonEmpty(block.title) ?? displayType(for: block)
+    }
+
+    private func displayType(for block: Block) -> String {
+        block.blockType
+            .replacingOccurrences(of: "_", with: " ")
+            .capitalized
+    }
+
+    private func nonEmpty(_ text: String?) -> String? {
+        guard let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
     }
 
     private func loadDetail() async {
@@ -440,4 +540,9 @@ private struct KnowledgeDetailPayload {
             ?? objectDetail?.object.mediaUrl.flatMap(URL.init(string:))
             ?? eventDetail.event.target?.mediaUrl.flatMap(URL.init(string:))
     }
+}
+
+private struct KnowledgeArticleBodyContent {
+    let text: String
+    let blockID: String?
 }

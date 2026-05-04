@@ -10,17 +10,6 @@ struct TodayView: View {
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: TodayViewModel?
     @State private var showCheckIn = false
-    @State private var showSettings = false
-    @State private var showNotifications = false
-
-    @Query(filter: #Predicate<CachedNotification> { !$0.isRead })
-    private var unreadNotifications: [CachedNotification]
-    @Query private var allIntegrations: [CachedIntegration]
-
-    private var errorIntegrations: [CachedIntegration] {
-        let healthy: Set<String> = ["up_to_date", "ok", "active", "syncing", "running"]
-        return allIntegrations.filter { !healthy.contains($0.status) }
-    }
 
     var body: some View {
         let snapshot = TodaySnapshot(summary: viewModel?.cached, date: date)
@@ -47,20 +36,13 @@ struct TodayView: View {
                     }
                 }
                 .padding(.horizontal, SparkSpacing.lg)
-                .padding(.top, SparkSpacing.xl + 40)
+                .padding(.top, SparkSpacing.xl + 72)
                 .padding(.bottom, deviceSafeAreaBottom + 66)
             }
             .scrollContentBackground(.hidden)
             .refreshable { await viewModel?.refresh() }
         }
-        .toolbar {
-            if showsToolbar {
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    settingsToolbarButton
-                    notificationsToolbarButton
-                }
-            }
-        }
+        .sparkMainAppToolbar(isVisible: showsToolbar)
         .sheet(isPresented: $showCheckIn) {
             let snapshot = TodaySnapshot(summary: viewModel?.cached, date: date)
             if case .pending(let slot) = snapshot.checkInStatus {
@@ -68,12 +50,6 @@ struct TodayView: View {
             } else {
                 CheckInModalView(slot: SparkTimeOfDay.from(date: .now).rawValue, date: date)
             }
-        }
-        .sheet(isPresented: $showSettings) {
-            SettingsRootView()
-        }
-        .sheet(isPresented: $showNotifications) {
-            NotificationsInboxView()
         }
         .task(id: date) {
             if viewModel == nil {
@@ -87,55 +63,26 @@ struct TodayView: View {
         }
     }
 
-    // MARK: - Toolbar
-
-    private var settingsToolbarButton: some View {
-        Button {
-            showSettings = true
-        } label: {
-            Image(systemName: "gearshape")
-                .symbolRenderingMode(.monochrome)
-                .foregroundStyle(errorIntegrations.isEmpty ? Color.primary : Color.sparkError)
-        }
-        .accessibilityLabel("Settings")
-    }
-
-    private var notificationsToolbarButton: some View {
-        Button {
-            showNotifications = true
-        } label: {
-            notificationsToolbarLabel
-        }
-        .accessibilityLabel(
-            unreadNotifications.isEmpty
-                ? "Notifications"
-                : "Notifications, \(unreadNotifications.count) unread"
-        )
-    }
-
-    @ViewBuilder
-    private var notificationsToolbarLabel: some View {
-        let icon = Image(systemName: "bell")
-            .symbolRenderingMode(.monochrome)
-            .foregroundStyle(unreadNotifications.isEmpty ? Color.primary : Color.sparkAccent)
-
-        if unreadNotifications.isEmpty {
-            icon
-        } else {
-            icon.badge(unreadNotifications.count)
-        }
-    }
-
     // MARK: - Hero
 
     private func hero(snapshot: TodaySnapshot) -> some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-            Text(heroTitle(snapshot: snapshot))
-                .font(SparkFonts.display(.title, weight: .bold))
-                .lineLimit(3)
-                .fixedSize(horizontal: false, vertical: true)
-                .foregroundStyle(Color.primary)
-                .accessibilityAddTraits(.isHeader)
+        let title = heroTitle(snapshot: snapshot)
+        let titleLines = title.components(separatedBy: "\n")
+
+        return VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(titleLines.enumerated()), id: \.offset) { index, line in
+                    Text(line)
+                        .font(heroTitleFont(isFirstLine: index == 0))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.88)
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .foregroundStyle(Color.primary)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(title.replacingOccurrences(of: "\n", with: " "))
+            .accessibilityAddTraits(.isHeader)
 
             if let subtitle = heroSubtitle(snapshot: snapshot) {
                 Text(subtitle)
@@ -144,6 +91,11 @@ struct TodayView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func heroTitleFont(isFirstLine: Bool) -> Font {
+        Font.custom(SparkFonts.displayPostScriptName, size: 32, relativeTo: .largeTitle)
+            .weight(isFirstLine ? .bold : .regular)
     }
 
     private func heroTitle(snapshot: TodaySnapshot) -> String {

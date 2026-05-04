@@ -5,6 +5,7 @@ import SwiftUI
 
 struct NotificationsInboxView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(\.dismiss) private var dismiss
     @State private var viewModel: NotificationsInboxViewModel?
     @State private var path: [DetailRoute] = []
 
@@ -31,12 +32,20 @@ struct NotificationsInboxView: View {
                 }
                 .toolbar {
                     if let viewModel, !viewModel.items.isEmpty {
-                        ToolbarItem(placement: .topBarTrailing) {
+                        ToolbarItem(placement: .primaryAction) {
                             Button("Mark all read") {
                                 Task { await viewModel.markAllRead() }
                             }
                             .font(SparkTypography.bodySmall)
                         }
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            dismiss()
+                        } label: {
+                            Image(systemName: "xmark")
+                        }
+                        .accessibilityLabel("Close")
                     }
                 }
         }
@@ -60,13 +69,28 @@ struct NotificationsInboxView: View {
             switch viewModel.state {
             case .loaded:
                 if viewModel.items.isEmpty {
-                    EmptyState(
-                        systemImage: "bell.slash",
-                        title: "All caught up",
-                        message: "Anomalies, digests, and integration alerts will land here."
-                    )
+                    VStack(spacing: SparkSpacing.lg) {
+                        SparkSystemScreenHeader(
+                            title: "Inbox",
+                            subtitle: "Anomalies, digests, and integration alerts."
+                        )
+                        EmptyState(
+                            systemImage: "bell.slash",
+                            title: "All caught up",
+                            message: "Anomalies, digests, and integration alerts will land here."
+                        )
+                    }
+                    .padding(SparkSpacing.lg)
                 } else {
                     List {
+                        Section {
+                            SparkSystemScreenHeader(
+                                title: "Inbox",
+                                subtitle: "\(viewModel.items.count) notification\(viewModel.items.count == 1 ? "" : "s")"
+                            )
+                        }
+                        .listRowBackground(Color.clear)
+
                         ForEach(viewModel.items) { item in
                             NotificationRow(item: item)
                                 .contentShape(Rectangle())

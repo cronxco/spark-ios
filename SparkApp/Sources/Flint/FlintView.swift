@@ -6,6 +6,11 @@ struct FlintView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: SparkSpacing.lg) {
+                    SparkMainPageHeader(
+                        title: "Flint",
+                        subtitle: "Daily guidance from your connected signals"
+                    )
+
                     GlassCard(tint: .sparkAccent.opacity(0.08)) {
                         VStack(alignment: .leading, spacing: SparkSpacing.md) {
                             GlassCardHeader(
@@ -48,11 +53,12 @@ struct FlintView: View {
                     }
                 }
                 .padding(.horizontal, SparkSpacing.lg)
-                .padding(.vertical, SparkSpacing.xl)
+                .padding(.top, SparkSpacing.md)
+                .padding(.bottom, SparkSpacing.xl)
             }
-            .navigationTitle("Flint")
-            .navigationBarTitleDisplayMode(.large)
+            .sparkMainNavigationTitle("Flint")
             .sparkAppBackground()
+            .sparkMainAppToolbar()
         }
     }
 }
