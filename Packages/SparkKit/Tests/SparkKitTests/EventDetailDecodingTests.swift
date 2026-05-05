@@ -4,6 +4,15 @@ import Testing
 
 @Suite("EventDetail decoding")
 struct EventDetailDecodingTests {
+    @Test("knowledge reprocess endpoint posts to knowledge event path")
+    func knowledgeReprocessEndpoint() {
+        let endpoint = EventsEndpoint.reprocessKnowledgeEvent(id: "evt_article")
+
+        #expect(endpoint.method == .post)
+        #expect(endpoint.path == "/knowledge/events/evt_article/reprocess")
+        #expect(endpoint.query.isEmpty)
+    }
+
     @Test("decodes wrapped detail payload")
     func decodesWrappedPayload() throws {
         let json = """

@@ -111,6 +111,95 @@ struct APIClientTests {
         #expect(retryRequest?.value(forHTTPHeaderField: "Authorization") == "Bearer new")
     }
 
+    @Test("concurrent 401s share one refresh request")
+    func concurrentUnauthorizedRequestsShareRefresh() async throws {
+        let (client, tokenStore) = makeClient()
+        await tokenStore.store(access: "old", refresh: "r-1", expiresIn: 60)
+
+        actor Stats {
+            private(set) var refreshCount = 0
+            private(set) var protectedAuthorizations: [String?] = []
+
+            func recordRefresh() -> Int {
+                refreshCount += 1
+                return refreshCount
+            }
+
+            func recordProtected(_ authorization: String?) {
+                protectedAuthorizations.append(authorization)
+            }
+        }
+        let stats = Stats()
+
+        await StubURLProtocol.set { request in
+            if request.url?.path.hasSuffix("/oauth/refresh") == true {
+                _ = await stats.recordRefresh()
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                let json = """
+                {"token_type":"Bearer","access_token":"new","refresh_token":"r-2","expires_in":3600}
+                """.data(using: .utf8)!
+                return (json, 200, [:])
+            }
+
+            await stats.recordProtected(request.value(forHTTPHeaderField: "Authorization"))
+            if request.value(forHTTPHeaderField: "Authorization") == "Bearer old" {
+                return (Data(), 401, [:])
+            }
+
+            let payload = """
+            {"date":"2026-04-19","timezone":"UTC","sync_status":{"in_flight":false,"last_synced_at":null,"anomaly_count":0},"sections":{},"anomalies":[]}
+            """.data(using: .utf8)!
+            return (payload, 200, [:])
+        }
+
+        let dates = try await withThrowingTaskGroup(of: String.self) { group in
+            for _ in 0..<5 {
+                group.addTask {
+                    try await client.request(BriefingEndpoint.today()).date
+                }
+            }
+
+            var dates: [String] = []
+            for try await date in group {
+                dates.append(date)
+            }
+            return dates
+        }
+
+        #expect(dates == Array(repeating: "2026-04-19", count: 5))
+        #expect(await tokenStore.accessToken() == "new")
+        #expect(await tokenStore.refreshToken() == "r-2")
+        #expect(await stats.refreshCount == 1)
+
+        let protectedAuthorizations = await stats.protectedAuthorizations
+        #expect(protectedAuthorizations.filter { $0 == "Bearer old" }.count == 5)
+        #expect(protectedAuthorizations.filter { $0 == "Bearer new" }.count == 5)
+    }
+
+    @Test("failed refresh clears stored tokens")
+    func failedRefreshClearsTokens() async {
+        let (client, tokenStore) = makeClient()
+        await tokenStore.store(access: "old", refresh: "r-1", expiresIn: 60)
+
+        await StubURLProtocol.set { request in
+            if request.url?.path.hasSuffix("/oauth/refresh") == true {
+                return (
+                    Data(#"{"error":"invalid_grant","error_description":"Refresh token already used; all device tokens revoked."}"#.utf8),
+                    401,
+                    ["Content-Type": "application/json"]
+                )
+            }
+            return (Data(), 401, [:])
+        }
+
+        await #expect(throws: APIError.self) {
+            _ = try await client.request(BriefingEndpoint.today())
+        }
+
+        #expect(await tokenStore.accessToken() == nil)
+        #expect(await tokenStore.refreshToken() == nil)
+    }
+
     @Test("401 without refresh token surfaces .unauthorized")
     func unauthorizedWithoutRefresh() async {
         let (client, _) = makeClient()

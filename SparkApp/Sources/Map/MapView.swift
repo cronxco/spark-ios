@@ -103,13 +103,16 @@ private struct MapViewContent: View {
                 anchorDay: viewModel.anchorDay
             )
             .padding(.horizontal, SparkSpacing.lg)
-            .padding(.bottom, SparkSpacing.xxl + SparkSpacing.xxxl)
+            .padding(.bottom, timelineBottomPadding)
         }
-        .overlay(alignment: .bottom) {
-            if isEmbedded {
-                EmbeddedMapSummary(points: viewModel.visiblePoints, onSelect: onSelectPoint)
-                    .padding(.horizontal, SparkSpacing.lg)
-                    .padding(.bottom, SparkSpacing.xxl + SparkSpacing.xxxl + 56)
+        .overlay {
+            GeometryReader { proxy in
+                if isEmbedded {
+                    EmbeddedMapSummary(points: viewModel.visiblePoints, onSelect: onSelectPoint)
+                        .frame(width: proxy.size.width * 2 / 3, alignment: .leading)
+                        .padding(.leading, SparkSpacing.lg)
+                        .padding(.top, SparkSpacing.xl)
+                }
             }
         }
         .onMapCameraChange(frequency: .onEnd) { context in
@@ -124,6 +127,11 @@ private struct MapViewContent: View {
                     .interactiveDismissDisabled()
             }
         }
+    }
+
+    private var timelineBottomPadding: CGFloat {
+        let base = SparkSpacing.xxl + SparkSpacing.xxxl
+        return isEmbedded ? base + 24 : base
     }
 }
 

@@ -27,6 +27,7 @@ public actor APIClient {
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
     private let logger = Logger(subsystem: "co.cronx.sparkapp", category: "APIClient")
+    private var refreshTask: Task<AuthTokens, Error>?
 
     public init(
         environment: APIEnvironment = .current(),
@@ -86,8 +87,9 @@ public actor APIClient {
             request.httpBody = body
             request.setValue(endpoint.contentType ?? "application/json", forHTTPHeaderField: "Content-Type")
         }
-        if endpoint.requiresAuth, let token = await tokenStore.accessToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let accessToken = endpoint.requiresAuth ? await tokenStore.accessToken() : nil
+        if let accessToken {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         }
         if let etag = await etagCache.etag(for: url) {
             request.setValue(etag, forHTTPHeaderField: "If-None-Match")
@@ -162,7 +164,12 @@ public actor APIClient {
                 outcome: .unauthorized
             )
             if allowRefresh, await tokenStore.hasRefreshToken() {
-                let refreshed = try await refreshAndRetry(endpoint, absoluteBase: absoluteBase, retryAttempt: attempt + 1)
+                let refreshed = try await refreshAndRetry(
+                    endpoint,
+                    absoluteBase: absoluteBase,
+                    retryAttempt: attempt + 1,
+                    tokenUsedForRequest: accessToken
+                )
                 return refreshed
             }
             throw APIError.unauthorized
@@ -254,23 +261,60 @@ public actor APIClient {
     private func refreshAndRetry<Response>(
         _ endpoint: Endpoint<Response>,
         absoluteBase: Bool,
-        retryAttempt: Int
+        retryAttempt: Int,
+        tokenUsedForRequest: String?
     ) async throws -> Response {
+        if let tokenUsedForRequest,
+           let currentAccessToken = await tokenStore.accessToken(),
+           currentAccessToken != tokenUsedForRequest {
+            return try await perform(endpoint, absoluteBase: absoluteBase, allowRefresh: false, attempt: retryAttempt)
+        }
+
+        _ = try await refreshTokens()
+        return try await perform(endpoint, absoluteBase: absoluteBase, allowRefresh: false, attempt: retryAttempt)
+    }
+
+    private func refreshTokens() async throws -> AuthTokens {
+        if let refreshTask {
+            return try await refreshTask.value
+        }
+
         guard let refreshToken = await tokenStore.refreshToken() else {
             throw APIError.unauthorized
         }
-        let tokens = try await perform(
-            AuthEndpoint.refresh(refreshToken: refreshToken),
-            absoluteBase: true,
-            allowRefresh: false,
-            isRefreshRequest: true
-        )
-        await tokenStore.store(
-            access: tokens.accessToken,
-            refresh: tokens.refreshToken,
-            expiresIn: tokens.expiresIn
-        )
-        return try await perform(endpoint, absoluteBase: absoluteBase, allowRefresh: false, attempt: retryAttempt)
+
+        let task = Task { [tokenStore] in
+            let tokens = try await self.perform(
+                AuthEndpoint.refresh(refreshToken: refreshToken),
+                absoluteBase: true,
+                allowRefresh: false,
+                isRefreshRequest: true
+            )
+            let authTokens = AuthTokens(
+                accessToken: tokens.accessToken,
+                refreshToken: tokens.refreshToken,
+                expiresIn: tokens.expiresIn
+            )
+            await tokenStore.store(
+                access: authTokens.accessToken,
+                refresh: authTokens.refreshToken,
+                expiresIn: authTokens.expiresIn
+            )
+            return authTokens
+        }
+        refreshTask = task
+
+        do {
+            let tokens = try await task.value
+            refreshTask = nil
+            return tokens
+        } catch {
+            refreshTask = nil
+            if case APIError.unauthorized = error {
+                await tokenStore.clear()
+            }
+            throw error
+        }
     }
 
     private func captureTelemetry<Response>(

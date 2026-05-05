@@ -11,6 +11,11 @@ public enum EventsEndpoint {
         let body = try? JSONEncoder().encode(UpdateNoteRequest(note: note))
         return Endpoint(method: .patch, path: "/events/\(id)/note", body: body)
     }
+
+    /// POST /knowledge/events/{id}/reprocess
+    public static func reprocessKnowledgeEvent(id: String) -> Endpoint<EmptyResponse> {
+        Endpoint(method: .post, path: "/knowledge/events/\(id)/reprocess")
+    }
 }
 
 private struct UpdateNoteRequest: Encodable {

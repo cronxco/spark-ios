@@ -302,6 +302,7 @@ struct SparkSubViewToolbarModifier: ViewModifier {
     let rawTitle: String
     let rawPayload: String?
     let refresh: () async -> Void
+    let reprocess: (() async -> Void)?
 
     @State private var showShareSheet = false
     @State private var showRawSheet = false
@@ -327,8 +328,12 @@ struct SparkSubViewToolbarModifier: ViewModifier {
                         } label: {
                             Label("Refresh", systemImage: "arrow.clockwise")
                         }
-                        Button("Reprocess") {}
-                            .disabled(true)
+                        Button {
+                            Task { await reprocess?() }
+                        } label: {
+                            Label("Reprocess", systemImage: "wand.and.sparkles")
+                        }
+                        .disabled(reprocess == nil)
                         Button {
                             showRawSheet = true
                         } label: {
@@ -363,13 +368,15 @@ extension View {
         shareItems: [Any],
         rawTitle: String = "Raw",
         rawPayload: String?,
-        refresh: @escaping () async -> Void
+        refresh: @escaping () async -> Void,
+        reprocess: (() async -> Void)? = nil
     ) -> some View {
         modifier(SparkSubViewToolbarModifier(
             shareItems: shareItems,
             rawTitle: rawTitle,
             rawPayload: rawPayload,
-            refresh: refresh
+            refresh: refresh,
+            reprocess: reprocess
         ))
     }
 }

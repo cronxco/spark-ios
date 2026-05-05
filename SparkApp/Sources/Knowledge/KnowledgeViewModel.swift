@@ -24,11 +24,10 @@ final class KnowledgeViewModel {
     private(set) var hasMore: Bool = false
 
     var filteredItems: [Event] {
-        let visible = allItems.filter { !$0.hidden }
         switch filter {
-        case .reading: return visible.filter { $0.service == "fetch" || $0.service == "newsletter" }
-        case .personal: return visible.filter { $0.service == "outline" || $0.service == "calendar" }
-        case .all: return visible
+        case .reading: return allItems.filter { $0.service == "fetch" || $0.service == "newsletter" }
+        case .personal: return allItems.filter { $0.service == "outline" || $0.service == "calendar" }
+        case .all: return allItems
         }
     }
 

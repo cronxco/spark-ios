@@ -7,6 +7,7 @@ struct KnowledgeItemDetailView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.openURL) private var openURL
     @State private var detailState: KnowledgeDetailState = .loading
+    @State private var reprocessError: String?
 
     private var title: String { event.target?.title ?? event.displayName ?? event.action }
 
@@ -30,6 +31,9 @@ struct KnowledgeItemDetailView: View {
                         LoadingShimmerCard()
                     case .loaded(let payload):
                         headerSection(payload: payload)
+                        if !payload.eventDetail.tags.isEmpty {
+                            TagChipRow(payload.eventDetail.tags.names)
+                        }
                         contentCards(for: payload)
                     case .error:
                         headerSection(payload: nil)
@@ -46,14 +50,24 @@ struct KnowledgeItemDetailView: View {
                 .padding(.bottom, SparkSpacing.xl)
             }
         }
+        .ignoresSafeArea(edges: .top)
         .sparkAppBackground()
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
         .sparkSubViewToolbar(
             shareItems: knowledgeShareItems,
             rawTitle: "Raw knowledge item",
             rawPayload: knowledgeRawPayload,
-            refresh: { await loadDetail() }
+            refresh: { await loadDetail() },
+            reprocess: { await reprocessKnowledgeEvent() }
         )
+        .alert("Couldn't reprocess", isPresented: reprocessErrorBinding) {
+            Button("OK", role: .cancel) {
+                reprocessError = nil
+            }
+        } message: {
+            Text(reprocessError ?? "Try again later.")
+        }
         .task(id: event.id) {
             await loadDetail()
         }
@@ -72,45 +86,58 @@ struct KnowledgeItemDetailView: View {
             ?? SparkPrettyJSON.fallback(entity: "knowledge_item", id: event.id, title: title)
     }
 
+    private var reprocessErrorBinding: Binding<Bool> {
+        Binding(
+            get: { reprocessError != nil },
+            set: { if !$0 { reprocessError = nil } }
+        )
+    }
+
     // MARK: - Colour block hero
 
     private func hero(for payload: KnowledgeDetailPayload?) -> some View {
-        ZStack(alignment: .bottomLeading) {
-            if let url = payload?.mainImageURL ?? mainImageURL(event: event) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    default:
-                        fallbackHeroBackground
+        GeometryReader { proxy in
+            let topInset = proxy.safeAreaInsets.top
+
+            ZStack(alignment: .bottomLeading) {
+                if let url = payload?.mainImageURL ?? mainImageURL(event: event) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        default:
+                            fallbackHeroBackground
+                        }
                     }
+                } else {
+                    fallbackHeroBackground
                 }
-                .frame(height: 240)
-                .clipped()
-            } else {
-                fallbackHeroBackground
-            }
 
-            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                Image(systemName: "books.vertical.fill")
-                    .font(.system(size: 40, weight: .light))
-                    .foregroundStyle(.white.opacity(0.75))
+                VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                    Image(systemName: "books.vertical.fill")
+                        .font(.system(size: 40, weight: .light))
+                        .foregroundStyle(.white.opacity(0.75))
 
-                Text(sourceLabel(payload: payload))
-                    .font(SparkTypography.monoSmall)
-                    .foregroundStyle(.white.opacity(0.9))
-                    .textCase(.uppercase)
+                    Text(sourceLabel(payload: payload))
+                        .font(SparkTypography.monoSmall)
+                        .foregroundStyle(.white.opacity(0.9))
+                        .textCase(.uppercase)
+                }
+                .padding(SparkSpacing.lg)
             }
-            .padding(SparkSpacing.lg)
+            .frame(height: 240 + topInset)
+            .clipped()
+            .offset(y: -topInset)
         }
+        .frame(height: 240)
+        .ignoresSafeArea(edges: .top)
     }
 
     private var fallbackHeroBackground: some View {
         Rectangle()
             .fill(Color.domainKnowledge)
-            .frame(height: 240)
             .overlay {
                 Image(systemName: "books.vertical.fill")
                     .font(.system(size: 92, weight: .light))
@@ -149,7 +176,7 @@ struct KnowledgeItemDetailView: View {
         let summaryBlock = summaryBlock(service: service, blocks: blocks)
         let articleBody = articleBodyContent(payload: payload, service: service, blocks: blocks)
 
-        if let summary = summaryText(payload: payload, summaryBlock: summaryBlock) {
+        if let summary = summaryText(payload: payload, summaryBlock: summaryBlock, articleBody: articleBody) {
             summaryCallout(summary)
         }
 
@@ -159,10 +186,6 @@ struct KnowledgeItemDetailView: View {
 
         ForEach(remainingBlocks(blocks, summaryBlock: summaryBlock, articleBody: articleBody)) { block in
             blockCard(block)
-        }
-
-        if !detail.tags.isEmpty {
-            TagChipRow(detail.tags.names)
         }
     }
 
@@ -203,7 +226,7 @@ struct KnowledgeItemDetailView: View {
     @ViewBuilder
     private func blockCard(_ block: Block) -> some View {
         if isKeyTakeawaysBlock(block), let content = nonEmpty(block.content) {
-            let bullets = content.components(separatedBy: "\n").compactMap(nonEmpty)
+            let bullets = takeawayBullets(from: content)
             if !bullets.isEmpty {
                 GlassCard {
                     VStack(alignment: .leading, spacing: SparkSpacing.sm) {
@@ -215,9 +238,7 @@ struct KnowledgeItemDetailView: View {
                                         .font(.caption2)
                                         .foregroundStyle(Color.domainKnowledge)
                                         .padding(.top, 3)
-                                    Text(bullet)
-                                        .font(SparkTypography.body)
-                                        .fixedSize(horizontal: false, vertical: true)
+                                    RichContentText(text: bullet, font: SparkTypography.body, foregroundStyle: .primary)
                                 }
                             }
                         }
@@ -246,22 +267,33 @@ struct KnowledgeItemDetailView: View {
         }
     }
 
-    private func summaryText(payload: KnowledgeDetailPayload, summaryBlock: Block?) -> String? {
-        summaryBlock.flatMap { nonEmpty($0.content) }
-            ?? nonEmpty(payload.objectDetail?.aiSummary)
-            ?? nonEmpty(payload.eventDetail.aiSummary)
-            ?? nonEmpty(event.tldr)
+    private func summaryText(
+        payload: KnowledgeDetailPayload,
+        summaryBlock: Block?,
+        articleBody: KnowledgeArticleBodyContent?
+    ) -> String? {
+        let candidates = [
+            summaryBlock.flatMap { nonEmpty($0.content) },
+            nonEmpty(payload.objectDetail?.aiSummary),
+            nonEmpty(payload.eventDetail.aiSummary),
+            nonEmpty(event.tldr),
+            articleBody.flatMap { firstArticleParagraph($0.text) },
+        ].compactMap { $0 }
+
+        return candidates.first { !looksTruncated($0) } ?? candidates.first
     }
 
     private func summaryBlock(service: String, blocks: [Block]) -> Block? {
-        blocks.first {
-            !isRawBlock($0)
-                && nonEmpty($0.content) != nil
-                && (blockType($0, matches: "\(service)_summary_paragraph")
-                    || blockType($0, matches: "summary_paragraph")
-                    || blockType($0, matches: "paragraph_summary")
-                    || $0.blockType.lowercased().hasSuffix("_summary_paragraph"))
-        }
+        blocks
+            .filter { block in
+                !isRawBlock(block)
+                    && nonEmpty(block.content) != nil
+                    && isSummaryBlock(block, service: service)
+            }
+            .sorted { lhs, rhs in
+                summaryRank(lhs) > summaryRank(rhs)
+            }
+            .first
     }
 
     private func articleBodyContent(payload: KnowledgeDetailPayload, service: String, blocks: [Block]) -> KnowledgeArticleBodyContent? {
@@ -308,6 +340,33 @@ struct KnowledgeItemDetailView: View {
         block.blockType.caseInsensitiveCompare(expected) == .orderedSame
     }
 
+    private func isSummaryBlock(_ block: Block, service: String) -> Bool {
+        let type = block.blockType.lowercased()
+        return blockType(block, matches: "\(service)_summary_paragraph")
+            || blockType(block, matches: "summary_paragraph")
+            || blockType(block, matches: "paragraph_summary")
+            || type.hasSuffix("_summary_paragraph")
+            || type.contains("summary")
+    }
+
+    private func summaryRank(_ block: Block) -> Int {
+        let content = nonEmpty(block.content) ?? ""
+        let type = block.blockType.lowercased()
+        let title = block.title.lowercased()
+        var score = min(content.count, 2_000)
+
+        if looksTruncated(content) {
+            score -= 1_000
+        }
+        if type.contains("short") || title.contains("short") || type.contains("tldr") || title.contains("tldr") {
+            score -= 500
+        }
+        if type.hasSuffix("_summary_paragraph") || type == "summary_paragraph" {
+            score += 100
+        }
+        return score
+    }
+
     private func displayTitle(for block: Block) -> String {
         nonEmpty(block.title) ?? displayType(for: block)
     }
@@ -323,6 +382,21 @@ struct KnowledgeItemDetailView: View {
             return nil
         }
         return trimmed
+    }
+
+    private func looksTruncated(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.hasSuffix("...")
+            || trimmed.hasSuffix("…")
+    }
+
+    private func firstArticleParagraph(_ text: String) -> String? {
+        ArticleBlock.parse(text).compactMap { block in
+            if case .paragraph(let paragraph) = block, !looksTruncated(paragraph) {
+                return nonEmpty(paragraph)
+            }
+            return nil
+        }.first
     }
 
     private func loadDetail() async {
@@ -342,6 +416,16 @@ struct KnowledgeItemDetailView: View {
         } catch {
             SparkObservability.captureHandled(error)
             detailState = .error(String(describing: error))
+        }
+    }
+
+    private func reprocessKnowledgeEvent() async {
+        do {
+            _ = try await appModel.apiClient.request(EventsEndpoint.reprocessKnowledgeEvent(id: event.id))
+            await loadDetail()
+        } catch {
+            SparkObservability.captureHandled(error)
+            reprocessError = (error as? LocalizedError)?.errorDescription ?? "The item couldn't be reprocessed."
         }
     }
 
@@ -367,14 +451,88 @@ struct KnowledgeItemDetailView: View {
         else { return nil }
         return host
             .replacingOccurrences(of: "www.", with: "")
-            .split(separator: ".")
-            .map { part in
-                if part.count <= 3 {
-                    return part.uppercased()
-                }
-                return part.prefix(1).uppercased() + part.dropFirst().lowercased()
+            .uppercased()
+    }
+
+    private func takeawayBullets(from content: String) -> [String] {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        for candidate in takeawayArrayCandidates(from: trimmed) {
+            if let decoded = decodeTakeawayArray(candidate) {
+                return decoded
             }
-            .joined(separator: ".")
+        }
+
+        return trimmed
+            .components(separatedBy: .newlines)
+            .flatMap(splitInlineQuotedTakeaways)
+            .map(stripBulletPrefix)
+            .compactMap(nonEmpty)
+    }
+
+    private func takeawayArrayCandidates(from text: String) -> [String] {
+        var candidates = [text]
+
+        let unescaped = text
+            .replacingOccurrences(of: #"\""#, with: #"""#)
+            .replacingOccurrences(of: #"\/"#, with: "/")
+        if unescaped != text {
+            candidates.append(unescaped)
+        }
+
+        let baseCandidates = candidates
+        for candidate in baseCandidates {
+            if let start = candidate.firstIndex(of: "["),
+               let end = candidate.lastIndex(of: "]"),
+               start < end {
+                let slice = String(candidate[start...end])
+                if !candidates.contains(slice) {
+                    candidates.append(slice)
+                }
+            }
+        }
+
+        return candidates
+    }
+
+    private func decodeTakeawayArray(_ text: String) -> [String]? {
+        guard text.hasPrefix("["), text.hasSuffix("]"), let data = text.data(using: .utf8) else {
+            return nil
+        }
+
+        guard let decoded = try? JSONDecoder().decode([String].self, from: data) else {
+            return nil
+        }
+
+        let bullets = decoded
+            .map(stripBulletPrefix)
+            .compactMap(nonEmpty)
+        return bullets.isEmpty ? nil : bullets
+    }
+
+    private func splitInlineQuotedTakeaways(_ line: String) -> [String] {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("[\""), trimmed.hasSuffix("\"]") else {
+            return [trimmed]
+        }
+
+        let body = trimmed
+            .dropFirst(2)
+            .dropLast(2)
+            .replacingOccurrences(of: #"\/"#, with: "/")
+        return body
+            .components(separatedBy: "\",\"")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+    }
+
+    private func stripBulletPrefix(_ line: String) -> String {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        for prefix in ["- ", "* ", "• "] {
+            if trimmed.hasPrefix(prefix) {
+                return String(trimmed.dropFirst(prefix.count))
+            }
+        }
+        return trimmed
     }
 }
 
