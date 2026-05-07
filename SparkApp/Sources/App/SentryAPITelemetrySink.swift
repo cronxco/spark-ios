@@ -10,6 +10,7 @@ final class SentryAPITelemetrySink: APITelemetrySink, @unchecked Sendable {
         captureTransaction(for: event)
 
         guard event.outcome != .success, event.outcome != .notModified else { return }
+        guard !isExpectedMetricMiss(event) else { return }
 
         let message = "API \(event.outcome.sentryName): \(event.method) \(event.url.host() ?? "")\(event.url.path)"
         SentrySDK.capture(message: message) { scope in
@@ -109,6 +110,12 @@ final class SentryAPITelemetrySink: APITelemetrySink, @unchecked Sendable {
         }
 
         return context
+    }
+
+    private func isExpectedMetricMiss(_ event: APITelemetryEvent) -> Bool {
+        guard event.outcome == .httpError, event.statusCode == 404 else { return false }
+        return (event.endpointPath ?? event.url.path).hasPrefix("/metrics/")
+            || event.url.path.hasPrefix("/api/v1/mobile/metrics/")
     }
 
     private func bodyString(_ data: Data?) -> String? {

@@ -21,32 +21,39 @@ final class MetricsExploreViewModel {
         self.apiClient = apiClient
     }
 
-    func load(identifiers: [String]) async {
+    func load() async {
         guard case .idle = loadState else { return }
         loadState = .loading
-        await fetchAll(identifiers: identifiers)
+        await fetchAll()
     }
 
-    func refresh(identifiers: [String]) async {
+    func refresh() async {
         snapshots = [:]
         metrics = []
         loadState = .idle
         metadataState = .idle
-        await fetchAll(identifiers: identifiers)
+        await fetchAll()
     }
 
-    private func fetchAll(identifiers: [String]) async {
+    private func fetchAll() async {
+        loadState = .loading
         do {
             let metrics = try await apiClient.request(MetricsEndpoint.list())
-            self.metrics = metrics
-            metadataState = .loaded(MetricsMetadataSummary(metrics: metrics))
+            self.metrics = metrics.filter { $0.eventCount > 0 }
+            metadataState = .loaded(MetricsMetadataSummary(metrics: self.metrics))
+        } catch where error.isAPICancellation {
+            loadState = .idle
+            return
         } catch {
             logger.error("Metrics list failed: \(String(describing: error), privacy: .public)")
             metrics = []
             metadataState = .unavailable
+            let message = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+            loadState = .error(message)
+            return
         }
 
-        snapshots = await fetchDetails(identifiers: identifiers)
+        snapshots = await fetchDetails(identifiers: metrics.map(\.identifier))
         loadState = .loaded
     }
 
@@ -58,7 +65,7 @@ final class MetricsExploreViewModel {
                 group.addTask {
                     do {
                         let detail = try await client.request(
-                            MetricsEndpoint.detail(identifier: id, range: .sevenDays)
+                            MetricsEndpoint.detail(identifier: id, range: .thirtyDays)
                         )
                         return (id, detail)
                     } catch {

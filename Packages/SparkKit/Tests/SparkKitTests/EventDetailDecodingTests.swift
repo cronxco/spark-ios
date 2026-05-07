@@ -80,6 +80,7 @@ struct EventDetailDecodingTests {
           "action": "card_payment",
           "display_name": "Card Payment",
           "hidden": false,
+          "display_with_object": true,
           "value": -10.5,
           "display_value": "£10.50",
           "tags": [{ "name": "coffee", "type": "merchant_category" }],
@@ -106,6 +107,7 @@ struct EventDetailDecodingTests {
 
         #expect(event.displayName == "Card Payment")
         #expect(event.hidden == false)
+        #expect(event.displayWithObject == true)
         #expect(event.displayValue == "£10.50")
         #expect(event.value == "-10.5")
         #expect(event.tags.names == ["coffee"])
@@ -275,5 +277,7 @@ struct EventDetailDecodingTests {
 
         #expect(hidden.hidden == true)
         #expect(visible.hidden == false)
+        #expect(hidden.displayWithObject == false)
+        #expect(visible.displayWithObject == false)
     }
 }

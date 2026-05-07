@@ -41,6 +41,8 @@ final class MoneyExploreViewModel {
             spend = spendData
             transactions = feedData.data.filter { !$0.hidden }
             loadState = .loaded
+        } catch where error.isAPICancellation {
+            loadState = .idle
         } catch {
             SparkObservability.captureHandled(error)
             logger.error("Money explore failed: \(String(describing: error))")

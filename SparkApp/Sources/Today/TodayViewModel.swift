@@ -107,6 +107,7 @@ final class TodayViewModel {
             existing.url = event.url
             existing.displayName = event.displayName
             existing.hidden = event.hidden
+            existing.displayWithObject = event.displayWithObject
             existing.displayValue = event.displayValue
             existing.tagNames = CachedEvent.encodeTagNames(event.tags)
             existing.blocksCount = event.blocksCount
@@ -129,6 +130,7 @@ final class TodayViewModel {
                 url: event.url,
                 displayName: event.displayName,
                 hidden: event.hidden,
+                displayWithObject: event.displayWithObject,
                 displayValue: event.displayValue,
                 tagNames: CachedEvent.encodeTagNames(event.tags),
                 blocksCount: event.blocksCount,

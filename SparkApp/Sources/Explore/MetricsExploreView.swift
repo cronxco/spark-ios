@@ -7,30 +7,40 @@ struct MetricsExploreView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.colorScheme) private var colorScheme
     @State private var viewModel: MetricsExploreViewModel?
-    @State private var filterDomain: MetricDomain? = nil
+    @State private var filterDomain: String? = nil
+    @State private var sortMode: MetricSortMode = .anomalies
+    @State private var searchText = ""
     @State private var heroRange: HeroMetricRange = .week
     @State private var path: [DetailRoute] = []
 
-    private static let categories: [MetricCategory] = [
-        .init(domain: .health, title: "Sleep Score", icon: "moon.zzz.fill", tint: .sparkOcean, identifier: "oura.sleep_score"),
-        .init(domain: .health, title: "Heart Rate", icon: "heart.fill", tint: .domainHealth, identifier: "oura.heart_rate"),
-        .init(domain: .activity, title: "Steps", icon: "figure.walk", tint: .domainActivity, identifier: "oura.steps"),
-        .init(domain: .activity, title: "Calories", icon: "flame.fill", tint: .domainActivity, identifier: "oura.calories"),
-        .init(domain: .money, title: "Daily Spend", icon: "sterlingsign.circle.fill", tint: .domainMoney, identifier: "monzo.spend_daily"),
-        .init(domain: .media, title: "Screen Time", icon: "iphone", tint: .domainMedia, identifier: "screen_time.daily"),
-    ]
-
-    private var allIdentifiers: [String] { Self.categories.map(\.identifier) }
-
-    private var visibleCategories: [MetricCategory] {
-        guard let filter = filterDomain else { return Self.categories }
-        return Self.categories.filter { effectiveDomain(for: $0) == filter }
+    private var visibleMetrics: [MetricPresentation] {
+        let metrics = (viewModel?.metrics ?? []).map { metric in
+            MetricPresentation(
+                metric: metric,
+                detail: viewModel?.snapshots[metric.identifier]
+            )
+        }
+        let domainFiltered = metrics.filter { metric in
+            guard let filterDomain else { return true }
+            return metric.domain == filterDomain
+        }
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let searched = query.isEmpty ? domainFiltered : domainFiltered.filter { $0.matches(query: query) }
+        return searched.sorted { sortMode.areInIncreasingOrder($0, $1) }
     }
 
-    private var heroCategory: MetricCategory { Self.categories[0] }
+    private var heroMetric: MetricPresentation? {
+        visibleMetrics.first
+    }
 
-    private var rowCategories: [MetricCategory] {
-        visibleCategories.filter { $0.identifier != heroCategory.identifier }
+    private var rowMetrics: [MetricPresentation] {
+        Array(visibleMetrics.dropFirst())
+    }
+
+    private var availableDomains: [String] {
+        Array(Set((viewModel?.metrics ?? []).map { MetricPresentation.domain(for: $0) })).sorted {
+            displayLabel(forDomain: $0) < displayLabel(forDomain: $1)
+        }
     }
 
     private var heatmapRows: [DomainHeatmapRow] {
@@ -50,17 +60,18 @@ struct MetricsExploreView: View {
                     pageHeader
                         .padding(.horizontal, SparkSpacing.lg)
 
+                    sortControls
+                        .padding(.horizontal, SparkSpacing.lg)
+
                     domainFilter
                         .padding(.horizontal, SparkSpacing.lg)
 
-                    heroChartCard
-                        .padding(.horizontal, SparkSpacing.lg)
+                    content
 
-                    metricsStack
-                        .padding(.horizontal, SparkSpacing.lg)
-
-                    historySection
-                        .padding(.horizontal, SparkSpacing.lg)
+                    if heroMetric != nil {
+                        historySection
+                            .padding(.horizontal, SparkSpacing.lg)
+                    }
                 }
                 .padding(.top, SparkSpacing.md)
                 .padding(.bottom, SparkSpacing.xl)
@@ -75,16 +86,19 @@ struct MetricsExploreView: View {
                     EmptyView()
                 }
             }
-            .refreshable {
-                await viewModel?.refresh(identifiers: allIdentifiers)
-            }
+            .refreshable { await viewModel?.refresh() }
             .sparkMainAppToolbar()
         }
+        .searchable(
+            text: $searchText,
+            placement: .automatic,
+            prompt: "Search service or action"
+        )
         .task {
             if viewModel == nil {
                 viewModel = MetricsExploreViewModel(apiClient: appModel.apiClient)
             }
-            await viewModel?.load(identifiers: allIdentifiers)
+            await viewModel?.load()
         }
     }
 
@@ -96,78 +110,171 @@ struct MetricsExploreView: View {
 
     // MARK: - Domain filter
 
+    @ViewBuilder
     private var domainFilter: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: SparkSpacing.sm) {
-                Button { filterDomain = nil } label: {
-                    MetricsFilterChip("All", isSelected: filterDomain == nil)
-                }
-                .buttonStyle(.plain)
-                ForEach(MetricDomain.allCases, id: \.self) { domain in
-                    Button { filterDomain = domain } label: {
-                        MetricsFilterChip(domain.label, isSelected: filterDomain == domain)
+        if !availableDomains.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: SparkSpacing.sm) {
+                    Button { filterDomain = nil } label: {
+                        MetricsFilterChip("All", isSelected: filterDomain == nil)
                     }
                     .buttonStyle(.plain)
+                    ForEach(availableDomains, id: \.self) { domain in
+                        Button { filterDomain = domain } label: {
+                            MetricsFilterChip(
+                                displayLabel(forDomain: domain),
+                                isSelected: filterDomain == domain
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
         }
+    }
+
+    private var sortControls: some View {
+        HStack(spacing: SparkSpacing.sm) {
+            Menu {
+                ForEach(MetricSortMode.allCases, id: \.self) { mode in
+                    Button {
+                        sortMode = mode
+                    } label: {
+                        Label(mode.title, systemImage: mode.systemImage)
+                    }
+                }
+            } label: {
+                HStack(spacing: SparkSpacing.xs) {
+                    Image(systemName: sortMode.systemImage)
+                    Text(sortMode.title)
+                    Image(systemName: "chevron.down")
+                        .font(.caption2)
+                }
+                .font(SparkTypography.captionStrong)
+                .foregroundStyle(Color.sparkTextPrimary)
+                .padding(.horizontal, SparkSpacing.md)
+                .padding(.vertical, SparkSpacing.xs + 2)
+                .background {
+                    Capsule().fill(Color.primary.opacity(0.04))
+                }
+                .overlay {
+                    Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                }
+            }
+            .buttonStyle(.plain)
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    // MARK: - Content
+
+    @ViewBuilder
+    private var content: some View {
+        switch viewModel?.loadState {
+        case .idle, .loading, .none:
+            loadingContent
+        case .error(let message):
+            EmptyState(
+                systemImage: "exclamationmark.triangle.fill",
+                title: "Couldn't load metrics",
+                message: message,
+                actionTitle: "Retry"
+            ) { Task { await viewModel?.refresh() } }
+            .padding(.horizontal, SparkSpacing.lg)
+        case .loaded:
+            if viewModel?.metrics.isEmpty == true {
+                EmptyState(
+                    systemImage: "chart.line.uptrend.xyaxis",
+                    title: "No active metrics",
+                    message: "Connected metrics will appear here once Spark receives events for them."
+                )
+                .padding(.horizontal, SparkSpacing.lg)
+            } else if visibleMetrics.isEmpty {
+                EmptyState(
+                    systemImage: "magnifyingglass",
+                    title: "No matching metrics",
+                    message: searchText.isEmpty ? "Try another domain." : "Try a different service, action, or metric name."
+                )
+                .padding(.horizontal, SparkSpacing.lg)
+            } else {
+                heroChartCard
+                    .padding(.horizontal, SparkSpacing.lg)
+
+                metricsStack
+                    .padding(.horizontal, SparkSpacing.lg)
+            }
+        }
+    }
+
+    private var loadingContent: some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.lg) {
+            LoadingShimmerCard()
+                .frame(height: 210)
+            LoadingShimmerCard()
+                .frame(height: 104)
+            LoadingShimmerCard()
+                .frame(height: 104)
+        }
+        .padding(.horizontal, SparkSpacing.lg)
     }
 
     // MARK: - Hero chart card
 
     @ViewBuilder
     private var heroChartCard: some View {
-        let cat = heroCategory
-        GlassCard(radius: 22, padding: SparkSpacing.xl) {
-            VStack(alignment: .leading, spacing: SparkSpacing.md) {
-                HStack(alignment: .top, spacing: SparkSpacing.sm) {
-                    VStack(alignment: .leading, spacing: SparkSpacing.xs) {
-                        HStack(spacing: SparkSpacing.sm) {
-                            Image(systemName: cat.icon)
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(cat.tint)
-                            Text(cat.title)
-                                .font(SparkTypography.bodyStrong)
-                                .foregroundStyle(headerTextColor)
+        if let metric = heroMetric {
+            GlassCard(radius: 22, padding: SparkSpacing.xl) {
+                VStack(alignment: .leading, spacing: SparkSpacing.md) {
+                    HStack(alignment: .top, spacing: SparkSpacing.sm) {
+                        VStack(alignment: .leading, spacing: SparkSpacing.xs) {
+                            HStack(spacing: SparkSpacing.sm) {
+                                Image(systemName: metric.icon)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(metric.tint)
+                                Text(metric.title)
+                                    .font(SparkTypography.bodyStrong)
+                                    .foregroundStyle(headerTextColor)
+                            }
+
+                            if let detail = metric.detail {
+                                VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                                    if let today = detail.today {
+                                        Text(formatValue(today, unit: detail.unit))
+                                            .font(SparkFonts.display(.largeTitle, weight: .bold))
+                                            .foregroundStyle(metric.tint)
+                                            .lineLimit(1)
+                                            .minimumScaleFactor(0.75)
+                                    }
+                                    if let delta = delta(for: detail) {
+                                        deltaChip(delta, suffix: "vs 30-day avg")
+                                    }
+                                }
+                            } else {
+                                LoadingShimmerCard()
+                                    .frame(width: 140, height: 74)
+                            }
                         }
 
-                        if let detail = viewModel?.snapshots[cat.identifier] {
-                            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                                if let today = detail.today {
-                                    Text(formatValue(today, unit: detail.unit))
-                                        .font(SparkFonts.display(.largeTitle, weight: .bold))
-                                        .foregroundStyle(cat.tint)
-                                        .lineLimit(1)
-                                        .minimumScaleFactor(0.75)
-                                }
-                                if let delta = delta(for: detail) {
-                                    deltaChip(delta, suffix: "vs 7-day avg")
-                                }
-                            }
-                        } else {
-                            LoadingShimmerCard()
-                                .frame(width: 140, height: 74)
-                        }
+                        Spacer(minLength: SparkSpacing.md)
+
+                        rangePicker
                     }
 
-                    Spacer(minLength: SparkSpacing.md)
-
-                    rangePicker
-                }
-
-                if let detail = viewModel?.snapshots[cat.identifier] {
-                    SparklineMiniChart(series: series(for: detail), tint: cat.tint)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 96)
-                } else {
-                    LoadingShimmerCard()
-                        .frame(height: 96)
+                    if let detail = metric.detail {
+                        SparklineMiniChart(series: series(for: detail), tint: metric.tint)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 96)
+                    } else {
+                        LoadingShimmerCard()
+                            .frame(height: 96)
+                    }
                 }
             }
-        }
-        .contentShape(RoundedRectangle(cornerRadius: 22))
-        .onTapGesture {
-            path.append(.metric(identifier: cat.identifier))
+            .contentShape(RoundedRectangle(cornerRadius: 22))
+            .onTapGesture {
+                path.append(.metric(identifier: metric.identifier))
+            }
         }
     }
 
@@ -175,13 +282,12 @@ struct MetricsExploreView: View {
 
     private var metricsStack: some View {
         VStack(spacing: SparkSpacing.sm) {
-            ForEach(rowCategories, id: \.identifier) { category in
+            ForEach(rowMetrics, id: \.identifier) { metric in
                 Button {
-                    path.append(.metric(identifier: category.identifier))
+                    path.append(.metric(identifier: metric.identifier))
                 } label: {
                     FullBleedMetricRow(
-                        category: category,
-                        detail: viewModel?.snapshots[category.identifier],
+                        metric: metric,
                         isLoading: viewModel?.loadState == .loading || viewModel == nil
                     )
                 }
@@ -294,14 +400,6 @@ struct MetricsExploreView: View {
         }
     }
 
-    private func effectiveDomain(for category: MetricCategory) -> MetricDomain {
-        guard let raw = viewModel?.metrics.first(where: { $0.identifier == category.identifier })?.domain,
-              let domain = MetricDomain(rawValue: raw) else {
-            return category.domain
-        }
-        return domain
-    }
-
     private func relativeSyncText(for date: Date) -> String {
         let seconds = max(0, Int(Date().timeIntervalSince(date)))
         if seconds < 60 { return "\(max(1, seconds))s" }
@@ -311,23 +409,26 @@ struct MetricsExploreView: View {
         if hours < 24 { return "\(hours)h" }
         return "\(hours / 24)d"
     }
+
+    private func displayLabel(forDomain domain: String) -> String {
+        domain.replacingOccurrences(of: "_", with: " ").sparkActionTitle
+    }
 }
 
 // MARK: - Full-bleed metric row
 
 private struct FullBleedMetricRow: View {
-    let category: MetricCategory
-    let detail: MetricDetail?
+    let metric: MetricPresentation
     let isLoading: Bool
 
     private var recentSeries: [MetricDetail.Point] {
-        Array((detail?.series ?? []).suffix(14))
+        Array((metric.detail?.series ?? []).suffix(14))
     }
 
     var body: some View {
         ZStack(alignment: .leading) {
             if !recentSeries.isEmpty {
-                SparklineMiniChart(series: recentSeries, tint: category.tint)
+                SparklineMiniChart(series: recentSeries, tint: metric.tint)
                     .opacity(0.28)
                     .frame(maxWidth: .infinity)
                     .frame(height: 92)
@@ -348,34 +449,34 @@ private struct FullBleedMetricRow: View {
             }
 
             HStack(spacing: SparkSpacing.md) {
-                Image(systemName: category.icon)
+                Image(systemName: metric.icon)
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 44, height: 44)
                     .background(
                         RoundedRectangle(cornerRadius: SparkRadii.sm)
-                            .fill(category.tint)
+                            .fill(metric.tint)
                     )
 
                 VStack(alignment: .leading, spacing: SparkSpacing.xs) {
-                    Text(category.title)
+                    Text(metric.title)
                         .font(SparkTypography.bodySmall)
                         .fontWeight(.semibold)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                    if let today = detail?.today {
+                    if let today = metric.detail?.today {
                         HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.xs) {
-                            Text(formatValue(today, unit: detail?.unit))
+                            Text(formatValue(today, unit: metric.detail?.unit))
                                 .font(SparkFonts.display(.title, weight: .bold))
-                                .foregroundStyle(category.tint)
-                            if let unit = unitLabel(detail?.unit) {
+                                .foregroundStyle(metric.tint)
+                            if let unit = unitLabel(metric.detail?.unit) {
                                 Text(unit)
                                     .font(SparkTypography.bodySmall)
                                     .foregroundStyle(.secondary)
                             }
                         }
 
-                        if let delta = delta(for: detail) {
+                        if let delta = delta(for: metric.detail) {
                             HStack(spacing: 3) {
                                 Image(systemName: delta.isPositive ? "arrow.up.right" : "arrow.down.right")
                                     .font(.caption2)
@@ -435,16 +536,67 @@ private struct FullBleedMetricRow: View {
 
 // MARK: - Supporting types
 
-private enum MetricDomain: String, CaseIterable {
-    case health, activity, money, media
+private enum MetricSortMode: String, CaseIterable {
+    case anomalies
+    case recent
+    case name
+    case service
 
-    var label: String {
+    var title: String {
         switch self {
-        case .health: "Health"
-        case .activity: "Activity"
-        case .money: "Money"
-        case .media: "Media"
+        case .anomalies: "Anomalies"
+        case .recent: "Most Recent"
+        case .name: "Name"
+        case .service: "Service"
         }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .anomalies: "exclamationmark.triangle.fill"
+        case .recent: "clock.fill"
+        case .name: "textformat"
+        case .service: "server.rack"
+        }
+    }
+
+    func areInIncreasingOrder(_ lhs: MetricPresentation, _ rhs: MetricPresentation) -> Bool {
+        switch self {
+        case .anomalies:
+            return compare(lhs, rhs, dates: [\.latestAnomalyAt, \.lastEventAt])
+        case .recent:
+            return compare(lhs, rhs, dates: [\.lastEventAt])
+        case .name:
+            return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+        case .service:
+            let service = lhs.service.localizedCaseInsensitiveCompare(rhs.service)
+            if service != .orderedSame { return service == .orderedAscending }
+            let action = lhs.action.localizedCaseInsensitiveCompare(rhs.action)
+            if action != .orderedSame { return action == .orderedAscending }
+            return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+        }
+    }
+
+    private func compare(
+        _ lhs: MetricPresentation,
+        _ rhs: MetricPresentation,
+        dates: [KeyPath<MetricPresentation, Date?>]
+    ) -> Bool {
+        for keyPath in dates {
+            let left = lhs[keyPath: keyPath]
+            let right = rhs[keyPath: keyPath]
+            switch (left, right) {
+            case let (left?, right?) where left != right:
+                return left > right
+            case (_?, nil):
+                return true
+            case (nil, _?):
+                return false
+            default:
+                break
+            }
+        }
+        return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
     }
 }
 
@@ -460,12 +612,57 @@ private enum HeroMetricRange: CaseIterable {
     }
 }
 
-private struct MetricCategory {
-    let domain: MetricDomain
-    let title: String
-    let icon: String
-    let tint: Color
-    let identifier: String
+private struct MetricPresentation {
+    let metric: Metric
+    let detail: MetricDetail?
+
+    var identifier: String { metric.identifier }
+    var title: String { metric.displayName }
+    var service: String { metric.service }
+    var action: String { metric.action }
+    var domain: String { Self.domain(for: metric) }
+    var lastEventAt: Date? { metric.lastEventAt }
+    var latestAnomalyAt: Date? { detail?.anomalies.map(\.date).max() }
+
+    var icon: String {
+        if action.localizedCaseInsensitiveContains("sleep") { return "moon.zzz.fill" }
+        if action.localizedCaseInsensitiveContains("heart") { return "heart.fill" }
+        if action.localizedCaseInsensitiveContains("hrv") { return "waveform.path.ecg" }
+        if action.localizedCaseInsensitiveContains("step") { return "figure.walk" }
+        if action.localizedCaseInsensitiveContains("calorie") { return "flame.fill" }
+        if service.localizedCaseInsensitiveContains("monzo") || domain == "money" { return "sterlingsign.circle.fill" }
+        if domain == "media" { return "iphone" }
+        if domain == "activity" { return "figure.run" }
+        if domain == "health" { return "heart.text.square.fill" }
+        return "chart.line.uptrend.xyaxis"
+    }
+
+    var tint: Color {
+        switch domain {
+        case "health": .domainHealth
+        case "activity": .domainActivity
+        case "money": .domainMoney
+        case "media": .domainMedia
+        case "knowledge": .domainKnowledge
+        default: .sparkAccent
+        }
+    }
+
+    func matches(query: String) -> Bool {
+        let fields = [title, identifier, service, action, domain]
+        return fields.contains { field in
+            field.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    static func domain(for metric: Metric) -> String {
+        guard let domain = metric.domain?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !domain.isEmpty
+        else {
+            return metric.service
+        }
+        return domain
+    }
 }
 
 private struct MetricsFilterChip: View {

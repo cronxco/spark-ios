@@ -16,9 +16,9 @@ struct APIClientTests {
         return ETagCache(defaults: defaults)
     }
 
-    private func makeSession() -> URLSession {
+    private func makeSession(protocolClasses: [AnyClass] = [StubURLProtocol.self]) -> URLSession {
         let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [StubURLProtocol.self]
+        config.protocolClasses = protocolClasses
         return URLSession(configuration: config)
     }
 
@@ -28,12 +28,14 @@ struct APIClientTests {
             oauthAuthorizeURL: URL(string: "https://test.spark.cronx.co/oauth/authorize")!,
             name: "test"
         ),
-        telemetry: APITelemetry = APITelemetry()
+        telemetry: APITelemetry = APITelemetry(),
+        session: URLSession? = nil,
+        tokenStore: KeychainTokenStore? = nil
     ) -> (APIClient, KeychainTokenStore) {
-        let tokenStore = makeStore()
+        let tokenStore = tokenStore ?? makeStore()
         let client = APIClient(
             environment: environment,
-            session: makeSession(),
+            session: session ?? makeSession(),
             tokenStore: tokenStore,
             etagCache: makeCache(),
             telemetry: telemetry
@@ -176,6 +178,69 @@ struct APIClientTests {
         #expect(protectedAuthorizations.filter { $0 == "Bearer new" }.count == 5)
     }
 
+    @Test("concurrent 401s across clients share one refresh request")
+    func concurrentUnauthorizedRequestsAcrossClientsShareRefresh() async throws {
+        let tokenStore = makeStore()
+        await tokenStore.store(access: "old", refresh: "r-1", expiresIn: 60)
+        let (clientA, _) = makeClient(tokenStore: tokenStore)
+        let (clientB, _) = makeClient(tokenStore: tokenStore)
+
+        actor Stats {
+            private(set) var refreshCount = 0
+            private(set) var protectedAuthorizations: [String?] = []
+
+            func recordRefresh() {
+                refreshCount += 1
+            }
+
+            func recordProtected(_ authorization: String?) {
+                protectedAuthorizations.append(authorization)
+            }
+        }
+        let stats = Stats()
+
+        await StubURLProtocol.set { request in
+            if request.url?.path.hasSuffix("/oauth/refresh") == true {
+                await stats.recordRefresh()
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                let json = """
+                {"token_type":"Bearer","access_token":"new","refresh_token":"r-2","expires_in":3600}
+                """.data(using: .utf8)!
+                return (json, 200, [:])
+            }
+
+            await stats.recordProtected(request.value(forHTTPHeaderField: "Authorization"))
+            if request.value(forHTTPHeaderField: "Authorization") == "Bearer old" {
+                return (Data(), 401, [:])
+            }
+
+            let payload = """
+            {"date":"2026-04-19","timezone":"UTC","sync_status":{"in_flight":false,"last_synced_at":null,"anomaly_count":0},"sections":{},"anomalies":[]}
+            """.data(using: .utf8)!
+            return (payload, 200, [:])
+        }
+
+        let dates = try await withThrowingTaskGroup(of: String.self) { group in
+            group.addTask { try await clientA.request(BriefingEndpoint.today()).date }
+            group.addTask { try await clientB.request(BriefingEndpoint.today()).date }
+
+            var dates: [String] = []
+            for try await date in group {
+                dates.append(date)
+            }
+            return dates
+        }
+
+        #expect(dates.sorted() == ["2026-04-19", "2026-04-19"])
+        #expect(await tokenStore.accessToken() == "new")
+        #expect(await tokenStore.refreshToken() == "r-2")
+        #expect(await stats.refreshCount == 1)
+
+        let protectedAuthorizations = await stats.protectedAuthorizations
+        #expect(protectedAuthorizations.filter { $0 == "Bearer old" }.count == 2)
+        #expect(protectedAuthorizations.filter { $0 == "Bearer new" }.count == 2)
+    }
+
     @Test("failed refresh clears stored tokens")
     func failedRefreshClearsTokens() async {
         let (client, tokenStore) = makeClient()
@@ -198,6 +263,31 @@ struct APIClientTests {
 
         #expect(await tokenStore.accessToken() == nil)
         #expect(await tokenStore.refreshToken() == nil)
+    }
+
+    @Test("stale failed refresh does not clear newer stored tokens")
+    func staleFailedRefreshDoesNotClearNewerStoredTokens() async {
+        let (client, tokenStore) = makeClient()
+        await tokenStore.store(access: "old", refresh: "r-1", expiresIn: 60)
+
+        await StubURLProtocol.set { request in
+            if request.url?.path.hasSuffix("/oauth/refresh") == true {
+                await tokenStore.store(access: "new", refresh: "r-2", expiresIn: 3600)
+                return (
+                    Data(#"{"error":"invalid_grant","error_description":"Refresh token already used."}"#.utf8),
+                    401,
+                    ["Content-Type": "application/json"]
+                )
+            }
+            return (Data(), 401, [:])
+        }
+
+        await #expect(throws: APIError.self) {
+            _ = try await client.request(BriefingEndpoint.today())
+        }
+
+        #expect(await tokenStore.accessToken() == "new")
+        #expect(await tokenStore.refreshToken() == "r-2")
     }
 
     @Test("401 without refresh token surfaces .unauthorized")
@@ -337,6 +427,21 @@ struct APIClientTests {
         #expect(event.responseSizeBytes == #"{"message":"broken"}"#.utf8.count)
         #expect(event.durationMillis >= 0)
     }
+
+    @Test("cancelled requests are not captured as telemetry failures")
+    func cancellationDoesNotCaptureTelemetryFailure() async throws {
+        let sink = TestTelemetrySink()
+        let telemetry = APITelemetry()
+        await telemetry.setSink(sink)
+        let session = makeSession(protocolClasses: [CancelledURLProtocol.self])
+        let (client, _) = makeClient(telemetry: telemetry, session: session)
+
+        await #expect(throws: APIError.self) {
+            _ = try await client.request(BriefingEndpoint.today())
+        }
+
+        #expect(await sink.events().isEmpty)
+    }
 }
 
 private actor TestTelemetrySink: APITelemetrySink {
@@ -349,4 +454,15 @@ private actor TestTelemetrySink: APITelemetrySink {
     func events() -> [APITelemetryEvent] {
         captured
     }
+}
+
+private final class CancelledURLProtocol: URLProtocol, @unchecked Sendable {
+    override class func canInit(with _: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        client?.urlProtocol(self, didFailWithError: URLError(.cancelled))
+    }
+
+    override func stopLoading() {}
 }

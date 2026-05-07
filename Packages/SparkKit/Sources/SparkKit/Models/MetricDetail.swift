@@ -105,7 +105,7 @@ extension MetricDetail: Codable {
 
         struct DailyValue: Codable {
             let date: String
-            let value: Double
+            let value: Double?
             let isAnomaly: Bool
 
             enum CodingKeys: String, CodingKey {
@@ -165,8 +165,8 @@ extension MetricDetail: Codable {
 
         let fmt = Self.dateFormatter
         series = api.dailyValues.compactMap { dv in
-            guard let date = fmt.date(from: dv.date) else { return nil }
-            return Point(date: date, value: dv.value)
+            guard let date = fmt.date(from: dv.date), let value = dv.value else { return nil }
+            return Point(date: date, value: value)
         }
 
         today = series.last?.value

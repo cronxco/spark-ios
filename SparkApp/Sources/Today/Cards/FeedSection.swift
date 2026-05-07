@@ -512,7 +512,7 @@ private struct WebDigestEventCard: View {
                 Image(systemName: "globe")
                     .font(.system(size: 54, weight: .regular))
                     .foregroundStyle(.white.opacity(0.82))
-                Text(event.displayName ?? event.value ?? "Web Digest")
+                Text(event.targetTitle ?? event.value ?? event.action.sparkActionTitle)
                     .font(SparkTypography.captionStrong)
                     .foregroundStyle(.primary)
                     .padding(.horizontal, SparkSpacing.md)
@@ -565,17 +565,10 @@ private struct SubtleEventRow: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 28)
 
-            Text(metaLine(for: event))
+            Text(primaryTitle(for: event))
                 .font(SparkTypography.bodyStrong)
                 .foregroundStyle(.primary)
                 .lineLimit(1)
-
-            if let target = event.targetTitle {
-                Text(target)
-                    .font(SparkTypography.body)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
 
             Spacer(minLength: SparkSpacing.sm)
 
@@ -595,27 +588,37 @@ private struct SubtleEventRow: View {
 
 private func metaLine(for event: CachedEvent) -> String {
     if isBalanceSnapshot(event), event.targetTitle?.isISODateString == true {
-        return event.displayName ?? event.action.humanisedAction
+        return event.action.sparkActionTitle
     }
 
     let actor = event.actorTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
     if let actor, !actor.isEmpty {
-        return "\(event.displayName ?? event.action.humanisedAction) — \(actor)"
+        return "\(event.service.uppercased()) — \(actor)"
     }
-    return event.displayName ?? event.action.humanisedAction
+    return event.service.uppercased()
 }
 
 private func primaryTitle(for event: CachedEvent) -> String {
     if isBalanceSnapshot(event), event.targetTitle?.isISODateString == true {
         return event.actorTitle?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-            ?? event.displayName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-            ?? event.action.humanisedAction
+            ?? actionTitle(for: event)
     }
 
-    return event.targetTitle?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        ?? event.actorTitle?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        ?? event.displayName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        ?? event.action.humanisedAction
+    return eventTitle(for: event)
+}
+
+private func eventTitle(for event: CachedEvent) -> String {
+    let action = actionTitle(for: event)
+    guard event.displayWithObject,
+          let target = event.targetTitle?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+    else {
+        return action
+    }
+    return "\(action) \(target)"
+}
+
+private func actionTitle(for event: CachedEvent) -> String {
+    event.action.sparkActionTitle
 }
 
 private func isBalanceSnapshot(_ event: CachedEvent) -> Bool {

@@ -15,6 +15,7 @@ public final class CachedEvent {
     public var url: String?
     public var displayName: String?
     public var hidden: Bool = false
+    public var displayWithObject: Bool = false
     public var displayValue: String?
     public var tagNames: String?
     public var blocksCount: Int?
@@ -37,6 +38,7 @@ public final class CachedEvent {
         url: String? = nil,
         displayName: String? = nil,
         hidden: Bool = false,
+        displayWithObject: Bool = false,
         displayValue: String? = nil,
         tagNames: String? = nil,
         blocksCount: Int? = nil,
@@ -58,6 +60,7 @@ public final class CachedEvent {
         self.url = url
         self.displayName = displayName
         self.hidden = hidden
+        self.displayWithObject = displayWithObject
         self.displayValue = displayValue
         self.tagNames = tagNames
         self.blocksCount = blocksCount

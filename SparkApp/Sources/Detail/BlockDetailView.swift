@@ -53,7 +53,9 @@ struct BlockDetailView: View {
                     LoadingShimmerCard()
                 }
             }
-            .padding(SparkSpacing.lg)
+            .padding(.horizontal, SparkSpacing.lg)
+            .padding(.top, SparkSpacing.xxl)
+            .padding(.bottom, SparkSpacing.xl)
         }
         .sparkAppBackground()
         .navigationTitle("Block")
@@ -87,14 +89,10 @@ struct BlockDetailView: View {
 
     @ViewBuilder
     private func content(for detail: BlockDetail) -> some View {
-        heroCard(for: detail.block)
-
-        if isValueBlock(detail.block), let value = detail.block.value {
-            valueCard(value: value, unit: detail.block.unit)
-        }
+        heroSection(for: detail)
 
         if let body = detail.block.content, !body.isEmpty {
-            GlassCard {
+            GlassCard(radius: SparkRadii.lg, padding: SparkSpacing.lg) {
                 Text(LocalizedStringKey(body))
                     .font(SparkTypography.body)
                     .accessibilityLabel(body)
@@ -102,81 +100,64 @@ struct BlockDetailView: View {
         }
 
         if let summary = detail.aiSummary, !summary.isEmpty {
-            GlassCard {
-                HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.sm) {
-                    Image(systemName: "sparkles")
-                        .font(.caption)
-                        .foregroundStyle(Color.sparkAccent)
-                    Text(summary)
-                        .font(SparkTypography.bodySmall)
-                        .italic()
-                        .foregroundStyle(.secondary)
-                }
-            }
+            SparkDetailInsightCard(label: "Insight", text: summary)
         }
 
         if let parent = detail.event {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                SectionLabel("From event")
-                GlassCard(radius: SparkRadii.md, padding: SparkSpacing.md) {
-                    HStack {
-                        Text(parent.action.capitalized)
-                            .font(SparkTypography.bodySmall)
-                        Spacer(minLength: 0)
-                        if let time = parent.time {
-                            Text(Self.shortTimeFormatter.string(from: time))
-                                .font(SparkTypography.monoSmall)
-                                .foregroundStyle(.secondary)
-                        }
-                        Image(systemName: "chevron.right")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+                SparkDetailSectionHeader("From event")
+                NavigationLink {
+                    EventDetailView(eventId: parent.id)
+                } label: {
+                    SparkDetailLinkedRow(
+                        title: eventTitle(for: parent),
+                        subtitle: parent.time.map { SparkDetailFormatters.compactDateTime.string(from: $0) },
+                        trailing: parent.displayValue?.sparkPlainTextFromHTMLFragment ?? parent.value?.sparkPlainTextFromHTMLFragment,
+                        tint: Color.domainTint(for: parent.domain)
+                    )
                 }
+                .buttonStyle(.plain)
             }
         }
     }
 
-    private func heroCard(for block: Block) -> some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                SectionLabel(block.blockType.replacingOccurrences(of: "_", with: " "))
-                Text(block.title)
-                    .font(SparkFonts.display(.title2, weight: .bold))
-                    .accessibilityAddTraits(.isHeader)
-                if let time = block.time {
-                    Text(Self.shortTimeFormatter.string(from: time))
-                        .font(SparkTypography.monoSmall)
-                        .foregroundStyle(.secondary)
-                }
-            }
+    private func heroSection(for detail: BlockDetail) -> some View {
+        SparkDetailHero(
+            eyebrow: blockEyebrow(for: detail.block),
+            status: detail.event?.action.humanisedAction,
+            title: detail.block.title,
+            subtitle: detail.event?.time.map { "From event on \(SparkDetailFormatters.compactDateTime.string(from: $0))" },
+            value: blockDisplayValue(for: detail.block),
+            valueTint: .sparkAccent
+        )
+    }
+
+    private func blockEyebrow(for block: Block) -> String {
+        var parts = [block.blockType.replacingOccurrences(of: "_", with: " ").uppercased()]
+        if let time = block.time {
+            parts.append(SparkDetailFormatters.shortDate.string(from: time))
+            parts.append(SparkDetailFormatters.shortTime.string(from: time))
         }
+        return parts.joined(separator: " — ")
     }
 
-    private func valueCard(value: String, unit: String?) -> some View {
-        GlassCard {
-            HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.sm) {
-                Text(value)
-                    .font(SparkFonts.display(.largeTitle, weight: .bold))
-                    .foregroundStyle(Color.sparkAccent)
-                if let unit {
-                    Text(unit)
-                        .font(SparkTypography.bodySmall)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("\(value)\(unit.map { " \($0)" } ?? "")")
+    private func blockDisplayValue(for block: Block) -> String? {
+        guard let value = block.value?.sparkPlainTextFromHTMLFragment, !value.isEmpty else { return nil }
+        guard let unit = block.unit, !unit.isEmpty else { return value }
+        if value.localizedCaseInsensitiveContains(unit) {
+            return value
         }
+        return "\(value) \(unit)"
     }
 
-    private func isValueBlock(_ block: Block) -> Bool {
-        block.blockType.lowercased().contains("value") && block.value != nil
+    private func eventTitle(for event: Event) -> String {
+        let action = event.action.sparkActionTitle
+        guard event.displayWithObject,
+              let target = event.target?.title.trimmingCharacters(in: .whitespacesAndNewlines),
+              !target.isEmpty
+        else {
+            return action
+        }
+        return "\(action) \(target)"
     }
-
-    private static let shortTimeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "d MMM, HH:mm"
-        return f
-    }()
 }

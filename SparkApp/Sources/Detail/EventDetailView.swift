@@ -7,8 +7,6 @@ struct EventDetailView: View {
     let eventId: String
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: EventDetailViewModel?
-    @State private var showShareSheet = false
-    @State private var showDeleteConfirm = false
     @State private var showNoteEditor = false
     @State private var noteDraft = ""
     @State private var noteError: String?
@@ -32,7 +30,8 @@ struct EventDetailView: View {
                 }
             }
             .padding(.horizontal, SparkSpacing.lg)
-            .padding(.vertical, SparkSpacing.lg)
+            .padding(.top, SparkSpacing.xxl)
+            .padding(.bottom, SparkSpacing.xl)
         }
         .sparkAppBackground()
         .navigationBarTitleDisplayMode(.inline)
@@ -62,9 +61,13 @@ struct EventDetailView: View {
             TagChipRow(detail.tags.names)
         }
 
+        metricBaselineStatusRow()
+
         if let loc = detail.location {
             eventMapCard(loc)
         }
+
+        linkedObjectsSection(for: detail)
 
         if !detail.blocks.isEmpty {
             blocksGrid(detail.blocks)
@@ -75,75 +78,144 @@ struct EventDetailView: View {
         }
 
         noteSection(for: detail)
-
-        quickActionsBar(for: detail)
     }
 
     // MARK: - Cinematic hero
 
     private func heroSection(for detail: EventDetail) -> some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: SparkSpacing.xs) {
-                Text(eyebrow(for: detail.event))
-                    .font(SparkTypography.monoSmall)
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .lineLimit(1)
-
-                Text(detail.event.displayName ?? detail.event.action.humanisedAction)
-                    .font(SparkTypography.bodySmall)
-                    .foregroundStyle(.secondary)
-
-                if let actor = detail.actor {
-                    Text(actor.title)
-                        .font(SparkFonts.display(.title, weight: .bold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(2)
-                }
-
-                if let target = detail.target {
-                    Text(target.title)
-                        .font(SparkTypography.body)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-
-                if let value = displayValue(for: detail.event) {
-                    Text(value)
-                        .font(SparkFonts.display(.largeTitle, weight: .bold))
-                        .foregroundStyle(Color.domainTint(for: detail.event.domain))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                        .padding(.top, SparkSpacing.xs)
-                }
-            }
-        }
+        SparkDetailHero(
+            eyebrow: eyebrow(for: detail.event),
+            status: nil,
+            title: heroTitle(for: detail),
+            subtitle: heroSubtitle(for: detail),
+            value: displayValue(for: detail.event),
+            valueTint: Color.domainTint(for: detail.event.domain),
+            valueAlignment: .trailing
+        )
     }
 
     private func eyebrow(for event: Event) -> String {
         var parts: [String] = [event.service.uppercased()]
         if let time = event.time {
-            parts.append(Self.dateFormatter.string(from: time))
-            parts.append(Self.timeFormatter.string(from: time))
+            parts.append(SparkDetailFormatters.shortDate.string(from: time))
+            parts.append(SparkDetailFormatters.shortTime.string(from: time))
         }
         return parts.joined(separator: " — ")
+    }
+
+    private func heroTitle(for detail: EventDetail) -> String {
+        eventTitle(for: detail.event)
+    }
+
+    private func heroSubtitle(for detail: EventDetail) -> String? {
+        if let tldr = detail.event.tldr, !tldr.isEmpty {
+            return tldr
+        }
+        return nil
+    }
+
+    // MARK: - Linked objects
+
+    @ViewBuilder
+    private func linkedObjectsSection(for detail: EventDetail) -> some View {
+        let links = linkedObjects(for: detail)
+        if !links.isEmpty {
+            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                SparkDetailSectionHeader("Objects", trailing: "\(links.count) linked")
+                ForEach(links) { link in
+                    NavigationLink {
+                        ObjectDetailView(objectId: link.id)
+                    } label: {
+                        SparkDetailLinkedRow(
+                            title: link.title,
+                            subtitle: link.subtitle,
+                            trailing: link.role
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func linkedObjects(for detail: EventDetail) -> [LinkedEventObject] {
+        [
+            linkedObject(from: detail.actor, role: "Actor"),
+            linkedObject(from: detail.target, role: "Target")
+        ].compactMap { $0 }
+    }
+
+    private func linkedObject(from object: EventDetail.ActorTarget?, role: String) -> LinkedEventObject? {
+        guard let object, let id = object.id, !id.isEmpty else { return nil }
+        let subtitle = [
+            object.concept?.replacingOccurrences(of: "_", with: " "),
+            object.type?.replacingOccurrences(of: "_", with: " ")
+        ]
+            .compactMap { value -> String? in
+                guard let value, !value.isEmpty else { return nil }
+                return value
+            }
+            .joined(separator: " — ")
+        return LinkedEventObject(
+            id: id,
+            role: role,
+            title: object.title,
+            subtitle: subtitle.isEmpty ? object.subtitle : subtitle
+        )
     }
 
     // MARK: - AI summary callout
 
     private func aiCalloutCard(_ summary: String) -> some View {
-        GlassCard(tint: Color.sparkAccent.opacity(0.06)) {
-            HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.sm) {
-                Image(systemName: "sparkles")
-                    .font(.caption)
-                    .foregroundStyle(Color.sparkAccent)
-                Text(summary)
-                    .font(SparkTypography.bodySmall)
+        SparkDetailInsightCard(label: "Insight", text: summary, tint: Color.domainTint(for: "anomaly"))
+    }
+
+    // MARK: - Metric baseline
+
+    @ViewBuilder
+    private func metricBaselineStatusRow() -> some View {
+        if let status = viewModel?.metricBaselineStatus {
+            NavigationLink {
+                MetricDetailView(identifier: status.metricIdentifier)
+            } label: {
+                metricBaselineStatusCard(status)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func metricBaselineStatusCard(_ status: MetricBaselineStatus) -> some View {
+        let tint = metricBaselineTint(for: status.state)
+        return GlassCard(radius: SparkRadii.md, padding: SparkSpacing.md, tint: tint?.opacity(0.08)) {
+            HStack(alignment: .center, spacing: SparkSpacing.md) {
+                Text(status.title)
+                    .font(SparkTypography.bodyStrong)
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+
+                Spacer(minLength: SparkSpacing.sm)
+
+                Text(status.trailing)
+                    .font(SparkTypography.bodyStrong)
+                    .foregroundStyle(tint ?? .secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Insight: \(summary)")
+        .accessibilityLabel("\(status.title), \(status.trailing)")
+    }
+
+    private func metricBaselineTint(for state: MetricBaselineStatus.State) -> Color? {
+        switch state {
+        case .normal: nil
+        case .high: .sparkError
+        case .low: .sparkInfo
+        }
     }
 
     // MARK: - Map
@@ -154,20 +226,28 @@ struct EventDetailView: View {
             center: coordinate,
             span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
         )
-        return Map(initialPosition: .region(region)) {
-            Marker("", coordinate: coordinate)
-                .tint(Color.sparkAccent)
+        return VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+            SparkDetailSectionHeader("Location")
+
+            Map(initialPosition: .region(region)) {
+                Marker("", coordinate: coordinate)
+                    .tint(Color.sparkAccent)
+            }
+            .frame(height: 180)
+            .clipShape(RoundedRectangle(cornerRadius: SparkRadii.lg))
+            .overlay {
+                RoundedRectangle(cornerRadius: SparkRadii.lg)
+                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            }
+            .allowsHitTesting(false)
         }
-        .frame(height: 180)
-        .clipShape(RoundedRectangle(cornerRadius: SparkRadii.lg))
-        .allowsHitTesting(false)
     }
 
     // MARK: - Blocks grid
 
     private func blocksGrid(_ blocks: [Block]) -> some View {
         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-            SectionLabel("Linked blocks (\(blocks.count))")
+            SparkDetailSectionHeader("Blocks", trailing: "\(blocks.count) blocks")
             LazyVGrid(
                 columns: [GridItem(.flexible(), spacing: SparkSpacing.sm), GridItem(.flexible(), spacing: SparkSpacing.sm)],
                 spacing: SparkSpacing.sm
@@ -185,25 +265,12 @@ struct EventDetailView: View {
     }
 
     private func blockTile(_ block: Block) -> some View {
-        GlassCard(radius: SparkRadii.md, padding: SparkSpacing.md) {
-            VStack(alignment: .leading, spacing: SparkSpacing.xs) {
-                Text(block.blockType.replacingOccurrences(of: "_", with: " "))
-                    .font(SparkTypography.monoSmall)
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .lineLimit(1)
-                Text(block.title)
-                    .font(SparkTypography.bodySmall)
-                    .fontWeight(.semibold)
-                    .lineLimit(2)
-                if let value = block.value {
-                    Text(value.sparkPlainTextFromHTMLFragment)
-                        .font(SparkTypography.bodyStrong)
-                        .foregroundStyle(Color.sparkAccent)
-                        .lineLimit(1)
-                }
-            }
-        }
+        SparkDetailValueTile(
+            label: block.blockType.replacingOccurrences(of: "_", with: " "),
+            value: block.value?.sparkPlainTextFromHTMLFragment ?? block.title,
+            subtitle: block.value == nil ? nil : block.title,
+            tint: Color.sparkAccent
+        )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(block.title), \(block.blockType.replacingOccurrences(of: "_", with: " "))")
     }
@@ -212,25 +279,9 @@ struct EventDetailView: View {
 
     private func relatedSection(_ related: [EventDetail.RelatedEvent]) -> some View {
         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-            SectionLabel("Related")
+            SparkDetailSectionHeader("Related")
             ForEach(related) { rel in
-                GlassCard(radius: SparkRadii.md, padding: SparkSpacing.md) {
-                    HStack(spacing: SparkSpacing.md) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(rel.title)
-                                .font(SparkTypography.bodySmall)
-                            if let meta = rel.meta {
-                                Text(meta)
-                                    .font(SparkTypography.monoSmall)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                SparkDetailLinkedRow(title: rel.title, subtitle: rel.meta, trailing: nil)
             }
         }
     }
@@ -332,7 +383,7 @@ struct EventDetailView: View {
             ?? SparkPrettyJSON.fallback(
                 entity: "event",
                 id: detail.event.id,
-                title: detail.event.displayName ?? detail.event.action.humanisedAction
+                title: eventTitle(for: detail.event)
             )
     }
 
@@ -343,62 +394,8 @@ struct EventDetailView: View {
         if let url = detail.event.url.flatMap(URL.init) {
             return [url]
         }
-        return [detail.event.displayName ?? detail.event.action.humanisedAction]
+        return [eventTitle(for: detail.event)]
     }
-    // MARK: - Quick actions bar
-
-    private func quickActionsBar(for detail: EventDetail) -> some View {
-        HStack(spacing: SparkSpacing.sm) {
-            quickAction(icon: "bookmark", label: "Bookmark") {}
-            quickAction(icon: "square.and.arrow.up", label: "Share") {
-                showShareSheet = true
-            }
-            quickAction(icon: "tag", label: "Tag") {}
-        }
-        .sheet(isPresented: $showShareSheet) {
-            if let url = detail.event.url.flatMap(URL.init) {
-                SparkShareSheet(items: [url])
-            } else {
-                SparkShareSheet(items: [detail.event.displayName ?? detail.event.action.humanisedAction])
-            }
-        }
-    }
-
-    private func quickAction(icon: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 16, weight: .semibold))
-                Text(label)
-                    .font(SparkTypography.monoSmall)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, SparkSpacing.sm)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
-        .sparkGlass(.roundedRect(SparkRadii.md))
-    }
-
-    // MARK: - Formatters
-
-    private static let dateFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "d MMM yyyy"
-        return f
-    }()
-
-    private static let timeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm"
-        return f
-    }()
-
-    private static let fullTimeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd  HH:mm:ss ZZZZZ"
-        return f
-    }()
 
     private func formattedHeroValue(_ v: String, unit: String?) -> String {
         let plainValue = v.sparkPlainTextFromHTMLFragment
@@ -423,20 +420,22 @@ struct EventDetailView: View {
         }
         return event.value.map { formattedHeroValue($0, unit: event.unit) }?.sparkPlainTextFromHTMLFragment
     }
+
+    private func eventTitle(for event: Event) -> String {
+        let action = event.action.sparkActionTitle
+        guard event.displayWithObject,
+              let target = event.target?.title.trimmingCharacters(in: .whitespacesAndNewlines),
+              !target.isEmpty
+        else {
+            return action
+        }
+        return "\(action) \(target)"
+    }
 }
 
-// MARK: - Domain tint
-
-extension Color {
-    static func domainTint(for domain: String) -> Color {
-        switch domain.lowercased() {
-        case "health": .domainHealth
-        case "activity": .domainActivity
-        case "money": .domainMoney
-        case "media": .domainMedia
-        case "knowledge": .domainKnowledge
-        case "anomaly": .domainAnomaly
-        default: .sparkAccent
-        }
-    }
+private struct LinkedEventObject: Identifiable {
+    let id: String
+    let role: String
+    let title: String
+    let subtitle: String?
 }

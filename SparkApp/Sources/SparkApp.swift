@@ -284,6 +284,7 @@ enum SparkObservability {
     }
 
     static func captureHandled(_ error: Error) {
+        guard !error.isAPICancellation else { return }
         SentrySDK.capture(error: error) { scope in
             scope.setTag(value: "handled", key: "error_type")
         }

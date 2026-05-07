@@ -248,9 +248,11 @@ private struct MoneyMerchantRow: View {
                     .fontWeight(.semibold)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                Text("\(merchant.count) transaction\(merchant.count == 1 ? "" : "s")")
-                    .font(SparkTypography.monoSmall)
-                    .foregroundStyle(.secondary)
+                if let count = merchant.count {
+                    Text("\(count) transaction\(count == 1 ? "" : "s")")
+                        .font(SparkTypography.monoSmall)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Spacer(minLength: SparkSpacing.sm)

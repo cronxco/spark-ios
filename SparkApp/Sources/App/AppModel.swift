@@ -56,6 +56,8 @@ final class AppModel {
     var lastError: String?
     var pendingRoute: AppRoute?
     private(set) var profile: UserProfile?
+    private var deviceRegistrationTask: Task<Void, Never>?
+    private var deviceRegistrationTokenInFlight: String?
 
     init(container: ModelContainer) {
         self.container = container
@@ -153,30 +155,51 @@ final class AppModel {
     }
 
     func registerDevice() async {
-        guard let apnsToken = UserDefaults.sparkAppGroup.string(forKey: "spark.apnsToken") else { return }
+        guard session == .loggedIn, await tokenStore.accessToken() != nil else { return }
 
-        #if canImport(UIKit)
-        let name = UIDevice.current.name
-        let osVersion = UIDevice.current.systemVersion
-        #else
-        let name = "Unknown"
-        let osVersion = "Unknown"
-        #endif
+        while true {
+            guard let apnsToken = UserDefaults.sparkAppGroup.string(forKey: "spark.apnsToken") else { return }
 
-        let info = Bundle.main.infoDictionary
-        let appVersion = info?["CFBundleShortVersionString"] as? String ?? "0.0.0"
-        let bundleId = Bundle.main.bundleIdentifier ?? "co.cronx.sparkapp"
-        #if DEBUG
-        let appEnvironment = "sandbox"
-        #else
-        let appEnvironment = "production"
-        #endif
+            if let deviceRegistrationTask {
+                let tokenInFlight = deviceRegistrationTokenInFlight
+                await deviceRegistrationTask.value
+                if tokenInFlight == apnsToken {
+                    return
+                }
+                continue
+            }
 
-        _ = try? await apiClient.request(DevicesEndpoint.register(
-            name: name, platform: "ios",
-            apnsToken: apnsToken, appEnvironment: appEnvironment,
-            appVersion: appVersion, bundleId: bundleId, osVersion: osVersion
-        ))
+            let task = Task { @MainActor [apiClient] in
+            #if canImport(UIKit)
+                let name = UIDevice.current.name
+                let osVersion = UIDevice.current.systemVersion
+            #else
+                let name = "Unknown"
+                let osVersion = "Unknown"
+            #endif
+
+                let info = Bundle.main.infoDictionary
+                let appVersion = info?["CFBundleShortVersionString"] as? String ?? "0.0.0"
+                let bundleId = Bundle.main.bundleIdentifier ?? "co.cronx.sparkapp"
+            #if DEBUG
+                let appEnvironment = "sandbox"
+            #else
+                let appEnvironment = "production"
+            #endif
+
+                _ = try? await apiClient.request(DevicesEndpoint.register(
+                    name: name, platform: "ios",
+                    apnsToken: apnsToken, appEnvironment: appEnvironment,
+                    appVersion: appVersion, bundleId: bundleId, osVersion: osVersion
+                ))
+            }
+            deviceRegistrationTokenInFlight = apnsToken
+            deviceRegistrationTask = task
+            await task.value
+            deviceRegistrationTask = nil
+            deviceRegistrationTokenInFlight = nil
+            return
+        }
     }
 
     func signIn(anchor: ASPresentationAnchorHandle) async {
@@ -184,6 +207,7 @@ final class AppModel {
             try await authService.signIn(presentationAnchor: anchor.value)
             session = .loggedIn
             await fetchAndCacheUserId()
+            await registerDevice()
             lastError = nil
         } catch AuthenticationError.cancelled {
             lastError = nil

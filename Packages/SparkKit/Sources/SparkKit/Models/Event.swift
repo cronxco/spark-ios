@@ -12,6 +12,7 @@ public struct Event: Codable, Sendable, Hashable, Identifiable {
     public let url: String?
     public let displayName: String?
     public let hidden: Bool
+    public let displayWithObject: Bool
     public let displayValue: String?
     public let tags: [EventTag]
     public let tldr: String?
@@ -22,6 +23,7 @@ public struct Event: Codable, Sendable, Hashable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case id, time, service, domain, action, value, unit, url, hidden, tags, tldr, actor, target
         case displayName = "display_name"
+        case displayWithObject = "display_with_object"
         case displayValue = "display_value"
         case blocksCount = "blocks_count"
     }
@@ -58,6 +60,7 @@ public struct Event: Codable, Sendable, Hashable, Identifiable {
         url: String? = nil,
         displayName: String? = nil,
         hidden: Bool = false,
+        displayWithObject: Bool = false,
         displayValue: String? = nil,
         tags: [EventTag] = [],
         tldr: String? = nil,
@@ -75,6 +78,7 @@ public struct Event: Codable, Sendable, Hashable, Identifiable {
         self.url = url
         self.displayName = displayName
         self.hidden = hidden
+        self.displayWithObject = displayWithObject
         self.displayValue = displayValue
         self.tags = tags
         self.tldr = tldr
@@ -94,6 +98,7 @@ public struct Event: Codable, Sendable, Hashable, Identifiable {
         url = try container.decodeIfPresent(String.self, forKey: .url)
         displayName = try container.decodeIfPresent(String.self, forKey: .displayName)
         hidden = try container.decodeIfPresent(Bool.self, forKey: .hidden) ?? false
+        displayWithObject = try container.decodeIfPresent(Bool.self, forKey: .displayWithObject) ?? false
         displayValue = try container.decodeIfPresent(String.self, forKey: .displayValue)
         tags = try container.decodeIfPresent([EventTag].self, forKey: .tags) ?? []
         tldr = try container.decodeIfPresent(String.self, forKey: .tldr)

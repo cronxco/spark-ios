@@ -11,6 +11,35 @@ public enum APIError: Error, Sendable {
     case noData
 }
 
+public extension APIError {
+    var isCancellation: Bool {
+        switch self {
+        case .transport(let error):
+            return error.isAPICancellation
+        default:
+            return false
+        }
+    }
+}
+
+public extension Error {
+    var isAPICancellation: Bool {
+        if #available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *) {
+            if self is CancellationError {
+                return true
+            }
+        }
+        if let apiError = self as? APIError {
+            return apiError.isCancellation
+        }
+        if let urlError = self as? URLError {
+            return urlError.code == .cancelled
+        }
+        let nsError = self as NSError
+        return nsError.domain == NSURLErrorDomain && nsError.code == URLError.cancelled.rawValue
+    }
+}
+
 /// Generic async/await HTTP client with:
 /// - `If-None-Match` / 304 short-circuit via `ETagCache`
 /// - automatic 401 → token refresh → retry once
@@ -27,7 +56,7 @@ public actor APIClient {
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
     private let logger = Logger(subsystem: "co.cronx.sparkapp", category: "APIClient")
-    private var refreshTask: Task<AuthTokens, Error>?
+    private static let refreshCoordinator = TokenRefreshCoordinator()
 
     public init(
         environment: APIEnvironment = .current(),
@@ -101,6 +130,9 @@ public actor APIClient {
         do {
             (data, response) = try await session.data(for: request, delegate: metricsCollector)
         } catch {
+            if error.isAPICancellation {
+                throw APIError.transport(error)
+            }
             await captureTelemetry(
                 operation: "http.client",
                 endpoint: endpoint,
@@ -275,43 +307,36 @@ public actor APIClient {
     }
 
     private func refreshTokens() async throws -> AuthTokens {
-        if let refreshTask {
-            return try await refreshTask.value
-        }
-
         guard let refreshToken = await tokenStore.refreshToken() else {
             throw APIError.unauthorized
         }
 
-        let task = Task { [tokenStore] in
-            let tokens = try await self.perform(
-                AuthEndpoint.refresh(refreshToken: refreshToken),
-                absoluteBase: true,
-                allowRefresh: false,
-                isRefreshRequest: true
-            )
-            let authTokens = AuthTokens(
-                accessToken: tokens.accessToken,
-                refreshToken: tokens.refreshToken,
-                expiresIn: tokens.expiresIn
-            )
-            await tokenStore.store(
-                access: authTokens.accessToken,
-                refresh: authTokens.refreshToken,
-                expiresIn: authTokens.expiresIn
-            )
-            return authTokens
-        }
-        refreshTask = task
-
         do {
-            let tokens = try await task.value
-            refreshTask = nil
-            return tokens
+            return try await Self.refreshCoordinator.refresh(refreshToken: refreshToken) { [tokenStore] in
+                let tokens = try await self.perform(
+                    AuthEndpoint.refresh(refreshToken: refreshToken),
+                    absoluteBase: true,
+                    allowRefresh: false,
+                    isRefreshRequest: true
+                )
+                let authTokens = AuthTokens(
+                    accessToken: tokens.accessToken,
+                    refreshToken: tokens.refreshToken,
+                    expiresIn: tokens.expiresIn
+                )
+                await tokenStore.store(
+                    access: authTokens.accessToken,
+                    refresh: authTokens.refreshToken,
+                    expiresIn: authTokens.expiresIn
+                )
+                return authTokens
+            }
         } catch {
-            refreshTask = nil
             if case APIError.unauthorized = error {
-                await tokenStore.clear()
+                let currentRefreshToken = await tokenStore.refreshToken()
+                if currentRefreshToken == nil || currentRefreshToken == refreshToken {
+                    await tokenStore.clear()
+                }
             }
             throw error
         }
@@ -407,6 +432,33 @@ public actor APIClient {
             return "/\(normalizedBase)"
         }
         return "/\(normalizedBase)/\(normalizedEndpoint)"
+    }
+}
+
+private actor TokenRefreshCoordinator {
+    private var tasks: [String: Task<AuthTokens, Error>] = [:]
+
+    func refresh(
+        refreshToken: String,
+        operation: @escaping @Sendable () async throws -> AuthTokens
+    ) async throws -> AuthTokens {
+        if let task = tasks[refreshToken] {
+            return try await task.value
+        }
+
+        let task = Task {
+            try await operation()
+        }
+        tasks[refreshToken] = task
+
+        do {
+            let tokens = try await task.value
+            tasks[refreshToken] = nil
+            return tokens
+        } catch {
+            tasks[refreshToken] = nil
+            throw error
+        }
     }
 }
 
