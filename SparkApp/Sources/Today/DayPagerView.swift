@@ -47,6 +47,8 @@ struct DayPagerView: View {
                             PlaceDetailView(placeId: id)
                         case .integration(let service):
                             IntegrationDetailView(integrationId: service)
+                        case .account(let id):
+                            AccountDetailView(accountId: id)
                         }
                     }
             }
@@ -81,6 +83,8 @@ struct DayPagerView: View {
             push(.place(id: id))
         case .integration(let service):
             push(.integration(service: service))
+        case .account(let id):
+            push(.account(id: id))
         }
         appModel.pendingRoute = nil
     }
@@ -108,6 +112,7 @@ enum DetailRoute: Hashable {
     case metric(identifier: String)
     case place(id: String)
     case integration(service: String)
+    case account(id: String)
 }
 
 private struct DayKey: Identifiable, Hashable {

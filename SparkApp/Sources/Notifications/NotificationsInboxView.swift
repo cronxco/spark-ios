@@ -28,6 +28,8 @@ struct NotificationsInboxView: View {
                         PlaceDetailView(placeId: id)
                     case .integration(let service):
                         IntegrationDetailView(integrationId: service)
+                    case .account(let id):
+                        AccountDetailView(accountId: id)
                     }
                 }
                 .toolbar {

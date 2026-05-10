@@ -22,6 +22,7 @@ enum AppRoute: Hashable {
     case metric(identifier: String)
     case place(id: String)
     case integration(service: String)
+    case account(id: String)
 }
 
 @MainActor
@@ -55,7 +56,13 @@ final class AppModel {
     var onboardingComplete: Bool
     var lastError: String?
     var pendingRoute: AppRoute?
-    private(set) var profile: UserProfile?
+    private(set) var profile: UserProfile? {
+        didSet {
+            if let name = profile?.name {
+                UserDefaults.sparkAppGroup.set(name, forKey: "spark.profile.name")
+            }
+        }
+    }
     private var deviceRegistrationTask: Task<Void, Never>?
     private var deviceRegistrationTokenInFlight: String?
 
@@ -70,9 +77,13 @@ final class AppModel {
         self.authService = AuthenticationService(tokenStore: tokenStore, apiClient: client)
         self.reverb = ReverbClient(tokenStore: tokenStore)
         self.onboardingComplete = UserDefaults(suiteName: "group.co.cronx.sparkapp")?.bool(forKey: "onboarding.completed") == true
+        if let cachedName = UserDefaults.sparkAppGroup.string(forKey: "spark.profile.name"), !cachedName.isEmpty {
+            self.profile = UserProfile(id: "", name: cachedName, email: "")
+        }
     }
 
     func bootstrap() async {
+        clearLegacyCheckInKeysIfNeeded()
         if let token = await tokenStore.accessToken() {
             onboardingComplete = true
             session = .loggedIn
@@ -85,6 +96,16 @@ final class AppModel {
         } else {
             session = .loggedOut
         }
+    }
+
+    private static let legacyCheckInMigrationKey = "spark.checkin.legacyCleared.v1"
+
+    private func clearLegacyCheckInKeysIfNeeded() {
+        let defaults = UserDefaults.sparkAppGroup
+        guard !defaults.bool(forKey: Self.legacyCheckInMigrationKey) else { return }
+        let legacyKeys = defaults.dictionaryRepresentation().keys.filter { $0.hasPrefix("checkin_") }
+        for key in legacyKeys { defaults.removeObject(forKey: key) }
+        defaults.set(true, forKey: Self.legacyCheckInMigrationKey)
     }
 
     private func wireReverbHandler() async {

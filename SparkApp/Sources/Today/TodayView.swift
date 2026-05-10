@@ -10,9 +10,15 @@ struct TodayView: View {
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: TodayViewModel?
     @State private var showCheckIn = false
+    @State private var showHistory = false
+    @State private var checkInInitialPeriod: CheckInPeriod = .morning
 
     var body: some View {
-        let snapshot = TodaySnapshot(summary: viewModel?.cached, date: date)
+        let snapshot = TodaySnapshot(
+            summary: viewModel?.cached,
+            date: date,
+            checkInStatus: viewModel?.checkInDayStatus ?? .allPending
+        )
 
         ZStack {
             SparkResolvedAppBackground()
@@ -25,9 +31,18 @@ struct TodayView: View {
 
                     anomalyPill(for: snapshot)
 
-                    CheckInCard(status: snapshot.checkInStatus) {
-                        showCheckIn = true
-                    }
+                    CheckInCard(
+                        status: snapshot.checkInStatus,
+                        onTapMorning: {
+                            checkInInitialPeriod = .morning
+                            showCheckIn = true
+                        },
+                        onTapAfternoon: {
+                            checkInInitialPeriod = .afternoon
+                            showCheckIn = true
+                        },
+                        showHistory: $showHistory
+                    )
 
                     FeedSection(date: date)
 
@@ -44,11 +59,13 @@ struct TodayView: View {
         }
         .sparkMainAppToolbar(isVisible: showsToolbar)
         .sheet(isPresented: $showCheckIn) {
-            let snapshot = TodaySnapshot(summary: viewModel?.cached, date: date)
-            if case .pending(let slot) = snapshot.checkInStatus {
-                CheckInModalView(slot: slot.rawValue, date: date)
-            } else {
-                CheckInModalView(slot: SparkTimeOfDay.from(date: .now).rawValue, date: date)
+            if let vm = viewModel {
+                CheckInModalView(viewModel: vm, date: date, initialPeriod: checkInInitialPeriod)
+            }
+        }
+        .sheet(isPresented: $showHistory) {
+            if let vm = viewModel {
+                CheckInHistoryView(apiClient: appModel.apiClient, container: appModel.container, todayViewModel: vm)
             }
         }
         .task(id: date) {
@@ -84,10 +101,12 @@ struct TodayView: View {
             .accessibilityLabel(title.replacingOccurrences(of: "\n", with: " "))
             .accessibilityAddTraits(.isHeader)
 
-            if let subtitle = heroSubtitle(snapshot: snapshot) {
+            if let subtitle = viewModel?.briefingSummaryLine {
                 Text(subtitle)
                     .font(SparkTypography.body)
                     .foregroundStyle(Color.secondary)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -122,33 +141,11 @@ struct TodayView: View {
         return name.split(separator: " ").first.map(String.init) ?? "Your"
     }
 
-    private func heroSubtitle(snapshot: TodaySnapshot) -> String? {
-        var parts: [String] = []
-        if let dur = snapshot.health?.sleepDurationMinutes {
-            parts.append("slept \(dur / 60)h \(dur % 60)m")
-        }
-        if let steps = snapshot.activity?.steps {
-            parts.append("walked \(formatSteps(steps)) steps")
-        }
-        if let display = snapshot.money?.spentTodayDisplay {
-            parts.append("spent \(display)")
-        }
-        guard !parts.isEmpty else { return nil }
-        return "You " + parts.joined(separator: ", ") + " so far."
-    }
-
     private static let dayTitleFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "EEEE\nd MMMM yyyy"
         return f
     }()
-
-    private func formatSteps(_ count: Int) -> String {
-        if count >= 1_000 {
-            return String(format: "%.1fk", Double(count) / 1_000)
-        }
-        return String(count)
-    }
 
     // MARK: - Anomaly pill
 

@@ -11,6 +11,7 @@ final class SentryAPITelemetrySink: APITelemetrySink, @unchecked Sendable {
 
         guard event.outcome != .success, event.outcome != .notModified else { return }
         guard !isExpectedMetricMiss(event) else { return }
+        guard !isCancelledRequest(event) else { return }
 
         let message = "API \(event.outcome.sentryName): \(event.method) \(event.url.host() ?? "")\(event.url.path)"
         SentrySDK.capture(message: message) { scope in
@@ -110,6 +111,12 @@ final class SentryAPITelemetrySink: APITelemetrySink, @unchecked Sendable {
         }
 
         return context
+    }
+
+    private func isCancelledRequest(_ event: APITelemetryEvent) -> Bool {
+        guard event.outcome == .transportError else { return false }
+        return event.errorDescription?.contains("Code=-999") == true
+            || event.errorDescription?.contains("cancelled") == true
     }
 
     private func isExpectedMetricMiss(_ event: APITelemetryEvent) -> Bool {

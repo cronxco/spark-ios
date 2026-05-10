@@ -88,6 +88,7 @@ struct ProfileView: View {
                                 Text(mode.displayName).tag(mode.rawValue)
                             }
                         }
+                        .pickerStyle(.segmented)
                     }
                 }
             }

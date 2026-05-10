@@ -31,6 +31,8 @@ struct MapView: View {
                         MetricDetailView(identifier: identifier)
                     case .integration(let service):
                         IntegrationDetailView(integrationId: service)
+                    case .account(let id):
+                        AccountDetailView(accountId: id)
                     }
                 }
                 .sparkMainNavigationTitle("Map")
