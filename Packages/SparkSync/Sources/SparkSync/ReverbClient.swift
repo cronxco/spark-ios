@@ -64,6 +64,11 @@ public actor ReverbClient {
 
     // MARK: - Public API
 
+    /// Current connection state — safe to call from any context.
+    public func connectionStatus() async -> (isConnected: Bool, socketId: String?) {
+        (isConnected, socketId)
+    }
+
     /// Register a handler that receives every broadcast event. Thread-safe.
     public func addHandler(_ handler: @escaping EventHandler) {
         handlers.append(handler)

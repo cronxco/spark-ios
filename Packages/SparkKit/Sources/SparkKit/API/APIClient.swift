@@ -11,6 +11,52 @@ public enum APIError: Error, Sendable {
     case noData
 }
 
+extension APIError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .invalidURL:
+            return "The API URL is invalid."
+        case .transport(let error):
+            return "Network error: \(error.localizedDescription)"
+        case .unauthorized:
+            return "Your session has expired. Please sign in again."
+        case .notModified:
+            return "The requested data has not changed."
+        case .httpStatus(let status, let data, let url):
+            return Self.httpStatusDescription(status: status, data: data, url: url)
+        case .decoding(let error):
+            return "The server response could not be read: \(error.localizedDescription)"
+        case .noData:
+            return "The server returned an invalid response."
+        }
+    }
+
+    private static func httpStatusDescription(status: Int, data: Data?, url: URL) -> String {
+        let serverMessage = data.flatMap(Self.serverMessage)
+        let base = "HTTP \(status) from \(url.path)"
+        guard let serverMessage, serverMessage.isEmpty == false else {
+            return base
+        }
+        return "\(base): \(serverMessage)"
+    }
+
+    private static func serverMessage(from data: Data) -> String? {
+        if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            for key in ["message", "error", "detail", "title"] {
+                if let message = object[key] as? String {
+                    return message
+                }
+            }
+        }
+
+        guard let text = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
 public extension APIError {
     var isCancellation: Bool {
         switch self {

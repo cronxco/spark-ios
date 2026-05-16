@@ -10,6 +10,7 @@ struct AccountDetailView: View {
     @State private var showAddBalance = false
     @State private var showEditAccount = false
     @State private var showArchiveConfirm = false
+    @State private var selectedRange: HistoryRange = .threeMonths
 
     var body: some View {
         ScrollView {
@@ -27,7 +28,7 @@ struct AccountDetailView: View {
                         ) { Task { await vm.load() } }
                     case .loaded:
                         if let account = vm.account {
-                            balanceHero(account: account)
+                            balanceHero(account: account, vm: vm)
                             actionsRow(account: account)
                             detailsCard(account: account)
                             balanceHistorySection(vm: vm)
@@ -87,23 +88,24 @@ struct AccountDetailView: View {
 
     // MARK: - Sections
 
-    private func balanceHero(account: MoneyAccount) -> some View {
+    private func balanceHero(account: MoneyAccount, vm: AccountDetailViewModel) -> some View {
         GlassCard(radius: 22, padding: SparkSpacing.xl, tint: balanceTint(account: account)) {
             VStack(alignment: .leading, spacing: SparkSpacing.md) {
                 HStack(spacing: SparkSpacing.sm) {
                     Image(systemName: accountIcon(kind: account.kind))
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(Color.domainMoney)
-                    Text(accountTypeLabel(account.accountType))
+                    let providerSuffix = account.provider.map { " — \($0.capitalized)" } ?? ""
+                    Text(accountTypeLabel(account.accountType) + providerSuffix)
                         .font(SparkTypography.bodyStrong)
                         .foregroundStyle(.secondary)
-                    if let provider = account.provider {
-                        Text("·")
-                            .foregroundStyle(.tertiary)
-                        Text(provider)
-                            .font(SparkTypography.bodySmall)
-                            .foregroundStyle(.secondary)
-                    }
+                }
+
+                if account.isNegativeBalance {
+                    Text("OUTSTANDING BALANCE")
+                        .font(SparkTypography.monoSmall)
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
                 }
 
                 if let balance = account.latestBalance {
@@ -112,18 +114,70 @@ struct AccountDetailView: View {
                         .foregroundStyle(balanceColor(balance: balance.balance, isNegative: account.isNegativeBalance))
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
-
-                    Text("Updated \(balance.time.relativeFormatted)")
-                        .font(SparkTypography.monoSmall)
-                        .foregroundStyle(.secondary)
                 } else {
                     Text("No balance recorded")
                         .font(SparkFonts.display(.largeTitle, weight: .bold))
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
                 }
+
+                if !vm.balances.isEmpty {
+                    rangeChips
+
+                    let points = chartData(vm: vm)
+                    if points.count >= 2 {
+                        BalanceAreaChart(
+                            data: points,
+                            tint: account.isNegativeBalance ? Color.sparkError : Color.sparkSuccess
+                        )
+                        .frame(height: 80)
+                    }
+                }
+
+                if let balance = account.latestBalance {
+                    Text("Updated \(balance.time.relativeFormatted)")
+                        .font(SparkTypography.monoSmall)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
+    }
+
+    private var rangeChips: some View {
+        HStack(spacing: SparkSpacing.xs) {
+            ForEach(HistoryRange.allCases) { range in
+                Button {
+                    selectedRange = range
+                } label: {
+                    Text(range.rawValue)
+                        .font(SparkTypography.monoSmall)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background {
+                            if selectedRange == range {
+                                RoundedRectangle(cornerRadius: SparkRadii.sm)
+                                    .fill(Color.domainMoney)
+                            } else {
+                                RoundedRectangle(cornerRadius: SparkRadii.sm)
+                                    .fill(.primary.opacity(0.06))
+                            }
+                        }
+                        .foregroundStyle(selectedRange == range ? .black : .secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func chartData(vm: AccountDetailViewModel) -> [BalanceAreaChart.Point] {
+        let cutoff: Date? = selectedRange.days.map {
+            Calendar.current.date(byAdding: .day, value: -$0, to: .now)!
+        }
+        return vm.balances
+            .filter { entry in cutoff.map { entry.time >= $0 } ?? true }
+            .sorted { $0.time < $1.time }
+            .map { BalanceAreaChart.Point(date: $0.time, value: $0.balance) }
     }
 
     private func actionsRow(account: MoneyAccount) -> some View {
@@ -235,7 +289,7 @@ struct AccountDetailView: View {
 
     private var shimmerPlaceholder: some View {
         VStack(spacing: SparkSpacing.sm) {
-            LoadingShimmerCard().frame(height: 140)
+            LoadingShimmerCard().frame(height: 200)
             LoadingShimmerCard().frame(height: 56)
             LoadingShimmerCard().frame(height: 180)
         }
@@ -244,11 +298,24 @@ struct AccountDetailView: View {
     // MARK: - Helpers
 
     private func balanceTint(account: MoneyAccount) -> Color {
+        if let provider = account.provider {
+            return issuerAccentColor(provider: provider).opacity(0.10)
+        }
         guard let balance = account.latestBalance?.balance else { return .clear }
         if account.isNegativeBalance {
             return Color.sparkError.opacity(0.08)
         }
         return balance >= 0 ? Color.sparkSuccess.opacity(0.08) : Color.sparkError.opacity(0.08)
+    }
+
+    private func issuerAccentColor(provider: String) -> Color {
+        switch provider.lowercased() {
+        case "monzo":    Color(red: 0.909, green: 0.467, blue: 0.369)
+        case "starling": Color(red: 0.431, green: 0.400, blue: 0.780)
+        case "amex":     Color(red: 0.239, green: 0.435, blue: 0.690)
+        case "halifax":  Color(red: 0.310, green: 0.482, blue: 0.710)
+        default:         Color.domainMoney
+        }
     }
 
     private func balanceColor(balance: Double, isNegative: Bool) -> Color {

@@ -181,7 +181,7 @@ struct KnowledgeItemDetailView: View {
         }
 
         if let articleBody {
-            ArticleBodyView(text: articleBody.text)
+            SparkLongFormContentView(text: articleBody.text, tint: .domainKnowledge)
         }
 
         ForEach(remainingBlocks(blocks, summaryBlock: summaryBlock, articleBody: articleBody)) { block in
@@ -195,7 +195,7 @@ struct KnowledgeItemDetailView: View {
         GlassCard(tint: Color.domainKnowledge.opacity(0.08)) {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                 GlassCardHeader(icon: "doc.text", tint: .domainKnowledge, title: "Summary")
-                RichContentText(text: text, font: SparkTypography.body, foregroundStyle: .primary)
+                SparkRichContentText(text: text, font: SparkTypography.body, foregroundStyle: .primary)
             }
         }
     }
@@ -238,7 +238,7 @@ struct KnowledgeItemDetailView: View {
                                         .font(.caption2)
                                         .foregroundStyle(Color.domainKnowledge)
                                         .padding(.top, 3)
-                                    RichContentText(text: bullet, font: SparkTypography.body, foregroundStyle: .primary)
+                                    SparkRichContentText(text: bullet, font: SparkTypography.body, foregroundStyle: .primary)
                                 }
                             }
                         }
@@ -255,7 +255,7 @@ struct KnowledgeItemDetailView: View {
                         trailing: displayType(for: block)
                     )
                     if let content = nonEmpty(block.content) {
-                        RichContentText(text: content, font: SparkTypography.body, foregroundStyle: .primary)
+                        SparkRichContentText(text: content, font: SparkTypography.body, foregroundStyle: .primary)
                     }
                     if let value = nonEmpty(block.value) {
                         Text([value, block.unit].compactMap(nonEmpty).joined(separator: " "))
@@ -391,7 +391,7 @@ struct KnowledgeItemDetailView: View {
     }
 
     private func firstArticleParagraph(_ text: String) -> String? {
-        ArticleBlock.parse(text).compactMap { block in
+        SparkLongFormBlock.parse(text).compactMap { block in
             if case .paragraph(let paragraph) = block, !looksTruncated(paragraph) {
                 return nonEmpty(paragraph)
             }
@@ -533,153 +533,6 @@ struct KnowledgeItemDetailView: View {
             }
         }
         return trimmed
-    }
-}
-
-// MARK: - Article body renderer
-
-private struct ArticleBodyView: View {
-    let text: String
-
-    private var blocks: [ArticleBlock] {
-        ArticleBlock.parse(text)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                switch block {
-                case .heading(let text, let level):
-                    RichContentText(
-                        text: text,
-                        font: level == 1
-                            ? SparkFonts.display(.title2, weight: .bold)
-                            : SparkFonts.display(.title3, weight: .bold),
-                        foregroundStyle: .primary,
-                        lineSpacing: 2
-                    )
-                    .padding(.top, level == 1 ? SparkSpacing.sm : SparkSpacing.xs)
-
-                case .paragraph(let text):
-                    RichContentText(
-                        text: text,
-                        font: SparkTypography.body,
-                        foregroundStyle: .primary,
-                        lineSpacing: 6
-                    )
-
-                case .quote(let text):
-                    HStack(alignment: .top, spacing: SparkSpacing.md) {
-                        Rectangle()
-                            .fill(Color.domainKnowledge)
-                            .frame(width: 3)
-                            .clipShape(.capsule)
-                        RichContentText(
-                            text: text,
-                            font: SparkTypography.body,
-                            foregroundStyle: .secondary,
-                            lineSpacing: 6
-                        )
-                        .italic()
-                    }
-
-                case .bullets(let bullets):
-                    VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                        ForEach(bullets, id: \.self) { bullet in
-                            HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.sm) {
-                                Text("•")
-                                    .font(SparkTypography.bodyStrong)
-                                    .foregroundStyle(Color.domainKnowledge)
-                                RichContentText(
-                                    text: bullet,
-                                    font: SparkTypography.body,
-                                    foregroundStyle: .primary,
-                                    lineSpacing: 5
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        .padding(.horizontal, SparkSpacing.xs)
-    }
-}
-
-private enum ArticleBlock {
-    case heading(String, level: Int)
-    case paragraph(String)
-    case quote(String)
-    case bullets([String])
-
-    static func parse(_ text: String) -> [ArticleBlock] {
-        let normalized = text
-            .replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !normalized.isEmpty else { return [] }
-
-        let rawBlocks = normalized.components(separatedBy: "\n\n")
-        var output: [ArticleBlock] = []
-
-        for rawBlock in rawBlocks {
-            let trimmed = rawBlock.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { continue }
-
-            let lines = trimmed
-                .components(separatedBy: "\n")
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-
-            guard !lines.isEmpty else { continue }
-
-            if lines.count == 1, let heading = heading(from: lines[0]) {
-                output.append(.heading(heading.text, level: heading.level))
-                continue
-            }
-
-            if lines.allSatisfy({ $0.hasPrefix(">") }) {
-                let text = lines
-                    .map { String($0.drop(while: { $0 == ">" || $0 == " " })) }
-                    .joined(separator: "\n")
-                output.append(.quote(text))
-                continue
-            }
-
-            if lines.allSatisfy(isBulletLine) {
-                output.append(.bullets(lines.map(stripBulletPrefix)))
-                continue
-            }
-
-            output.append(.paragraph(lines.joined(separator: "\n")))
-        }
-
-        return output
-    }
-
-    private static func heading(from line: String) -> (text: String, level: Int)? {
-        if line.hasPrefix("### ") {
-            return (String(line.dropFirst(4)), 3)
-        }
-        if line.hasPrefix("## ") {
-            return (String(line.dropFirst(3)), 2)
-        }
-        if line.hasPrefix("# ") {
-            return (String(line.dropFirst(2)), 1)
-        }
-        return nil
-    }
-
-    private static func isBulletLine(_ line: String) -> Bool {
-        line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("• ")
-    }
-
-    private static func stripBulletPrefix(_ line: String) -> String {
-        if isBulletLine(line) {
-            return String(line.dropFirst(2))
-        }
-        return line
     }
 }
 

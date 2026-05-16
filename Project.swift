@@ -173,14 +173,22 @@ let baseSettings: SettingsDictionary = [
     "DEVELOPMENT_TEAM": .string(developmentTeam),
 ]
 
+let debugSettings: SettingsDictionary = [
+    "APS_ENVIRONMENT": "development",
+]
+
+let releaseSettings: SettingsDictionary = [
+    "APS_ENVIRONMENT": "production",
+]
+
 func sharedSettings(bundleId: String) -> Settings {
     .settings(
         base: baseSettings.merging([
             "PRODUCT_BUNDLE_IDENTIFIER": .string(bundleId),
         ]),
         configurations: [
-            .debug(name: "Debug"),
-            .release(name: "Release"),
+            .debug(name: "Debug", settings: debugSettings),
+            .release(name: "Release", settings: releaseSettings),
         ]
     )
 }
@@ -218,8 +226,8 @@ let sparkApp: Target = .target(
             "ASSETCATALOG_COMPILER_APPICON_NAME": "SparkIcon",
         ]),
         configurations: [
-            .debug(name: "Debug"),
-            .release(name: "Release"),
+            .debug(name: "Debug", settings: debugSettings),
+            .release(name: "Release", settings: releaseSettings),
         ]
     )
 )

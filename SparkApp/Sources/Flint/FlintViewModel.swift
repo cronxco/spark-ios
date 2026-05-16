@@ -2,7 +2,6 @@ import Foundation
 import Observation
 import OSLog
 import SparkKit
-import SwiftData
 
 @MainActor
 @Observable
@@ -11,193 +10,181 @@ final class FlintViewModel {
         case idle
         case loading
         case loaded
+        case empty(String)
         case error(String)
     }
 
-    private static let promptVersion = "flint-daily-note-v1"
-    private static let cachePrefix = "spark.flint.dailyNote"
+    enum PeriodSelection: String, Identifiable {
+        case latest
+        case morning
+        case afternoon
+        case evening
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .latest: "Latest"
+            case .morning: "Morning"
+            case .afternoon: "Afternoon"
+            case .evening: "Evening"
+            }
+        }
+
+        var apiPeriod: FlintDigestPeriod? {
+            switch self {
+            case .morning: .morning
+            case .afternoon: .afternoon
+            case .evening: .evening
+            case .latest: nil
+            }
+        }
+
+        init?(period: FlintDigestPeriod) {
+            switch period {
+            case .morning:
+                self = .morning
+            case .afternoon:
+                self = .afternoon
+            case .evening:
+                self = .evening
+            }
+        }
+    }
 
     private(set) var state: LoadState = .idle
-    private(set) var note: FlintDailyNote?
-    private(set) var facts: FlintBriefingFacts?
-    private(set) var generationAvailability: FlintGenerationAvailability = .unavailable
-    private(set) var usedAppleIntelligence = false
+    private(set) var digests: [FlintDigest] = []
+    private(set) var availablePeriodSelections: [PeriodSelection] = [.latest]
+    private(set) var answeringBlockIDs: Set<String> = []
+    private(set) var answerErrorByBlockID: [String: String] = [:]
+    var selectedPeriod: PeriodSelection = .latest
 
     private let date: Date
     private let apiClient: APIClient
-    private let container: ModelContainer
-    private let defaults: UserDefaults
     private let logger = Logger(subsystem: "co.cronx.sparkapp", category: "Flint")
-    private var generationTask: Task<Void, Never>?
 
-    init(
-        date: Date = .now,
-        apiClient: APIClient,
-        container: ModelContainer,
-        defaults: UserDefaults = .sparkAppGroup
-    ) {
+    init(date: Date = .now, apiClient: APIClient) {
         self.date = date
         self.apiClient = apiClient
-        self.container = container
-        self.defaults = defaults
+    }
+
+    var unansweredQuestionCount: Int {
+        digests.reduce(0) { total, digest in
+            total + digest.blocks.filter { $0.isQuestion && !$0.answered }.count
+        }
     }
 
     func load() async {
         guard state == .idle else { return }
-        state = .loading
-        loadCachedSummary()
-        await revalidate()
+        await refresh()
     }
 
     func refresh() async {
         state = .loading
-        await revalidate(force: true)
-    }
+        answerErrorByBlockID.removeAll()
 
-    var generationStatusMessage: String {
-        switch generationAvailability {
-        case .available where usedAppleIntelligence:
-            return "Generated on device with Apple Intelligence"
-        case .deviceNotEligible:
-            return "Apple Intelligence is not available on this device"
-        case .appleIntelligenceNotEnabled:
-            return "Using Spark's briefing because Apple Intelligence is off"
-        case .modelNotReady:
-            return "Using Spark's briefing while Apple Intelligence gets ready"
-        case .available, .unavailable:
-            return "Using Spark's briefing"
-        }
-    }
-
-    private func loadCachedSummary() {
-        guard let summary = cachedSummary() else { return }
-        apply(summary: summary)
-    }
-
-    private func revalidate(force: Bool = false) async {
         do {
-            let summary = try await apiClient.request(
-                BriefingEndpoint.today(date: Self.isoKey(for: date))
-            )
-            await persist(summary)
-            apply(summary: summary)
+            let loaded = try await fetchDigests()
+            applyLoadedDigests(loaded)
         } catch APIError.notModified {
-            if note == nil, let summary = cachedSummary() {
-                apply(summary: summary)
-            }
+            state = digests.isEmpty ? .empty(emptyMessage) : .loaded
         } catch where error.isAPICancellation {
-            if note == nil {
+            if digests.isEmpty {
                 state = .idle
             }
+        } catch where error.isNotFound {
+            digests = []
+            availablePeriodSelections = [.latest]
+            selectedPeriod = .latest
+            state = .empty(emptyMessage)
         } catch {
             SparkObservability.captureHandled(error)
-            logger.error("Flint briefing failed: \(String(describing: error))")
-            if note == nil {
-                state = .error(force ? userFacingError(error) : "Couldn't load today's briefing.")
+            logger.error("Flint digest load failed: \(String(describing: error))")
+            if digests.isEmpty {
+                state = .error(userFacingError(error))
+            } else {
+                state = .loaded
             }
         }
     }
 
-    private func apply(summary: DaySummary) {
-        generationTask?.cancel()
+    func selectPeriod(_ period: PeriodSelection) async {
+        guard selectedPeriod != period else { return }
+        guard availablePeriodSelections.contains(period) else { return }
+        selectedPeriod = period
+        await refresh()
+    }
 
-        let facts = FlintBriefingFacts(summary: summary)
-        self.facts = facts
-
-        let cacheKey = noteCacheKey(for: summary)
-        if let cached = cachedNote(forKey: cacheKey) {
-            note = cached
-            generationAvailability = .available
-            usedAppleIntelligence = true
-            state = .loaded
+    func answerQuestion(block: FlintDigestBlock, answer: String, note: String? = nil) async {
+        let trimmedAnswer = answer.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedAnswer.isEmpty else {
+            answerErrorByBlockID[block.id] = "Enter an answer before submitting."
             return
         }
 
-        note = facts.fallbackNote
-        generationAvailability = .unavailable
-        usedAppleIntelligence = false
-        state = .loaded
+        answeringBlockIDs.insert(block.id)
+        answerErrorByBlockID[block.id] = nil
 
-        generationTask = Task {
-            do {
-                let result = try await FlintGenerationService.generateNote(from: facts)
-                guard !Task.isCancelled else { return }
-                note = result.note
-                generationAvailability = result.availability
-                usedAppleIntelligence = result.usedAppleIntelligence
-                state = .loaded
-                if result.usedAppleIntelligence {
-                    cache(note: result.note, forKey: cacheKey)
-                }
-            } catch where error.isAPICancellation {
-            } catch {
-                SparkObservability.captureHandled(error)
-                logger.error("Flint note generation failed: \(String(describing: error))")
-                generationAvailability = .unavailable
-                usedAppleIntelligence = false
-                state = .loaded
-            }
-        }
-    }
-
-    private func cachedSummary() -> DaySummary? {
-        let key = Self.isoKey(for: date)
-        let context = ModelContext(container)
-        let descriptor = FetchDescriptor<CachedDaySummary>(predicate: #Predicate { $0.date == key })
-        guard let cached = (try? context.fetch(descriptor))?.first else { return nil }
-        return try? cached.decoded()
-    }
-
-    private func persist(_ summary: DaySummary) async {
-        let context = ModelContext(container)
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        guard let data = try? encoder.encode(summary) else { return }
-        let key = Self.isoKey(for: date)
-        let descriptor = FetchDescriptor<CachedDaySummary>(predicate: #Predicate { $0.date == key })
-        if let existing = (try? context.fetch(descriptor))?.first {
-            existing.payload = data
-            existing.timezone = summary.timezone
-            existing.lastSyncedAt = .now
-        } else {
-            context.insert(CachedDaySummary(
-                date: key,
-                timezone: summary.timezone,
-                payload: data,
-                lastSyncedAt: .now
+        do {
+            _ = try await apiClient.request(FlintEndpoint.answerQuestion(
+                blockID: block.id,
+                FlintQuestionAnswerRequest(
+                    answer: trimmedAnswer,
+                    answerNote: trimmedNote?.isEmpty == false ? trimmedNote : nil
+                )
             ))
+            answeringBlockIDs.remove(block.id)
+            await refresh()
+        } catch where error.isAPICancellation {
+            answeringBlockIDs.remove(block.id)
+        } catch {
+            answeringBlockIDs.remove(block.id)
+            SparkObservability.captureHandled(error)
+            logger.error("Flint question answer failed: \(String(describing: error))")
+            answerErrorByBlockID[block.id] = userFacingAnswerError(error)
         }
-        try? context.save()
     }
 
-    private func cachedNote(forKey key: String) -> FlintDailyNote? {
-        guard let data = defaults.data(forKey: key) else { return nil }
-        return try? JSONDecoder().decode(FlintDailyNote.self, from: data)
+    private func fetchDigests() async throws -> [FlintDigest] {
+        let dateKey = Self.isoKey(for: date)
+        let response = try await apiClient.request(FlintEndpoint.digests(date: dateKey, all: true))
+        return response.digests
     }
 
-    private func cache(note: FlintDailyNote, forKey key: String) {
-        guard let data = try? JSONEncoder().encode(note) else { return }
-        defaults.set(data, forKey: key)
-    }
+    private func applyLoadedDigests(_ loaded: [FlintDigest]) {
+        let ordered = loaded.map(Self.orderedDigest)
+        availablePeriodSelections = Self.availableSelections(for: ordered)
 
-    private func noteCacheKey(for summary: DaySummary) -> String {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        let data = (try? encoder.encode(summary)) ?? Data(summary.date.utf8)
-        return "\(Self.cachePrefix).\(Self.promptVersion).\(summary.date).\(Self.stableHash(data))"
-    }
-
-    private static func stableHash(_ data: Data) -> String {
-        var hash: UInt64 = 14_695_981_039_346_656_037
-        for byte in data {
-            hash ^= UInt64(byte)
-            hash &*= 1_099_511_628_211
+        if !availablePeriodSelections.contains(selectedPeriod) {
+            selectedPeriod = .latest
         }
-        return String(hash, radix: 16)
+
+        digests = Self.visibleDigests(from: ordered, selectedPeriod: selectedPeriod)
+        state = digests.isEmpty ? .empty(emptyMessage) : .loaded
+    }
+
+    private var emptyMessage: String {
+        switch selectedPeriod {
+        case .latest:
+            "No Flint digest has been created for today yet."
+        case .morning, .afternoon, .evening:
+            "No \(selectedPeriod.title.lowercased()) digest has been created for today yet."
+        }
     }
 
     private func userFacingError(_ error: Error) -> String {
-        (error as? LocalizedError)?.errorDescription ?? "Couldn't load today's briefing."
+        (error as? LocalizedError)?.errorDescription ?? "Couldn't load Flint."
+    }
+
+    private func userFacingAnswerError(_ error: Error) -> String {
+        if case APIError.httpStatus(403, _, _) = error {
+            return "This session cannot submit Flint answers."
+        }
+        if case APIError.httpStatus(422, _, _) = error {
+            return "Flint could not save that answer."
+        }
+        return (error as? LocalizedError)?.errorDescription ?? "Couldn't submit your answer."
     }
 
     static func isoKey(for date: Date) -> String {
@@ -205,5 +192,111 @@ final class FlintViewModel {
         formatter.dateFormat = "yyyy-MM-dd"
         formatter.timeZone = .current
         return formatter.string(from: date)
+    }
+
+    private static func availableSelections(for digests: [FlintDigest]) -> [PeriodSelection] {
+        let availablePeriods = Set(digests.compactMap(\.period))
+        let periodSelections = FlintDigestPeriod.allCases.compactMap { period -> PeriodSelection? in
+            guard availablePeriods.contains(period) else { return nil }
+            return PeriodSelection(period: period)
+        }
+
+        return [.latest] + periodSelections
+    }
+
+    private static func visibleDigests(
+        from digests: [FlintDigest],
+        selectedPeriod: PeriodSelection
+    ) -> [FlintDigest] {
+        switch selectedPeriod {
+        case .latest:
+            guard let latest = latestDigest(from: digests) else { return [] }
+            return [latest]
+        case .morning, .afternoon, .evening:
+            guard let period = selectedPeriod.apiPeriod else { return [] }
+            return digests.filter { $0.period == period }
+        }
+    }
+
+    private static func latestDigest(from digests: [FlintDigest]) -> FlintDigest? {
+        digests.max { lhs, rhs in
+            switch (lhs.createdAt, rhs.createdAt) {
+            case let (lhsDate?, rhsDate?):
+                return lhsDate < rhsDate
+            case (nil, _?):
+                return true
+            case (_?, nil):
+                return false
+            case (nil, nil):
+                return false
+            }
+        }
+    }
+
+    private static func orderedDigest(_ digest: FlintDigest) -> FlintDigest {
+        let orderedBlocks = digest.blocks
+            .enumerated()
+            .sorted { lhs, rhs in
+                let lhsRank = blockRank(lhs.element)
+                let rhsRank = blockRank(rhs.element)
+                if lhsRank != rhsRank {
+                    return lhsRank < rhsRank
+                }
+                return lhs.offset < rhs.offset
+            }
+            .map(\.element)
+
+        return FlintDigest(
+            eventID: digest.eventID,
+            digestObjectID: digest.digestObjectID,
+            date: digest.date,
+            period: digest.period,
+            title: digest.title,
+            summary: digest.summary,
+            createdAt: digest.createdAt,
+            blockCount: digest.blockCount,
+            unansweredQuestionCount: digest.unansweredQuestionCount,
+            blocks: orderedBlocks
+        )
+    }
+
+    private static func blockRank(_ block: FlintDigestBlock) -> Int {
+        if block.isQuestion {
+            return 0
+        }
+        if block.blockType == "flint_editorial_note" {
+            return 50
+        }
+
+        switch block.blockType {
+        case "flint_urgent_alert", "flint_prioritized_action":
+            return 10
+        case "flint_health_insight",
+             "flint_money_insight",
+             "flint_media_insight",
+             "flint_knowledge_insight",
+             "flint_online_insight",
+             "flint_cross_domain_insight",
+             "flint_pattern_detected",
+             "flint_correlation",
+             "flint_coaching_insight":
+            return 20
+        case "flint_digest", "flint_news_briefing", "flint_articles_waiting":
+            return 30
+        case "flint_coaching_check_in":
+            return 40
+        default:
+            return 30
+        }
+    }
+}
+
+private extension Error {
+    var isNotFound: Bool {
+        if let apiError = self as? APIError,
+           case APIError.httpStatus(404, _, _) = apiError {
+            return true
+        }
+        return false
     }
 }

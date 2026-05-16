@@ -208,11 +208,13 @@ final class AppModel {
                 let appEnvironment = "production"
             #endif
 
-                _ = try? await apiClient.request(DevicesEndpoint.register(
+                if let registered = try? await apiClient.request(DevicesEndpoint.register(
                     name: name, platform: "ios",
                     apnsToken: apnsToken, appEnvironment: appEnvironment,
                     appVersion: appVersion, bundleId: bundleId, osVersion: osVersion
-                ))
+                )) {
+                    UserDefaults.sparkAppGroup.set(registered.id, forKey: "spark.apnsDeviceId")
+                }
             }
             deviceRegistrationTokenInFlight = apnsToken
             deviceRegistrationTask = task
@@ -221,6 +223,10 @@ final class AppModel {
             deviceRegistrationTokenInFlight = nil
             return
         }
+    }
+
+    func sendTestPush() async throws {
+        _ = try await apiClient.request(DevicesEndpoint.sendTestPush())
     }
 
     func signIn(anchor: ASPresentationAnchorHandle) async {
@@ -242,6 +248,10 @@ final class AppModel {
     }
 
     func signOut() async {
+        if let deviceId = UserDefaults.sparkAppGroup.string(forKey: "spark.apnsDeviceId") {
+            _ = try? await apiClient.request(DevicesEndpoint.revoke(id: deviceId))
+            UserDefaults.sparkAppGroup.removeObject(forKey: "spark.apnsDeviceId")
+        }
         await authService.signOut()
         await etagCache.clearAll()
         profile = nil

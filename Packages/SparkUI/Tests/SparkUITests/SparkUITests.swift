@@ -54,3 +54,34 @@ struct SparkAppBackgroundPhaseTests {
         DateComponents(calendar: calendar, timeZone: calendar.timeZone, year: 2026, month: 5, day: 4, hour: hour).date
     }
 }
+
+@Suite("Spark long-form content parsing")
+struct SparkLongFormContentParsingTests {
+    @Test("parses headings paragraphs quotes and bullets")
+    func parsesLongFormBlocks() {
+        let blocks = SparkLongFormBlock.parse("""
+        # Digest
+
+        The day started well.
+
+        > Keep an eye on recovery.
+
+        - Hydrate
+        - Read later
+        """)
+
+        #expect(blocks == [
+            .heading("Digest", level: 1),
+            .paragraph("The day started well."),
+            .quote("Keep an eye on recovery."),
+            .bullets(["Hydrate", "Read later"]),
+        ])
+    }
+
+    @Test("plain markdown inline text stays a paragraph")
+    func parsesInlineMarkdownAsParagraph() {
+        let blocks = SparkLongFormBlock.parse("This has **emphasis** but remains one paragraph.")
+
+        #expect(blocks == [.paragraph("This has **emphasis** but remains one paragraph.")])
+    }
+}

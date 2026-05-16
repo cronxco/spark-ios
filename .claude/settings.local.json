@@ -4,7 +4,8 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
-      "Bash(xcodebuild build *)"
+      "Bash(xcodebuild build *)",
+      "WebFetch(domain:api.anthropic.com)"
     ]
   }
 }

@@ -317,9 +317,41 @@ private struct TimelineFilterChip: View {
 
 // MARK: - Hour group
 
+private enum EventGroup: Identifiable {
+    case single(CachedEvent)
+    case collapsed(events: [CachedEvent])
+
+    var id: String {
+        switch self {
+        case .single(let e): return e.id
+        case .collapsed(let es): return (es.first?.id ?? "") + "_group"
+        }
+    }
+}
+
 private struct HourGroup: View {
     let hour: Int
     let events: [CachedEvent]
+
+    private var eventGroups: [EventGroup] {
+        var result: [EventGroup] = []
+        var i = 0
+        while i < events.count {
+            let current = events[i]
+            var j = i + 1
+            while j < events.count,
+                  events[j].action == current.action,
+                  events[j].service == current.service { j += 1 }
+            let run = Array(events[i..<j])
+            if run.count >= 3 {
+                result.append(.collapsed(events: run))
+            } else {
+                result.append(contentsOf: run.map { .single($0) })
+            }
+            i = j
+        }
+        return result
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.md) {
@@ -336,26 +368,34 @@ private struct HourGroup: View {
             }
 
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                ForEach(events) { event in
-                    NavigationLink(value: DetailRoute.event(id: event.id)) {
-                        row(for: event)
+                ForEach(eventGroups) { group in
+                    switch group {
+                    case .single(let event):
+                        NavigationLink(value: DetailRoute.event(id: event.id)) {
+                            row(for: event)
+                        }
+                        .buttonStyle(.plain)
+                    case .collapsed(let groupEvents):
+                        NavigationLink(value: DetailRoute.event(id: groupEvents[0].id)) {
+                            row(for: groupEvents[0], surplusCount: groupEvents.count - 1)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
     }
 
     @ViewBuilder
-    private func row(for event: CachedEvent) -> some View {
+    private func row(for event: CachedEvent, surplusCount: Int = 0) -> some View {
         if isWebDigest(event) {
-            WebDigestEventCard(event: event)
+            WebDigestEventCard(event: event, surplusCount: surplusCount)
         } else if isStandout(event) {
-            StandoutEventCard(event: event)
+            StandoutEventCard(event: event, surplusCount: surplusCount)
         } else if isSubtle(event) {
-            SubtleEventRow(event: event)
+            SubtleEventRow(event: event, surplusCount: surplusCount)
         } else {
-            RaisedEventCard(event: event)
+            RaisedEventCard(event: event, surplusCount: surplusCount)
         }
     }
 
@@ -380,6 +420,7 @@ private struct HourGroup: View {
 
 private struct RaisedEventCard: View {
     let event: CachedEvent
+    var surplusCount: Int = 0
 
     var body: some View {
         HStack(alignment: .center, spacing: SparkSpacing.md) {
@@ -390,7 +431,7 @@ private struct RaisedEventCard: View {
                     .font(SparkTypography.captionStrong)
                     .foregroundStyle(Color.secondary.opacity(0.68))
                     .lineLimit(1)
-                Text(primaryTitle(for: event))
+                Text(titledWithSurplus(primaryTitle(for: event), surplus: surplusCount))
                     .font(SparkTypography.bodyStrong)
                     .foregroundStyle(.primary)
                     .lineLimit(2)
@@ -428,6 +469,7 @@ private struct RaisedEventCard: View {
 
 private struct StandoutEventCard: View {
     let event: CachedEvent
+    var surplusCount: Int = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
@@ -444,7 +486,7 @@ private struct StandoutEventCard: View {
                 }
             }
 
-            Text(primaryTitle(for: event))
+            Text(titledWithSurplus(primaryTitle(for: event), surplus: surplusCount))
                 .font(SparkTypography.bodyStrong)
                 .foregroundStyle(.primary)
                 .lineLimit(2)
@@ -500,28 +542,26 @@ private struct StandoutEventCard: View {
 
 private struct WebDigestEventCard: View {
     let event: CachedEvent
+    var surplusCount: Int = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ZStack {
-                LinearGradient(
-                    colors: [Color.sparkOcean.opacity(0.88), Color.sparkAccent.opacity(0.92)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                Image(systemName: "globe")
-                    .font(.system(size: 54, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.82))
-                Text(event.targetTitle ?? event.value ?? event.action.sparkActionTitle)
-                    .font(SparkTypography.captionStrong)
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, SparkSpacing.md)
-                    .padding(.vertical, SparkSpacing.xs)
-                    .background(Color.white.opacity(0.48), in: .capsule)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .padding(SparkSpacing.sm)
+            Group {
+                if let urlString = event.targetMediaUrl, let url = URL(string: urlString) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image.resizable().scaledToFill()
+                        default:
+                            gradientPlaceholder
+                        }
+                    }
+                } else {
+                    gradientPlaceholder
+                }
             }
             .frame(height: 168)
+            .clipped()
 
             VStack(alignment: .leading, spacing: SparkSpacing.xs) {
                 HStack {
@@ -536,7 +576,7 @@ private struct WebDigestEventCard: View {
                     }
                 }
 
-                Text(primaryTitle(for: event))
+                Text(titledWithSurplus(primaryTitle(for: event), surplus: surplusCount))
                     .font(SparkTypography.bodyStrong)
                     .foregroundStyle(.primary)
                     .lineLimit(2)
@@ -551,12 +591,34 @@ private struct WebDigestEventCard: View {
         }
         .shadow(color: .black.opacity(0.08), radius: 18, x: 0, y: 10)
     }
+
+    private var gradientPlaceholder: some View {
+        ZStack {
+            LinearGradient(
+                colors: [Color.sparkOcean.opacity(0.88), Color.sparkAccent.opacity(0.92)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            Image(systemName: "globe")
+                .font(.system(size: 54, weight: .regular))
+                .foregroundStyle(.white.opacity(0.82))
+            Text(event.targetTitle ?? event.value ?? event.action.sparkActionTitle)
+                .font(SparkTypography.captionStrong)
+                .foregroundStyle(.primary)
+                .padding(.horizontal, SparkSpacing.md)
+                .padding(.vertical, SparkSpacing.xs)
+                .background(Color.white.opacity(0.48), in: .capsule)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(SparkSpacing.sm)
+        }
+    }
 }
 
 // MARK: - Subtle event row
 
 private struct SubtleEventRow: View {
     let event: CachedEvent
+    var surplusCount: Int = 0
 
     var body: some View {
         HStack(alignment: .center, spacing: SparkSpacing.sm) {
@@ -565,7 +627,7 @@ private struct SubtleEventRow: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 28)
 
-            Text(primaryTitle(for: event))
+            Text(titledWithSurplus(primaryTitle(for: event), surplus: surplusCount))
                 .font(SparkTypography.bodyStrong)
                 .foregroundStyle(.primary)
                 .lineLimit(1)
@@ -586,16 +648,15 @@ private struct SubtleEventRow: View {
 
 // MARK: - Helpers
 
+private func titledWithSurplus(_ title: String, surplus: Int) -> String {
+    surplus > 0 ? "\(title) + \(surplus) others" : title
+}
+
 private func metaLine(for event: CachedEvent) -> String {
     if isBalanceSnapshot(event), event.targetTitle?.isISODateString == true {
         return event.action.sparkActionTitle
     }
-
-    let actor = event.actorTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
-    if let actor, !actor.isEmpty {
-        return "\(event.service.uppercased()) — \(actor)"
-    }
-    return event.service.uppercased()
+    return event.actorTitle?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? ""
 }
 
 private func primaryTitle(for event: CachedEvent) -> String {

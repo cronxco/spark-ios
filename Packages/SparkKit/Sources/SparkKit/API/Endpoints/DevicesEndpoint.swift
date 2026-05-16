@@ -15,15 +15,20 @@ public enum DevicesEndpoint {
         appVersion: String,
         bundleId: String,
         osVersion: String
-    ) -> Endpoint<EmptyResponse> {
+    ) -> Endpoint<DeviceRegistrationResponse> {
         let encoder = JSONEncoder()
         encoder.keyEncodingStrategy = .convertToSnakeCase
         let body = try? encoder.encode(RegisterRequest(
-            name: name, platform: platform,
+            deviceName: name, platform: platform,
             apnsToken: apnsToken, appEnvironment: appEnvironment,
             appVersion: appVersion, bundleId: bundleId, osVersion: osVersion
         ))
         return Endpoint(method: .post, path: "/devices", body: body, contentType: "application/json")
+    }
+
+    /// POST /devices/test — send a diagnostic APNs notification to this user.
+    public static func sendTestPush() -> Endpoint<EmptyResponse> {
+        Endpoint(method: .post, path: "/devices/test")
     }
 
     /// DELETE /devices/{id}
@@ -32,12 +37,38 @@ public enum DevicesEndpoint {
     }
 
     private struct RegisterRequest: Encodable {
-        let name: String
+        let deviceName: String
         let platform: String
         let apnsToken: String
         let appEnvironment: String
         let appVersion: String
         let bundleId: String
         let osVersion: String
+    }
+}
+
+public struct DeviceRegistrationResponse: Decodable, Sendable {
+    public let id: String
+    public let deviceType: String
+    public let endpoint: String
+    public let appEnvironment: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case deviceType = "device_type"
+        case endpoint
+        case appEnvironment = "app_environment"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if let stringID = try? container.decode(String.self, forKey: .id) {
+            id = stringID
+        } else {
+            id = String(try container.decode(Int.self, forKey: .id))
+        }
+        deviceType = try container.decode(String.self, forKey: .deviceType)
+        endpoint = try container.decode(String.self, forKey: .endpoint)
+        appEnvironment = try container.decode(String.self, forKey: .appEnvironment)
     }
 }

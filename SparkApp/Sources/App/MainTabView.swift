@@ -30,6 +30,7 @@ struct MainTabView: View {
                     SearchView()
                 }
             }
+            .tabBarMinimizeBehavior(.onScrollDown)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea()

@@ -2,6 +2,10 @@ import SparkUI
 import SwiftUI
 import UserNotifications
 
+#if canImport(UIKit)
+import UIKit
+#endif
+
 struct NotificationsStep: View {
     let proceed: () -> Void
 
@@ -45,7 +49,14 @@ struct NotificationsStep: View {
             options: [.alert, .badge, .sound]
         )) ?? false
         authStatus = granted ? .authorized : .denied
-        if granted { proceed() }
+        if granted {
+            #if canImport(UIKit)
+            await MainActor.run {
+                UIApplication.shared.registerForRemoteNotifications()
+            }
+            #endif
+            proceed()
+        }
     }
 
     private func refreshStatus() async {

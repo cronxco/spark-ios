@@ -1,3 +1,4 @@
+import SparkKit
 import SparkUI
 import SwiftUI
 
@@ -8,152 +9,485 @@ struct FlintView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: SparkSpacing.lg) {
-                    SparkMainPageHeader(
-                        title: "Flint",
-                        subtitle: "Daily guidance from your connected signals"
-                    )
-
-                    GlassCard(tint: .sparkAccent.opacity(0.08)) {
-                        VStack(alignment: .leading, spacing: SparkSpacing.md) {
-                            GlassCardHeader(
-                                icon: "sparkles",
-                                tint: .sparkAccent,
-                                title: "Daily Briefing"
-                            )
-                            briefingStatus
-                            briefingContent
-                        }
-                    }
-
-                    GlassCard {
-                        VStack(alignment: .leading, spacing: SparkSpacing.md) {
-                            GlassCardHeader(
-                                icon: "bubble.left.and.bubble.right.fill",
-                                tint: .sparkAccent,
-                                title: "Ask Flint"
-                            )
-                            HStack(spacing: SparkSpacing.md) {
-                                Image(systemName: "magnifyingglass")
-                                    .foregroundStyle(.secondary)
-                                Text("Ask anything about your day…")
-                                    .font(SparkTypography.body)
-                                    .foregroundStyle(.secondary)
-                                Spacer()
-                            }
-                            .padding(SparkSpacing.md)
-                            .sparkGlass(.roundedRect(SparkRadii.md))
-                            .opacity(0.5)
-
-                            Text("Conversational AI advisor — coming in Phase 3.")
-                                .font(SparkTypography.bodySmall)
-                                .foregroundStyle(.secondary)
-                        }
+                VStack(alignment: .leading, spacing: SparkSpacing.lg) {
+                    if let viewModel {
+                        content(for: viewModel)
+                    } else {
+                        loadingContent
                     }
                 }
                 .padding(.horizontal, SparkSpacing.lg)
                 .padding(.top, SparkSpacing.md)
-                .padding(.bottom, SparkSpacing.xl)
+                .padding(.bottom, SparkSpacing.xxl * 2)
             }
             .refreshable { await viewModel?.refresh() }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if let viewModel {
+                    periodPicker(for: viewModel)
+                }
+            }
             .sparkMainNavigationTitle("Flint")
             .sparkAppBackground()
             .sparkMainAppToolbar()
         }
         .task {
             if viewModel == nil {
-                viewModel = FlintViewModel(
-                    apiClient: appModel.apiClient,
-                    container: appModel.container
-                )
+                viewModel = FlintViewModel(apiClient: appModel.apiClient)
             }
             await viewModel?.load()
         }
     }
 
-    @ViewBuilder
-    private var briefingStatus: some View {
-        if let viewModel {
-            switch viewModel.state {
-            case .idle, .loading:
-                StatusPill(.neutral, message: "Loading today's briefing")
-            case .loaded:
-                StatusPill(
-                    viewModel.usedAppleIntelligence ? .ok : .neutral,
-                    message: viewModel.generationStatusMessage,
-                    trailing: viewModel.usedAppleIntelligence ? "On device" : "Fallback"
-                )
-            case .error:
-                StatusPill(.warning, message: "Briefing unavailable")
+    private func periodPicker(for viewModel: FlintViewModel) -> some View {
+        Picker("Digest period", selection: Binding(
+            get: { viewModel.selectedPeriod },
+            set: { period in
+                Task { await viewModel.selectPeriod(period) }
             }
-        } else {
-            StatusPill(.neutral, message: "Loading today's briefing")
+        )) {
+            ForEach(viewModel.availablePeriodSelections) { period in
+                Text(period.title).tag(period)
+            }
         }
+        .pickerStyle(.segmented)
+        .padding(SparkSpacing.sm)
+        .sparkGlass(.roundedRect(SparkRadii.lg), tint: Color.sparkElevated.opacity(0.48))
+        .shadow(color: .black.opacity(0.12), radius: 16, x: 0, y: 8)
+        .padding(.horizontal, SparkSpacing.lg)
+        .padding(.top, SparkSpacing.sm)
+        .padding(.bottom, SparkSpacing.xl + SparkSpacing.sm)
     }
 
     @ViewBuilder
-    private var briefingContent: some View {
-        if let note = viewModel?.note {
-            VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-                VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                    Text(note.title)
-                        .font(SparkTypography.title)
-                        .foregroundStyle(.primary)
-                    Text(note.summary)
-                        .font(SparkTypography.body)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+    private func content(for viewModel: FlintViewModel) -> some View {
+        switch viewModel.state {
+        case .idle, .loading:
+            loadingContent
+        case .loaded:
+            VStack(alignment: .leading, spacing: SparkSpacing.xl) {
+                if let digest = viewModel.digests.first {
+                    FlintDigestHeader(digest: digest)
                 }
 
-                noteSection(title: "Highlights", systemImage: "sparkles", items: note.highlights)
-                noteSection(title: "Watchouts", systemImage: "exclamationmark.triangle.fill", items: note.watchouts)
-                noteSection(title: "Actions", systemImage: "checkmark.circle.fill", items: note.suggestedActions)
+                ForEach(viewModel.digests) { digest in
+                    FlintDigestSection(digest: digest, viewModel: viewModel)
+                }
             }
-        } else if case .error(let message) = viewModel?.state {
+        case .empty(let message):
             EmptyState(
-                systemImage: "wifi.exclamationmark",
-                title: "Couldn't load your briefing",
+                systemImage: "sparkles",
+                title: "No digest yet",
                 message: message
             )
-        } else {
+        case .error(let message):
+            VStack(spacing: SparkSpacing.md) {
+                EmptyState(
+                    systemImage: "wifi.exclamationmark",
+                    title: "Couldn't load Flint",
+                    message: message
+                )
+                PillButton("Retry", systemImage: "arrow.clockwise", tint: .sparkAccent) {
+                    Task { await viewModel.refresh() }
+                }
+            }
+        }
+    }
+
+    private var loadingContent: some View {
+        GlassCard {
             VStack(alignment: .leading, spacing: SparkSpacing.md) {
                 LoadingShimmer(cornerRadius: SparkRadii.sm)
                     .frame(height: 18)
-                    .frame(maxWidth: 180)
+                    .frame(maxWidth: 220)
                 LoadingShimmer(cornerRadius: SparkRadii.sm)
-                    .frame(height: 72)
+                    .frame(height: 84)
                 LoadingShimmer(cornerRadius: SparkRadii.sm)
                     .frame(height: 18)
-                    .frame(maxWidth: 260)
+                    .frame(maxWidth: 280)
             }
-            .accessibilityLabel("Loading daily briefing")
+            .accessibilityLabel("Loading Flint digest")
         }
     }
 
-    @ViewBuilder
-    private func noteSection(title: String, systemImage: String, items: [String]) -> some View {
-        if !items.isEmpty {
-            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                Label(title, systemImage: systemImage)
-                    .font(SparkTypography.captionStrong)
-                    .foregroundStyle(.primary)
+}
 
-                VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                    ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                        HStack(alignment: .top, spacing: SparkSpacing.sm) {
-                            Circle()
-                                .fill(Color.sparkAccent.opacity(0.8))
-                                .frame(width: 5, height: 5)
-                                .padding(.top, 8)
-                            Text(item)
-                                .font(SparkTypography.bodySmall)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
+private struct FlintDigestSection: View {
+    let digest: FlintDigest
+    let viewModel: FlintViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.lg) {
+            if let summary = digest.summary, !summary.isEmpty {
+                SparkLongFormContentView(text: summary, tint: .sparkAccent)
+            }
+
+            if digest.blocks.isEmpty {
+                Text("This digest has no blocks yet.")
+                    .font(SparkTypography.bodySmall)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: SparkSpacing.md) {
+                    ForEach(digest.blocks) { block in
+                        FlintBlockRow(block: block, viewModel: viewModel)
                     }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+private struct FlintDigestHeader: View {
+    let digest: FlintDigest
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+            Text(digest.displayTitle)
+                .font(SparkTypography.heroXL)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+
+            HStack(spacing: SparkSpacing.sm) {
+                Label(createdAtText, systemImage: "clock")
+                if let count = digest.unansweredQuestionCount, count > 0 {
+                    Text("\(count) unanswered")
+                        .foregroundStyle(Color.sparkWarning)
+                }
+            }
+            .font(SparkTypography.caption)
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    private var createdAtText: String {
+        guard let createdAt = digest.createdAt else { return digest.date }
+        return createdAt.formatted(
+            Date.FormatStyle()
+                .weekday(.abbreviated)
+                .day()
+                .month(.abbreviated)
+                .hour()
+                .minute()
+        )
+    }
+}
+
+private extension FlintDigest {
+    var displayTitle: String {
+        guard let period else { return title }
+
+        let generatedPrefix = "\(period.displayName) Digest"
+        guard title.hasPrefix(generatedPrefix) else { return title }
+
+        let suffix = title.dropFirst(generatedPrefix.count)
+        let separators = [" — ", " – ", " - "]
+        if separators.contains(where: { suffix.hasPrefix($0) }) {
+            return generatedPrefix
+        }
+
+        return title
+    }
+}
+
+private struct FlintBlockRow: View {
+    let block: FlintDigestBlock
+    let viewModel: FlintViewModel
+    @State private var isEditorialExpanded = false
+
+    var body: some View {
+        if block.blockType == "flint_editorial_note" {
+            editorialDisclosure
+        } else {
+            standardRow
+        }
+    }
+
+    private var standardRow: some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.md) {
+            HStack(alignment: .top, spacing: SparkSpacing.md) {
+                DomainGlyph(icon: icon, tint: tint, size: 26)
+
+                VStack(alignment: .leading, spacing: SparkSpacing.xs) {
+                    HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.sm) {
+                        Text(block.title)
+                            .font(SparkTypography.bodyStrong)
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: SparkSpacing.sm)
+                        if let badge {
+                            Text(badge)
+                                .font(SparkTypography.monoSmall)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    if let topic = block.topic, !topic.isEmpty {
+                        Text(topic.capitalized)
+                            .font(SparkTypography.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            if block.isQuestion {
+                FlintQuestionContent(block: block, viewModel: viewModel)
+            } else if let content = block.content, !content.isEmpty {
+                SparkRichContentText(text: content, font: SparkTypography.bodySmall, foregroundStyle: .secondary)
+            }
+        }
+        .padding(SparkSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .sparkGlass(.roundedRect(SparkRadii.md), tint: tint.opacity(0.08))
+    }
+
+    private var editorialDisclosure: some View {
+        DisclosureGroup(isExpanded: $isEditorialExpanded) {
+            if let content = block.content, !content.isEmpty {
+                SparkRichContentText(text: content, font: SparkTypography.bodySmall, foregroundStyle: .secondary)
+                .padding(.top, SparkSpacing.md)
+            }
+        } label: {
+            HStack(alignment: .center, spacing: SparkSpacing.md) {
+                DomainGlyph(icon: icon, tint: tint, size: 24)
+                VStack(alignment: .leading, spacing: SparkSpacing.xs) {
+                    Text(block.title)
+                        .font(SparkTypography.bodyStrong)
+                        .foregroundStyle(.primary)
+                    Text("Editorial Note")
+                        .font(SparkTypography.monoSmall)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: SparkSpacing.sm)
+            }
+        }
+        .padding(SparkSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .sparkGlass(.roundedRect(SparkRadii.md), tint: tint.opacity(0.08))
+    }
+
+    private var icon: String {
+        switch block.blockType {
+        case "flint_user_question": "questionmark.circle.fill"
+        case "flint_editorial_note": "pencil.and.scribble"
+        case "flint_health_insight", "flint_coaching_check_in": "heart.fill"
+        case "flint_money_insight": "sterlingsign.circle.fill"
+        case "flint_media_insight": "play.circle.fill"
+        case "flint_knowledge_insight", "flint_articles_waiting": "book.fill"
+        case "flint_online_insight": "network"
+        case "flint_cross_domain_insight", "flint_correlation": "arrow.left.arrow.right"
+        case "flint_pattern_detected": "chart.line.uptrend.xyaxis"
+        case "flint_prioritized_action": "flag.fill"
+        case "flint_urgent_alert": "bell.badge.fill"
+        case "flint_digest": "doc.text.fill"
+        case "flint_news_briefing": "newspaper.fill"
+        case "flint_coaching_insight": "brain.head.profile"
+        default: "sparkles"
+        }
+    }
+
+    private var tint: Color {
+        switch block.blockType {
+        case "flint_user_question", "flint_prioritized_action": .sparkAccent
+        case "flint_urgent_alert": .sparkError
+        case "flint_health_insight", "flint_coaching_check_in", "flint_coaching_insight": .sparkSuccess
+        case "flint_money_insight": .sparkWarning
+        case "flint_media_insight": .sparkInfo
+        case "flint_knowledge_insight", "flint_news_briefing", "flint_articles_waiting": .sparkOcean
+        default: .sparkAccent
+        }
+    }
+
+    private var badge: String? {
+        if let priority = block.priority {
+            return "\(priority.displayName) priority"
+        }
+        return blockTypeTitle(block.blockType)
+    }
+
+    private func blockTypeTitle(_ raw: String) -> String? {
+        let trimmed = raw.replacingOccurrences(of: "flint_", with: "")
+            .replacingOccurrences(of: "_", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed.capitalized
+    }
+}
+
+private struct FlintQuestionContent: View {
+    let block: FlintDigestBlock
+    let viewModel: FlintViewModel
+
+    @State private var selectedAnswer = ""
+    @State private var freeformAnswer = ""
+    @State private var answerNote = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.md) {
+            Text(block.question ?? block.title)
+                .font(SparkTypography.body)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if block.answered {
+                answeredView
+            } else {
+                answerForm
+            }
+
+            if let error = viewModel.answerErrorByBlockID[block.id] {
+                Text(error)
+                    .font(SparkTypography.caption)
+                    .foregroundStyle(Color.sparkError)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var answeredView: some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.xs) {
+            Label(block.answer ?? "Answered", systemImage: "checkmark.circle.fill")
+                .font(SparkTypography.bodySmall)
+                .foregroundStyle(Color.sparkSuccess)
+
+            if let note = block.answerNote, !note.isEmpty {
+                Text(note)
+                    .font(SparkTypography.bodySmall)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let answeredAt = block.answeredAt {
+                Text("Answered \(answeredAt.formatted(date: .abbreviated, time: .shortened))")
+                    .font(SparkTypography.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var answerForm: some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.md) {
+            if let options = block.answerOptions, !options.isEmpty {
+                FlowLayout(spacing: SparkSpacing.sm) {
+                    ForEach(options, id: \.self) { option in
+                        Button {
+                            selectedAnswer = option
+                        } label: {
+                            Text(option)
+                                .font(SparkTypography.captionStrong)
+                                .foregroundStyle(selectedAnswer == option ? Color.white : Color.primary)
+                                .padding(.horizontal, SparkSpacing.md)
+                                .padding(.vertical, SparkSpacing.sm)
+                                .sparkGlass(
+                                    .capsule,
+                                    tint: selectedAnswer == option ? Color.sparkAccent : Color.sparkAccent.opacity(0.1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            } else {
+                TextField("Answer", text: $freeformAnswer, axis: .vertical)
+                    .font(SparkTypography.bodySmall)
+                    .lineLimit(1...4)
+                    .padding(SparkSpacing.md)
+                    .textFieldInputBackground()
+            }
+
+            TextField("Add a note", text: $answerNote, axis: .vertical)
+                .font(SparkTypography.bodySmall)
+                .lineLimit(1...3)
+                .padding(SparkSpacing.md)
+                .textFieldInputBackground()
+
+            Button {
+                Task {
+                    await viewModel.answerQuestion(
+                        block: block,
+                        answer: submittedAnswer,
+                        note: answerNote
+                    )
+                }
+            } label: {
+                HStack(spacing: SparkSpacing.sm) {
+                    if viewModel.answeringBlockIDs.contains(block.id) {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "paperplane.fill")
+                    }
+                    Text("Submit")
+                        .font(SparkTypography.bodyStrong)
+                }
+                .padding(.horizontal, SparkSpacing.lg)
+                .padding(.vertical, SparkSpacing.sm)
+                .foregroundStyle(Color.white)
+                .sparkGlass(.capsule, tint: Color.sparkAccent)
+            }
+            .buttonStyle(.plain)
+            .disabled(viewModel.answeringBlockIDs.contains(block.id) || submittedAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+    }
+
+    private var submittedAnswer: String {
+        if let options = block.answerOptions, !options.isEmpty {
+            return selectedAnswer
+        }
+        return freeformAnswer
+    }
+}
+
+private extension View {
+    func textFieldInputBackground() -> some View {
+        background {
+            RoundedRectangle(cornerRadius: SparkRadii.sm)
+                .fill(.thinMaterial)
+                .overlay {
+                    RoundedRectangle(cornerRadius: SparkRadii.sm)
+                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                }
+        }
+    }
+}
+
+private struct FlowLayout: Layout {
+    var spacing: CGFloat
+
+    init(spacing: CGFloat) {
+        self.spacing = spacing
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? 0
+        var position = CGPoint.zero
+        var lineHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if position.x > 0, position.x + size.width > width {
+                position.x = 0
+                position.y += lineHeight + spacing
+                lineHeight = 0
+            }
+            position.x += size.width + spacing
+            lineHeight = max(lineHeight, size.height)
+        }
+
+        return CGSize(width: width, height: position.y + lineHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var position = CGPoint(x: bounds.minX, y: bounds.minY)
+        var lineHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if position.x > bounds.minX, position.x + size.width > bounds.maxX {
+                position.x = bounds.minX
+                position.y += lineHeight + spacing
+                lineHeight = 0
+            }
+
+            subview.place(at: position, proposal: ProposedViewSize(size))
+            position.x += size.width + spacing
+            lineHeight = max(lineHeight, size.height)
         }
     }
 }

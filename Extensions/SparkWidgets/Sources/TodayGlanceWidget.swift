@@ -21,28 +21,36 @@ struct TodayGlanceWidgetView: View {
     var body: some View {
         let snap = entry.snapshot
         HStack(spacing: 0) {
-            tileView(
-                systemImage: "moon.fill",
-                color: .indigo,
-                value: snap.sleepScore.map { "\($0)" } ?? "—",
-                label: "Sleep"
-            )
+            Link(destination: URL(string: "https://spark.cronx.co/metrics/sleep.score")!) {
+                tileView(
+                    systemImage: "moon.fill",
+                    color: .indigo,
+                    value: snap.sleepScore.map { "\($0)" } ?? "—",
+                    label: "Sleep"
+                )
+            }
             Divider().frame(maxHeight: 60).opacity(0.3)
-            tileView(
-                systemImage: "figure.walk",
-                color: .green,
-                value: snap.stepsDisplay,
-                label: "Steps"
-            )
+            Link(destination: URL(string: "https://spark.cronx.co/metrics/health.steps")!) {
+                tileView(
+                    systemImage: "figure.walk",
+                    color: .green,
+                    value: snap.stepsDisplay,
+                    label: "Steps"
+                )
+            }
             Divider().frame(maxHeight: 60).opacity(0.3)
-            tileView(
-                systemImage: "creditcard.fill",
-                color: .orange,
-                value: snap.spentTodayDisplay ?? "—",
-                label: "Spend"
-            )
+            Link(destination: URL(string: "https://spark.cronx.co/metrics/money.spend")!) {
+                tileView(
+                    systemImage: "creditcard.fill",
+                    color: .orange,
+                    value: snap.spentTodayDisplay ?? "—",
+                    label: "Spend"
+                )
+            }
             Divider().frame(maxHeight: 60).opacity(0.3)
-            nextEventTile(snap)
+            Link(destination: URL(string: "https://spark.cronx.co/today")!) {
+                nextEventTile(snap)
+            }
         }
         .containerBackground(for: .widget) { Color(.systemBackground) }
         .widgetURL(URL(string: "https://spark.cronx.co/today"))

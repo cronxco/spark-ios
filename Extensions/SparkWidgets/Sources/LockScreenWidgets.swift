@@ -147,11 +147,14 @@ struct NextEventInlineView: View {
 
     var body: some View {
         let snap = entry.snapshot
-        if let title = snap.nextEventTitle {
-            let time = snap.nextEventStart.map { " · \($0)" } ?? ""
-            Label("\(title)\(time)", systemImage: "calendar")
-        } else {
-            Label("No upcoming events", systemImage: "calendar")
+        Group {
+            if let title = snap.nextEventTitle {
+                let time = snap.nextEventStart.map { " · \($0)" } ?? ""
+                Label("\(title)\(time)", systemImage: "calendar")
+            } else {
+                Label("No upcoming events", systemImage: "calendar")
+            }
         }
+        .widgetURL(URL(string: "https://spark.cronx.co/today"))
     }
 }
