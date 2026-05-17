@@ -66,8 +66,19 @@ struct ApiTokensView: View {
                     message: "Create an API token to access Spark from external tools."
                 )
             } else {
-                List(tokens) { token in
-                    TokenRow(token: token)
+                List {
+                    Section {
+                        SparkSystemScreenHeader(
+                            title: "API Tokens",
+                            subtitle: "Create and manage tokens for external Spark tools."
+                        )
+                        .padding(.vertical, SparkSpacing.sm)
+                    }
+                    .listRowBackground(Color.clear)
+
+                    ForEach(tokens) { token in
+                        TokenRow(token: token)
+                    }
                 }
             }
         }
@@ -100,6 +111,7 @@ private struct TokenRow: View {
 private struct CreateTokenSheet: View {
     @Bindable var viewModel: ApiTokensViewModel
     let onDone: () -> Void
+    @Environment(\.dismiss) private var dismiss
 
     private let availableAbilities = ["mcp:read", "mcp:write", "webhooks:read", "data:export"]
 
@@ -132,10 +144,16 @@ private struct CreateTokenSheet: View {
             .navigationTitle("New Token")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { onDone() }
-                }
                 ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        onDone()
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("Close")
+                }
+                ToolbarItem(placement: .confirmationAction) {
                     Button("Create") {
                         Task {
                             await viewModel.create()

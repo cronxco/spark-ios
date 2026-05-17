@@ -7,9 +7,9 @@ import SparkKit
 @MainActor
 final class KnowledgeViewModel {
     enum Filter: String, CaseIterable, Identifiable {
+        case reading = "Reading"
+        case personal = "Personal"
         case all = "All"
-        case newsletters = "Newsletters"
-        case webDigests = "Web Digests"
         var id: String { rawValue }
     }
 
@@ -17,7 +17,7 @@ final class KnowledgeViewModel {
         case idle, loading, loaded, error(String)
     }
 
-    var filter: Filter = .all
+    var filter: Filter = .reading
     private(set) var allItems: [Event] = []
     private(set) var loadState: LoadState = .idle
     private var cursor: String?
@@ -25,14 +25,14 @@ final class KnowledgeViewModel {
 
     var filteredItems: [Event] {
         switch filter {
-        case .all: allItems
-        case .newsletters: allItems.filter { $0.service == "newsletter" }
-        case .webDigests: allItems.filter { $0.service == "fetch" }
+        case .reading: return allItems.filter { $0.service == "fetch" || $0.service == "newsletter" }
+        case .personal: return allItems.filter { $0.service == "outline" || $0.service == "calendar" }
+        case .all: return allItems
         }
     }
 
     private let apiClient: APIClient
-    private let logger = Logger(subsystem: "co.cronx.spark", category: "Knowledge")
+    private let logger = Logger(subsystem: "co.cronx.sparkapp", category: "Knowledge")
 
     init(apiClient: APIClient) {
         self.apiClient = apiClient

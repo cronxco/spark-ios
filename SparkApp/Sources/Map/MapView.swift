@@ -31,11 +31,14 @@ struct MapView: View {
                         MetricDetailView(identifier: identifier)
                     case .integration(let service):
                         IntegrationDetailView(integrationId: service)
+                    case .account(let id):
+                        AccountDetailView(accountId: id)
                     }
                 }
-                .navigationTitle("Map")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar(isEmbedded ? .hidden : .visible, for: .navigationBar)
+                .sparkMainNavigationTitle("Map")
+                .toolbar(.visible, for: .navigationBar)
+                .toolbarBackground(.hidden, for: .navigationBar)
+                .sparkMainAppToolbar()
         }
         .task {
             if viewModel == nil {
@@ -48,7 +51,7 @@ struct MapView: View {
     @ViewBuilder
     private var content: some View {
         if let viewModel {
-            MapViewContent(viewModel: viewModel, cameraPosition: $cameraPosition) { point in
+            MapViewContent(viewModel: viewModel, cameraPosition: $cameraPosition, isEmbedded: isEmbedded) { point in
                 handleSelection(point)
             }
         } else {
@@ -75,6 +78,7 @@ struct MapView: View {
 private struct MapViewContent: View {
     @Bindable var viewModel: MapViewModel
     @Binding var cameraPosition: MapCameraPosition
+    let isEmbedded: Bool
     let onSelectPoint: (MapDataPoint) -> Void
 
     @State private var sheetDetent: PresentationDetent = .height(160)
@@ -101,18 +105,82 @@ private struct MapViewContent: View {
                 anchorDay: viewModel.anchorDay
             )
             .padding(.horizontal, SparkSpacing.lg)
-            .padding(.bottom, SparkSpacing.xxl + SparkSpacing.xxxl)
+            .padding(.bottom, timelineBottomPadding)
+        }
+        .overlay {
+            GeometryReader { proxy in
+                if isEmbedded {
+                    EmbeddedMapSummary(points: viewModel.visiblePoints, onSelect: onSelectPoint)
+                        .frame(width: proxy.size.width * 2 / 3, alignment: .leading)
+                        .padding(.leading, SparkSpacing.lg)
+                        .padding(.top, SparkSpacing.xl)
+                }
+            }
         }
         .onMapCameraChange(frequency: .onEnd) { context in
             viewModel.regionDidChange(context.region)
         }
-        .sheet(isPresented: .constant(true)) {
-            MapBottomSheet(points: viewModel.visiblePoints, onSelect: onSelectPoint)
-                .presentationDetents([.height(160), .medium, .large], selection: $sheetDetent)
-                .presentationBackgroundInteraction(.enabled(upThrough: .medium))
-                .presentationDragIndicator(.visible)
-                .interactiveDismissDisabled()
+        .sheet(isPresented: .constant(!isEmbedded)) {
+            if !isEmbedded {
+                MapBottomSheet(points: viewModel.visiblePoints, onSelect: onSelectPoint)
+                    .presentationDetents([.height(160), .medium, .large], selection: $sheetDetent)
+                    .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+                    .presentationDragIndicator(.visible)
+                    .interactiveDismissDisabled()
+            }
         }
+    }
+
+    private var timelineBottomPadding: CGFloat {
+        let base = SparkSpacing.xxl + SparkSpacing.xxxl
+        return isEmbedded ? base + 24 : base
+    }
+}
+
+private struct EmbeddedMapSummary: View {
+    let points: [MapDataPoint]
+    let onSelect: (MapDataPoint) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+            HStack {
+                Text("In view")
+                    .font(SparkTypography.bodyStrong)
+                Spacer(minLength: 0)
+                Text("\(points.count)")
+                    .font(SparkTypography.monoSmall)
+                    .foregroundStyle(.secondary)
+            }
+
+            if points.isEmpty {
+                Text("Pan the map to find visits and events.")
+                    .font(SparkTypography.bodySmall)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(points.prefix(3)) { point in
+                    Button {
+                        onSelect(point)
+                    } label: {
+                        HStack(spacing: SparkSpacing.sm) {
+                            Image(systemName: point.kind == .transaction ? "creditcard.fill" : "mappin.and.ellipse")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 18)
+                            Text(point.title)
+                                .font(SparkTypography.bodySmall)
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.right")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(SparkSpacing.md)
+        .sparkGlass(.roundedRect(SparkRadii.lg))
     }
 }
 

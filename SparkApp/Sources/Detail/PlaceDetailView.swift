@@ -57,15 +57,34 @@ struct PlaceDetailView: View {
             }
             .padding(SparkSpacing.lg)
         }
-        .background(Color.sparkSurface.ignoresSafeArea())
+        .sparkAppBackground()
         .navigationTitle("Place")
         .navigationBarTitleDisplayMode(.inline)
+        .sparkSubViewToolbar(
+            shareItems: placeShareItems,
+            rawTitle: "Raw place",
+            rawPayload: placeRawPayload,
+            refresh: { await viewModel?.load() }
+        )
         .task(id: placeId) {
             if viewModel == nil {
                 viewModel = PlaceDetailViewModel(placeId: placeId, apiClient: appModel.apiClient)
             }
             await viewModel?.load()
         }
+    }
+
+    private var placeShareItems: [Any] {
+        guard case .loaded(let detail) = viewModel?.state else {
+            return ["Spark Place: \(placeId)"]
+        }
+        return ["Spark Place: \(detail.place.title)"]
+    }
+
+    private var placeRawPayload: String? {
+        guard case .loaded(let detail) = viewModel?.state else { return nil }
+        return SparkPrettyJSON.string(for: detail)
+            ?? SparkPrettyJSON.fallback(entity: "place", id: detail.place.id, title: detail.place.title)
     }
 
     @ViewBuilder

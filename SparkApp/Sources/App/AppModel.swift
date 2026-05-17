@@ -22,6 +22,7 @@ enum AppRoute: Hashable {
     case metric(identifier: String)
     case place(id: String)
     case integration(service: String)
+    case account(id: String)
 }
 
 @MainActor
@@ -55,6 +56,15 @@ final class AppModel {
     var onboardingComplete: Bool
     var lastError: String?
     var pendingRoute: AppRoute?
+    private(set) var profile: UserProfile? {
+        didSet {
+            if let name = profile?.name {
+                UserDefaults.sparkAppGroup.set(name, forKey: "spark.profile.name")
+            }
+        }
+    }
+    private var deviceRegistrationTask: Task<Void, Never>?
+    private var deviceRegistrationTokenInFlight: String?
 
     init(container: ModelContainer) {
         self.container = container
@@ -66,10 +76,14 @@ final class AppModel {
         self.apiClient = client
         self.authService = AuthenticationService(tokenStore: tokenStore, apiClient: client)
         self.reverb = ReverbClient(tokenStore: tokenStore)
-        self.onboardingComplete = UserDefaults(suiteName: "group.co.cronx.spark")?.bool(forKey: "onboarding.completed") == true
+        self.onboardingComplete = UserDefaults(suiteName: "group.co.cronx.sparkapp")?.bool(forKey: "onboarding.completed") == true
+        if let cachedName = UserDefaults.sparkAppGroup.string(forKey: "spark.profile.name"), !cachedName.isEmpty {
+            self.profile = UserProfile(id: "", name: cachedName, email: "")
+        }
     }
 
     func bootstrap() async {
+        clearLegacyCheckInKeysIfNeeded()
         if let token = await tokenStore.accessToken() {
             onboardingComplete = true
             session = .loggedIn
@@ -82,6 +96,16 @@ final class AppModel {
         } else {
             session = .loggedOut
         }
+    }
+
+    private static let legacyCheckInMigrationKey = "spark.checkin.legacyCleared.v1"
+
+    private func clearLegacyCheckInKeysIfNeeded() {
+        let defaults = UserDefaults.sparkAppGroup
+        guard !defaults.bool(forKey: Self.legacyCheckInMigrationKey) else { return }
+        let legacyKeys = defaults.dictionaryRepresentation().keys.filter { $0.hasPrefix("checkin_") }
+        for key in legacyKeys { defaults.removeObject(forKey: key) }
+        defaults.set(true, forKey: Self.legacyCheckInMigrationKey)
     }
 
     private func wireReverbHandler() async {
@@ -117,7 +141,7 @@ final class AppModel {
     /// Read a route written by an AppIntent (from the extension process) and
     /// navigate to it. Consumed once to prevent stale navigation on re-launch.
     private func consumePendingIntentRoute() {
-        let defaults = UserDefaults(suiteName: "group.co.cronx.spark")
+        let defaults = UserDefaults(suiteName: "group.co.cronx.sparkapp")
         guard let raw = defaults?.string(forKey: "spark.pendingRoute") else { return }
         defaults?.removeObject(forKey: "spark.pendingRoute")
         let parts = raw.split(separator: ":", maxSplits: 1).map(String.init)
@@ -139,8 +163,9 @@ final class AppModel {
     }
 
     private func fetchAndCacheUserId() async {
-        guard let profile = try? await apiClient.request(MeEndpoint.get()) else { return }
-        UserDefaults.sparkAppGroup.set(profile.id, forKey: "spark.userId")
+        guard let fetched = try? await apiClient.request(MeEndpoint.get()) else { return }
+        profile = fetched
+        UserDefaults.sparkAppGroup.set(fetched.id, forKey: "spark.userId")
     }
 
     private func configureHealthUploader(accessToken: String) {
@@ -150,19 +175,66 @@ final class AppModel {
         )
     }
 
-    private func registerDevice() async {
-        #if canImport(UIKit)
-        let name = UIDevice.current.name
-        #else
-        let name = "Unknown"
-        #endif
-        _ = try? await apiClient.request(DevicesEndpoint.register(name: name, platform: "ios"))
+    func registerDevice() async {
+        guard session == .loggedIn, await tokenStore.accessToken() != nil else { return }
+
+        while true {
+            guard let apnsToken = UserDefaults.sparkAppGroup.string(forKey: "spark.apnsToken") else { return }
+
+            if let deviceRegistrationTask {
+                let tokenInFlight = deviceRegistrationTokenInFlight
+                await deviceRegistrationTask.value
+                if tokenInFlight == apnsToken {
+                    return
+                }
+                continue
+            }
+
+            let task = Task { @MainActor [apiClient] in
+            #if canImport(UIKit)
+                let name = UIDevice.current.name
+                let osVersion = UIDevice.current.systemVersion
+            #else
+                let name = "Unknown"
+                let osVersion = "Unknown"
+            #endif
+
+                let info = Bundle.main.infoDictionary
+                let appVersion = info?["CFBundleShortVersionString"] as? String ?? "0.0.0"
+                let bundleId = Bundle.main.bundleIdentifier ?? "co.cronx.sparkapp"
+            #if DEBUG
+                let appEnvironment = "sandbox"
+            #else
+                let appEnvironment = "production"
+            #endif
+
+                if let registered = try? await apiClient.request(DevicesEndpoint.register(
+                    name: name, platform: "ios",
+                    apnsToken: apnsToken, appEnvironment: appEnvironment,
+                    appVersion: appVersion, bundleId: bundleId, osVersion: osVersion
+                )) {
+                    UserDefaults.sparkAppGroup.set(registered.id, forKey: "spark.apnsDeviceId")
+                }
+            }
+            deviceRegistrationTokenInFlight = apnsToken
+            deviceRegistrationTask = task
+            await task.value
+            deviceRegistrationTask = nil
+            deviceRegistrationTokenInFlight = nil
+            return
+        }
+    }
+
+    func sendTestPush() async throws {
+        _ = try await apiClient.request(DevicesEndpoint.sendTestPush())
     }
 
     func signIn(anchor: ASPresentationAnchorHandle) async {
         do {
             try await authService.signIn(presentationAnchor: anchor.value)
             session = .loggedIn
+            await fetchAndCacheUserId()
+            await registerDevice()
             lastError = nil
         } catch AuthenticationError.cancelled {
             lastError = nil
@@ -176,8 +248,15 @@ final class AppModel {
     }
 
     func signOut() async {
+        if let deviceId = UserDefaults.sparkAppGroup.string(forKey: "spark.apnsDeviceId") {
+            _ = try? await apiClient.request(DevicesEndpoint.revoke(id: deviceId))
+            UserDefaults.sparkAppGroup.removeObject(forKey: "spark.apnsDeviceId")
+        }
         await authService.signOut()
         await etagCache.clearAll()
+        profile = nil
+        UserDefaults.sparkAppGroup.removeObject(forKey: "spark.userId")
+        await reverbDisconnect()
         session = .loggedOut
     }
 }

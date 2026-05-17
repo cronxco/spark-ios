@@ -53,11 +53,19 @@ struct ObjectDetailView: View {
                     LoadingShimmerCard()
                 }
             }
-            .padding(SparkSpacing.lg)
+            .padding(.horizontal, SparkSpacing.lg)
+            .padding(.top, SparkSpacing.xxl)
+            .padding(.bottom, SparkSpacing.xl)
         }
-        .background(Color.sparkSurface.ignoresSafeArea())
+        .sparkAppBackground()
         .navigationTitle("Object")
         .navigationBarTitleDisplayMode(.inline)
+        .sparkSubViewToolbar(
+            shareItems: objectShareItems,
+            rawTitle: "Raw object",
+            rawPayload: objectRawPayload,
+            refresh: { await viewModel?.load() }
+        )
         .task(id: objectId) {
             if viewModel == nil {
                 viewModel = ObjectDetailViewModel(objectId: objectId, apiClient: appModel.apiClient)
@@ -66,39 +74,28 @@ struct ObjectDetailView: View {
         }
     }
 
+    private var objectShareItems: [Any] {
+        guard case .loaded(let detail) = viewModel?.state else {
+            return ["Spark Object: \(objectId)"]
+        }
+        if let url = detail.object.url.flatMap(URL.init) {
+            return [url]
+        }
+        return ["Spark Object: \(detail.object.title)"]
+    }
+
+    private var objectRawPayload: String? {
+        guard case .loaded(let detail) = viewModel?.state else { return nil }
+        return SparkPrettyJSON.string(for: detail)
+            ?? SparkPrettyJSON.fallback(entity: "object", id: detail.object.id, title: detail.object.title)
+    }
+
     @ViewBuilder
     private func content(for detail: ObjectDetail) -> some View {
-        heroCard(for: detail)
+        heroSection(for: detail)
 
         if let summary = detail.aiSummary, !summary.isEmpty {
-            GlassCard {
-                HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.sm) {
-                    Image(systemName: "sparkles")
-                        .font(.caption)
-                        .foregroundStyle(Color.sparkAccent)
-                    Text(summary)
-                        .font(SparkTypography.bodySmall)
-                        .italic()
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-
-        GlassCard(radius: SparkRadii.md, padding: 0) {
-            VStack(spacing: 0) {
-                InspectorRow("Concept") { Text(detail.object.concept) }
-                InspectorRow("Type") { Text(detail.object.type) }
-                if let url = detail.object.url, let parsed = URL(string: url) {
-                    InspectorRow("URL", isMono: true) {
-                        Link(parsed.host ?? url, destination: parsed)
-                    }
-                }
-                if let time = detail.object.time {
-                    InspectorRow("Created", isMono: true) {
-                        Text(Self.fullTimeFormatter.string(from: time))
-                    }
-                }
-            }
+            SparkDetailInsightCard(label: "Insight", text: summary)
         }
 
         if !detail.tags.isEmpty {
@@ -110,7 +107,7 @@ struct ObjectDetailView: View {
 
         if !detail.relatedObjects.isEmpty {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                SectionLabel("Related")
+                SparkDetailSectionHeader("Related", trailing: "\(detail.relatedObjects.count) objects")
                 ForEach(detail.relatedObjects) { rel in
                     relatedObjectRow(rel)
                 }
@@ -119,85 +116,76 @@ struct ObjectDetailView: View {
 
         if !detail.recentEvents.isEmpty {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                SectionLabel("Recent events")
+                SparkDetailSectionHeader("Recent events", trailing: "\(detail.recentEvents.count) events")
                 ForEach(detail.recentEvents) { event in
-                    eventRowSummary(event)
+                    NavigationLink {
+                        EventDetailView(eventId: event.id)
+                    } label: {
+                        eventRowSummary(event)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }
     }
 
-    private func heroCard(for detail: ObjectDetail) -> some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                HStack(spacing: SparkSpacing.sm) {
-                    DomainGlyph(icon: "shippingbox", tint: .sparkAccent, size: 28)
-                    Text(detail.object.concept.uppercased())
-                        .font(SparkTypography.monoSmall)
-                        .foregroundStyle(.secondary)
-                }
-                Text(detail.object.title)
-                    .font(SparkFonts.display(.title2, weight: .bold))
-                    .accessibilityAddTraits(.isHeader)
-                if let content = detail.object.content {
-                    Text(content)
-                        .font(SparkTypography.bodySmall)
-                        .foregroundStyle(.secondary)
-                }
-            }
+    private func heroSection(for detail: ObjectDetail) -> some View {
+        SparkDetailHero(
+            eyebrow: objectEyebrow(for: detail.object),
+            status: detail.object.type.humanisedAction,
+            title: detail.object.title,
+            subtitle: objectSubtitle(for: detail.object),
+            value: nil
+        )
+    }
+
+    private func objectEyebrow(for object: EventObject) -> String {
+        var parts = [
+            object.concept.uppercased(),
+            object.type.replacingOccurrences(of: "_", with: " ").uppercased()
+        ]
+        if let time = object.time {
+            parts.append(SparkDetailFormatters.shortDate.string(from: time))
+            parts.append(SparkDetailFormatters.shortTime.string(from: time))
         }
+        return parts.joined(separator: " — ")
+    }
+
+    private func objectSubtitle(for object: EventObject) -> String? {
+        if let content = object.content, !content.isEmpty {
+            return content
+        }
+        if let url = object.url, let parsed = URL(string: url) {
+            return parsed.host ?? url
+        }
+        return nil
     }
 
     private func relatedObjectRow(_ rel: ObjectDetail.Related) -> some View {
-        GlassCard(radius: SparkRadii.md, padding: SparkSpacing.md) {
-            HStack {
-                Text(rel.title)
-                    .font(SparkTypography.bodySmall)
-                Spacer(minLength: 0)
-                Text(rel.relationship ?? rel.concept)
-                    .font(SparkTypography.monoSmall)
-                    .foregroundStyle(.secondary)
-                Image(systemName: "chevron.right")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        }
+        SparkDetailLinkedRow(
+            title: rel.title,
+            subtitle: rel.concept,
+            trailing: rel.relationship
+        )
     }
 
     private func eventRowSummary(_ event: Event) -> some View {
-        GlassCard(radius: SparkRadii.md, padding: SparkSpacing.md) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(event.action)
-                        .font(SparkTypography.bodySmall)
-                    if let time = event.time {
-                        Text(Self.shortTimeFormatter.string(from: time))
-                            .font(SparkTypography.monoSmall)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                Spacer(minLength: 0)
-                if let value = event.value {
-                    Text(value)
-                        .font(SparkTypography.bodyStrong)
-                        .foregroundStyle(Color.domainTint(for: event.domain))
-                }
-                Image(systemName: "chevron.right")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        }
+        SparkDetailLinkedRow(
+            title: eventTitle(for: event),
+            subtitle: event.time.map { SparkDetailFormatters.compactDateTime.string(from: $0) },
+            trailing: event.displayValue?.sparkPlainTextFromHTMLFragment ?? event.value?.sparkPlainTextFromHTMLFragment,
+            tint: Color.domainTint(for: event.domain)
+        )
     }
 
-    private static let shortTimeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "d MMM, HH:mm"
-        return f
-    }()
-
-    private static let fullTimeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd  HH:mm:ss"
-        return f
-    }()
+    private func eventTitle(for event: Event) -> String {
+        let action = event.action.sparkActionTitle
+        guard event.displayWithObject,
+              let target = event.target?.title.trimmingCharacters(in: .whitespacesAndNewlines),
+              !target.isEmpty
+        else {
+            return action
+        }
+        return "\(action) \(target)"
+    }
 }

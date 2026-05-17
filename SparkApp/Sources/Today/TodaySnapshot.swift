@@ -20,9 +20,9 @@ struct TodaySnapshot {
     let knowledge: KnowledgeSnapshot?
     let anomalies: [Anomaly]
     let heatmapRows: [DomainHeatmapRow]
-    let checkInStatus: CheckInStatus
+    let checkInStatus: CheckInDayStatus
 
-    init(summary: DaySummary?, date: Date, now: Date = .now) {
+    init(summary: DaySummary?, date: Date, now: Date = .now, checkInStatus: CheckInDayStatus = .allPending) {
         self.date = date
         self.timeOfDay = SparkTimeOfDay.from(date: now)
         self.dateLabel = Self.dateFormatter.string(from: date)
@@ -33,8 +33,7 @@ struct TodaySnapshot {
         self.knowledge = KnowledgeSnapshot(summary?.sections.knowledge?.objectValue)
         self.anomalies = summary?.anomalies ?? []
         self.heatmapRows = Self.buildHeatmapRows()
-        let slot = SparkTimeOfDay.from(date: now)
-        self.checkInStatus = Self.loadCheckIn(date: date, slot: slot)
+        self.checkInStatus = checkInStatus
     }
 
     private static let dateFormatter: DateFormatter = {
@@ -42,26 +41,6 @@ struct TodaySnapshot {
         f.dateFormat = "EEEE · d MMMM"
         return f
     }()
-
-    private static func loadCheckIn(date: Date, slot: SparkTimeOfDay) -> CheckInStatus {
-        let dateKey = isoDate(date)
-        let key = "checkin_\(dateKey)_\(slot.rawValue)"
-        guard let data = UserDefaults(suiteName: "group.co.cronx.spark")?.data(forKey: key) else {
-            return .pending(slot: slot)
-        }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        guard let entry = try? decoder.decode(CheckIn.self, from: data) else {
-            return .pending(slot: slot)
-        }
-        return .logged(mood: entry.mood, note: entry.note)
-    }
-
-    private static func isoDate(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd"
-        return f.string(from: date)
-    }
 
     private static func buildHeatmapRows() -> [DomainHeatmapRow] {
         // Backend `/api/v1/mobile/heatmap` doesn't exist yet — Phase 2 ships a
@@ -249,10 +228,16 @@ struct KnowledgeSnapshot {
     }
 }
 
-/// Local-only check-in state for Phase 2. Backend `/check-ins` endpoint
-/// lands in a follow-up phase; until then we surface a "pending" prompt and
-/// the modal stub.
-enum CheckInStatus {
-    case pending(slot: SparkTimeOfDay)
-    case logged(mood: String, note: String?)
+// MARK: - Check-in status types
+
+enum PeriodStatus: Sendable {
+    case pending
+    case completed(physical: Int, mental: Int, notes: String?)
+}
+
+struct CheckInDayStatus: Sendable {
+    let morning: PeriodStatus
+    let afternoon: PeriodStatus
+
+    static let allPending = CheckInDayStatus(morning: .pending, afternoon: .pending)
 }

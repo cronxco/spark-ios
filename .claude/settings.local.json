@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(xcodebuild build *)",
+      "WebFetch(domain:api.anthropic.com)",
+      "Bash(./vendor/bin/sail test *)",
+      "Bash(swift test *)",
+      "Bash(tuist generate *)",
+      "Bash(xcodebuild test *)",
+      "Bash(xcodebuild -workspace Spark.xcworkspace -list)"
+    ]
+  }
+}

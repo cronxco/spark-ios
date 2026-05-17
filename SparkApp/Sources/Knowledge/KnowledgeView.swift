@@ -4,23 +4,29 @@ import SwiftUI
 
 struct KnowledgeView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(\.tabAccessoryCoordinator) private var tabAccessoryCoordinator
     @State private var viewModel: KnowledgeViewModel?
     @State private var path: [Event] = []
 
     var body: some View {
         NavigationStack(path: $path) {
             content
-                .navigationTitle("Knowledge")
-                .navigationBarTitleDisplayMode(.large)
+                .sparkMainNavigationTitle("Knowledge")
                 .navigationDestination(for: Event.self) { event in
                     KnowledgeItemDetailView(event: event)
                 }
+                .sparkMainAppToolbar()
+                .onAppear { updateFilterAccessory() }
+                .onChange(of: viewModel?.filter) { _, _ in updateFilterAccessory() }
+                .onChange(of: path.count) { _, _ in updateFilterAccessory() }
+                .onDisappear { tabAccessoryCoordinator?.clear(owner: .knowledge) }
         }
         .task {
             if viewModel == nil {
                 viewModel = KnowledgeViewModel(apiClient: appModel.apiClient)
             }
             await viewModel?.initialLoad()
+            updateFilterAccessory()
         }
     }
 
@@ -36,7 +42,7 @@ struct KnowledgeView: View {
     private func mainContent(viewModel: KnowledgeViewModel) -> some View {
         ScrollView {
             VStack(spacing: SparkSpacing.lg) {
-                filterRow(viewModel: viewModel)
+                pageHeader(viewModel: viewModel)
                     .padding(.horizontal, SparkSpacing.lg)
 
                 let items = viewModel.filteredItems
@@ -86,24 +92,65 @@ struct KnowledgeView: View {
                     }
                 }
             }
-            .padding(.vertical, SparkSpacing.xl)
+            .padding(.top, SparkSpacing.md)
+            .padding(.bottom, SparkSpacing.xl)
         }
         .refreshable { await viewModel.refresh() }
-        .background(Color.sparkSurface.ignoresSafeArea())
+        .sparkAppBackground()
     }
 
-    private func filterRow(viewModel: KnowledgeViewModel) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: SparkSpacing.sm) {
-                ForEach(KnowledgeViewModel.Filter.allCases) { f in
-                    Button {
-                        viewModel.filter = f
-                    } label: {
-                        TagChip(f.rawValue, isGhost: viewModel.filter != f)
-                    }
-                    .buttonStyle(.plain)
+    private func updateFilterAccessory() {
+        guard path.isEmpty else {
+            tabAccessoryCoordinator?.clear(owner: .knowledge)
+            return
+        }
+
+        registerFilterAccessory()
+    }
+
+    private func registerFilterAccessory() {
+        guard let viewModel else { return }
+
+        tabAccessoryCoordinator?.set(
+            TabAccessory(
+                owner: .knowledge,
+                title: "Knowledge filter",
+                items: KnowledgeViewModel.Filter.allCases.map {
+                    TabAccessoryItem(id: $0.id, title: $0.rawValue, systemImage: filterIcon($0))
+                },
+                selectedID: viewModel.filter.id,
+                select: { id in
+                    guard let filter = KnowledgeViewModel.Filter(rawValue: id) else { return }
+                    viewModel.filter = filter
                 }
-            }
+            )
+        )
+    }
+
+    private func filterIcon(_ filter: KnowledgeViewModel.Filter) -> String {
+        switch filter {
+        case .reading: "newspaper.fill"
+        case .personal: "person.crop.circle.fill"
+        case .all: "square.grid.2x2.fill"
+        }
+    }
+
+    private func pageHeader(viewModel: KnowledgeViewModel) -> some View {
+        SparkMainPageHeader(title: "Knowledge", subtitle: headerSubtitle(viewModel: viewModel))
+    }
+
+    private func headerSubtitle(viewModel: KnowledgeViewModel) -> String {
+        switch viewModel.loadState {
+        case .idle:
+            return "Loading your reading"
+        case .loading where viewModel.allItems.isEmpty:
+            return "Loading your reading"
+        case .error where viewModel.allItems.isEmpty:
+            return "Knowledge unavailable"
+        default:
+            let count = viewModel.filteredItems.count
+            let noun = count == 1 ? "item" : "items"
+            return "\(count) \(noun) in \(viewModel.filter.rawValue)"
         }
     }
 
@@ -124,6 +171,7 @@ struct KnowledgeView: View {
             }
             .padding(SparkSpacing.lg)
         }
+        .sparkAppBackground()
     }
 }
 
@@ -131,6 +179,9 @@ struct KnowledgeView: View {
 
 private struct KnowledgeItemCard: View {
     let event: Event
+    @Environment(\.colorScheme) private var colorScheme
+
+    private let cardRadius: CGFloat = 20
 
     private var imageUrl: URL? {
         guard let raw = event.target?.mediaUrl else { return nil }
@@ -138,7 +189,7 @@ private struct KnowledgeItemCard: View {
     }
 
     private var title: String {
-        event.target?.title ?? event.action.replacingOccurrences(of: "_", with: " ").capitalized
+        event.target?.title ?? event.displayName ?? event.action.replacingOccurrences(of: "_", with: " ").capitalized
     }
 
     private var source: String {
@@ -149,12 +200,43 @@ private struct KnowledgeItemCard: View {
         switch event.service {
         case "newsletter": "Newsletter"
         case "fetch": "Web Digest"
+        case "outline": "Outline"
+        case "calendar": "Calendar"
         default: event.service.capitalized
         }
     }
 
+    private var serviceIcon: String {
+        switch event.service {
+        case "newsletter": "newspaper.fill"
+        case "fetch": "safari.fill"
+        case "outline": "list.bullet.rectangle.fill"
+        case "calendar": "calendar"
+        default: "books.vertical.fill"
+        }
+    }
+
+    private var accent: Color {
+        let palette: [Color] = [
+            .spark400,
+            .spark500,
+            .ocean300,
+            .ember300,
+            .sparkSuccess,
+            .sparkWarning,
+        ]
+        return palette[stablePaletteIndex % palette.count]
+    }
+
+    private var stablePaletteIndex: Int {
+        let seed = event.id + title + event.service
+        return seed.unicodeScalars.reduce(0) { partial, scalar in
+            (partial &* 31 &+ Int(scalar.value)) & 0x7fffffff
+        }
+    }
+
     var body: some View {
-        GlassCard(padding: 0) {
+        GlassCard(radius: cardRadius, padding: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 Group {
                     if let url = imageUrl {
@@ -193,9 +275,7 @@ private struct KnowledgeItemCard: View {
                         .foregroundStyle(.primary)
 
                     if let tldr = event.tldr {
-                        Text(tldr)
-                            .font(SparkTypography.bodySmall)
-                            .foregroundStyle(.secondary)
+                        SparkRichContentText(text: tldr, font: SparkTypography.bodySmall, foregroundStyle: .secondary)
                             .italic()
                             .lineLimit(2)
                     }
@@ -203,11 +283,16 @@ private struct KnowledgeItemCard: View {
                     HStack {
                         Text(serviceLabel)
                             .font(SparkTypography.monoSmall)
-                            .foregroundStyle(Color.domainKnowledge)
+                            .foregroundStyle(accent)
                             .padding(.horizontal, SparkSpacing.sm)
                             .padding(.vertical, 3)
-                            .background(Color.domainKnowledge.opacity(0.12))
+                            .background(accent.opacity(colorScheme == .dark ? 0.20 : 0.12))
                             .clipShape(.capsule)
+                        if let count = event.blocksCount, count > 0 {
+                            Text("\(count) blocks")
+                                .font(SparkTypography.monoSmall)
+                                .foregroundStyle(.secondary)
+                        }
                         Spacer(minLength: 0)
                         Image(systemName: "chevron.right")
                             .font(.caption2)
@@ -217,14 +302,24 @@ private struct KnowledgeItemCard: View {
                 .padding(SparkSpacing.lg)
             }
         }
+        .clipShape(RoundedRectangle(cornerRadius: cardRadius, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: cardRadius, style: .continuous))
     }
 
     private var imagePlaceholder: some View {
-        Color.sparkElevated
-            .overlay(
-                Image(systemName: "doc.richtext")
-                    .font(.title)
-                    .foregroundStyle(.tertiary)
-            )
+        Rectangle()
+            .fill(accent.opacity(colorScheme == .dark ? 0.62 : 0.82))
+            .overlay(alignment: .center) {
+                Image(systemName: "books.vertical.fill")
+                    .font(.system(size: 88, weight: .light))
+                    .foregroundStyle(.white.opacity(0.26))
+                    .offset(x: 58, y: 8)
+            }
+            .overlay(alignment: .bottomLeading) {
+                Image(systemName: serviceIcon)
+                    .font(.system(size: 34, weight: .light))
+                    .foregroundStyle(.white.opacity(0.78))
+                    .padding(SparkSpacing.lg)
+            }
     }
 }

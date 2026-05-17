@@ -22,6 +22,11 @@ public enum SparkTypography {
     public static let caption = Font.system(.caption)
     public static let captionStrong = Font.system(.caption).weight(.semibold)
 
+    // Long-form reading — New York-style system serif for article/digest prose.
+    public static let longFormBody = Font.system(.title3, design: .serif)
+    public static let longFormBodySmall = Font.system(.body, design: .serif)
+    public static let longFormQuote = Font.system(.title3, design: .serif).italic()
+
     // Technical — PT Mono. Used for timestamps, IDs, all-caps section labels.
     public static let mono = SparkFonts.mono(.footnote)
     public static let monoSmall = SparkFonts.mono(.caption2)

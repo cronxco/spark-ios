@@ -2,15 +2,21 @@ import SparkUI
 import SwiftUI
 
 struct ExploreView: View {
+    @Environment(\.tabAccessoryCoordinator) private var tabAccessoryCoordinator
     @State private var section: ExploreSection = .map
 
     var body: some View {
-        ZStack(alignment: .top) {
-            currentSectionView
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            sectionPicker
-        }
+        currentSectionView
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onAppear {
+                registerSectionAccessory()
+            }
+            .onChange(of: section) { _, _ in
+                registerSectionAccessory()
+            }
+            .onDisappear {
+                tabAccessoryCoordinator?.clear(owner: .explore)
+            }
     }
 
     @ViewBuilder
@@ -27,28 +33,33 @@ struct ExploreView: View {
         }
     }
 
-    private var sectionPicker: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: SparkSpacing.sm) {
-                ForEach(ExploreSection.allCases, id: \.self) { sec in
-                    Button {
-                        section = sec
-                    } label: {
-                        ExploreSectionChip(sec, isSelected: section == sec)
-                    }
-                    .buttonStyle(.plain)
-                }
+    private func registerSectionAccessory() {
+        tabAccessoryCoordinator?.set(TabAccessory(
+            owner: .explore,
+            title: "Section",
+            items: ExploreSection.allCases.map {
+                TabAccessoryItem(id: $0.id, title: $0.label, systemImage: $0.icon)
+            },
+            selectedID: section.id,
+            select: { id in
+                guard let selected = ExploreSection.allCases.first(where: { $0.id == id }) else { return }
+                section = selected
             }
-            .padding(.horizontal, SparkSpacing.lg)
-        }
-        .safeAreaPadding(.top)
-        .padding(.vertical, SparkSpacing.sm)
-        .background(.ultraThinMaterial)
+        ))
     }
 }
 
-enum ExploreSection: CaseIterable {
+enum ExploreSection: CaseIterable, Equatable {
     case map, health, metrics, money
+
+    var id: String {
+        switch self {
+        case .map: "map"
+        case .health: "health"
+        case .metrics: "metrics"
+        case .money: "money"
+        }
+    }
 
     var label: String {
         switch self {
@@ -61,41 +72,10 @@ enum ExploreSection: CaseIterable {
 
     var icon: String {
         switch self {
-        case .map: "map"
+        case .map: "mappin"
         case .health: "heart.fill"
-        case .metrics: "chart.line.uptrend.xyaxis"
-        case .money: "sterlingsign.circle.fill"
+        case .metrics: "bolt.fill"
+        case .money: "sterlingsign"
         }
-    }
-
-    var tint: Color {
-        switch self {
-        case .map: .sparkOcean
-        case .health: .sparkSuccess
-        case .metrics: .sparkAccent
-        case .money: .domainMoney
-        }
-    }
-}
-
-private struct ExploreSectionChip: View {
-    let section: ExploreSection
-    let isSelected: Bool
-
-    init(_ section: ExploreSection, isSelected: Bool) {
-        self.section = section
-        self.isSelected = isSelected
-    }
-
-    var body: some View {
-        HStack(spacing: SparkSpacing.xs) {
-            Image(systemName: section.icon)
-            Text(section.label)
-        }
-        .font(SparkTypography.captionStrong)
-        .padding(.horizontal, SparkSpacing.md)
-        .padding(.vertical, SparkSpacing.sm)
-        .foregroundStyle(isSelected ? Color.white : section.tint)
-        .sparkGlass(.capsule, tint: isSelected ? section.tint : section.tint.opacity(0.15))
     }
 }

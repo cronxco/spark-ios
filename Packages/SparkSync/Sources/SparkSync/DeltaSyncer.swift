@@ -8,7 +8,7 @@ import SwiftData
 /// All SwiftData operations run on the MainActor so the ModelContext is
 /// never accessed across thread-suspension points.
 public enum DeltaSyncer {
-    private static let logger = Logger(subsystem: "co.cronx.spark", category: "DeltaSyncer")
+    private static let logger = Logger(subsystem: "co.cronx.sparkapp", category: "DeltaSyncer")
 
     /// Fetches new events from the server and applies them to the local cache.
     /// Returns `true` if any records were written, `false` for no-change or error.
@@ -68,8 +68,17 @@ public enum DeltaSyncer {
             existing.value = event.value
             existing.unit = event.unit
             existing.url = event.url
+            existing.displayName = event.displayName
+            existing.hidden = event.hidden
+            existing.displayValue = event.displayValue
+            existing.tagNames = CachedEvent.encodeTagNames(event.tags)
+            existing.blocksCount = event.blocksCount
             existing.actorTitle = event.actor?.title
+            existing.actorType = event.actor?.type
+            existing.actorMediaUrl = event.actor?.mediaUrl
             existing.targetTitle = event.target?.title
+            existing.targetType = event.target?.type
+            existing.targetMediaUrl = event.target?.mediaUrl
             existing.lastSyncedAt = syncedAt
         } else {
             context.insert(CachedEvent(
@@ -81,8 +90,17 @@ public enum DeltaSyncer {
                 value: event.value,
                 unit: event.unit,
                 url: event.url,
+                displayName: event.displayName,
+                hidden: event.hidden,
+                displayValue: event.displayValue,
+                tagNames: CachedEvent.encodeTagNames(event.tags),
+                blocksCount: event.blocksCount,
                 actorTitle: event.actor?.title,
+                actorType: event.actor?.type,
+                actorMediaUrl: event.actor?.mediaUrl,
                 targetTitle: event.target?.title,
+                targetType: event.target?.type,
+                targetMediaUrl: event.target?.mediaUrl,
                 lastSyncedAt: syncedAt
             ))
         }

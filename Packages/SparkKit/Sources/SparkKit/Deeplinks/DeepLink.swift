@@ -52,7 +52,7 @@ public enum DeepLink: Sendable, Equatable {
             return .block(id: parts[1])
         case "metrics", "metric":
             guard parts.count >= 2 else { return nil }
-            return .metric(identifier: parts[1])
+            return .metric(identifier: MetricsEndpoint.canonicalIdentifier(parts[1]))
         case "places", "place":
             guard parts.count >= 2 else { return nil }
             return .place(id: parts[1])

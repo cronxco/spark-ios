@@ -8,8 +8,7 @@ struct KeychainTokenStoreTests {
     /// the production Keychain item or bleed state between test cases. Using
     /// `accessGroup: nil` sidesteps the signed-entitlement requirement when
     /// running under `swift test` without a provisioning profile.
-    private func makeStore() -> KeychainTokenStore {
-        let service = "co.cronx.spark.tests.\(UUID().uuidString)"
+    private func makeStore(service: String = "co.cronx.sparkapp.tests.\(UUID().uuidString)") -> KeychainTokenStore {
         return KeychainTokenStore(service: service, account: "test", accessGroup: nil)
     }
 
@@ -40,6 +39,23 @@ struct KeychainTokenStoreTests {
         #expect(await store.accessToken() == "new")
         #expect(await store.refreshToken() == "new-r")
         await store.clear()
+    }
+
+    @Test("separate store instances observe token rotation")
+    func independentInstancesObserveRotation() async {
+        let service = "co.cronx.sparkapp.tests.\(UUID().uuidString)"
+        let first = makeStore(service: service)
+        let second = makeStore(service: service)
+
+        await first.store(access: "old", refresh: "old-r", expiresIn: 1)
+        #expect(await second.refreshToken() == "old-r")
+
+        await first.store(access: "new", refresh: "new-r", expiresIn: 7200)
+        #expect(await second.accessToken() == "new")
+        #expect(await second.refreshToken() == "new-r")
+
+        await first.clear()
+        #expect(await second.tokens() == nil)
     }
 
     @Test("clear wipes stored tokens")

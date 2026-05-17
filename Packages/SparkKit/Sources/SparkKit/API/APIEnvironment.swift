@@ -90,6 +90,6 @@ public extension UserDefaults {
     /// The App Group UserDefaults. Writing via this suite lets widgets,
     /// extensions and the main app share preferences and ETags.
     nonisolated(unsafe) static let sparkAppGroup: UserDefaults = {
-        UserDefaults(suiteName: "group.co.cronx.spark") ?? .standard
+        UserDefaults(suiteName: "group.co.cronx.sparkapp") ?? .standard
     }()
 }

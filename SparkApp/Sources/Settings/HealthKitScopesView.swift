@@ -1,9 +1,13 @@
 import SparkHealth
+import SparkKit
 import SparkUI
 import SwiftUI
 
 struct HealthKitScopesView: View {
     @Environment(AppModel.self) private var appModel
+
+    @AppStorage("health.upload.enabled", store: .sparkAppGroup)
+    private var healthUploadEnabled = false
 
     private var mgr: HealthKitPermissionManager { appModel.healthPermissions }
 
@@ -36,6 +40,18 @@ struct HealthKitScopesView: View {
                     state: mgr.advancedState,
                     action: { Task { await mgr.requestAdvanced() } }
                 )
+
+                Section {
+                    Toggle(isOn: $healthUploadEnabled) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Sync Health Data")
+                                .font(SparkTypography.body)
+                            Text("Upload activity and health metrics to Spark")
+                                .font(SparkTypography.bodySmall)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
 
                 Section {
                     Link(destination: URL(string: "x-apple-health://")!) {

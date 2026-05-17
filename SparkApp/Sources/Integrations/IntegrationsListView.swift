@@ -18,6 +18,15 @@ struct IntegrationsListView: View {
                     )
                 } else {
                     Form {
+                        Section {
+                            SparkSystemScreenHeader(
+                                title: "Integrations",
+                                subtitle: "Connection health and sync controls for Spark sources."
+                            )
+                            .padding(.vertical, SparkSpacing.sm)
+                        }
+                        .listRowBackground(Color.clear)
+
                         ForEach(viewModel?.grouped(list) ?? [], id: \.0) { group in
                             Section(group.0) {
                                 ForEach(group.1) { integration in
@@ -77,14 +86,15 @@ private struct IntegrationRow: View {
         Circle()
             .fill(statusColor)
             .frame(width: 8, height: 8)
-            .accessibilityLabel(integration.status)
+            .accessibilityLabel(integration.statusValue)
     }
 
     private var statusColor: Color {
-        switch integration.status.lowercased() {
+        switch integration.statusValue.lowercased() {
         case "up_to_date", "ok", "active": .sparkSuccess
         case "syncing", "running": .sparkInfo
         case "needs_reauth", "reauth", "expired": .sparkWarning
+        case "unknown": .secondary
         default: .sparkError
         }
     }

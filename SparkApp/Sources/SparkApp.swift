@@ -22,17 +22,26 @@ struct SparkApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environment(model)
-                .modelContainer(model.container)
-                .tint(.sparkAccent)
-                .sparkDynamicTypeClamp()
-                .task(id: model.session) {
-                    if model.session == .loggedIn {
-                        HealthKitObserver.shared.startObserving()
+            ZStack {
+                SparkResolvedAppBackground()
+
+                RootView()
+                    .environment(model)
+                    .modelContainer(model.container)
+                    .tint(.sparkAccent)
+                    .sparkDynamicTypeClamp()
+                    .task(id: model.session) {
+                        if model.session == .loggedIn {
+                            HealthKitObserver.shared.startObserving()
+                        }
                     }
-                }
-                .onContinueUserActivity(CSSearchableItemActionType, perform: handle(spotlightActivity:))
+                    .onContinueUserActivity(CSSearchableItemActionType, perform: handle(spotlightActivity:))
+            }
+            .overlay(alignment: .top) {
+                SparkResolvedStatusBarBackground()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .ignoresSafeArea()
         }
         .onChange(of: scenePhase) { _, phase in
             Task { @MainActor in
@@ -49,11 +58,11 @@ struct SparkApp: App {
     }
 
     /// Spotlight tap handler. Identifiers have the form:
-    /// `co.cronx.spark.{type}.{id}` — parse the type prefix and route.
+    /// `co.cronx.sparkapp.{type}.{id}` — parse the type prefix and route.
     @MainActor
     private func handle(spotlightActivity activity: NSUserActivity) {
         guard let identifier = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String else { return }
-        let prefix = "co.cronx.spark."
+        let prefix = "co.cronx.sparkapp."
         guard identifier.hasPrefix(prefix) else { return }
         let rest = identifier.dropFirst(prefix.count)
         guard let dotRange = rest.firstIndex(of: ".") else { return }
@@ -78,7 +87,18 @@ final class SparkAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
         UNUserNotificationCenter.current().delegate = self
         registerNotificationCategories()
         registerBackgroundTasks()
+        application.registerForRemoteNotifications()
         return true
+    }
+
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
+        UserDefaults.sparkAppGroup.set(hex, forKey: "spark.apnsToken")
+        Task { await AppModel.shared.registerDevice() }
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        SentrySDK.capture(error: error)
     }
 
     func application(
@@ -212,17 +232,32 @@ enum SparkObservability {
     static let dsn = "https://1583f3671989ff49f2e578e5cef8ace9@sentry.cronx.co/5"
 
     static func start() {
+        guard !isRunningTests else { return }
+
         SentrySDK.start { options in
             options.dsn = dsn
             options.environment = APIEnvironment.current().name
             options.releaseName = releaseName()
+            options.maxBreadcrumbs = 200
 
             // Error monitoring
+            options.sampleRate = 1.0
             options.enableCrashHandler = true
             options.enableWatchdogTerminationTracking = true
             options.attachScreenshot = true
             options.attachViewHierarchy = true
             options.enableTimeToFullDisplayTracing = true
+
+            // Network capture
+            let environment = APIEnvironment.current()
+            options.enableNetworkBreadcrumbs = true
+            options.enableCaptureFailedRequests = true
+            options.failedRequestStatusCodes = [HttpStatusCodeRange(min: 400, max: 599)]
+            options.failedRequestTargets = [
+                environment.baseURL.host() ?? "spark.cronx.co",
+                environment.reverbHTTPBaseURL.host() ?? "ws.spark.cronx.co",
+            ]
+            options.tracePropagationTargets = options.failedRequestTargets
 
             // Logging (captures OSLog output)
             options.enableLogs = true
@@ -235,16 +270,21 @@ enum SparkObservability {
                 $0.lifecycle = .trace
             }
             #else
-            options.tracesSampleRate = 0.2
+            options.tracesSampleRate = 1.0
             options.configureProfiling = {
-                $0.sessionSampleRate = 0.1
+                $0.sessionSampleRate = 1.0
                 $0.lifecycle = .trace
             }
             #endif
         }
+
+        Task {
+            await APITelemetry.shared.setSink(SentryAPITelemetrySink())
+        }
     }
 
     static func captureHandled(_ error: Error) {
+        guard !error.isAPICancellation else { return }
         SentrySDK.capture(error: error) { scope in
             scope.setTag(value: "handled", key: "error_type")
         }
@@ -254,6 +294,10 @@ enum SparkObservability {
         let info = Bundle.main.infoDictionary
         let short = info?["CFBundleShortVersionString"] as? String ?? "0.0.0"
         let build = info?["CFBundleVersion"] as? String ?? "0"
-        return "co.cronx.spark@\(short)+\(build)"
+        return "co.cronx.sparkapp@\(short)+\(build)"
+    }
+
+    private static var isRunningTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 }

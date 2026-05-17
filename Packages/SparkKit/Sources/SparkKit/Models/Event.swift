@@ -10,29 +10,41 @@ public struct Event: Codable, Sendable, Hashable, Identifiable {
     public let value: String?
     public let unit: String?
     public let url: String?
+    public let displayName: String?
+    public let hidden: Bool
+    public let displayWithObject: Bool
+    public let displayValue: String?
+    public let tags: [EventTag]
     public let tldr: String?
+    public let blocksCount: Int?
     public let actor: ActorTarget?
     public let target: ActorTarget?
 
     enum CodingKeys: String, CodingKey {
-        case id, time, service, domain, action, value, unit, url, tldr, actor, target
+        case id, time, service, domain, action, value, unit, url, hidden, tags, tldr, actor, target
+        case displayName = "display_name"
+        case displayWithObject = "display_with_object"
+        case displayValue = "display_value"
+        case blocksCount = "blocks_count"
     }
 
     public struct ActorTarget: Codable, Sendable, Hashable {
         public let id: String
         public let title: String
         public let concept: String
+        public let type: String?
         public let mediaUrl: String?
 
         enum CodingKeys: String, CodingKey {
-            case id, title, concept
+            case id, title, concept, type
             case mediaUrl = "media_url"
         }
 
-        public init(id: String, title: String, concept: String, mediaUrl: String? = nil) {
+        public init(id: String, title: String, concept: String, type: String? = nil, mediaUrl: String? = nil) {
             self.id = id
             self.title = title
             self.concept = concept
+            self.type = type
             self.mediaUrl = mediaUrl
         }
     }
@@ -46,7 +58,13 @@ public struct Event: Codable, Sendable, Hashable, Identifiable {
         value: String? = nil,
         unit: String? = nil,
         url: String? = nil,
+        displayName: String? = nil,
+        hidden: Bool = false,
+        displayWithObject: Bool = false,
+        displayValue: String? = nil,
+        tags: [EventTag] = [],
         tldr: String? = nil,
+        blocksCount: Int? = nil,
         actor: ActorTarget? = nil,
         target: ActorTarget? = nil
     ) {
@@ -58,7 +76,13 @@ public struct Event: Codable, Sendable, Hashable, Identifiable {
         self.value = value
         self.unit = unit
         self.url = url
+        self.displayName = displayName
+        self.hidden = hidden
+        self.displayWithObject = displayWithObject
+        self.displayValue = displayValue
+        self.tags = tags
         self.tldr = tldr
+        self.blocksCount = blocksCount
         self.actor = actor
         self.target = target
     }
@@ -72,7 +96,13 @@ public struct Event: Codable, Sendable, Hashable, Identifiable {
         action = try container.decode(String.self, forKey: .action)
         unit = try container.decodeIfPresent(String.self, forKey: .unit)
         url = try container.decodeIfPresent(String.self, forKey: .url)
+        displayName = try container.decodeIfPresent(String.self, forKey: .displayName)
+        hidden = try container.decodeIfPresent(Bool.self, forKey: .hidden) ?? false
+        displayWithObject = try container.decodeIfPresent(Bool.self, forKey: .displayWithObject) ?? false
+        displayValue = try container.decodeIfPresent(String.self, forKey: .displayValue)
+        tags = try container.decodeIfPresent([EventTag].self, forKey: .tags) ?? []
         tldr = try container.decodeIfPresent(String.self, forKey: .tldr)
+        blocksCount = try container.decodeIfPresent(Int.self, forKey: .blocksCount)
         actor = try container.decodeIfPresent(ActorTarget.self, forKey: .actor)
         target = try container.decodeIfPresent(ActorTarget.self, forKey: .target)
 

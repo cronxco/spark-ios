@@ -5,7 +5,7 @@ import WidgetKit
 /// with large readable text. iOS rotates between multiple systemSmall widgets
 /// in the StandBy widget carousel automatically.
 struct StandByWidget: Widget {
-    let kind = "co.cronx.spark.widgets.standby"
+    let kind = "co.cronx.sparkapp.widgets.standby"
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: SparkTimelineProvider()) { entry in

@@ -65,3 +65,13 @@ public struct BoundingBox: Sendable, Hashable {
         "\(southWest.lat),\(southWest.lng),\(northEast.lat),\(northEast.lng)"
     }
 }
+
+public struct MapDataResponse: Decodable, Sendable {
+    public struct Markers: Decodable, Sendable {
+        public let events: [MapDataPoint]
+        public let places: [MapDataPoint]
+    }
+    public let markers: Markers
+
+    public var allPoints: [MapDataPoint] { markers.events + markers.places }
+}

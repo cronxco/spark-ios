@@ -2,7 +2,7 @@ import SwiftUI
 import WidgetKit
 
 struct NextEventWidget: Widget {
-    let kind = "co.cronx.spark.widgets.nextevent"
+    let kind = "co.cronx.sparkapp.widgets.nextevent"
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: SparkTimelineProvider()) { entry in

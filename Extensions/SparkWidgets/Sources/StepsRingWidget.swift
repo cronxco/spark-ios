@@ -2,7 +2,7 @@ import SwiftUI
 import WidgetKit
 
 struct StepsRingWidget: Widget {
-    let kind = "co.cronx.spark.widgets.steps"
+    let kind = "co.cronx.sparkapp.widgets.steps"
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: SparkTimelineProvider()) { entry in

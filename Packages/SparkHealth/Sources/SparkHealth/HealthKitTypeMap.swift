@@ -45,7 +45,7 @@ public enum HealthKitTypeMap {
         case .distanceWalkingRunning:   return (.meter(), "m")
         case .appleExerciseTime:        return (.minute(), "min")
         case .heartRateVariabilitySDNN: return (HKUnit(from: "ms"), "ms")
-        case .vo2Max:                   return (HKUnit(from: "ml/kg/min"), "ml/kg/min")
+        case .vo2Max:                   return (HKUnit.literUnit(with: .milli).unitDivided(by: HKUnit.gramUnit(with: .kilo).unitMultiplied(by: .minute())), "ml/kg/min")
         case .respiratoryRate:          return (.count().unitDivided(by: .minute()), "count/min")
         case .oxygenSaturation:         return (.percent(), "%")
         default:                        return (.count(), "count")

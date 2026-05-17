@@ -19,7 +19,7 @@ final class IntegrationDetailViewModel {
 
     private let apiClient: APIClient
     private let reauthService = IntegrationReauthService()
-    private let logger = Logger(subsystem: "co.cronx.spark", category: "IntegrationDetail")
+    private let logger = Logger(subsystem: "co.cronx.sparkapp", category: "IntegrationDetail")
 
     init(integrationId: String, apiClient: APIClient) {
         self.integrationId = integrationId

@@ -4,6 +4,7 @@ public enum IntegrationStatus: Sendable, Hashable {
     case upToDate
     case syncing
     case needsReauth
+    case unknown
     case error(String)
 
     public var label: String {
@@ -11,6 +12,7 @@ public enum IntegrationStatus: Sendable, Hashable {
         case .upToDate: "Up to date"
         case .syncing: "Syncing"
         case .needsReauth: "Reauth required"
+        case .unknown: "Unknown"
         case .error(let msg): msg
         }
     }
@@ -32,11 +34,12 @@ public struct IntegrationDetail: Codable, Sendable, Hashable, Identifiable {
     public var id: String { integration.id }
 
     public var status: IntegrationStatus {
-        switch integration.status.lowercased() {
+        switch integration.statusValue.lowercased() {
         case "up_to_date", "ok", "active": .upToDate
         case "syncing", "running": .syncing
         case "needs_reauth", "reauth", "expired": .needsReauth
-        default: .error(statusMessage ?? integration.status)
+        case "unknown": .unknown
+        default: .error(statusMessage ?? integration.statusValue)
         }
     }
 

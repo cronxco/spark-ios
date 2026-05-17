@@ -45,4 +45,17 @@ public struct ObjectDetail: Codable, Sendable, Hashable, Identifiable {
         self.tags = tags
         self.aiSummary = aiSummary
     }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        // Backend may return either an ObjectDetail envelope or a flat
+        // EventObject payload with detail fields at the root.
+        object = try container.decodeIfPresent(EventObject.self, forKey: .object)
+            ?? EventObject(from: decoder)
+        recentEvents = try container.decodeIfPresent([Event].self, forKey: .recentEvents) ?? []
+        relatedObjects = try container.decodeIfPresent([Related].self, forKey: .relatedObjects) ?? []
+        tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
+        aiSummary = try container.decodeIfPresent(String.self, forKey: .aiSummary)
+    }
 }

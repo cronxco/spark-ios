@@ -7,10 +7,10 @@ import WidgetKit
 
 /// Manages the two background task identifiers Spark registers with the OS.
 ///
-/// `co.cronx.spark.refresh`  — BGAppRefreshTask, fires ~every 2 h.
+/// `co.cronx.sparkapp.refresh`  — BGAppRefreshTask, fires ~every 2 h.
 ///   Fetches /sync/delta, writes to SwiftData, reloads widget timelines.
 ///
-/// `co.cronx.spark.prefetch` — BGProcessingTask, fires nightly when on
+/// `co.cronx.sparkapp.prefetch` — BGProcessingTask, fires nightly when on
 ///   power + Wi-Fi. Runs the optional Spotlight indexing closure provided
 ///   by the app target, then pre-warms image caches.
 ///
@@ -18,10 +18,10 @@ import WidgetKit
 /// `BGTaskCoordinator.register(...)` inside `SparkAppDelegate.application(_:didFinishLaunchingWithOptions:)`
 /// or `SparkApp.init()` before the method returns.
 public enum BGTaskCoordinator {
-    public static let refreshTaskIdentifier = "co.cronx.spark.refresh"
-    public static let prefetchTaskIdentifier = "co.cronx.spark.prefetch"
+    public static let refreshTaskIdentifier = "co.cronx.sparkapp.refresh"
+    public static let prefetchTaskIdentifier = "co.cronx.sparkapp.prefetch"
 
-    private static let logger = Logger(subsystem: "co.cronx.spark", category: "BGTask")
+    private static let logger = Logger(subsystem: "co.cronx.sparkapp", category: "BGTask")
 
     // MARK: - Registration
 

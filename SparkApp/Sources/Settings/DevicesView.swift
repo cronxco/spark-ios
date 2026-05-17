@@ -14,6 +14,15 @@ struct DevicesView: View {
                     EmptyState(systemImage: "iphone", title: "No devices", message: "Devices appear here after sign-in.")
                 } else {
                     List {
+                        Section {
+                            SparkSystemScreenHeader(
+                                title: "Devices",
+                                subtitle: "Signed-in devices connected to your Spark account."
+                            )
+                            .padding(.vertical, SparkSpacing.sm)
+                        }
+                        .listRowBackground(Color.clear)
+
                         ForEach(devices) { device in
                             DeviceRow(device: device) {
                                 Task { await viewModel?.revoke(device) }

@@ -5,7 +5,7 @@ import SwiftData
 /// container so the main app, widgets, and other extensions all read/write the
 /// same cache.
 public enum SparkDataStore {
-    public static let appGroupIdentifier = "group.co.cronx.spark"
+    public static let appGroupIdentifier = "group.co.cronx.sparkapp"
     public static let storeFilename = "Spark.sqlite"
 
     public enum StoreError: Error {
@@ -25,7 +25,8 @@ public enum SparkDataStore {
         let url = try storeURL()
         let configuration = ModelConfiguration(url: url)
         return try ModelContainer(
-            for: Schema(versionedSchema: SparkSchemaV1.self),
+            for: Schema(versionedSchema: SparkSchemaV3.self),
+            migrationPlan: SparkMigrationPlan.self,
             configurations: configuration
         )
     }
@@ -34,7 +35,7 @@ public enum SparkDataStore {
     public static func makeInMemoryContainer() throws -> ModelContainer {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         return try ModelContainer(
-            for: Schema(versionedSchema: SparkSchemaV1.self),
+            for: Schema(versionedSchema: SparkSchemaV3.self),
             configurations: configuration
         )
     }

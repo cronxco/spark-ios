@@ -6,47 +6,48 @@ import SparkKit
 
 public struct LogCheckInIntent: AppIntent {
     public static let title: LocalizedStringResource = "Log Check-In"
-    public static let description = IntentDescription("Log a mood check-in in Spark.")
+    public static let description = IntentDescription("Open Spark to log a check-in.")
     public static let openAppWhenRun: Bool = true
 
-    @Parameter(title: "Mood", optionsProvider: MoodOptionsProvider())
-    public var mood: String
+    @Parameter(title: "Physical Energy (1–5)")
+    public var physical: Int
+
+    @Parameter(title: "Mental Energy (1–5)")
+    public var mental: Int
 
     @Parameter(title: "Note")
     public var note: String?
 
-    public init() {}
-    public init(mood: String, note: String? = nil) {
-        self.mood = mood
+    public init() {
+        self.physical = 3
+        self.mental = 3
+    }
+    public init(physical: Int, mental: Int, note: String? = nil) {
+        self.physical = max(1, min(5, physical))
+        self.mental = max(1, min(5, mental))
         self.note = note
     }
 
     public func perform() async throws -> some IntentResult & ProvidesDialog {
         let service = await IntentService()
-        let checkIn = CheckIn(
-            slot: currentSlot(),
-            mood: mood,
-            tags: [],
-            note: note
-        )
-        _ = try? await service.apiClient.request(CheckInsEndpoint.create(checkIn))
-        return .result(dialog: "Check-in logged. Feeling \(mood).")
-    }
-
-    private func currentSlot() -> String {
         let hour = Calendar.current.component(.hour, from: .now)
-        switch hour {
-        case 5..<12: return "morning"
-        case 12..<17: return "afternoon"
-        case 17..<21: return "evening"
-        default: return "night"
-        }
+        let period: CheckInPeriod = hour < 12 ? .morning : .afternoon
+        let dateKey = Self.isoDate(.now)
+        let request = CheckInRequest(
+            period: period,
+            physical: max(1, min(5, physical)),
+            mental: max(1, min(5, mental)),
+            date: dateKey,
+            notes: note
+        )
+        _ = try? await service.apiClient.request(CheckInsEndpoint.submit(request))
+        return .result(dialog: "Check-in logged. Physical \(physical)/5, mental \(mental)/5.")
     }
-}
 
-private struct MoodOptionsProvider: DynamicOptionsProvider {
-    func results() async throws -> [String] {
-        ["great", "good", "okay", "low", "stressed", "tired", "energised", "calm", "anxious", "grateful"]
+    private static func isoDate(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: date)
     }
 }
 

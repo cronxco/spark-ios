@@ -83,6 +83,15 @@ struct DeepLinkTests {
         #expect(DeepLink.parse(url) == .metric(identifier: "sleep_score"))
     }
 
+    @Test("canonicalizes legacy metric deeplink aliases")
+    func canonicalizesLegacyMetricAliases() throws {
+        let sleep = try #require(URL(string: "https://spark.cronx.co/metrics/sleep.score"))
+        let steps = try #require(URL(string: "https://spark.cronx.co/metrics/health.steps"))
+
+        #expect(DeepLink.parse(sleep) == .metric(identifier: "oura.sleep_score"))
+        #expect(DeepLink.parse(steps) == .metric(identifier: "oura.steps"))
+    }
+
     @Test("parses /places/:id")
     func place() throws {
         let url = try #require(URL(string: "https://spark.cronx.co/places/plc_42"))

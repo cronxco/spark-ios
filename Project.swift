@@ -4,11 +4,12 @@ import ProjectDescription
 
 let appIdentifierPrefix = "$(AppIdentifierPrefix)"
 let organizationName = "Cronx"
-let bundleIdBase = "co.cronx.spark"
-let appGroup = "group.co.cronx.spark"
+let developmentTeam = "SHZS45BR7Q" // William Scott
+let bundleIdBase = "co.cronx.sparkapp"
+let appGroup = "group.co.cronx.sparkapp"
 let keychainGroup = "\(appIdentifierPrefix)\(bundleIdBase)"
 let associatedDomain = "applinks:spark.cronx.co"
-let iosDeploymentTarget: DeploymentTargets = .iOS("26.0")
+let iosDeploymentTarget: DeploymentTargets = .iOS("26.4")
 let watchDeploymentTarget: DeploymentTargets = .watchOS("26.0")
 
 // MARK: - Entitlements builders
@@ -58,17 +59,17 @@ func appInfoPlist() -> InfoPlist {
         "NSLocationWhenInUseUsageDescription":
             "Spark uses your location to tag check-ins and detect place visits.",
         "BGTaskSchedulerPermittedIdentifiers": [
-            "co.cronx.spark.refresh",
-            "co.cronx.spark.prefetch",
+            "co.cronx.sparkapp.refresh",
+            "co.cronx.sparkapp.prefetch",
         ],
         "NSUserActivityTypes": [
-            "co.cronx.spark.openToday",
-            "co.cronx.spark.openEvent",
+            "co.cronx.sparkapp.openToday",
+            "co.cronx.sparkapp.openEvent",
             "com.apple.corespotlight.search-continue",
         ],
         "CFBundleURLTypes": [
             [
-                "CFBundleURLName": "co.cronx.spark.oauth",
+                "CFBundleURLName": "co.cronx.sparkapp.oauth",
                 "CFBundleURLSchemes": ["spark"],
             ],
         ],
@@ -169,7 +170,15 @@ let baseSettings: SettingsDictionary = [
     "GCC_TREAT_WARNINGS_AS_ERRORS": "YES",
     "ENABLE_USER_SCRIPT_SANDBOXING": "YES",
     "CODE_SIGN_STYLE": "Automatic",
-    "DEVELOPMENT_TEAM": "$(DEVELOPMENT_TEAM)",
+    "DEVELOPMENT_TEAM": .string(developmentTeam),
+]
+
+let debugSettings: SettingsDictionary = [
+    "APS_ENVIRONMENT": "development",
+]
+
+let releaseSettings: SettingsDictionary = [
+    "APS_ENVIRONMENT": "production",
 ]
 
 func sharedSettings(bundleId: String) -> Settings {
@@ -178,8 +187,8 @@ func sharedSettings(bundleId: String) -> Settings {
             "PRODUCT_BUNDLE_IDENTIFIER": .string(bundleId),
         ]),
         configurations: [
-            .debug(name: "Debug"),
-            .release(name: "Release"),
+            .debug(name: "Debug", settings: debugSettings),
+            .release(name: "Release", settings: releaseSettings),
         ]
     )
 }
@@ -217,8 +226,8 @@ let sparkApp: Target = .target(
             "ASSETCATALOG_COMPILER_APPICON_NAME": "SparkIcon",
         ]),
         configurations: [
-            .debug(name: "Debug"),
-            .release(name: "Release"),
+            .debug(name: "Debug", settings: debugSettings),
+            .release(name: "Release", settings: releaseSettings),
         ]
     )
 )

@@ -21,7 +21,7 @@ final class NotificationsInboxViewModel {
 
     private let apiClient: APIClient
     private let container: ModelContainer
-    private let logger = Logger(subsystem: "co.cronx.spark", category: "Notifications")
+    private let logger = Logger(subsystem: "co.cronx.sparkapp", category: "Notifications")
 
     init(apiClient: APIClient, container: ModelContainer) {
         self.apiClient = apiClient

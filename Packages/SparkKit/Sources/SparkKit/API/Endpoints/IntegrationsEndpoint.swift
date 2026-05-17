@@ -1,8 +1,12 @@
 import Foundation
 
 public enum IntegrationsEndpoint {
+    public struct ListResponse: Decodable, Sendable {
+        public let data: [Integration]
+    }
+
     /// GET /integrations
-    public static func list() -> Endpoint<[Integration]> {
+    public static func list() -> Endpoint<ListResponse> {
         Endpoint(method: .get, path: "/integrations")
     }
 

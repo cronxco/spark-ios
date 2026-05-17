@@ -11,7 +11,6 @@ struct RootView: View {
             switch model.session {
             case .unknown:
                 ProgressView()
-                    .task { await model.bootstrap() }
             case .loggedOut:
                 OnboardingFlow(isComplete: $model.onboardingComplete)
             case .loggedIn:
@@ -22,7 +21,18 @@ struct RootView: View {
                 }
             }
         }
+        .task { await model.bootstrap() }
         .onOpenURL(perform: handle(url:))
+        .environment(\.openURL, OpenURLAction { url in
+            // In-app deep links embedded in rendered prose (e.g. Flint digest
+            // markdown). Anything not a navigable Spark route falls through to
+            // the system (real external links still open in Safari).
+            guard let link = DeepLink.parse(url), link.detailRoute != nil else {
+                return .systemAction
+            }
+            handle(url: url)
+            return .handled
+        })
     }
 
     private func handle(url: URL) {

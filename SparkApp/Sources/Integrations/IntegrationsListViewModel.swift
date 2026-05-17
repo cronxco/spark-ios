@@ -15,7 +15,7 @@ final class IntegrationsListViewModel {
     private(set) var state: LoadState = .loading
 
     private let apiClient: APIClient
-    private let logger = Logger(subsystem: "co.cronx.spark", category: "Integrations")
+    private let logger = Logger(subsystem: "co.cronx.sparkapp", category: "Integrations")
 
     init(apiClient: APIClient) {
         self.apiClient = apiClient
@@ -24,8 +24,8 @@ final class IntegrationsListViewModel {
     func load() async {
         state = .loading
         do {
-            let list = try await apiClient.request(IntegrationsEndpoint.list())
-            state = .loaded(list)
+            let response = try await apiClient.request(IntegrationsEndpoint.list())
+            state = .loaded(response.data)
         } catch APIError.notModified {
             return
         } catch {
