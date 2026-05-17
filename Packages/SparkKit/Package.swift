@@ -4,6 +4,7 @@ import PackageDescription
 let package = Package(
     name: "SparkKit",
     platforms: [
+        .macOS(.v15),
         .iOS(.v26),
         .watchOS(.v26),
     ],

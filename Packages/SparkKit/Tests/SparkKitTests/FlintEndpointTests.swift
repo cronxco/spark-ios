@@ -100,6 +100,7 @@ struct FlintEndpointTests {
         let json = """
         {
           "event_id": "e-1",
+          "digest_object_id": null,
           "date": "2026-05-16",
           "period": "morning",
           "title": "Morning Digest",
@@ -141,6 +142,7 @@ struct FlintEndpointTests {
         let json = """
         {
           "event_id": "e-1",
+          "digest_object_id": null,
           "date": "2026-05-16",
           "title": "Digest",
           "created_at": "2026-05-16T08:30:00Z",

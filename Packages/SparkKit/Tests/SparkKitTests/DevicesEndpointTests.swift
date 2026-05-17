@@ -4,9 +4,9 @@ import Testing
 
 @Suite("Devices endpoint")
 struct DevicesEndpointTests {
-    @Test("register endpoint treats successful response as empty")
-    func registerEndpointDecodesTraceResponseAsEmpty() throws {
-        let endpoint: Endpoint<EmptyResponse> = DevicesEndpoint.register(
+    @Test("register endpoint decodes trace response")
+    func registerEndpointDecodesTraceResponse() throws {
+        let endpoint: Endpoint<DeviceRegistrationResponse> = DevicesEndpoint.register(
             name: "iPhone",
             platform: "ios",
             apnsToken: "token",
@@ -26,7 +26,11 @@ struct DevicesEndpointTests {
 
         #expect(endpoint.method == .post)
         #expect(endpoint.path == "/devices")
-        _ = try JSONDecoder().decode(EmptyResponse.self, from: Data(json.utf8))
+        let response = try JSONDecoder().decode(DeviceRegistrationResponse.self, from: Data(json.utf8))
+        #expect(response.id == "3")
+        #expect(response.deviceType == "ios")
+        #expect(response.endpoint == "805d058ee0072e38ed393c0969c22fb9c46bd76d9b5676ac5f9361722ddf04e1")
+        #expect(response.appEnvironment == "sandbox")
     }
 
     @Test("registered device decodes numeric IDs as strings")

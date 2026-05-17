@@ -434,9 +434,7 @@ public actor APIClient {
     private func buildURL<Response>(endpoint: Endpoint<Response>, absoluteBase: Bool) throws -> URL {
         let base: URL
         if absoluteBase {
-            base = environment.baseURL
-                .deletingLastPathComponent() // /api/v1
-                .deletingLastPathComponent() // /api (oauth lives here, not at site root)
+            base = oauthSiteRootURL()
         } else {
             base = environment.baseURL
         }
