@@ -82,11 +82,12 @@ public struct FlintDigestBlock: Codable, Sendable, Hashable, Identifiable {
     public let answerNote: String?
     public let answeredAt: Date?
     public let answered: Bool
+    public let references: [EntityReference]?
 
     public var isQuestion: Bool { blockType == "flint_user_question" }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, time, content, question, topic, priority, answer, answered
+        case id, title, time, content, question, topic, priority, answer, answered, references
         case blockType = "block_type"
         case answerOptions = "answer_options"
         case answerNote = "answer_note"
@@ -106,7 +107,8 @@ public struct FlintDigestBlock: Codable, Sendable, Hashable, Identifiable {
         answer: String? = nil,
         answerNote: String? = nil,
         answeredAt: Date? = nil,
-        answered: Bool = false
+        answered: Bool = false,
+        references: [EntityReference]? = nil
     ) {
         self.id = id
         self.blockType = blockType
@@ -121,6 +123,7 @@ public struct FlintDigestBlock: Codable, Sendable, Hashable, Identifiable {
         self.answerNote = answerNote
         self.answeredAt = answeredAt
         self.answered = answered
+        self.references = references
     }
 
     public init(from decoder: Decoder) throws {
@@ -138,6 +141,7 @@ public struct FlintDigestBlock: Codable, Sendable, Hashable, Identifiable {
         answerNote = try container.decodeIfPresent(String.self, forKey: .answerNote)
         answeredAt = try container.decodeIfPresent(Date.self, forKey: .answeredAt)
         answered = try container.decodeIfPresent(Bool.self, forKey: .answered) ?? (answer != nil)
+        references = try container.decodeIfPresent([EntityReference].self, forKey: .references)
     }
 }
 

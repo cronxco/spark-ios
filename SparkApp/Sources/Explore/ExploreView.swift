@@ -2,13 +2,20 @@ import SparkUI
 import SwiftUI
 
 struct ExploreView: View {
+    @Environment(\.tabAccessoryCoordinator) private var tabAccessoryCoordinator
     @State private var section: ExploreSection = .map
 
     var body: some View {
         currentSectionView
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                sectionPicker
+            .onAppear {
+                registerSectionAccessory()
+            }
+            .onChange(of: section) { _, _ in
+                registerSectionAccessory()
+            }
+            .onDisappear {
+                tabAccessoryCoordinator?.clear(owner: .explore)
             }
     }
 
@@ -26,24 +33,33 @@ struct ExploreView: View {
         }
     }
 
-    private var sectionPicker: some View {
-        Picker("Section", selection: $section) {
-            ForEach(ExploreSection.allCases, id: \.self) { sec in
-                Label(sec.label, systemImage: sec.icon).tag(sec)
+    private func registerSectionAccessory() {
+        tabAccessoryCoordinator?.set(TabAccessory(
+            owner: .explore,
+            title: "Section",
+            items: ExploreSection.allCases.map {
+                TabAccessoryItem(id: $0.id, title: $0.label, systemImage: $0.icon)
+            },
+            selectedID: section.id,
+            select: { id in
+                guard let selected = ExploreSection.allCases.first(where: { $0.id == id }) else { return }
+                section = selected
             }
-        }
-        .pickerStyle(.segmented)
-        .padding(SparkSpacing.sm)
-        .sparkGlass(.roundedRect(SparkRadii.lg), tint: Color.sparkElevated.opacity(0.48))
-        .shadow(color: .black.opacity(0.12), radius: 16, x: 0, y: 8)
-        .padding(.horizontal, SparkSpacing.lg)
-        .padding(.top, SparkSpacing.sm)
-        .padding(.bottom, SparkSpacing.xl + SparkSpacing.sm)
+        ))
     }
 }
 
-enum ExploreSection: CaseIterable {
+enum ExploreSection: CaseIterable, Equatable {
     case map, health, metrics, money
+
+    var id: String {
+        switch self {
+        case .map: "map"
+        case .health: "health"
+        case .metrics: "metrics"
+        case .money: "money"
+        }
+    }
 
     var label: String {
         switch self {

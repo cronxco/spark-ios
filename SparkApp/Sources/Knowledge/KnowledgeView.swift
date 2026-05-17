@@ -4,7 +4,7 @@ import SwiftUI
 
 struct KnowledgeView: View {
     @Environment(AppModel.self) private var appModel
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.tabAccessoryCoordinator) private var tabAccessoryCoordinator
     @State private var viewModel: KnowledgeViewModel?
     @State private var path: [Event] = []
 
@@ -16,12 +16,17 @@ struct KnowledgeView: View {
                     KnowledgeItemDetailView(event: event)
                 }
                 .sparkMainAppToolbar()
+                .onAppear { updateFilterAccessory() }
+                .onChange(of: viewModel?.filter) { _, _ in updateFilterAccessory() }
+                .onChange(of: path.count) { _, _ in updateFilterAccessory() }
+                .onDisappear { tabAccessoryCoordinator?.clear(owner: .knowledge) }
         }
         .task {
             if viewModel == nil {
                 viewModel = KnowledgeViewModel(apiClient: appModel.apiClient)
             }
             await viewModel?.initialLoad()
+            updateFilterAccessory()
         }
     }
 
@@ -38,9 +43,6 @@ struct KnowledgeView: View {
         ScrollView {
             VStack(spacing: SparkSpacing.lg) {
                 pageHeader(viewModel: viewModel)
-                    .padding(.horizontal, SparkSpacing.lg)
-
-                filterRow(viewModel: viewModel)
                     .padding(.horizontal, SparkSpacing.lg)
 
                 let items = viewModel.filteredItems
@@ -97,27 +99,44 @@ struct KnowledgeView: View {
         .sparkAppBackground()
     }
 
-    private func filterRow(viewModel: KnowledgeViewModel) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: SparkSpacing.sm) {
-                ForEach(KnowledgeViewModel.Filter.allCases) { f in
-                    Button {
-                        viewModel.filter = f
-                    } label: {
-                        KnowledgeFilterChip(filter: f, isSelected: viewModel.filter == f)
-                    }
-                    .buttonStyle(.plain)
+    private func updateFilterAccessory() {
+        guard path.isEmpty else {
+            tabAccessoryCoordinator?.clear(owner: .knowledge)
+            return
+        }
+
+        registerFilterAccessory()
+    }
+
+    private func registerFilterAccessory() {
+        guard let viewModel else { return }
+
+        tabAccessoryCoordinator?.set(
+            TabAccessory(
+                owner: .knowledge,
+                title: "Knowledge filter",
+                items: KnowledgeViewModel.Filter.allCases.map {
+                    TabAccessoryItem(id: $0.id, title: $0.rawValue, systemImage: filterIcon($0))
+                },
+                selectedID: viewModel.filter.id,
+                select: { id in
+                    guard let filter = KnowledgeViewModel.Filter(rawValue: id) else { return }
+                    viewModel.filter = filter
                 }
-            }
+            )
+        )
+    }
+
+    private func filterIcon(_ filter: KnowledgeViewModel.Filter) -> String {
+        switch filter {
+        case .reading: "newspaper.fill"
+        case .personal: "person.crop.circle.fill"
+        case .all: "square.grid.2x2.fill"
         }
     }
 
     private func pageHeader(viewModel: KnowledgeViewModel) -> some View {
         SparkMainPageHeader(title: "Knowledge", subtitle: headerSubtitle(viewModel: viewModel))
-    }
-
-    private var headerTextColor: Color {
-        colorScheme == .dark ? Color.spark100 : Color.sparkTextPrimary
     }
 
     private func headerSubtitle(viewModel: KnowledgeViewModel) -> String {
@@ -302,38 +321,5 @@ private struct KnowledgeItemCard: View {
                     .foregroundStyle(.white.opacity(0.78))
                     .padding(SparkSpacing.lg)
             }
-    }
-}
-
-private struct KnowledgeFilterChip: View {
-    let filter: KnowledgeViewModel.Filter
-    let isSelected: Bool
-
-    private var icon: String {
-        switch filter {
-        case .reading: "newspaper.fill"
-        case .personal: "person.crop.circle.fill"
-        case .all: "square.grid.2x2.fill"
-        }
-    }
-
-    var body: some View {
-        HStack(spacing: SparkSpacing.xs) {
-            Image(systemName: icon)
-                .font(.caption2)
-            Text(filter.rawValue)
-        }
-        .font(SparkTypography.captionStrong)
-        .padding(.horizontal, SparkSpacing.md)
-        .padding(.vertical, SparkSpacing.xs + 2)
-        .foregroundStyle(isSelected ? Color.sparkTextPrimary : Color.secondary)
-        .background {
-            Capsule()
-                .fill(isSelected ? Color.spark100 : Color.primary.opacity(0.04))
-        }
-        .overlay {
-            Capsule()
-                .strokeBorder(Color.primary.opacity(isSelected ? 0 : 0.08), lineWidth: 1)
-        }
     }
 }

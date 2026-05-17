@@ -8,9 +8,9 @@ Spark is a Tuist-generated native Swift iOS workspace. `Project.swift` defines t
 
 - `tuist generate` regenerates `Spark.xcworkspace` from `Project.swift`.
 - `open Spark.xcworkspace` opens the generated workspace for Xcode development.
-- `xcodebuild build -workspace Spark.xcworkspace -scheme SparkApp -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -configuration Debug` builds the main app.
+- `xcodebuild build -workspace Spark.xcworkspace -scheme SparkApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4.1' -configuration Debug` builds the main app.
 - `cd Packages/SparkKit && swift test` runs the fastest package-level unit tests.
-- `xcodebuild -workspace Spark.xcworkspace -scheme SparkApp -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' -skipPackagePluginValidation -skipMacroValidation test` runs the app test scheme.
+- `xcodebuild -workspace Spark.xcworkspace -scheme SparkApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4.1' -skipPackagePluginValidation -skipMacroValidation test` runs the app test scheme.
 
 ## Coding Style & Naming Conventions
 

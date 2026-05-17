@@ -35,6 +35,11 @@ struct BlockDetailView: View {
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: BlockDetailViewModel?
 
+    @ViewBuilder
+    private func referencesSection(for block: Block) -> some View {
+        EntityReferenceLinkRow(label: "References", references: block.references ?? [])
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: SparkSpacing.lg) {
@@ -93,11 +98,11 @@ struct BlockDetailView: View {
 
         if let body = detail.block.content, !body.isEmpty {
             GlassCard(radius: SparkRadii.lg, padding: SparkSpacing.lg) {
-                Text(LocalizedStringKey(body))
-                    .font(SparkTypography.body)
-                    .accessibilityLabel(body)
+                SparkRichContentText(text: body, font: SparkTypography.body, foregroundStyle: .primary)
             }
         }
+
+        referencesSection(for: detail.block)
 
         if let summary = detail.aiSummary, !summary.isEmpty {
             SparkDetailInsightCard(label: "Insight", text: summary)

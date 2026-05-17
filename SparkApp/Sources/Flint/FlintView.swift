@@ -4,58 +4,77 @@ import SwiftUI
 
 struct FlintView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(\.tabAccessoryCoordinator) private var tabAccessoryCoordinator
     @State private var viewModel: FlintViewModel?
+    @State private var path: [DetailRoute] = []
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-                    if let viewModel {
-                        content(for: viewModel)
-                    } else {
-                        loadingContent
-                    }
-                }
-                .padding(.horizontal, SparkSpacing.lg)
-                .padding(.top, SparkSpacing.md)
-                .padding(.bottom, SparkSpacing.xxl * 2)
-            }
-            .refreshable { await viewModel?.refresh() }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if let viewModel {
-                    periodPicker(for: viewModel)
-                }
-            }
+        NavigationStack(path: $path) {
+            digestScrollView
             .sparkMainNavigationTitle("Flint")
             .sparkAppBackground()
             .sparkMainAppToolbar()
+            .sparkDetailDestinations()
+            .environment(\.openURL, OpenURLAction { url in
+                if let route = DeepLink.parse(url)?.detailRoute {
+                    push(route)
+                    return .handled
+                }
+                return .systemAction
+            })
+            .onAppear {
+                registerPeriodAccessory()
+            }
+            .onChange(of: viewModel?.selectedPeriod) { _, _ in
+                registerPeriodAccessory()
+            }
+            .onChange(of: viewModel?.availablePeriodSelections.map(\.id) ?? []) { _, _ in
+                registerPeriodAccessory()
+            }
+            .onDisappear {
+                tabAccessoryCoordinator?.clear(owner: .flint)
+            }
         }
         .task {
             if viewModel == nil {
                 viewModel = FlintViewModel(apiClient: appModel.apiClient)
             }
             await viewModel?.load()
+            registerPeriodAccessory()
         }
     }
 
-    private func periodPicker(for viewModel: FlintViewModel) -> some View {
-        Picker("Digest period", selection: Binding(
-            get: { viewModel.selectedPeriod },
-            set: { period in
+    private var digestScrollView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: SparkSpacing.lg) {
+                if let viewModel {
+                    content(for: viewModel)
+                } else {
+                    loadingContent
+                }
+            }
+            .padding(.horizontal, SparkSpacing.lg)
+            .padding(.top, SparkSpacing.md)
+            .padding(.bottom, SparkSpacing.xxl * 2)
+        }
+        .refreshable { await viewModel?.refresh() }
+    }
+
+    private func registerPeriodAccessory() {
+        guard let viewModel else { return }
+
+        tabAccessoryCoordinator?.set(TabAccessory(
+            owner: .flint,
+            title: "Digest period",
+            items: viewModel.availablePeriodSelections.map {
+                TabAccessoryItem(id: $0.id, title: $0.title)
+            },
+            selectedID: viewModel.selectedPeriod.id,
+            select: { id in
+                guard let period = FlintViewModel.PeriodSelection(rawValue: id) else { return }
                 Task { await viewModel.selectPeriod(period) }
             }
-        )) {
-            ForEach(viewModel.availablePeriodSelections) { period in
-                Text(period.title).tag(period)
-            }
-        }
-        .pickerStyle(.segmented)
-        .padding(SparkSpacing.sm)
-        .sparkGlass(.roundedRect(SparkRadii.lg), tint: Color.sparkElevated.opacity(0.48))
-        .shadow(color: .black.opacity(0.12), radius: 16, x: 0, y: 8)
-        .padding(.horizontal, SparkSpacing.lg)
-        .padding(.top, SparkSpacing.sm)
-        .padding(.bottom, SparkSpacing.xl + SparkSpacing.sm)
+        ))
     }
 
     @ViewBuilder
@@ -70,7 +89,7 @@ struct FlintView: View {
                 }
 
                 ForEach(viewModel.digests) { digest in
-                    FlintDigestSection(digest: digest, viewModel: viewModel)
+                    FlintDigestSection(digest: digest, viewModel: viewModel, onOpen: push)
                 }
             }
         case .empty(let message):
@@ -91,6 +110,11 @@ struct FlintView: View {
                 }
             }
         }
+    }
+
+    private func push(_ route: DetailRoute) {
+        if path.last == route { return }
+        path.append(route)
     }
 
     private var loadingContent: some View {
@@ -114,6 +138,7 @@ struct FlintView: View {
 private struct FlintDigestSection: View {
     let digest: FlintDigest
     let viewModel: FlintViewModel
+    let onOpen: (DetailRoute) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.lg) {
@@ -128,7 +153,7 @@ private struct FlintDigestSection: View {
             } else {
                 VStack(alignment: .leading, spacing: SparkSpacing.md) {
                     ForEach(digest.blocks) { block in
-                        FlintBlockRow(block: block, viewModel: viewModel)
+                        FlintBlockRow(block: block, viewModel: viewModel, onOpen: onOpen)
                     }
                 }
             }
@@ -192,7 +217,19 @@ private extension FlintDigest {
 private struct FlintBlockRow: View {
     let block: FlintDigestBlock
     let viewModel: FlintViewModel
+    let onOpen: (DetailRoute) -> Void
     @State private var isEditorialExpanded = false
+
+    @ViewBuilder
+    private var referenceRow: some View {
+        if let references = block.references, !references.isEmpty {
+            EntityRefChipRow(label: "Connecting:", references: references) { reference in
+                if let route = reference.detailRoute {
+                    onOpen(route)
+                }
+            }
+        }
+    }
 
     var body: some View {
         if block.blockType == "flint_editorial_note" {
@@ -234,6 +271,8 @@ private struct FlintBlockRow: View {
             } else if let content = block.content, !content.isEmpty {
                 SparkRichContentText(text: content, font: SparkTypography.bodySmall, foregroundStyle: .secondary)
             }
+
+            referenceRow
         }
         .padding(SparkSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -242,10 +281,13 @@ private struct FlintBlockRow: View {
 
     private var editorialDisclosure: some View {
         DisclosureGroup(isExpanded: $isEditorialExpanded) {
-            if let content = block.content, !content.isEmpty {
-                SparkRichContentText(text: content, font: SparkTypography.bodySmall, foregroundStyle: .secondary)
-                .padding(.top, SparkSpacing.md)
+            VStack(alignment: .leading, spacing: SparkSpacing.md) {
+                if let content = block.content, !content.isEmpty {
+                    SparkRichContentText(text: content, font: SparkTypography.bodySmall, foregroundStyle: .secondary)
+                }
+                referenceRow
             }
+            .padding(.top, SparkSpacing.md)
         } label: {
             HStack(alignment: .center, spacing: SparkSpacing.md) {
                 DomainGlyph(icon: icon, tint: tint, size: 24)

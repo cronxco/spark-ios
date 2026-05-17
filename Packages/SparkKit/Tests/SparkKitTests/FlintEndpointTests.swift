@@ -93,6 +93,69 @@ struct FlintEndpointTests {
         #expect(digest.blocks[1].content == "**Hydrate** early.")
     }
 
+    @Test("content block decodes entity references with unknown-type fallback")
+    func decodesBlockReferences() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let json = """
+        {
+          "event_id": "e-1",
+          "date": "2026-05-16",
+          "period": "morning",
+          "title": "Morning Digest",
+          "created_at": "2026-05-16T08:30:00Z",
+          "block_count": 1,
+          "unanswered_question_count": 0,
+          "blocks": [
+            {
+              "id": "ins-1",
+              "block_type": "flint_health_insight",
+              "title": "Health",
+              "content": "You did a [Morning Walk](https://spark.cronx.co/event/abc) today.",
+              "references": [
+                {"type": "event", "id": "abc", "title": "Morning Walk", "service": "Strava", "domain": "health"},
+                {"type": "starship", "id": "xyz", "title": "Future Thing"}
+              ]
+            }
+          ]
+        }
+        """
+
+        let digest = try decoder.decode(FlintDigest.self, from: Data(json.utf8))
+        let refs = try #require(digest.blocks[0].references)
+
+        #expect(refs.count == 2)
+        #expect(refs[0].type == .event)
+        #expect(refs[0].id == "abc")
+        #expect(refs[0].title == "Morning Walk")
+        #expect(refs[0].service == "Strava")
+        #expect(refs[0].domain == "health")
+        #expect(refs[1].type == .unknown)
+        #expect(refs[1].service == nil)
+    }
+
+    @Test("content block without references decodes to nil")
+    func decodesBlockWithoutReferences() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let json = """
+        {
+          "event_id": "e-1",
+          "date": "2026-05-16",
+          "title": "Digest",
+          "created_at": "2026-05-16T08:30:00Z",
+          "block_count": 1,
+          "unanswered_question_count": 0,
+          "blocks": [
+            {"id": "n-1", "block_type": "flint_editorial_note", "title": "Note", "content": "Plain."}
+          ]
+        }
+        """
+
+        let digest = try decoder.decode(FlintDigest.self, from: Data(json.utf8))
+        #expect(digest.blocks[0].references == nil)
+    }
+
     @Test("all response decodes digest list")
     func decodesDigestList() throws {
         let decoder = JSONDecoder()

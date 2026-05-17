@@ -9,25 +9,54 @@ public struct SparkRichContentText: View {
     public var font: Font
     public var foregroundStyle: Color
     public var lineSpacing: CGFloat
+    public var linkTint: Color
+    public var recognizesLink: ((URL) -> Bool)?
 
     public init(
         text: String,
         font: Font = SparkTypography.body,
         foregroundStyle: Color = .primary,
-        lineSpacing: CGFloat = 6
+        lineSpacing: CGFloat = 6,
+        linkTint: Color = .sparkAccent,
+        recognizesLink: ((URL) -> Bool)? = nil
     ) {
         self.text = text
         self.font = font
         self.foregroundStyle = foregroundStyle
         self.lineSpacing = lineSpacing
+        self.linkTint = linkTint
+        self.recognizesLink = recognizesLink
     }
 
     public var body: some View {
-        Text(Self.rendered(text))
+        Text(styled(Self.rendered(text)))
             .font(font)
             .foregroundStyle(foregroundStyle)
             .lineSpacing(lineSpacing)
+            .tint(linkTint)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// Restyle recognised deep links as inline chip-like tokens: tinted and
+    /// semibold, underline removed. The `.link` attribute is preserved so a
+    /// tap still flows through the host's `\.openURL` action — that is where
+    /// in-app navigation is wired, keeping SparkUI free of routing logic.
+    private func styled(_ attributed: AttributedString) -> AttributedString {
+        var attributed = attributed
+        let isRecognised = recognizesLink ?? Self.defaultRecognizer
+
+        for run in attributed.runs where run.link != nil {
+            guard let url = run.link, isRecognised(url) else { continue }
+            attributed[run.range].foregroundColor = linkTint
+            attributed[run.range].font = SparkTypography.bodyStrong
+            attributed[run.range].underlineStyle = nil
+        }
+
+        return attributed
+    }
+
+    private static func defaultRecognizer(_ url: URL) -> Bool {
+        url.host()?.hasSuffix("spark.cronx.co") ?? false
     }
 
     public static func rendered(_ text: String) -> AttributedString {

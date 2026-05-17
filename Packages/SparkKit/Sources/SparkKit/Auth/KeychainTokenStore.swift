@@ -46,8 +46,10 @@ public actor KeychainTokenStore {
     public func hasRefreshToken() -> Bool { tokens()?.refreshToken.isEmpty == false }
 
     public func tokens() -> AuthTokens? {
-        if let cachedTokens { return cachedTokens }
-        guard let data = read() else { return nil }
+        guard let data = read() else {
+            cachedTokens = nil
+            return nil
+        }
         let decoded = try? JSONDecoder().decode(AuthTokens.self, from: data)
         cachedTokens = decoded
         return decoded

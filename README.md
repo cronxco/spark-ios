@@ -48,7 +48,7 @@ cd Packages/SparkKit && swift test
 xcodebuild \
     -workspace Spark.xcworkspace \
     -scheme SparkApp \
-    -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' \
+    -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4.1' \
     -skipPackagePluginValidation \
     -skipMacroValidation \
     test

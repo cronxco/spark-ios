@@ -625,27 +625,11 @@ private struct MetricPresentation {
     var latestAnomalyAt: Date? { detail?.anomalies.map(\.date).max() }
 
     var icon: String {
-        if action.localizedCaseInsensitiveContains("sleep") { return "moon.zzz.fill" }
-        if action.localizedCaseInsensitiveContains("heart") { return "heart.fill" }
-        if action.localizedCaseInsensitiveContains("hrv") { return "waveform.path.ecg" }
-        if action.localizedCaseInsensitiveContains("step") { return "figure.walk" }
-        if action.localizedCaseInsensitiveContains("calorie") { return "flame.fill" }
-        if service.localizedCaseInsensitiveContains("monzo") || domain == "money" { return "sterlingsign.circle.fill" }
-        if domain == "media" { return "iphone" }
-        if domain == "activity" { return "figure.run" }
-        if domain == "health" { return "heart.text.square.fill" }
-        return "chart.line.uptrend.xyaxis"
+        EntityPresentation.icon(domain: domain, service: service, action: action)
     }
 
     var tint: Color {
-        switch domain {
-        case "health": .domainHealth
-        case "activity": .domainActivity
-        case "money": .domainMoney
-        case "media": .domainMedia
-        case "knowledge": .domainKnowledge
-        default: .sparkAccent
-        }
+        EntityPresentation.tint(domain: domain)
     }
 
     func matches(query: String) -> Bool {

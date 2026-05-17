@@ -8,6 +8,19 @@ struct EventDetailView: View {
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: EventDetailViewModel?
     @State private var showNoteEditor = false
+
+    private func aggregatedReferences(for detail: EventDetail) -> [EntityReference] {
+        var seen = Set<String>()
+        return detail.blocks
+            .compactMap(\.references)
+            .flatMap { $0 }
+            .filter { seen.insert("\($0.type.rawValue):\($0.id)").inserted }
+    }
+
+    @ViewBuilder
+    private func referencesSection(for detail: EventDetail) -> some View {
+        EntityReferenceLinkRow(label: "Connecting", references: aggregatedReferences(for: detail))
+    }
     @State private var noteDraft = ""
     @State private var noteError: String?
 
@@ -68,6 +81,8 @@ struct EventDetailView: View {
         }
 
         linkedObjectsSection(for: detail)
+
+        referencesSection(for: detail)
 
         if !detail.blocks.isEmpty {
             blocksGrid(detail.blocks)

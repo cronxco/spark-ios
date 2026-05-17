@@ -16,7 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Tech Stack
 
 - **Language**: Swift 6.2 with strict concurrency enforcement (`SWIFT_STRICT_CONCURRENCY=complete`)
-- **Minimum OS**: iOS 26.0 (also watchOS 26.0 for Phase 5)
+- **Minimum OS**: iOS 26.4 (also watchOS 26.0 for Phase 5)
 - **Project generation**: Tuist 4.x (not native Xcode workspace)
 - **Package management**: SPM (Swift Package Manager) with 6 local packages + Sentry remote dependency
 - **Data persistence**: SwiftData with App Group shared container
@@ -117,11 +117,11 @@ tuist generate
 xcodebuild build \
   -workspace Spark.xcworkspace \
   -scheme SparkApp \
-  -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4.1' \
   -configuration Debug
 
 # Build from Xcode
-# Select SparkApp scheme → iPhone 16 Pro simulator → ⌘B
+# Select SparkApp scheme → iPhone 17 Pro simulator → ⌘B
 ```
 
 ### Test
@@ -134,13 +134,13 @@ cd Packages/SparkKit && swift test
 xcodebuild \
   -workspace Spark.xcworkspace \
   -scheme SparkApp \
-  -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4.1' \
   -skipPackagePluginValidation \
   -skipMacroValidation \
   test
 
 # From Xcode
-# Select SparkApp scheme → iPhone 16 Pro simulator → ⌘U
+# Select SparkApp scheme → iPhone 17 Pro simulator → ⌘U
 ```
 
 ### Lint & Code Quality
@@ -153,7 +153,7 @@ swiftformat --lint .
 xcodebuild \
   -workspace Spark.xcworkspace \
   -scheme SparkApp \
-  -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4.1' \
   build \
   -skipPackagePluginValidation
 ```
@@ -291,7 +291,7 @@ Tests cover:
 xcodebuild \
   -workspace Spark.xcworkspace \
   -scheme SparkApp \
-  -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4.1' \
   test
 ```
 
@@ -308,7 +308,7 @@ Test every family × size class × light/dark × extreme Dynamic Type before eac
 - Runs on every push to `main` / `dev` and every PR
 - Caches DerivedData + SPM packages
 - Runs `swift test` on SparkKit
-- Runs `xcodebuild test` on SparkApp (iPhone 16 Pro, iOS 26 simulator)
+- Runs `xcodebuild test` on SparkApp (iPhone 17 Pro, iOS 26.4.1 simulator)
 - Uploads xcresult on failure
 
 ## Version & Release

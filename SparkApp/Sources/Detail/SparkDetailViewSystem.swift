@@ -217,14 +217,6 @@ enum SparkDetailFormatters {
 
 extension Color {
     static func domainTint(for domain: String) -> Color {
-        switch domain.lowercased() {
-        case "health": .domainHealth
-        case "activity": .domainActivity
-        case "money": .domainMoney
-        case "media": .domainMedia
-        case "knowledge": .domainKnowledge
-        case "anomaly": .domainAnomaly
-        default: .sparkAccent
-        }
+        EntityPresentation.tint(domain: domain)
     }
 }
