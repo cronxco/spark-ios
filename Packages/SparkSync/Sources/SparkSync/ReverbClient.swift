@@ -32,7 +32,7 @@ public actor ReverbClient {
     // MARK: - Private state
 
     private let environment: APIEnvironment
-    private let tokenStore: KeychainTokenStore
+    private let apiClient: APIClient
     private let session: URLSession
     private let logger = Logger(subsystem: "co.cronx.sparkapp", category: "ReverbClient")
 
@@ -55,11 +55,16 @@ public actor ReverbClient {
     public init(
         environment: APIEnvironment = .current(),
         tokenStore: KeychainTokenStore,
-        session: URLSession = .shared
+        session: URLSession = .shared,
+        apiClient: APIClient? = nil
     ) {
         self.environment = environment
-        self.tokenStore = tokenStore
         self.session = session
+        self.apiClient = apiClient ?? APIClient(
+            environment: environment,
+            session: session,
+            tokenStore: tokenStore
+        )
     }
 
     // MARK: - Public API
@@ -230,46 +235,65 @@ public actor ReverbClient {
     }
 
     private func fetchChannelAuth(channel: String, socketId: String) async -> String? {
-        guard let token = await tokenStore.accessToken() else { return nil }
-
         var components = URLComponents(url: environment.baseURL, resolvingAgainstBaseURL: false)!
         components.path = "/broadcasting/auth"
         components.queryItems = nil
         let authURL = components.url!
-        var request = URLRequest(url: authURL)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        request.httpBody = "channel_name=\(channel)&socket_id=\(socketId)".data(using: .utf8)
+        for attempt in 1...2 {
+            let forceRefresh = attempt > 1
+            guard let token = try? await apiClient.accessTokenRefreshingIfNeeded(forceRefresh: forceRefresh) else {
+                return nil
+            }
 
-        let startedAt = Date()
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            let http = response as? HTTPURLResponse
-            await captureAuthTelemetry(
-                request: request,
-                response: http,
-                data: data,
-                startedAt: startedAt,
-                outcome: http?.statusCode == 200 ? .success : .httpError
-            )
-            guard http?.statusCode == 200 else { return nil }
-            let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
-            return authResponse.auth
-        } catch {
-            logger.error("Reverb auth request failed: \(error, privacy: .public)")
-            await captureAuthTelemetry(
-                request: request,
-                response: nil,
-                data: nil,
-                startedAt: startedAt,
-                outcome: .transportError,
-                errorDescription: String(describing: error)
-            )
-            return nil
+            var request = URLRequest(url: authURL)
+            request.httpMethod = "POST"
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.httpBody = formURLEncodedBody([
+                "channel_name": channel,
+                "socket_id": socketId,
+            ])
+
+            let startedAt = Date()
+            do {
+                let (data, response) = try await session.data(for: request)
+                let http = response as? HTTPURLResponse
+                await captureAuthTelemetry(
+                    request: request,
+                    response: http,
+                    data: data,
+                    startedAt: startedAt,
+                    outcome: http?.statusCode == 200 ? .success : .httpError
+                )
+                if http?.statusCode == 401, attempt == 1 {
+                    continue
+                }
+                guard http?.statusCode == 200 else { return nil }
+                let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
+                return authResponse.auth
+            } catch {
+                logger.error("Reverb auth request failed: \(error, privacy: .public)")
+                await captureAuthTelemetry(
+                    request: request,
+                    response: nil,
+                    data: nil,
+                    startedAt: startedAt,
+                    outcome: .transportError,
+                    errorDescription: String(describing: error)
+                )
+                return nil
+            }
         }
+
+        return nil
+    }
+
+    private func formURLEncodedBody(_ values: [String: String]) -> Data? {
+        var components = URLComponents()
+        components.queryItems = values.map { URLQueryItem(name: $0.key, value: $0.value) }
+        return components.percentEncodedQuery?.data(using: .utf8)
     }
 
     private func captureAuthTelemetry(

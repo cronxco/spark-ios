@@ -56,6 +56,8 @@ struct RootView: View {
             model.pendingRoute = .place(id: id)
         case .integration(let service):
             model.pendingRoute = .integration(service: service)
+        case .tag(let name):
+            model.pendingRoute = .tag(name: name, type: nil)
         }
     }
 }

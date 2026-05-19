@@ -9,9 +9,8 @@ struct TodayView: View {
     var showsToolbar = true
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: TodayViewModel?
-    @State private var showCheckIn = false
+    @State private var checkInSelection: CheckInSheetSelection?
     @State private var showHistory = false
-    @State private var checkInInitialPeriod: CheckInPeriod = .morning
 
     var body: some View {
         let snapshot = TodaySnapshot(
@@ -32,14 +31,13 @@ struct TodayView: View {
                     anomalyPill(for: snapshot)
 
                     CheckInCard(
+                        date: date,
                         status: snapshot.checkInStatus,
                         onTapMorning: {
-                            checkInInitialPeriod = .morning
-                            showCheckIn = true
+                            checkInSelection = CheckInSheetSelection(date: date, period: .morning)
                         },
                         onTapAfternoon: {
-                            checkInInitialPeriod = .afternoon
-                            showCheckIn = true
+                            checkInSelection = CheckInSheetSelection(date: date, period: .afternoon)
                         },
                         showHistory: $showHistory
                     )
@@ -48,6 +46,10 @@ struct TodayView: View {
 
                     if !snapshot.hasAnyDomainData {
                         loadingOrEmptyState
+                    }
+
+                    if let vm = viewModel, !vm.rawAPIEntries.isEmpty {
+                        RawFeedJSONView(title: "Raw API response", entries: vm.rawAPIEntries)
                     }
                 }
                 .padding(.horizontal, SparkSpacing.lg)
@@ -58,9 +60,9 @@ struct TodayView: View {
             .refreshable { await viewModel?.refresh() }
         }
         .sparkMainAppToolbar(isVisible: showsToolbar)
-        .sheet(isPresented: $showCheckIn) {
+        .sheet(item: $checkInSelection) { selection in
             if let vm = viewModel {
-                CheckInModalView(viewModel: vm, date: date, initialPeriod: checkInInitialPeriod)
+                CheckInModalView(viewModel: vm, date: selection.date, initialPeriod: selection.period)
             }
         }
         .sheet(isPresented: $showHistory) {
@@ -189,6 +191,21 @@ struct TodayView: View {
             )
         }
     }
+}
+
+private struct CheckInSheetSelection: Identifiable {
+    let date: Date
+    let period: CheckInPeriod
+
+    var id: String {
+        "\(Self.formatter.string(from: date))-\(period.rawValue)"
+    }
+
+    private static let formatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
 }
 
 private extension TodaySnapshot {

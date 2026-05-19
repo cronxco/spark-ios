@@ -258,6 +258,9 @@ enum SparkObservability {
                 environment.reverbHTTPBaseURL.host() ?? "ws.spark.cronx.co",
             ]
             options.tracePropagationTargets = options.failedRequestTargets
+            options.beforeSend = { event in
+                isExpectedMetricNotFoundEvent(event) ? nil : event
+            }
 
             // Logging (captures OSLog output)
             options.enableLogs = true
@@ -288,6 +291,49 @@ enum SparkObservability {
         SentrySDK.capture(error: error) { scope in
             scope.setTag(value: "handled", key: "error_type")
         }
+    }
+
+    static func captureUserFeedback(
+        comments: String,
+        context: SparkFeedbackContext,
+        profile: UserProfile?
+    ) {
+        let eventId = SentrySDK.capture(message: "User feedback for \(context.displayLabel)") { scope in
+            scope.setTag(value: "true", key: "feedback")
+            scope.setTag(value: context.entityType, key: "entity_type")
+            scope.setTag(value: context.entityId, key: "entity_id")
+            scope.setContext(value: [
+                "type": context.entityType,
+                "id": context.entityId,
+                "title": context.title,
+            ], key: "spark_entity")
+        }
+
+        let name = profile?.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let email = profile?.email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let feedback = SentryFeedback(
+            message: comments,
+            name: name?.isEmpty == false ? name : nil,
+            email: email?.isEmpty == false ? email : nil,
+            source: .custom,
+            associatedEventId: eventId
+        )
+        SentrySDK.capture(feedback: feedback)
+    }
+
+    private static func isExpectedMetricNotFoundEvent(_ event: Sentry.Event) -> Bool {
+        guard event.exceptions?.contains(where: { $0.type == "HTTPClientError" }) == true,
+              let requestURL = event.request?.url,
+              let url = URL(string: requestURL),
+              url.path.hasPrefix("/api/v1/mobile/metrics/")
+        else {
+            return false
+        }
+
+        let response = event.context?["response"]
+        let statusCode = response?["status_code"] as? Int
+            ?? (response?["status_code"] as? NSNumber)?.intValue
+        return statusCode == 404
     }
 
     private static func releaseName() -> String {

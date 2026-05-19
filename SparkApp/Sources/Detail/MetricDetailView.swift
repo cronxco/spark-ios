@@ -9,6 +9,7 @@ final class MetricDetailViewModel {
     var range: MetricsEndpoint.Range
     private(set) var state: DetailLoadState<MetricDetail> = .loading
     private(set) var recentEvents: [Event] = []
+    private(set) var rawPayload: String?
 
     private let apiClient: APIClient
 
@@ -27,9 +28,11 @@ final class MetricDetailViewModel {
             return
         }
         do {
-            let detail = try await apiClient.request(
+            let response = try await apiClient.requestWithRawResponse(
                 MetricsEndpoint.detail(identifier: canonicalIdentifier, range: range)
             )
+            let detail = response.decoded
+            rawPayload = response.utf8Body
             state = .loaded(detail)
             recentEvents = await fetchRecentEvents(for: detail)
         } catch APIError.notModified {
@@ -200,6 +203,7 @@ struct MetricDetailView: View {
             shareItems: metricShareItems,
             rawTitle: "Raw metric",
             rawPayload: metricRawPayload,
+            feedbackContext: metricFeedbackContext,
             refresh: { await viewModel?.load() }
         )
         .task(id: identifier) {
@@ -222,8 +226,20 @@ struct MetricDetailView: View {
 
     private var metricRawPayload: String? {
         guard case .loaded(let detail) = viewModel?.state else { return nil }
+        if let rawPayload = viewModel?.rawPayload { return rawPayload }
         return SparkPrettyJSON.string(for: detail)
             ?? SparkPrettyJSON.fallback(entity: "metric", id: detail.id, title: detail.title)
+    }
+
+    private var metricFeedbackContext: SparkFeedbackContext {
+        if case .loaded(let detail) = viewModel?.state {
+            return SparkFeedbackContext(
+                entityType: "metric",
+                entityId: detail.id,
+                title: detail.title
+            )
+        }
+        return SparkFeedbackContext(entityType: "metric", entityId: identifier, title: identifier)
     }
 
     @ViewBuilder

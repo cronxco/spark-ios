@@ -32,8 +32,8 @@ final class CheckInHistoryViewModel {
 
     private func loadFromCache() {
         let context = ModelContext(container)
-        let thirtyDaysAgo = Calendar.current.date(byAdding: .day, value: -29, to: .now) ?? .now
-        let fromKey = Self.isoDate(thirtyDaysAgo)
+        let firstDay = Calendar.current.date(byAdding: .day, value: -27, to: .now) ?? .now
+        let fromKey = Self.isoDate(firstDay)
         let toKey = Self.isoDate(.now)
         let descriptor = FetchDescriptor<CachedCheckIn>(
             predicate: #Predicate { $0.date >= fromKey && $0.date <= toKey },
@@ -46,8 +46,8 @@ final class CheckInHistoryViewModel {
     }
 
     private func fetchFromAPI() async {
-        let thirtyDaysAgo = Calendar.current.date(byAdding: .day, value: -29, to: .now) ?? .now
-        let fromKey = Self.isoDate(thirtyDaysAgo)
+        let firstDay = Calendar.current.date(byAdding: .day, value: -27, to: .now) ?? .now
+        let fromKey = Self.isoDate(firstDay)
         let toKey = Self.isoDate(.now)
         do {
             let response = try await apiClient.request(
@@ -89,11 +89,11 @@ final class CheckInHistoryViewModel {
         }
 
         let calendar = Calendar.current
-        let thirtyDaysAgo = calendar.date(byAdding: .day, value: -29, to: calendar.startOfDay(for: .now)) ?? .now
+        let firstDay = calendar.date(byAdding: .day, value: -27, to: calendar.startOfDay(for: .now)) ?? .now
         var result: [CheckInHistoryDay] = []
 
-        for offset in 0..<30 {
-            guard let day = calendar.date(byAdding: .day, value: offset, to: thirtyDaysAgo) else { continue }
+        for offset in 0..<28 {
+            guard let day = calendar.date(byAdding: .day, value: offset, to: firstDay) else { continue }
             let key = Self.isoDate(day)
             let dayRows = grouped[key] ?? []
             let morningRow = dayRows.first { $0.period == "morning" }

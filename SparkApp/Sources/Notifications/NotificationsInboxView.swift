@@ -30,6 +30,8 @@ struct NotificationsInboxView: View {
                         IntegrationDetailView(integrationId: service)
                     case .account(let id):
                         AccountDetailView(accountId: id)
+                    case .tag(let name, let type):
+                        TagDetailView(tagName: name, tagType: type)
                     }
                 }
                 .toolbar {

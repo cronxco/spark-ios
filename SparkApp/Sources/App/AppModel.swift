@@ -23,6 +23,7 @@ enum AppRoute: Hashable {
     case place(id: String)
     case integration(service: String)
     case account(id: String)
+    case tag(name: String, type: String?)
 }
 
 @MainActor

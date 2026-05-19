@@ -16,6 +16,7 @@ final class TodayViewModel {
     let date: Date
     private(set) var cached: DaySummary?
     private(set) var briefingSummaryLine: String?
+    private(set) var rawAPIEntries: [RawFeedJSONEntry] = []
     private(set) var networkState: TodayNetworkState = .idle
     private(set) var checkInDayStatus: CheckInDayStatus = .allPending
 
@@ -49,6 +50,11 @@ final class TodayViewModel {
 
     func refresh() async {
         await revalidate(force: true)
+        await revalidateCheckIns()
+    }
+
+    func loadCheckIns() async {
+        loadCachedCheckIns()
         await revalidateCheckIns()
     }
 
@@ -96,7 +102,8 @@ final class TodayViewModel {
     private func revalidateCheckIns() async {
         let key = Self.isoKey(for: date)
         do {
-            let response = try await apiClient.request(CheckInsEndpoint.today(date: key))
+            let response = try await apiClient.requestWithRawResponse(CheckInsEndpoint.today(date: key))
+            upsertRawAPIEntry(title: "GET /check-ins/today?date=\(key)", body: response.utf8Body)
             let context = ModelContext(container)
 
             func upsertPeriod(_ detail: CheckInPeriodDetail, period: CheckInPeriod) {
@@ -111,8 +118,8 @@ final class TodayViewModel {
                 )
             }
 
-            upsertPeriod(response.morning, period: .morning)
-            upsertPeriod(response.afternoon, period: .afternoon)
+            upsertPeriod(response.decoded.morning, period: .morning)
+            upsertPeriod(response.decoded.afternoon, period: .afternoon)
             try? context.save()
             loadCachedCheckIns()
         } catch APIError.notModified {
@@ -137,9 +144,11 @@ final class TodayViewModel {
     private func revalidate(force: Bool = false) async {
         networkState = .loading
         do {
-            let summary = try await apiClient.request(
+            let response = try await apiClient.requestWithRawResponse(
                 BriefingEndpoint.today(date: Self.isoKey(for: date))
             )
+            let summary = response.decoded
+            upsertRawAPIEntry(title: "GET /today?date=\(Self.isoKey(for: date))", body: response.utf8Body)
             apply(summary: summary)
             try await persist(summary)
             networkState = .idle
@@ -165,7 +174,10 @@ final class TodayViewModel {
             let context = ModelContext(container)
 
             repeat {
-                let page = try await apiClient.request(FeedEndpoint.feed(cursor: cursor, limit: 100, date: dateKey))
+                let response = try await apiClient.requestWithRawResponse(FeedEndpoint.feed(cursor: cursor, limit: 100, date: dateKey))
+                let page = response.decoded
+                let cursorSuffix = cursor.map { "&cursor=\($0)" } ?? ""
+                upsertRawAPIEntry(title: "GET /feed?date=\(dateKey)&limit=100\(cursorSuffix)", body: response.utf8Body)
                 for event in page.data {
                     upsert(event, in: context)
                 }
@@ -231,6 +243,11 @@ final class TodayViewModel {
                 targetMediaUrl: event.target?.mediaUrl
             ))
         }
+    }
+
+    private func upsertRawAPIEntry(title: String, body: String) {
+        rawAPIEntries.removeAll { $0.title == title }
+        rawAPIEntries.append(RawFeedJSONEntry(title: title, body: body))
     }
 
     private func persist(_ summary: DaySummary) async throws {

@@ -14,6 +14,7 @@ public struct CheckInRequest: Encodable, Sendable {
     public let physical: Int
     public let mental: Int
     public let date: String
+    public let occurredAt: Date?
     public let latitude: Double?
     public let longitude: Double?
     public let address: String?
@@ -24,6 +25,7 @@ public struct CheckInRequest: Encodable, Sendable {
         physical: Int,
         mental: Int,
         date: String,
+        occurredAt: Date? = nil,
         latitude: Double? = nil,
         longitude: Double? = nil,
         address: String? = nil,
@@ -33,6 +35,7 @@ public struct CheckInRequest: Encodable, Sendable {
         self.physical = physical
         self.mental = mental
         self.date = date
+        self.occurredAt = occurredAt
         self.latitude = latitude
         self.longitude = longitude
         self.address = address
@@ -41,6 +44,7 @@ public struct CheckInRequest: Encodable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case period, physical, mental, date, latitude, longitude, address, notes
+        case occurredAt = "occurred_at"
     }
 }
 

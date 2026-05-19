@@ -7,6 +7,7 @@ struct CheckInModalView: View {
     let viewModel: TodayViewModel
     let date: Date
     let initialPeriod: CheckInPeriod
+    let allowsPeriodSelection: Bool
 
     @Environment(\.dismiss) private var dismiss
 
@@ -18,14 +19,21 @@ struct CheckInModalView: View {
     @State private var isSubmitting = false
     @State private var submitError: String? = nil
 
-    init(viewModel: TodayViewModel, date: Date, initialPeriod: CheckInPeriod) {
+    init(
+        viewModel: TodayViewModel,
+        date: Date,
+        initialPeriod: CheckInPeriod,
+        allowsPeriodSelection: Bool = false
+    ) {
         self.viewModel = viewModel
         self.date = date
         self.initialPeriod = initialPeriod
+        self.allowsPeriodSelection = allowsPeriodSelection
         _period = State(initialValue: initialPeriod)
     }
 
     private var otherPeriodAlsoPending: Bool {
+        guard allowsPeriodSelection else { return false }
         switch initialPeriod {
         case .morning:
             if case .pending = viewModel.checkInDayStatus.afternoon { return true }
@@ -199,6 +207,7 @@ struct CheckInModalView: View {
             physical: phy,
             mental: men,
             date: dateKey,
+            occurredAt: CheckInPresentation.occurredAtOverride(for: date, period: period),
             latitude: lat,
             longitude: lng,
             address: addr,

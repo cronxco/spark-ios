@@ -7,6 +7,7 @@ struct KnowledgeItemDetailView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.openURL) private var openURL
     @State private var detailState: KnowledgeDetailState = .loading
+    @State private var rawPayload: String?
     @State private var reprocessError: String?
 
     private var title: String { event.target?.title ?? event.displayName ?? event.action }
@@ -32,7 +33,25 @@ struct KnowledgeItemDetailView: View {
                     case .loaded(let payload):
                         headerSection(payload: payload)
                         if !payload.eventDetail.tags.isEmpty {
-                            TagChipRow(payload.eventDetail.tags.names)
+                            FlowLayout(spacing: SparkSpacing.xs + 2) {
+                                ForEach(payload.eventDetail.tags) { tag in
+                                    let route = DetailRoute.tag(name: tag.name, type: tag.type)
+                                    NavigationLink(value: route) {
+                                        TagChip(tag)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .contextMenu {
+                                        Button {
+                                            appModel.pendingRoute = .tag(name: tag.name, type: tag.type)
+                                        } label: {
+                                            Label("Open Tag", systemImage: "tag")
+                                        }
+                                    } preview: {
+                                        TagPreviewCard(tag: tag)
+                                            .environment(appModel)
+                                    }
+                                }
+                            }
                         }
                         contentCards(for: payload)
                     case .error:
@@ -58,6 +77,7 @@ struct KnowledgeItemDetailView: View {
             shareItems: knowledgeShareItems,
             rawTitle: "Raw knowledge item",
             rawPayload: knowledgeRawPayload,
+            feedbackContext: knowledgeFeedbackContext,
             refresh: { await loadDetail() },
             reprocess: { await reprocessKnowledgeEvent() }
         )
@@ -82,8 +102,13 @@ struct KnowledgeItemDetailView: View {
 
     private var knowledgeRawPayload: String? {
         guard case .loaded(let payload) = detailState else { return nil }
+        if let rawPayload { return rawPayload }
         return SparkPrettyJSON.string(for: payload.eventDetail)
             ?? SparkPrettyJSON.fallback(entity: "knowledge_item", id: event.id, title: title)
+    }
+
+    private var knowledgeFeedbackContext: SparkFeedbackContext {
+        SparkFeedbackContext(entityType: "knowledge", entityId: event.id, title: title)
     }
 
     private var reprocessErrorBinding: Binding<Bool> {
@@ -116,10 +141,6 @@ struct KnowledgeItemDetailView: View {
                 }
 
                 VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                    Image(systemName: "books.vertical.fill")
-                        .font(.system(size: 40, weight: .light))
-                        .foregroundStyle(.white.opacity(0.75))
-
                     Text(sourceLabel(payload: payload))
                         .font(SparkTypography.monoSmall)
                         .foregroundStyle(.white.opacity(0.9))
@@ -149,17 +170,10 @@ struct KnowledgeItemDetailView: View {
 
     private func headerSection(payload: KnowledgeDetailPayload?) -> some View {
         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-            HStack(spacing: SparkSpacing.xs) {
-                Text(sourceLabel(payload: payload))
-                    .font(SparkTypography.captionStrong)
+            if let time = event.time {
+                Text(time.formatted(date: .abbreviated, time: .omitted))
+                    .font(SparkTypography.caption)
                     .foregroundStyle(.secondary)
-                if let time = event.time {
-                    Text(" — ")
-                        .foregroundStyle(.secondary)
-                    Text(time.formatted(date: .abbreviated, time: .omitted))
-                        .font(SparkTypography.caption)
-                        .foregroundStyle(.secondary)
-                }
             }
             Text(title)
                 .font(SparkFonts.display(.title, weight: .bold))
@@ -401,8 +415,11 @@ struct KnowledgeItemDetailView: View {
 
     private func loadDetail() async {
         detailState = .loading
+        rawPayload = nil
         do {
-            let detail = try await appModel.apiClient.request(EventsEndpoint.detail(id: event.id))
+            let response = try await appModel.apiClient.requestWithRawResponse(EventsEndpoint.detail(id: event.id))
+            let detail = response.decoded
+            rawPayload = response.utf8Body
             let objectID = detail.target?.id ?? event.target?.id
             let objectDetail: ObjectDetail?
             if let objectID {

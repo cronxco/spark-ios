@@ -52,6 +52,7 @@ struct EventDetailView: View {
             shareItems: eventShareItems,
             rawTitle: "Raw event",
             rawPayload: eventRawPayload,
+            feedbackContext: eventFeedbackContext,
             refresh: { await viewModel?.retry() }
         )
         .task(id: eventId) {
@@ -71,7 +72,25 @@ struct EventDetailView: View {
         }
 
         if !detail.tags.isEmpty {
-            TagChipRow(detail.tags.names)
+            FlowLayout(spacing: SparkSpacing.xs + 2) {
+                ForEach(detail.tags) { tag in
+                    let route = DetailRoute.tag(name: tag.name, type: tag.type)
+                    NavigationLink(value: route) {
+                        TagChip(tag)
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        Button {
+                            appModel.pendingRoute = .tag(name: tag.name, type: tag.type)
+                        } label: {
+                            Label("Open Tag", systemImage: "tag")
+                        }
+                    } preview: {
+                        TagPreviewCard(tag: tag)
+                            .environment(appModel)
+                    }
+                }
+            }
         }
 
         metricBaselineStatusRow()
@@ -390,16 +409,24 @@ struct EventDetailView: View {
 
     private var eventRawPayload: String? {
         guard case .loaded(let detail) = viewModel?.state else { return nil }
-        if let metadata = detail.metadata,
-           let json = SparkPrettyJSON.string(for: metadata) {
-            return json
-        }
+        if let rawPayload = viewModel?.rawPayload { return rawPayload }
         return SparkPrettyJSON.string(for: detail)
             ?? SparkPrettyJSON.fallback(
                 entity: "event",
                 id: detail.event.id,
                 title: eventTitle(for: detail.event)
             )
+    }
+
+    private var eventFeedbackContext: SparkFeedbackContext {
+        if case .loaded(let detail) = viewModel?.state {
+            return SparkFeedbackContext(
+                entityType: "event",
+                entityId: detail.event.id,
+                title: eventTitle(for: detail.event)
+            )
+        }
+        return SparkFeedbackContext(entityType: "event", entityId: eventId, title: eventId)
     }
 
     private var eventShareItems: [Any] {

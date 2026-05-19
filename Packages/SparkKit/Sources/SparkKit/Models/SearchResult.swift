@@ -9,6 +9,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
     case metric(MetricHit)
     case integration(IntegrationHit)
     case place(PlaceHit)
+    case tag(TagHit)
     case intent(IntentHit)
 
     public var id: String {
@@ -19,6 +20,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         case .metric(let h): "metric:\(h.identifier)"
         case .integration(let h): "integration:\(h.id)"
         case .place(let h): "place:\(h.id)"
+        case .tag(let h): "tag:\(h.type ?? ""):\(h.name)"
         case .intent(let h): "intent:\(h.id)"
         }
     }
@@ -31,6 +33,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         case .metric(let h): h.title
         case .integration(let h): h.title
         case .place(let h): h.title
+        case .tag(let h): h.title
         case .intent(let h): h.title
         }
     }
@@ -43,6 +46,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         case .metric(let h): h.subtitle
         case .integration(let h): h.subtitle
         case .place(let h): h.subtitle
+        case .tag(let h): h.subtitle
         case .intent(let h): h.subtitle
         }
     }
@@ -55,6 +59,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         case .metric: "Metrics"
         case .integration: "Integrations"
         case .place: "Places"
+        case .tag: "Tags"
         case .intent: "Actions"
         }
     }
@@ -74,6 +79,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         case "metric": self = .metric(try single.decode(MetricHit.self))
         case "integration": self = .integration(try single.decode(IntegrationHit.self))
         case "place": self = .place(try single.decode(PlaceHit.self))
+        case "tag": self = .tag(try single.decode(TagHit.self))
         case "intent": self = .intent(try single.decode(IntentHit.self))
         default:
             throw DecodingError.dataCorruptedError(
@@ -93,6 +99,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         case .metric(let h): try single.encode(h)
         case .integration(let h): try single.encode(h)
         case .place(let h): try single.encode(h)
+        case .tag(let h): try single.encode(h)
         case .intent(let h): try single.encode(h)
         }
     }
@@ -145,6 +152,43 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         public let subtitle: String?
     }
 
+    public struct TagHit: Codable, Sendable, Hashable {
+        public let name: String
+        public let type: String?
+        public let title: String
+        public let subtitle: String?
+
+        enum CodingKeys: String, CodingKey {
+            case id, name, type, title, subtitle, count, resultsCount = "results_count"
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            name = try container.decodeIfPresent(String.self, forKey: .name)
+                ?? container.decodeIfPresent(String.self, forKey: .id)
+                ?? container.decode(String.self, forKey: .title)
+            type = try container.decodeIfPresent(String.self, forKey: .type)
+            title = try container.decodeIfPresent(String.self, forKey: .title) ?? name
+
+            if let subtitle = try container.decodeIfPresent(String.self, forKey: .subtitle) {
+                self.subtitle = subtitle
+            } else if let count = try container.decodeIfPresent(Int.self, forKey: .count)
+                ?? container.decodeIfPresent(Int.self, forKey: .resultsCount) {
+                self.subtitle = "\(count) item\(count == 1 ? "" : "s")"
+            } else {
+                self.subtitle = type
+            }
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(name, forKey: .name)
+            try container.encodeIfPresent(type, forKey: .type)
+            try container.encode(title, forKey: .title)
+            try container.encodeIfPresent(subtitle, forKey: .subtitle)
+        }
+    }
+
     public struct IntentHit: Codable, Sendable, Hashable {
         public let id: String
         public let title: String
@@ -161,7 +205,7 @@ public struct SearchResponse: Codable, Sendable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         // Grouped backend format
-        case events, objects, integrations, metrics
+        case events, objects, integrations, metrics, tags
         // Legacy wrapped formats
         case results, data, items, hits
     }
@@ -181,7 +225,8 @@ public struct SearchResponse: Codable, Sendable, Hashable {
 
         // 2. Grouped backend format: { events: [...], objects: [...], ... }
         if container.contains(.events) || container.contains(.objects)
-            || container.contains(.integrations) || container.contains(.metrics) {
+            || container.contains(.integrations) || container.contains(.metrics)
+            || container.contains(.tags) {
             var all: [SearchResult] = []
 
             for e in (try container.decodeIfPresent([BackendEvent].self, forKey: .events)) ?? [] {
@@ -215,6 +260,9 @@ public struct SearchResponse: Codable, Sendable, Hashable {
                     subtitle: m.unit,
                     domain: m.domain
                 )))
+            }
+            for tag in (try container.decodeIfPresent([SearchResult.TagHit].self, forKey: .tags)) ?? [] {
+                all.append(.tag(tag))
             }
 
             results = all

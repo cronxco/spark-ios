@@ -16,6 +16,7 @@ final class MoneyExploreViewModel {
 
     private(set) var accounts: [MoneyAccount] = []
     private(set) var netWorthHistory: [NetWorthPoint] = []
+    private(set) var rawFeedEntries: [RawFeedJSONEntry] = []
     private(set) var loadState: LoadState = .idle
     private(set) var historyState: LoadState = .idle
 
@@ -37,8 +38,11 @@ final class MoneyExploreViewModel {
         guard case .idle = loadState else { return }
         loadState = .loading
         do {
-            let data = try await apiClient.request(MoneyEndpoint.accounts())
-            accounts = data.data
+            let response = try await apiClient.requestWithRawResponse(MoneyEndpoint.accounts())
+            accounts = response.decoded.data
+            rawFeedEntries = [
+                RawFeedJSONEntry(title: "GET /money/accounts", body: response.utf8Body)
+            ]
             loadState = .loaded
             await buildNetWorthHistory()
         } catch where error.isAPICancellation {
@@ -53,6 +57,7 @@ final class MoneyExploreViewModel {
     func refresh() async {
         accounts = []
         netWorthHistory = []
+        rawFeedEntries = []
         loadState = .idle
         historyState = .idle
         await load()
@@ -67,23 +72,30 @@ final class MoneyExploreViewModel {
         historyState = .loading
 
         var allBalances: [String: [BalanceEntry]] = [:]
+        var rawBalances: [String: String] = [:]
         let snapAccounts = accounts
 
-        await withTaskGroup(of: (String, [BalanceEntry]).self) { group in
+        await withTaskGroup(of: (String, [BalanceEntry], String?).self) { group in
             for account in snapAccounts {
                 group.addTask { [apiClient] in
                     do {
-                        let page = try await apiClient.request(MoneyEndpoint.balances(accountId: account.id))
-                        return (account.id, page.data)
+                        let response = try await apiClient.requestWithRawResponse(MoneyEndpoint.balances(accountId: account.id))
+                        return (account.id, response.decoded.data, response.utf8Body)
                     } catch {
-                        return (account.id, [])
+                        return (account.id, [], nil)
                     }
                 }
             }
-            for await (id, entries) in group {
+            for await (id, entries, rawBody) in group {
                 allBalances[id] = entries
+                rawBalances[id] = rawBody
             }
         }
+
+        rawFeedEntries.append(contentsOf: snapAccounts.compactMap { account in
+            guard let rawBody = rawBalances[account.id] else { return nil }
+            return RawFeedJSONEntry(title: "GET /money/accounts/\(account.id)/balances", body: rawBody)
+        })
 
         let cal = Calendar.current
         var dateMap: [Date: [String: Double]] = [:]

@@ -6,7 +6,7 @@ struct KnowledgeView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.tabAccessoryCoordinator) private var tabAccessoryCoordinator
     @State private var viewModel: KnowledgeViewModel?
-    @State private var path: [Event] = []
+    @State private var path = NavigationPath()
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -15,6 +15,7 @@ struct KnowledgeView: View {
                 .navigationDestination(for: Event.self) { event in
                     KnowledgeItemDetailView(event: event)
                 }
+                .sparkDetailDestinations()
                 .sparkMainAppToolbar()
                 .onAppear { updateFilterAccessory() }
                 .onChange(of: viewModel?.filter) { _, _ in updateFilterAccessory() }

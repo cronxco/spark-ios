@@ -72,6 +72,11 @@ struct MetricsExploreView: View {
                         historySection
                             .padding(.horizontal, SparkSpacing.lg)
                     }
+
+                    if let viewModel, case .loaded = viewModel.loadState, !viewModel.rawFeedEntries.isEmpty {
+                        RawFeedJSONView(entries: viewModel.rawFeedEntries)
+                            .padding(.horizontal, SparkSpacing.lg)
+                    }
                 }
                 .padding(.top, SparkSpacing.md)
                 .padding(.bottom, SparkSpacing.xl)

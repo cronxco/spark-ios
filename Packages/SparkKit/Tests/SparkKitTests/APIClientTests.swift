@@ -113,6 +113,42 @@ struct APIClientTests {
         #expect(retryRequest?.value(forHTTPHeaderField: "Authorization") == "Bearer new")
     }
 
+    @Test("expired access token refreshes before protected request")
+    func expiredTokenRefreshesBeforeProtectedRequest() async throws {
+        let (client, tokenStore) = makeClient()
+        await tokenStore.store(access: "old", refresh: "r-1", expiresIn: -1)
+
+        await StubURLProtocol.set { request in
+            if request.url?.path.hasSuffix("/oauth/refresh") == true {
+                let json = """
+                {"token_type":"Bearer","access_token":"new","refresh_token":"r-2","expires_in":3600}
+                """.data(using: .utf8)!
+                return (json, 200, [:])
+            }
+
+            guard request.value(forHTTPHeaderField: "Authorization") == "Bearer new" else {
+                return (Data(), 401, [:])
+            }
+
+            let payload = """
+            {"date":"2026-04-19","timezone":"UTC","sync_status":{"in_flight":false,"last_synced_at":null,"anomaly_count":0},"sections":{},"anomalies":[]}
+            """.data(using: .utf8)!
+            return (payload, 200, [:])
+        }
+
+        let summary = try await client.request(BriefingEndpoint.today())
+        #expect(summary.date == "2026-04-19")
+        #expect(await tokenStore.accessToken() == "new")
+
+        let captured = await StubURLProtocol.recorded()
+        #expect(captured.compactMap { $0.url?.path } == [
+            "/api/oauth/refresh",
+            "/api/v1/mobile/briefing/today",
+        ])
+        let briefingRequest = try #require(captured.last)
+        #expect(briefingRequest.value(forHTTPHeaderField: "Authorization") == "Bearer new")
+    }
+
     @Test("concurrent 401s share one refresh request")
     func concurrentUnauthorizedRequestsShareRefresh() async throws {
         let (client, tokenStore) = makeClient()
@@ -309,8 +345,8 @@ struct APIClientTests {
         }
     }
 
-    @Test("site-root requests do not include a double slash")
-    func siteRootPathIsNormalized() async throws {
+    @Test("OAuth token endpoint resolves under the /api prefix on the API host")
+    func oauthTokenResolvesUnderAPIPrefix() async throws {
         let (client, _) = makeClient()
         await StubURLProtocol.set { _ in
             let payload = """
@@ -323,14 +359,15 @@ struct APIClientTests {
 
         let captured = await StubURLProtocol.recorded()
         let request = try #require(captured.first)
-        #expect(request.url?.path == "/oauth/token")
+        #expect(request.url?.host == "test.spark.cronx.co")
+        #expect(request.url?.path == "/api/oauth/token")
     }
 
-    @Test("site-root requests use oauth host when base URL has a trailing slash")
-    func siteRootUsesOAuthHost() async throws {
+    @Test("OAuth base ignores a trailing slash on the mobile API base URL")
+    func oauthBaseHandlesTrailingSlash() async throws {
         let environment = APIEnvironment(
             baseURL: URL(string: "https://api.spark.cronx.co/api/v1/mobile/")!,
-            oauthAuthorizeURL: URL(string: "https://auth.spark.cronx.co/oauth/authorize")!,
+            oauthAuthorizeURL: URL(string: "https://api.spark.cronx.co/oauth/authorize")!,
             name: "test"
         )
         let (client, _) = makeClient(environment: environment)
@@ -346,8 +383,31 @@ struct APIClientTests {
 
         let captured = await StubURLProtocol.recorded()
         let request = try #require(captured.first)
-        #expect(request.url?.host == "auth.spark.cronx.co")
-        #expect(request.url?.path == "/oauth/token")
+        #expect(request.url?.host == "api.spark.cronx.co")
+        #expect(request.url?.path == "/api/oauth/token")
+    }
+
+    @Test("OAuth base honours a LAN override (http host with a port)")
+    func oauthBaseHandlesLANOverride() async throws {
+        let environment = APIEnvironment(
+            baseURL: URL(string: "http://192.168.1.42:8000/api/v1/mobile")!,
+            oauthAuthorizeURL: URL(string: "http://192.168.1.42:8000/oauth/authorize")!,
+            name: "lan"
+        )
+        let (client, _) = makeClient(environment: environment)
+
+        await StubURLProtocol.set { _ in
+            let payload = """
+            {"token_type":"Bearer","access_token":"new","refresh_token":"r-2","expires_in":3600}
+            """.data(using: .utf8)!
+            return (payload, 200, [:])
+        }
+
+        _ = try await client.requestSiteRoot(AuthEndpoint.exchange(code: "abc", verifier: "verifier"))
+
+        let captured = await StubURLProtocol.recorded()
+        let request = try #require(captured.first)
+        #expect(request.url?.absoluteString == "http://192.168.1.42:8000/api/oauth/token")
     }
 
     @Test("telemetry captures request and response metadata with redacted credentials")

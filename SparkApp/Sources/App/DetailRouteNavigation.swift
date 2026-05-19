@@ -67,6 +67,7 @@ extension DeepLink {
         case .metric(let identifier): .metric(identifier: identifier)
         case .place(let id): .place(id: id)
         case .integration(let service): .integration(service: service)
+        case .tag(let name): .tag(name: name, type: nil)
         case .today, .day, .authCallback: nil
         }
     }
@@ -92,6 +93,8 @@ extension View {
                 IntegrationDetailView(integrationId: service)
             case .account(let id):
                 AccountDetailView(accountId: id)
+            case .tag(let name, let type):
+                TagDetailView(tagName: name, tagType: type)
             }
         }
     }

@@ -136,13 +136,31 @@ public actor APIClient {
     // MARK: - Public entrypoints
 
     public func request<Response>(_ endpoint: Endpoint<Response>) async throws -> Response {
+        try await perform(endpoint, absoluteBase: false, allowRefresh: true).decoded
+    }
+
+    public func requestWithRawResponse<Response>(_ endpoint: Endpoint<Response>) async throws -> RawAPIResponse<Response> {
         try await perform(endpoint, absoluteBase: false, allowRefresh: true)
     }
 
     /// Hit an endpoint whose path is rooted at `/api` (not `/api/v1/mobile`).
     /// Used for the OAuth token endpoints.
     public func requestSiteRoot<Response>(_ endpoint: Endpoint<Response>) async throws -> Response {
-        try await perform(endpoint, absoluteBase: true, allowRefresh: false)
+        try await perform(endpoint, absoluteBase: true, allowRefresh: false).decoded
+    }
+
+    public func accessTokenRefreshingIfNeeded(
+        leeway: TimeInterval = 30,
+        forceRefresh: Bool = false
+    ) async throws -> String? {
+        guard let tokens = await tokenStore.tokens() else { return nil }
+        guard forceRefresh || tokens.expiresAt <= Date().addingTimeInterval(leeway) else {
+            return tokens.accessToken
+        }
+        guard await tokenStore.hasRefreshToken() else {
+            return tokens.accessToken
+        }
+        return try await refreshTokens().accessToken
     }
 
     // MARK: - Core
@@ -153,7 +171,7 @@ public actor APIClient {
         allowRefresh: Bool,
         attempt: Int = 1,
         isRefreshRequest: Bool = false
-    ) async throws -> Response {
+    ) async throws -> RawAPIResponse<Response> {
         let url = try buildURL(endpoint: endpoint, absoluteBase: absoluteBase)
         var request = URLRequest(url: url)
         request.httpMethod = endpoint.method.rawValue
@@ -162,7 +180,9 @@ public actor APIClient {
             request.httpBody = body
             request.setValue(endpoint.contentType ?? "application/json", forHTTPHeaderField: "Content-Type")
         }
-        let accessToken = endpoint.requiresAuth ? await tokenStore.accessToken() : nil
+        let accessToken = endpoint.requiresAuth
+            ? try await accessTokenRefreshingIfNeeded()
+            : nil
         if let accessToken {
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         }
@@ -294,7 +314,7 @@ public actor APIClient {
                 metrics: metricsCollector.snapshot,
                 outcome: .success
             )
-            return empty
+            return RawAPIResponse(decoded: empty, data: data)
         }
 
         do {
@@ -314,7 +334,7 @@ public actor APIClient {
                 outcome: .success,
                 decodeDurationMillis: Date().timeIntervalSince(decodeStartedAt) * 1_000
             )
-            return decoded
+            return RawAPIResponse(decoded: decoded, data: data)
         } catch {
             let bodyString = String(data: data, encoding: .utf8) ?? "<binary>"
             logger.error("Decoding failed for \(endpoint.path, privacy: .public): \(error.localizedDescription, privacy: .public) — body: \(bodyString, privacy: .public)")
@@ -341,7 +361,7 @@ public actor APIClient {
         absoluteBase: Bool,
         retryAttempt: Int,
         tokenUsedForRequest: String?
-    ) async throws -> Response {
+    ) async throws -> RawAPIResponse<Response> {
         if let tokenUsedForRequest,
            let currentAccessToken = await tokenStore.accessToken(),
            currentAccessToken != tokenUsedForRequest {
@@ -364,7 +384,7 @@ public actor APIClient {
                     absoluteBase: true,
                     allowRefresh: false,
                     isRefreshRequest: true
-                )
+                ).decoded
                 let authTokens = AuthTokens(
                     accessToken: tokens.accessToken,
                     refreshToken: tokens.refreshToken,
@@ -434,7 +454,7 @@ public actor APIClient {
     private func buildURL<Response>(endpoint: Endpoint<Response>, absoluteBase: Bool) throws -> URL {
         let base: URL
         if absoluteBase {
-            base = oauthSiteRootURL()
+            base = oauthAPIRootURL()
         } else {
             base = environment.baseURL
         }
@@ -449,14 +469,20 @@ public actor APIClient {
         return url
     }
 
-    private func oauthSiteRootURL() -> URL {
+    /// The OAuth token/refresh endpoints (`/oauth/token`, `/oauth/refresh`) are
+    /// registered in Laravel's `routes/api.php`, so they are served from the
+    /// API host under the `/api` prefix — *not* as root-level siblings of the
+    /// `/oauth/authorize` web route. Derive the base from `environment.baseURL`
+    /// (definitionally the API host, e.g. `https://host/api/v1/mobile`) and
+    /// anchor it at `/api` so endpoint paths resolve to `/api/oauth/token`.
+    private func oauthAPIRootURL() -> URL {
         guard var components = URLComponents(
-            url: environment.oauthAuthorizeURL,
+            url: environment.baseURL,
             resolvingAgainstBaseURL: false
         ) else {
             return environment.baseURL
         }
-        components.path = "/"
+        components.path = "/api"
         components.query = nil
         components.fragment = nil
         return components.url ?? environment.baseURL
@@ -518,4 +544,13 @@ private extension HTTPURLResponse {
 /// Sentinel for endpoints that return an empty 204.
 public struct EmptyResponse: Codable, Sendable {
     public init() {}
+}
+
+public struct RawAPIResponse<Response: Sendable>: Sendable {
+    public let decoded: Response
+    public let data: Data
+
+    public var utf8Body: String {
+        String(data: data, encoding: .utf8) ?? "<binary response: \(data.count) bytes>"
+    }
 }
