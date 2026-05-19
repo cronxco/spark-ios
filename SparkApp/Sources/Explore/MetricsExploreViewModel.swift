@@ -11,6 +11,7 @@ final class MetricsExploreViewModel {
 
     private(set) var snapshots: [String: MetricDetail] = [:]
     private(set) var metrics: [Metric] = []
+    private(set) var rawFeedEntries: [RawFeedJSONEntry] = []
     private(set) var loadState: LoadState = .idle
     private(set) var metadataState: MetadataState = .idle
 
@@ -30,6 +31,7 @@ final class MetricsExploreViewModel {
     func refresh() async {
         snapshots = [:]
         metrics = []
+        rawFeedEntries = []
         loadState = .idle
         metadataState = .idle
         await fetchAll()
@@ -38,8 +40,11 @@ final class MetricsExploreViewModel {
     private func fetchAll() async {
         loadState = .loading
         do {
-            let metrics = try await apiClient.request(MetricsEndpoint.list())
-            self.metrics = metrics.filter { $0.eventCount > 0 }
+            let response = try await apiClient.requestWithRawResponse(MetricsEndpoint.list())
+            self.metrics = response.decoded.filter { $0.eventCount > 0 }
+            rawFeedEntries = [
+                RawFeedJSONEntry(title: "GET /metrics", body: response.utf8Body)
+            ]
             metadataState = .loaded(MetricsMetadataSummary(metrics: self.metrics))
         } catch where error.isAPICancellation {
             loadState = .idle
@@ -53,31 +58,38 @@ final class MetricsExploreViewModel {
             return
         }
 
-        snapshots = await fetchDetails(identifiers: metrics.map(\.identifier))
+        let details = await fetchDetails(identifiers: metrics.map(\.identifier))
+        snapshots = details.snapshots
+        rawFeedEntries.append(contentsOf: details.rawEntries)
         loadState = .loaded
     }
 
-    private func fetchDetails(identifiers: [String]) async -> [String: MetricDetail] {
+    private func fetchDetails(identifiers: [String]) async -> (snapshots: [String: MetricDetail], rawEntries: [RawFeedJSONEntry]) {
         var details: [String: MetricDetail] = [:]
-        await withTaskGroup(of: (String, MetricDetail?).self) { group in
+        var rawEntries: [RawFeedJSONEntry] = []
+        await withTaskGroup(of: (String, MetricDetail?, String?).self) { group in
             let client = apiClient
             for id in identifiers {
                 group.addTask {
                     do {
-                        let detail = try await client.request(
+                        let response = try await client.requestWithRawResponse(
                             MetricsEndpoint.detail(identifier: id, range: .thirtyDays)
                         )
-                        return (id, detail)
+                        return (id, response.decoded, response.utf8Body)
                     } catch {
-                        return (id, nil)
+                        return (id, nil, nil)
                     }
                 }
             }
-            for await (id, detail) in group {
+            for await (id, detail, rawBody) in group {
                 if let detail { details[id] = detail }
+                if let rawBody {
+                    rawEntries.append(RawFeedJSONEntry(title: "GET /metrics/\(MetricsEndpoint.canonicalIdentifier(id))?range=30d", body: rawBody))
+                }
             }
         }
-        return details
+        rawEntries.sort { $0.title < $1.title }
+        return (details, rawEntries)
     }
 }
 

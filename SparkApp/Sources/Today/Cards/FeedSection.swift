@@ -155,8 +155,8 @@ struct FeedSection: View {
             case .idle, .loading:
                 ProgressView()
                     .frame(maxWidth: .infinity, minHeight: 220)
-            case .loaded(let json):
-                SparkRawPayloadView(text: json)
+            case .loaded(let entries):
+                RawFeedJSONView(title: "Raw feed JSON", entries: entries)
             case .error(let message):
                 EmptyState(
                     systemImage: "exclamationmark.triangle.fill",
@@ -173,8 +173,8 @@ struct FeedSection: View {
     private func loadRawFeed() async {
         rawFeedState = .loading
         do {
-            let events = try await fetchAllFeedEvents()
-            rawFeedState = .loaded(prettyJSON(for: events))
+            let entries = try await fetchAllFeedResponses()
+            rawFeedState = .loaded(entries)
         } catch APIError.notModified {
             rawFeedState = .error("The feed endpoint returned 304 Not Modified, so no raw response body was available.")
         } catch {
@@ -183,32 +183,25 @@ struct FeedSection: View {
         }
     }
 
-    private func fetchAllFeedEvents() async throws -> [Event] {
+    private func fetchAllFeedResponses() async throws -> [RawFeedJSONEntry] {
         var cursor: String?
-        var events: [Event] = []
+        var entries: [RawFeedJSONEntry] = []
+        let dateKey = Self.isoKey(for: date)
 
         repeat {
-            let page = try await appModel.apiClient.request(
-                FeedEndpoint.feed(cursor: cursor, limit: 100, date: Self.isoKey(for: date))
+            let response = try await appModel.apiClient.requestWithRawResponse(
+                FeedEndpoint.feed(cursor: cursor, limit: 100, date: dateKey)
             )
-            events.append(contentsOf: page.data)
+            let cursorSuffix = cursor.map { "&cursor=\($0)" } ?? ""
+            entries.append(RawFeedJSONEntry(
+                title: "GET /feed?date=\(dateKey)&limit=100\(cursorSuffix)",
+                body: response.utf8Body
+            ))
+            let page = response.decoded
             cursor = page.hasMore ? page.nextCursor : nil
         } while cursor != nil
 
-        return events
-    }
-
-    private func prettyJSON(for events: [Event]) -> String {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        guard
-            let data = try? encoder.encode(events),
-            let string = String(data: data, encoding: .utf8)
-        else {
-            return "[]"
-        }
-        return string
+        return entries
     }
 
     private static func isoKey(for date: Date) -> String {
@@ -222,7 +215,7 @@ struct FeedSection: View {
 private enum RawFeedState {
     case idle
     case loading
-    case loaded(String)
+    case loaded([RawFeedJSONEntry])
     case error(String)
 }
 
@@ -333,6 +326,8 @@ private struct HourGroup: View {
     let hour: Int
     let events: [CachedEvent]
 
+    @State private var expandedGroupIDs: Set<String> = []
+
     private var eventGroups: [EventGroup] {
         var result: [EventGroup] = []
         var i = 0
@@ -376,10 +371,26 @@ private struct HourGroup: View {
                         }
                         .buttonStyle(.plain)
                     case .collapsed(let groupEvents):
-                        NavigationLink(value: DetailRoute.event(id: groupEvents[0].id)) {
-                            row(for: groupEvents[0], surplusCount: groupEvents.count - 1)
+                        let groupID = group.id
+                        if expandedGroupIDs.contains(groupID) {
+                            ForEach(groupEvents) { event in
+                                NavigationLink(value: DetailRoute.event(id: event.id)) {
+                                    row(for: event)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        } else {
+                            Button {
+                                withAnimation(.snappy(duration: 0.22)) {
+                                    _ = expandedGroupIDs.insert(groupID)
+                                }
+                            } label: {
+                                row(for: groupEvents[0], surplusCount: groupEvents.count - 1)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("\(primaryTitle(for: groupEvents[0])), \(groupEvents.count - 1) others")
+                            .accessibilityHint("Expands the grouped timeline events")
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }

@@ -7,6 +7,7 @@ import SwiftUI
 final class BlockDetailViewModel {
     let blockId: String
     private(set) var state: DetailLoadState<BlockDetail> = .loading
+    private(set) var rawPayload: String?
 
     private let apiClient: APIClient
 
@@ -18,8 +19,9 @@ final class BlockDetailViewModel {
     func load() async {
         state = .loading
         do {
-            let detail = try await apiClient.request(BlocksEndpoint.detail(id: blockId))
-            state = .loaded(detail)
+            let response = try await apiClient.requestWithRawResponse(BlocksEndpoint.detail(id: blockId))
+            rawPayload = response.utf8Body
+            state = .loaded(response.decoded)
         } catch APIError.notModified {
             return
         } catch {
@@ -69,6 +71,7 @@ struct BlockDetailView: View {
             shareItems: blockShareItems,
             rawTitle: "Raw block",
             rawPayload: blockRawPayload,
+            feedbackContext: blockFeedbackContext,
             refresh: { await viewModel?.load() }
         )
         .task(id: blockId) {
@@ -88,8 +91,20 @@ struct BlockDetailView: View {
 
     private var blockRawPayload: String? {
         guard case .loaded(let detail) = viewModel?.state else { return nil }
+        if let rawPayload = viewModel?.rawPayload { return rawPayload }
         return SparkPrettyJSON.string(for: detail)
             ?? SparkPrettyJSON.fallback(entity: "block", id: detail.block.id, title: detail.block.title)
+    }
+
+    private var blockFeedbackContext: SparkFeedbackContext {
+        if case .loaded(let detail) = viewModel?.state {
+            return SparkFeedbackContext(
+                entityType: "block",
+                entityId: detail.block.id,
+                title: detail.block.title
+            )
+        }
+        return SparkFeedbackContext(entityType: "block", entityId: blockId, title: blockId)
     }
 
     @ViewBuilder

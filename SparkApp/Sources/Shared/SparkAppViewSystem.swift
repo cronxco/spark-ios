@@ -145,15 +145,32 @@ struct SparkSheetScaffold<Content: View>: View {
 
 struct SparkRawPayloadView: View {
     let text: String
+    @State private var didCopy = false
 
     var body: some View {
-        Text(text)
-            .font(SparkTypography.monoSmall)
-            .foregroundStyle(.primary)
-            .textSelection(.enabled)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(SparkSpacing.md)
-            .sparkGlass(.roundedRect(SparkRadii.md))
+        VStack(alignment: .leading, spacing: SparkSpacing.md) {
+            Button {
+                UIPasteboard.general.string = text
+                didCopy = true
+                Task {
+                    try? await Task.sleep(for: .seconds(1.4))
+                    didCopy = false
+                }
+            } label: {
+                Label(didCopy ? "Copied" : "Copy JSON", systemImage: didCopy ? "checkmark.circle.fill" : "doc.on.doc")
+                    .font(SparkTypography.captionStrong)
+                    .foregroundStyle(didCopy ? Color.sparkSuccess : Color.sparkTextPrimary)
+            }
+            .buttonStyle(.bordered)
+
+            Text(text)
+                .font(SparkTypography.monoSmall)
+                .foregroundStyle(.primary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(SparkSpacing.md)
+                .sparkGlass(.roundedRect(SparkRadii.md))
+        }
     }
 }
 
@@ -216,7 +233,6 @@ struct SparkOnboardingScaffold<Content: View, Actions: View>: View {
             .padding(.horizontal, SparkSpacing.xl)
             .padding(.top, SparkSpacing.md)
             .padding(.bottom, SparkSpacing.xxl)
-            .background(.ultraThinMaterial)
         }
         .background(SparkResolvedAppBackground().ignoresSafeArea())
         .navigationBarBackButtonHidden()
@@ -231,6 +247,76 @@ struct SparkShareSheet: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+struct SparkFeedbackContext: Sendable {
+    let entityType: String
+    let entityId: String
+    let title: String
+
+    var displayLabel: String {
+        "\(entityType.capitalized): \(title)"
+    }
+}
+
+struct SparkUserFeedbackSheet: View {
+    let context: SparkFeedbackContext
+    let profile: UserProfile?
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var comments = ""
+    @State private var isSending = false
+
+    private var trimmedComments: String {
+        comments.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Text(context.displayLabel)
+                        .font(SparkTypography.bodySmall)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("Feedback") {
+                    TextEditor(text: $comments)
+                        .frame(minHeight: 160)
+                        .accessibilityLabel("Feedback")
+                }
+            }
+            .navigationTitle("Send Feedback")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .disabled(isSending)
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(isSending ? "Sending..." : "Send") {
+                        submit()
+                    }
+                    .disabled(trimmedComments.isEmpty || isSending)
+                }
+            }
+        }
+    }
+
+    private func submit() {
+        let comments = trimmedComments
+        guard !comments.isEmpty else { return }
+        isSending = true
+        SparkObservability.captureUserFeedback(
+            comments: comments,
+            context: context,
+            profile: profile
+        )
+        dismiss()
+    }
 }
 
 struct SparkMainAppToolbarModifier: ViewModifier {
@@ -301,11 +387,14 @@ struct SparkSubViewToolbarModifier: ViewModifier {
     let shareItems: [Any]
     let rawTitle: String
     let rawPayload: String?
+    let feedbackContext: SparkFeedbackContext?
     let refresh: () async -> Void
     let reprocess: (() async -> Void)?
 
+    @Environment(AppModel.self) private var appModel
     @State private var showShareSheet = false
     @State private var showRawSheet = false
+    @State private var showFeedbackSheet = false
 
     func body(content: Content) -> some View {
         content
@@ -323,6 +412,13 @@ struct SparkSubViewToolbarModifier: ViewModifier {
                     Menu {
                         Button("Tag") {}
                             .disabled(true)
+                        if feedbackContext != nil {
+                            Button {
+                                showFeedbackSheet = true
+                            } label: {
+                                Label("Send Feedback", systemImage: "bubble.left.and.bubble.right")
+                            }
+                        }
                         Button {
                             Task { await refresh() }
                         } label: {
@@ -356,6 +452,14 @@ struct SparkSubViewToolbarModifier: ViewModifier {
                     SparkRawPayloadView(text: rawPayload ?? "{}")
                 }
             }
+            .sheet(isPresented: $showFeedbackSheet) {
+                if let feedbackContext {
+                    SparkUserFeedbackSheet(
+                        context: feedbackContext,
+                        profile: appModel.profile
+                    )
+                }
+            }
     }
 }
 
@@ -368,6 +472,7 @@ extension View {
         shareItems: [Any],
         rawTitle: String = "Raw",
         rawPayload: String?,
+        feedbackContext: SparkFeedbackContext? = nil,
         refresh: @escaping () async -> Void,
         reprocess: (() async -> Void)? = nil
     ) -> some View {
@@ -375,6 +480,7 @@ extension View {
             shareItems: shareItems,
             rawTitle: rawTitle,
             rawPayload: rawPayload,
+            feedbackContext: feedbackContext,
             refresh: refresh,
             reprocess: reprocess
         ))

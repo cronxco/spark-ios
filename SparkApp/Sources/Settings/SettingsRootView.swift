@@ -10,11 +10,10 @@ struct SettingsRootView: View {
         NavigationStack {
             Form {
                 Section {
-                    SparkSystemScreenHeader(
-                        title: "Settings",
-                        subtitle: "Manage your account, preferences, connections, and app diagnostics."
-                    )
-                    .padding(.vertical, SparkSpacing.sm)
+                    Text("Manage your account, preferences, connections, and app diagnostics.")
+                        .font(SparkTypography.bodySmall)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, SparkSpacing.sm)
                 }
                 .listRowBackground(Color.clear)
 

@@ -48,7 +48,7 @@ public struct SparkRichContentText: View {
         for run in attributed.runs where run.link != nil {
             guard let url = run.link, isRecognised(url) else { continue }
             attributed[run.range].foregroundColor = linkTint
-            attributed[run.range].font = SparkTypography.bodyStrong
+            attributed[run.range].font = font.weight(.semibold)
             attributed[run.range].underlineStyle = nil
         }
 

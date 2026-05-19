@@ -34,6 +34,7 @@ struct IntegrationDetailView: View {
             shareItems: integrationShareItems,
             rawTitle: "Raw integration",
             rawPayload: integrationRawPayload,
+            feedbackContext: integrationFeedbackContext,
             refresh: { await viewModel?.load() }
         )
         .task(id: integrationId) {
@@ -56,12 +57,24 @@ struct IntegrationDetailView: View {
 
     private var integrationRawPayload: String? {
         guard case .loaded(let detail) = viewModel?.state else { return nil }
+        if let rawPayload = viewModel?.rawPayload { return rawPayload }
         return SparkPrettyJSON.string(for: detail)
             ?? SparkPrettyJSON.fallback(
                 entity: "integration",
                 id: detail.integration.id,
                 title: detail.integration.name
             )
+    }
+
+    private var integrationFeedbackContext: SparkFeedbackContext {
+        if case .loaded(let detail) = viewModel?.state {
+            return SparkFeedbackContext(
+                entityType: "integration",
+                entityId: detail.integration.id,
+                title: detail.integration.name
+            )
+        }
+        return SparkFeedbackContext(entityType: "integration", entityId: integrationId, title: integrationId)
     }
 
     @ViewBuilder

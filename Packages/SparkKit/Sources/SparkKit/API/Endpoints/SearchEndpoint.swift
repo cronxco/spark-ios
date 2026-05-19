@@ -9,6 +9,13 @@ public enum SearchEndpoint {
         case integrations
         case semantic
 
+        public var queryValue: String {
+            switch self {
+            case .tags: "tag"
+            default: rawValue
+            }
+        }
+
         /// Single-character prefix used in the web Spotlight (`>` etc.). The
         /// search bar swallows the prefix and switches `Mode`.
         public var symbol: String? {
@@ -41,7 +48,7 @@ public enum SearchEndpoint {
             path: "/search",
             query: [
                 URLQueryItem(name: "q", value: text),
-                URLQueryItem(name: "mode", value: mode.rawValue),
+                URLQueryItem(name: "mode", value: mode.queryValue),
             ]
         )
     }

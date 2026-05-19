@@ -6,18 +6,19 @@ import SparkKit
 @Observable
 @MainActor
 final class HealthExploreViewModel {
-    private static let identifiers: [String] = [
-        "oura.sleep_score",
-        "oura.heart_rate",
-        "oura.hrv",
-        "oura.steps",
-        "oura.calories",
-    ]
+    typealias DashboardRange = HealthEndpoint.DashboardRange
 
-    enum LoadState { case idle, loading, loaded, error(String) }
+    enum LoadState {
+        case idle
+        case loading
+        case loaded
+        case error(String)
+    }
 
-    private(set) var snapshots: [String: MetricDetail] = [:]
+    private(set) var dashboard: HealthDashboard?
+    private(set) var rawFeedEntries: [RawFeedJSONEntry] = []
     private(set) var loadState: LoadState = .idle
+    var selectedRange: DashboardRange = .sevenDays
 
     private let apiClient: APIClient
     private let logger = Logger(subsystem: "co.cronx.sparkapp", category: "HealthExplore")
@@ -28,35 +29,37 @@ final class HealthExploreViewModel {
 
     func load() async {
         guard case .idle = loadState else { return }
-        loadState = .loading
-        await fetchAll()
+        await fetchDashboard()
     }
 
     func refresh() async {
-        snapshots = [:]
-        loadState = .idle
-        await fetchAll()
+        await fetchDashboard()
     }
 
-    private func fetchAll() async {
-        await withTaskGroup(of: (String, MetricDetail?).self) { group in
-            let client = apiClient
-            for id in Self.identifiers {
-                group.addTask {
-                    do {
-                        let detail = try await client.request(
-                            MetricsEndpoint.detail(identifier: id, range: .sevenDays)
-                        )
-                        return (id, detail)
-                    } catch {
-                        return (id, nil)
-                    }
-                }
-            }
-            for await (id, detail) in group {
-                if let detail { snapshots[id] = detail }
-            }
+    func selectRange(_ range: DashboardRange) async {
+        guard selectedRange != range else { return }
+        selectedRange = range
+        await fetchDashboard()
+    }
+
+    private func fetchDashboard() async {
+        loadState = .loading
+
+        do {
+            let response = try await apiClient.requestWithRawResponse(
+                HealthEndpoint.dashboard(date: "today", range: selectedRange)
+            )
+            dashboard = response.decoded
+            rawFeedEntries = [
+                RawFeedJSONEntry(title: "GET /health/dashboard", body: response.utf8Body)
+            ]
+            loadState = .loaded
+        } catch where error.isAPICancellation {
+            loadState = dashboard == nil ? .idle : .loaded
+        } catch {
+            logger.error("Health dashboard failed: \(String(describing: error), privacy: .public)")
+            let message = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+            loadState = .error(message)
         }
-        loadState = .loaded
     }
 }

@@ -101,8 +101,11 @@ struct TabAccessoryView: View {
             }
         }
         .pickerStyle(.segmented)
-        .controlSize(.small)
-        .frame(minWidth: 260)
+        .controlSize(.regular)
+        .frame(width: inlineSegmentedWidth)
+        .fixedSize(horizontal: true, vertical: true)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
         .accessibilityLabel(accessory.title)
     }
 
@@ -129,5 +132,9 @@ struct TabAccessoryView: View {
 
     private var selectedTitle: String {
         accessory.items.first { $0.id == accessory.selectedID }?.title ?? accessory.title
+    }
+
+    private var inlineSegmentedWidth: CGFloat {
+        CGFloat(accessory.items.count) * 96
     }
 }

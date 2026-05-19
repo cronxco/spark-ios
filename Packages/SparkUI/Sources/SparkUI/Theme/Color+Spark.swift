@@ -87,6 +87,17 @@ public extension Color {
     static let domainAnomaly = Color.sparkWarning
 }
 
+// MARK: - Tag type tints
+//
+// Colour-codes EventTag.type in chip display. Reuses existing semantic tokens
+// where they fit the semantic (place → success green).
+
+public extension Color {
+    static let sparkTagPerson: Color = .purple
+    static let sparkTagPlace: Color  = .sparkSuccess
+    static let sparkTagTopic: Color  = .orange
+}
+
 // MARK: - Surfaces (light/dark adaptive)
 
 public extension Color {

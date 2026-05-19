@@ -3,7 +3,7 @@ import SwiftUI
 
 struct ExploreView: View {
     @Environment(\.tabAccessoryCoordinator) private var tabAccessoryCoordinator
-    @State private var section: ExploreSection = .map
+    @State private var section: ExploreSection = .health
 
     var body: some View {
         currentSectionView
@@ -50,7 +50,7 @@ struct ExploreView: View {
 }
 
 enum ExploreSection: CaseIterable, Equatable {
-    case map, health, metrics, money
+    case health, money, metrics, map
 
     var id: String {
         switch self {

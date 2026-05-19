@@ -9,6 +9,7 @@ import SwiftUI
 final class PlaceDetailViewModel {
     let placeId: String
     private(set) var state: DetailLoadState<PlaceDetail> = .loading
+    private(set) var rawPayload: String?
 
     private let apiClient: APIClient
 
@@ -20,8 +21,9 @@ final class PlaceDetailViewModel {
     func load() async {
         state = .loading
         do {
-            let detail = try await apiClient.request(PlacesEndpoint.detail(id: placeId))
-            state = .loaded(detail)
+            let response = try await apiClient.requestWithRawResponse(PlacesEndpoint.detail(id: placeId))
+            rawPayload = response.utf8Body
+            state = .loaded(response.decoded)
         } catch APIError.notModified {
             return
         } catch {
@@ -64,6 +66,7 @@ struct PlaceDetailView: View {
             shareItems: placeShareItems,
             rawTitle: "Raw place",
             rawPayload: placeRawPayload,
+            feedbackContext: placeFeedbackContext,
             refresh: { await viewModel?.load() }
         )
         .task(id: placeId) {
@@ -83,8 +86,20 @@ struct PlaceDetailView: View {
 
     private var placeRawPayload: String? {
         guard case .loaded(let detail) = viewModel?.state else { return nil }
+        if let rawPayload = viewModel?.rawPayload { return rawPayload }
         return SparkPrettyJSON.string(for: detail)
             ?? SparkPrettyJSON.fallback(entity: "place", id: detail.place.id, title: detail.place.title)
+    }
+
+    private var placeFeedbackContext: SparkFeedbackContext {
+        if case .loaded(let detail) = viewModel?.state {
+            return SparkFeedbackContext(
+                entityType: "place",
+                entityId: detail.place.id,
+                title: detail.place.title
+            )
+        }
+        return SparkFeedbackContext(entityType: "place", entityId: placeId, title: placeId)
     }
 
     @ViewBuilder

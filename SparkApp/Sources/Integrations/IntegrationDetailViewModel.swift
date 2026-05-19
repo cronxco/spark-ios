@@ -9,6 +9,7 @@ import SparkKit
 final class IntegrationDetailViewModel {
     let integrationId: String
     private(set) var state: DetailLoadState<IntegrationDetail> = .loading
+    private(set) var rawPayload: String?
     private(set) var actionInProgress: Action?
     private(set) var lastActionMessage: String?
 
@@ -29,8 +30,9 @@ final class IntegrationDetailViewModel {
     func load() async {
         state = .loading
         do {
-            let detail = try await apiClient.request(IntegrationsEndpoint.detail(id: integrationId))
-            state = .loaded(detail)
+            let response = try await apiClient.requestWithRawResponse(IntegrationsEndpoint.detail(id: integrationId))
+            rawPayload = response.utf8Body
+            state = .loaded(response.decoded)
         } catch APIError.notModified {
             return
         } catch {

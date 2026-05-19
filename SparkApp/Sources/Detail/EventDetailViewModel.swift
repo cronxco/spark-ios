@@ -14,6 +14,7 @@ final class EventDetailViewModel {
     let eventId: String
     private(set) var state: DetailLoadState<EventDetail> = .loading
     private(set) var metricBaselineStatus: MetricBaselineStatus?
+    private(set) var rawPayload: String?
 
     private let apiClient: APIClient
 
@@ -26,7 +27,9 @@ final class EventDetailViewModel {
         state = .loading
         metricBaselineStatus = nil
         do {
-            let detail = try await apiClient.request(EventsEndpoint.detail(id: eventId))
+            let response = try await apiClient.requestWithRawResponse(EventsEndpoint.detail(id: eventId))
+            let detail = response.decoded
+            rawPayload = response.utf8Body
             state = .loaded(detail)
             await loadMetricBaselineStatus(for: detail)
         } catch APIError.notModified {
@@ -45,9 +48,11 @@ final class EventDetailViewModel {
 
     func saveNote(_ note: String) async throws {
         let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
-        let updated = try await apiClient.request(
+        let response = try await apiClient.requestWithRawResponse(
             EventsEndpoint.updateNote(id: eventId, note: trimmed.isEmpty ? nil : trimmed)
         )
+        let updated = response.decoded
+        rawPayload = response.utf8Body
         state = .loaded(updated)
         await loadMetricBaselineStatus(for: updated)
     }

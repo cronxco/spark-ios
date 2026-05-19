@@ -109,4 +109,16 @@ struct DeepLinkTests {
         let url = try #require(URL(string: "https://spark.cronx.co/integrations/monzo"))
         #expect(DeepLink.parse(url) == nil)
     }
+
+    @Test("parses /tags/:name")
+    func tagPlural() throws {
+        let url = try #require(URL(string: "https://spark.cronx.co/tags/Alice"))
+        #expect(DeepLink.parse(url) == .tag(name: "Alice"))
+    }
+
+    @Test("parses /tag/:name (singular)")
+    func tagSingular() throws {
+        let url = try #require(URL(string: "https://spark.cronx.co/tag/coffee"))
+        #expect(DeepLink.parse(url) == .tag(name: "coffee"))
+    }
 }

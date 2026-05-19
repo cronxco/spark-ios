@@ -4,6 +4,16 @@ import Testing
 
 @Suite("Search response decoding")
 struct SearchResponseDecodingTests {
+    @Test("tag search mode uses backend singular query value")
+    func tagSearchModeQueryValue() throws {
+        let endpoint = SearchEndpoint.query(text: "Hannah Waddingham", mode: .tags)
+
+        let mode = try #require(endpoint.query.first { $0.name == "mode" })
+        #expect(mode.value == "tag")
+        #expect(SearchEndpoint.Mode.tags.label == "Tags")
+        #expect(SearchEndpoint.Mode.tags.symbol == "#")
+    }
+
     @Test("decodes top-level array payload")
     func decodesArrayPayload() throws {
         let json = """
@@ -116,6 +126,43 @@ struct SearchResponseDecodingTests {
             #expect(hit.domain == "health")
         } else {
             Issue.record("Expected a metric hit at index 3.")
+        }
+    }
+
+    @Test("decodes tag hits from flat and grouped search payloads")
+    func decodesTagHits() throws {
+        let flatJSON = """
+        [
+          { "kind": "tag", "name": "Alice", "type": "spark_person", "title": "Alice", "count": 3 }
+        ]
+        """
+
+        let flat = try JSONDecoder().decode(SearchResponse.self, from: Data(flatJSON.utf8))
+        if case .tag(let hit) = try #require(flat.results.first) {
+            #expect(hit.name == "Alice")
+            #expect(hit.type == "spark_person")
+            #expect(hit.subtitle == "3 items")
+        } else {
+            Issue.record("Expected a tag hit.")
+        }
+
+        let groupedJSON = """
+        {
+          "mode": "tags",
+          "query": "coffee",
+          "tags": [
+            { "name": "coffee", "type": "merchant_category", "results_count": 1 }
+          ]
+        }
+        """
+
+        let grouped = try JSONDecoder().decode(SearchResponse.self, from: Data(groupedJSON.utf8))
+        if case .tag(let hit) = try #require(grouped.results.first) {
+            #expect(hit.name == "coffee")
+            #expect(hit.title == "coffee")
+            #expect(hit.subtitle == "1 item")
+        } else {
+            Issue.record("Expected a grouped tag hit.")
         }
     }
 }

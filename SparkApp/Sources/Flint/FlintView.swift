@@ -151,14 +151,119 @@ private struct FlintDigestSection: View {
                     .font(SparkTypography.bodySmall)
                     .foregroundStyle(.secondary)
             } else {
-                VStack(alignment: .leading, spacing: SparkSpacing.md) {
-                    ForEach(digest.blocks) { block in
-                        FlintBlockRow(block: block, viewModel: viewModel, onOpen: onOpen)
-                    }
+                blockRows(insightBlocks)
+                blockRows(questionBlocks)
+            }
+
+            FlintDigestCheckInPrompt(digest: digest)
+
+            blockRows(editorialBlocks)
+        }
+    }
+
+    private var insightBlocks: [FlintDigestBlock] {
+        digest.blocks.filter { !$0.isQuestion && $0.blockType != "flint_editorial_note" }
+    }
+
+    private var questionBlocks: [FlintDigestBlock] {
+        digest.blocks.filter(\.isQuestion)
+    }
+
+    private var editorialBlocks: [FlintDigestBlock] {
+        digest.blocks.filter { $0.blockType == "flint_editorial_note" }
+    }
+
+    @ViewBuilder
+    private func blockRows(_ blocks: [FlintDigestBlock]) -> some View {
+        if !blocks.isEmpty {
+            VStack(alignment: .leading, spacing: SparkSpacing.md) {
+                ForEach(blocks) { block in
+                    FlintBlockRow(block: block, viewModel: viewModel, onOpen: onOpen)
                 }
             }
         }
     }
+}
+
+private struct FlintDigestCheckInPrompt: View {
+    let digest: FlintDigest
+
+    @Environment(AppModel.self) private var appModel
+    @State private var checkInViewModel: TodayViewModel?
+    @State private var showCheckIn = false
+
+    private var checkInPeriod: CheckInPeriod? {
+        switch digest.period {
+        case .morning:
+            return .morning
+        case .afternoon, .evening:
+            return .afternoon
+        case nil:
+            return nil
+        }
+    }
+
+    private var digestDate: Date? {
+        Self.dateFormatter.date(from: digest.date)
+    }
+
+    var body: some View {
+        if let period = checkInPeriod, let digestDate {
+            GlassCard {
+                VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                    HStack {
+                        SectionLabel("CHECK-IN")
+                        Spacer()
+                        Text(period.rawValue.uppercased())
+                            .font(SparkTypography.monoSmall)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    CheckInPeriodSummaryRow(
+                        title: "\(period.rawValue.capitalized) Check-in",
+                        status: status(for: period),
+                        onTap: { showCheckIn = true }
+                    )
+                }
+            }
+            .sheet(isPresented: $showCheckIn, onDismiss: {
+                Task { await checkInViewModel?.loadCheckIns() }
+            }) {
+                if let checkInViewModel {
+                    CheckInModalView(
+                        viewModel: checkInViewModel,
+                        date: digestDate,
+                        initialPeriod: period
+                    )
+                }
+            }
+            .task(id: digest.date) {
+                let vm = TodayViewModel(
+                    date: digestDate,
+                    apiClient: appModel.apiClient,
+                    container: appModel.container
+                )
+                await vm.loadCheckIns()
+                checkInViewModel = vm
+            }
+        }
+    }
+
+    private func status(for period: CheckInPeriod) -> PeriodStatus {
+        guard let checkInViewModel else { return .pending }
+        switch period {
+        case .morning:
+            return checkInViewModel.checkInDayStatus.morning
+        case .afternoon:
+            return checkInViewModel.checkInDayStatus.afternoon
+        }
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
 }
 
 private struct FlintDigestHeader: View {
@@ -465,6 +570,7 @@ private struct FlintQuestionContent: View {
             }
             .buttonStyle(.plain)
             .disabled(viewModel.answeringBlockIDs.contains(block.id) || submittedAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
 
