@@ -18,12 +18,17 @@ enum CheckInPresentation {
         }
     }
 
+    static let physicalEmojis = ["💀", "😴", "🚶‍♂️", "🏃‍♂️", "💪"]
+    static let physicalLabels = ["Dead", "Exhausted", "Walking", "Running", "Strong"]
+    static let mentalEmojis = ["😭", "🥹", "😕", "😊", "😄"]
+    static let mentalLabels = ["Awful", "Sad", "Meh", "Happy", "Great"]
+
     static func physicalEmoji(_ value: Int) -> String {
-        emoji(value, from: ["💀", "😴", "🚶‍♂️", "🏃‍♂️", "💪"])
+        emoji(value, from: physicalEmojis)
     }
 
     static func mentalEmoji(_ value: Int) -> String {
-        emoji(value, from: ["😭", "🥹", "😕", "😊", "😄"])
+        emoji(value, from: mentalEmojis)
     }
 
     static func retrospectiveTimestamp(for date: Date, period: CheckInPeriod, calendar: Calendar = .current) -> Date? {

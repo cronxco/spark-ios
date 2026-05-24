@@ -11,6 +11,8 @@ struct TodayView: View {
     @State private var viewModel: TodayViewModel?
     @State private var checkInSelection: CheckInSheetSelection?
     @State private var showHistory = false
+    @State private var showUpToSpeed = false
+    @State private var upToSpeedViewModel: UpToSpeedViewModel?
 
     var body: some View {
         let snapshot = TodaySnapshot(
@@ -24,11 +26,9 @@ struct TodayView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-                    hero(snapshot: snapshot)
+                    let unreadCount = upToSpeedViewModel?.unreadCount ?? 0
 
-                    StatStripView(snapshot: snapshot)
-
-                    anomalyPill(for: snapshot)
+                    hero(snapshot: snapshot, unreadCount: unreadCount)
 
                     CheckInCard(
                         date: date,
@@ -38,9 +38,10 @@ struct TodayView: View {
                         },
                         onTapAfternoon: {
                             checkInSelection = CheckInSheetSelection(date: date, period: .afternoon)
-                        },
-                        showHistory: $showHistory
+                        }
                     )
+
+                    CheckInHeatmapCard(date: date, showHistory: $showHistory)
 
                     FeedSection(date: date)
 
@@ -53,7 +54,7 @@ struct TodayView: View {
                     }
                 }
                 .padding(.horizontal, SparkSpacing.lg)
-                .padding(.top, SparkSpacing.xl + 72)
+                .padding(.top, SparkSpacing.xl + 88)
                 .padding(.bottom, deviceSafeAreaBottom + 66)
             }
             .scrollContentBackground(.hidden)
@@ -70,6 +71,12 @@ struct TodayView: View {
                 CheckInHistoryView(apiClient: appModel.apiClient, container: appModel.container, todayViewModel: vm)
             }
         }
+        .fullScreenCover(isPresented: $showUpToSpeed, onDismiss: {
+            Task { await upToSpeedViewModel?.load() }
+        }) {
+            UpToSpeedView(isPresented: $showUpToSpeed, viewModel: upToSpeedViewModel)
+                .environment(appModel)
+        }
         .task(id: date) {
             if viewModel == nil {
                 viewModel = TodayViewModel(
@@ -80,28 +87,26 @@ struct TodayView: View {
             }
             await viewModel?.load()
         }
+        .task {
+            if upToSpeedViewModel == nil {
+                upToSpeedViewModel = UpToSpeedViewModel(apiClient: appModel.apiClient)
+            }
+            await upToSpeedViewModel?.load()
+        }
     }
 
     // MARK: - Hero
 
-    private func hero(snapshot: TodaySnapshot) -> some View {
+    private func hero(snapshot: TodaySnapshot, unreadCount: Int) -> some View {
         let title = heroTitle(snapshot: snapshot)
         let titleLines = title.components(separatedBy: "\n")
 
         return VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(titleLines.enumerated()), id: \.offset) { index, line in
-                    Text(line)
-                        .font(heroTitleFont(isFirstLine: index == 0))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.88)
-                }
+            if unreadCount > 0 {
+                heroTitleWithAction(titleLines: titleLines, unreadCount: unreadCount)
+            } else {
+                heroTitleStack(titleLines: titleLines)
             }
-            .fixedSize(horizontal: false, vertical: true)
-            .foregroundStyle(Color.primary)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(title.replacingOccurrences(of: "\n", with: " "))
-            .accessibilityAddTraits(.isHeader)
 
             if let subtitle = viewModel?.briefingSummaryLine {
                 Text(subtitle)
@@ -112,11 +117,56 @@ struct TodayView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
     }
 
-    private func heroTitleFont(isFirstLine: Bool) -> Font {
+    private func heroTitleWithAction(titleLines: [String], unreadCount: Int) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: SparkSpacing.md) {
+                if let firstLine = titleLines.first {
+                    heroTitleText(firstLine, index: 0)
+                }
+
+                Spacer(minLength: SparkSpacing.md)
+
+                GetUpToSpeedButton(
+                    unreadCount: unreadCount,
+                    onTap: { showUpToSpeed = true }
+                )
+            }
+
+            if titleLines.count > 1 {
+                ForEach(Array(titleLines.dropFirst().enumerated()), id: \.offset) { offset, line in
+                    heroTitleText(line, index: offset + 1)
+                }
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func heroTitleStack(titleLines: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(titleLines.enumerated()), id: \.offset) { index, line in
+                heroTitleText(line, index: index)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(titleLines.joined(separator: " "))
+        .accessibilityAddTraits(.isHeader)
+    }
+
+    private func heroTitleText(_ line: String, index: Int) -> some View {
+        Text(line)
+            .font(heroTitleFont)
+            .foregroundStyle(index == 0 ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
+            .lineLimit(1)
+            .minimumScaleFactor(0.88)
+    }
+
+    private var heroTitleFont: Font {
         Font.custom(SparkFonts.displayPostScriptName, size: 32, relativeTo: .largeTitle)
-            .weight(isFirstLine ? .bold : .regular)
+            .weight(.bold)
     }
 
     private func heroTitle(snapshot: TodaySnapshot) -> String {
@@ -148,23 +198,6 @@ struct TodayView: View {
         f.dateFormat = "EEEE\nd MMMM yyyy"
         return f
     }()
-
-    // MARK: - Anomaly pill
-
-    @ViewBuilder
-    private func anomalyPill(for snapshot: TodaySnapshot) -> some View {
-        if snapshot.anomalies.isEmpty {
-            StatusPill(.ok, message: "Baselines holding", trailing: "0 anomalies")
-        } else {
-            StatusPill(
-                .warning,
-                message: snapshot.anomalies.first?.displayName
-                    ?? snapshot.anomalies.first?.metric
-                    ?? "Anomaly detected",
-                trailing: "\(snapshot.anomalies.count) anomal\(snapshot.anomalies.count == 1 ? "y" : "ies")"
-            )
-        }
-    }
 
     // MARK: - Loading / empty
 
@@ -206,6 +239,38 @@ private struct CheckInSheetSelection: Identifiable {
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()
+}
+
+// MARK: - GetUpToSpeedButton
+
+private struct GetUpToSpeedButton: View {
+    let unreadCount: Int
+    let onTap: () -> Void
+
+    private static let darkInk = Color(red: 0.086, green: 0.086, blue: 0.086)
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 6) {
+                Text("\(unreadCount)")
+                    .font(Font.custom(SparkFonts.displayPostScriptName, size: 12).bold())
+                    .foregroundStyle(Self.darkInk)
+                    .padding(.horizontal, 6)
+                    .frame(minWidth: 24, minHeight: 24)
+                    .background(Self.darkInk.opacity(0.12), in: .capsule)
+
+                Text("Get Up to Speed")
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(Self.darkInk)
+            }
+            .padding(.leading, 4)
+            .padding(.trailing, 10)
+            .frame(height: 32)
+            .background(Color.sparkAccent, in: .capsule)
+            .shadow(color: Color.sparkAccent.opacity(0.22), radius: 7, x: 0, y: 6)
+        }
+        .buttonStyle(.plain)
+    }
 }
 
 private extension TodaySnapshot {

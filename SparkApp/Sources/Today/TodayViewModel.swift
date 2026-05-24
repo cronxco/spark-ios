@@ -25,7 +25,7 @@ final class TodayViewModel {
     private let defaults: UserDefaults
     private var summaryLineTask: Task<Void, Never>?
 
-    private static let summaryLinePromptVersion = "today-hero-summary-v1"
+    private static let summaryLinePromptVersion = "today-hero-summary-v2"
     private static let summaryLineCachePrefix = "spark.today.heroSummary"
 
     init(
@@ -46,6 +46,7 @@ final class TodayViewModel {
         await revalidate()
         await revalidateCheckIns()
         await loadFeed()
+        await revalidateUpToSpeed()
     }
 
     func refresh() async {
@@ -242,6 +243,18 @@ final class TodayViewModel {
                 targetType: event.target?.type,
                 targetMediaUrl: event.target?.mediaUrl
             ))
+        }
+    }
+
+    private func revalidateUpToSpeed() async {
+        do {
+            let response = try await apiClient.requestWithRawResponse(UpToSpeedEndpoint.feed())
+            upsertRawAPIEntry(title: "GET /up-to-speed/feed", body: response.utf8Body)
+        } catch APIError.httpStatus(let code, let data, _) {
+            let body = data.flatMap { String(data: $0, encoding: .utf8) } ?? "(no body)"
+            upsertRawAPIEntry(title: "GET /up-to-speed/feed [HTTP \(code)]", body: body)
+        } catch {
+            upsertRawAPIEntry(title: "GET /up-to-speed/feed [error]", body: error.localizedDescription)
         }
     }
 

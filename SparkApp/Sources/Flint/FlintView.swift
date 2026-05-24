@@ -57,6 +57,7 @@ struct FlintView: View {
             .padding(.top, SparkSpacing.md)
             .padding(.bottom, SparkSpacing.xxl * 2)
         }
+        .scrollDismissesKeyboard(.interactively)
         .refreshable { await viewModel?.refresh() }
     }
 
@@ -351,7 +352,7 @@ private struct FlintBlockRow: View {
 
                 VStack(alignment: .leading, spacing: SparkSpacing.xs) {
                     HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.sm) {
-                        Text(block.title)
+                        Text(block.isQuestion ? (block.question ?? block.title) : block.title)
                             .font(SparkTypography.bodyStrong)
                             .foregroundStyle(.primary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -372,7 +373,14 @@ private struct FlintBlockRow: View {
             }
 
             if block.isQuestion {
-                FlintQuestionContent(block: block, viewModel: viewModel)
+                FlintAnswerFormView(
+                    block: block,
+                    isSubmitting: viewModel.answeringBlockIDs.contains(block.id),
+                    errorMessage: viewModel.answerErrorByBlockID[block.id],
+                    onSubmit: { answer, note in
+                        await viewModel.answerQuestion(block: block, answer: answer, note: note)
+                    }
+                )
             } else if let content = block.content, !content.isEmpty {
                 SparkRichContentText(text: content, font: SparkTypography.bodySmall, foregroundStyle: .secondary)
             }
@@ -459,183 +467,3 @@ private struct FlintBlockRow: View {
     }
 }
 
-private struct FlintQuestionContent: View {
-    let block: FlintDigestBlock
-    let viewModel: FlintViewModel
-
-    @State private var selectedAnswer = ""
-    @State private var freeformAnswer = ""
-    @State private var answerNote = ""
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.md) {
-            Text(block.question ?? block.title)
-                .font(SparkTypography.body)
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if block.answered {
-                answeredView
-            } else {
-                answerForm
-            }
-
-            if let error = viewModel.answerErrorByBlockID[block.id] {
-                Text(error)
-                    .font(SparkTypography.caption)
-                    .foregroundStyle(Color.sparkError)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
-    private var answeredView: some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.xs) {
-            Label(block.answer ?? "Answered", systemImage: "checkmark.circle.fill")
-                .font(SparkTypography.bodySmall)
-                .foregroundStyle(Color.sparkSuccess)
-
-            if let note = block.answerNote, !note.isEmpty {
-                Text(note)
-                    .font(SparkTypography.bodySmall)
-                    .foregroundStyle(.secondary)
-            }
-
-            if let answeredAt = block.answeredAt {
-                Text("Answered \(answeredAt.formatted(date: .abbreviated, time: .shortened))")
-                    .font(SparkTypography.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private var answerForm: some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.md) {
-            if let options = block.answerOptions, !options.isEmpty {
-                FlowLayout(spacing: SparkSpacing.sm) {
-                    ForEach(options, id: \.self) { option in
-                        Button {
-                            selectedAnswer = option
-                        } label: {
-                            Text(option)
-                                .font(SparkTypography.captionStrong)
-                                .foregroundStyle(selectedAnswer == option ? Color.white : Color.primary)
-                                .padding(.horizontal, SparkSpacing.md)
-                                .padding(.vertical, SparkSpacing.sm)
-                                .sparkGlass(
-                                    .capsule,
-                                    tint: selectedAnswer == option ? Color.sparkAccent : Color.sparkAccent.opacity(0.1)
-                                )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            } else {
-                TextField("Answer", text: $freeformAnswer, axis: .vertical)
-                    .font(SparkTypography.bodySmall)
-                    .lineLimit(1...4)
-                    .padding(SparkSpacing.md)
-                    .textFieldInputBackground()
-            }
-
-            TextField("Add a note", text: $answerNote, axis: .vertical)
-                .font(SparkTypography.bodySmall)
-                .lineLimit(1...3)
-                .padding(SparkSpacing.md)
-                .textFieldInputBackground()
-
-            Button {
-                Task {
-                    await viewModel.answerQuestion(
-                        block: block,
-                        answer: submittedAnswer,
-                        note: answerNote
-                    )
-                }
-            } label: {
-                HStack(spacing: SparkSpacing.sm) {
-                    if viewModel.answeringBlockIDs.contains(block.id) {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Image(systemName: "paperplane.fill")
-                    }
-                    Text("Submit")
-                        .font(SparkTypography.bodyStrong)
-                }
-                .padding(.horizontal, SparkSpacing.lg)
-                .padding(.vertical, SparkSpacing.sm)
-                .foregroundStyle(Color.white)
-                .sparkGlass(.capsule, tint: Color.sparkAccent)
-            }
-            .buttonStyle(.plain)
-            .disabled(viewModel.answeringBlockIDs.contains(block.id) || submittedAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .frame(maxWidth: .infinity, alignment: .trailing)
-        }
-    }
-
-    private var submittedAnswer: String {
-        if let options = block.answerOptions, !options.isEmpty {
-            return selectedAnswer
-        }
-        return freeformAnswer
-    }
-}
-
-private extension View {
-    func textFieldInputBackground() -> some View {
-        background {
-            RoundedRectangle(cornerRadius: SparkRadii.sm)
-                .fill(.thinMaterial)
-                .overlay {
-                    RoundedRectangle(cornerRadius: SparkRadii.sm)
-                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
-                }
-        }
-    }
-}
-
-private struct FlowLayout: Layout {
-    var spacing: CGFloat
-
-    init(spacing: CGFloat) {
-        self.spacing = spacing
-    }
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? 0
-        var position = CGPoint.zero
-        var lineHeight: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if position.x > 0, position.x + size.width > width {
-                position.x = 0
-                position.y += lineHeight + spacing
-                lineHeight = 0
-            }
-            position.x += size.width + spacing
-            lineHeight = max(lineHeight, size.height)
-        }
-
-        return CGSize(width: width, height: position.y + lineHeight)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var position = CGPoint(x: bounds.minX, y: bounds.minY)
-        var lineHeight: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if position.x > bounds.minX, position.x + size.width > bounds.maxX {
-                position.x = bounds.minX
-                position.y += lineHeight + spacing
-                lineHeight = 0
-            }
-
-            subview.place(at: position, proposal: ProposedViewSize(size))
-            position.x += size.width + spacing
-            lineHeight = max(lineHeight, size.height)
-        }
-    }
-}

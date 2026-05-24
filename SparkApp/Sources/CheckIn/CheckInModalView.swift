@@ -114,8 +114,8 @@ struct CheckInModalView: View {
             SectionLabel("HOW'S YOUR BODY?")
             EmojiRatingRow(
                 selected: $physical,
-                emojis: ["💀", "😴", "🚶‍♂️", "🏃‍♂️", "💪"],
-                labels: ["Dead", "Exhausted", "Walking", "Running", "Strong"]
+                emojis: CheckInPresentation.physicalEmojis,
+                labels: CheckInPresentation.physicalLabels
             )
         }
     }
@@ -125,8 +125,8 @@ struct CheckInModalView: View {
             SectionLabel("HOW'S YOUR MIND?")
             EmojiRatingRow(
                 selected: $mental,
-                emojis: ["😭", "🥹", "😕", "😊", "😄"],
-                labels: ["Awful", "Sad", "Meh", "Happy", "Great"]
+                emojis: CheckInPresentation.mentalEmojis,
+                labels: CheckInPresentation.mentalLabels
             )
         }
     }
@@ -223,35 +223,8 @@ struct CheckInModalView: View {
     }
 
     private func fetchLocation() async {
-        let status = CLLocationManager().authorizationStatus
-        switch status {
-        case .denied, .restricted:
-            locationState = .denied
-            return
-        default:
-            break
-        }
         locationState = .fetching
-        do {
-            for try await update in CLLocationUpdate.liveUpdates() {
-                guard let location = update.location,
-                      location.horizontalAccuracy >= 0,
-                      location.horizontalAccuracy < 200 else { continue }
-                locationState = .resolved(
-                    address: nil,
-                    lat: location.coordinate.latitude,
-                    lng: location.coordinate.longitude
-                )
-                break
-            }
-        } catch {
-            let newStatus = CLLocationManager().authorizationStatus
-            if newStatus == .denied || newStatus == .restricted {
-                locationState = .denied
-            } else {
-                locationState = .failed("Couldn't get location")
-            }
-        }
+        locationState = await fetchLocationState(current: locationState)
     }
 
     private static func isoDate(_ date: Date) -> String {
@@ -261,114 +234,3 @@ struct CheckInModalView: View {
     }
 }
 
-// MARK: - Location state
-
-private enum LocationState {
-    case idle
-    case fetching
-    case resolved(address: String?, lat: Double, lng: Double)
-    case failed(String)
-    case denied
-}
-
-// MARK: - Emoji rating row
-
-private struct EmojiRatingRow: View {
-    @Binding var selected: Int?
-    let emojis: [String]
-    let labels: [String]
-
-    var body: some View {
-        HStack(spacing: SparkSpacing.lg) {
-            ForEach(Array(emojis.enumerated()), id: \.offset) { index, emoji in
-                let value = index + 1
-                Button {
-                    selected = selected == value ? nil : value
-                } label: {
-                    Text(emoji)
-                        .font(.system(size: 28))
-                        .opacity(selected == value ? 1 : 0.35)
-                        .scaleEffect(selected == value ? 1.15 : 1.0)
-                        .animation(.spring(response: 0.2), value: selected)
-                        .padding(SparkSpacing.xs)
-                        .background(
-                            selected == value
-                                ? Color.sparkAccent.opacity(0.12)
-                                : Color.clear
-                        )
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(labels[index]), \(value) of 5")
-                .accessibilityAddTraits(selected == value ? .isSelected : [])
-            }
-        }
-    }
-}
-
-// MARK: - Location chip
-
-private struct LocationChip: View {
-    let state: LocationState
-    let onTap: () -> Void
-    let onClear: () -> Void
-
-    var body: some View {
-        switch state {
-        case .idle:
-            Button(action: onTap) {
-                Label("Add location", systemImage: "location")
-                    .font(SparkTypography.monoSmall)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, SparkSpacing.md)
-                    .padding(.vertical, SparkSpacing.sm)
-                    .background(Color.primary.opacity(0.06))
-                    .clipShape(.capsule)
-                    .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.3), lineWidth: 1, antialiased: true))
-            }
-            .buttonStyle(.plain)
-
-        case .fetching:
-            HStack(spacing: SparkSpacing.sm) {
-                ProgressView().scaleEffect(0.7)
-                Text("Getting location…")
-                    .font(SparkTypography.monoSmall)
-                    .foregroundStyle(.secondary)
-            }
-
-        case let .resolved(address, _, _):
-            HStack(spacing: SparkSpacing.xs) {
-                Image(systemName: "location.fill")
-                    .font(.caption2)
-                    .foregroundStyle(Color.sparkAccent)
-                Text(address ?? "Current location")
-                    .font(SparkTypography.monoSmall)
-                    .lineLimit(1)
-                Button(action: onClear) {
-                    Image(systemName: "xmark")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Remove location")
-            }
-            .padding(.horizontal, SparkSpacing.md)
-            .padding(.vertical, SparkSpacing.sm)
-            .background(Color.sparkAccent.opacity(0.08))
-            .clipShape(.capsule)
-
-        case let .failed(message):
-            Button(action: onTap) {
-                Text(message + " — retry")
-                    .font(SparkTypography.monoSmall)
-                    .foregroundStyle(Color.sparkWarning)
-            }
-            .buttonStyle(.plain)
-
-        case .denied:
-            Text("Location access denied")
-                .font(SparkTypography.monoSmall)
-                .foregroundStyle(.secondary)
-        }
-    }
-}

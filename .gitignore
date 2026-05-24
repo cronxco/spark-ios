@@ -25,6 +25,7 @@ Package.resolved
 .env.local
 docs/plans
 docs/schema
+docs/ui
 
 # macOS
 .DS_Store

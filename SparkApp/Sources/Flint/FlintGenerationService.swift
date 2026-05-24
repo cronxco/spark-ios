@@ -122,8 +122,11 @@ enum FlintGenerationService {
         case .available:
             let session = LanguageModelSession(
                 instructions: """
-                You write the subtitle under Spark's Day page heading.
-                Use only the supplied Spark briefing facts.
+                You write the subtitle under the user's Day page heading.
+                Use only the supplied briefing facts.
+                The app is named Spark, but Spark is not the user and must not be described as doing the user's actions.
+                Do not write phrases like "Spark slept", "Spark walked", "Spark spent", or "Spark had".
+                Write about the user directly ("You slept...") or use neutral phrasing ("Sleep held steady...").
                 Help the user understand the main pattern at a glance.
                 Choose the single most useful pattern for the user to notice.
                 Prefer anomalies or unusual changes, then activity, sleep, or spend highlights, then a neutral recap.
@@ -147,7 +150,7 @@ enum FlintGenerationService {
                 Tone: calm, specific, concise, and human.
                 Context: \(context == .daySoFar ? "today's day so far" : "the day in review").
 
-                Spark briefing facts:
+                Briefing facts:
                 \(facts.promptText)
                 """
             }
