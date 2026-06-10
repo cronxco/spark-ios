@@ -39,6 +39,10 @@ struct AnomalyScreen: View {
         }
         .scrollContentBackground(.hidden)
         .task { await loadMetric() }
+        .onChange(of: acknowledged) { _, newValue in
+            guard newValue else { return }
+            viewModel.markAnomalyRead(itemID: item.id)
+        }
         .sheet(isPresented: $showSuppressSheet) {
             SuppressSheet(
                 anomaly: anomaly,

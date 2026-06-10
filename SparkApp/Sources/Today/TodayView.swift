@@ -8,6 +8,7 @@ struct TodayView: View {
     let date: Date
     var showsToolbar = true
     @Environment(AppModel.self) private var appModel
+    @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel: TodayViewModel?
     @State private var checkInSelection: CheckInSheetSelection?
     @State private var showHistory = false
@@ -92,6 +93,14 @@ struct TodayView: View {
                 upToSpeedViewModel = UpToSpeedViewModel(apiClient: appModel.apiClient)
             }
             await upToSpeedViewModel?.load()
+        }
+        .onChange(of: appModel.lastSyncAt) {
+            Task { await viewModel?.backgroundRevalidate() }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                Task { await viewModel?.backgroundRevalidate() }
+            }
         }
     }
 

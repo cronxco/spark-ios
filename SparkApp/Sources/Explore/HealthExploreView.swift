@@ -122,41 +122,47 @@ struct HealthExploreView: View {
     }
 
     private func rangePicker(_ vm: HealthExploreViewModel) -> some View {
-        HStack(spacing: SparkSpacing.xs) {
+        HStack(spacing: 4) {
             ForEach(HealthExploreViewModel.DashboardRange.allCases, id: \.self) { range in
+                let isSelected = vm.selectedRange == range
                 Button {
                     Task { await vm.selectRange(range) }
                 } label: {
                     Text(range.label)
                         .font(SparkTypography.monoSmall)
                         .fontWeight(.semibold)
-                        .foregroundStyle(vm.selectedRange == range ? Color.sparkTextPrimary : .secondary)
+                        .foregroundStyle(isSelected ? Color.sparkTextPrimary : .secondary)
                         .frame(minWidth: 42)
                         .padding(.vertical, SparkSpacing.xs + 2)
-                        .sparkGlass(
-                            .capsule,
-                            tint: vm.selectedRange == range ? Color.domainHealth.opacity(0.22) : Color.primary.opacity(0.04)
-                        )
+                        .background {
+                            if isSelected {
+                                Capsule()
+                                    .fill(Color.domainHealth)
+                            }
+                        }
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("\(range.label) range")
             }
-
-            Spacer(minLength: 0)
         }
+        .padding(4)
+        .sparkGlass(.capsule)
     }
 
     @ViewBuilder
     private func heroSection(_ dashboard: HealthDashboard) -> some View {
         if let hero = dashboard.hero {
-            let tint = color(forStatus: hero.status)
-            GlassCard(radius: 22, padding: SparkSpacing.xl, tint: tint.opacity(0.08)) {
-                VStack(alignment: .leading, spacing: SparkSpacing.lg) {
+            let tint = Color.domainHealth
+            GlassCard(radius: 28, padding: SparkSpacing.xl, tint: tint.opacity(0.08)) {
+                VStack(alignment: .leading, spacing: SparkSpacing.xl) {
                     HStack(alignment: .top, spacing: SparkSpacing.md) {
                         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                            Label(hero.kind.replacingOccurrences(of: "_", with: " ").capitalized, systemImage: icon(forHeroKind: hero.kind))
-                                .font(SparkTypography.bodyStrong)
-                                .foregroundStyle(tint)
+                            HStack(spacing: 6) {
+                                Label(hero.kind.replacingOccurrences(of: "_", with: " ").capitalized, systemImage: icon(forHeroKind: hero.kind))
+                                    .font(SparkTypography.bodyStrong)
+                                    .foregroundStyle(tint)
+                                AnomalyDot(active: hero.status == "critical" || hero.status == "low")
+                            }
 
                             Text(hero.title)
                                 .font(SparkFonts.display(.title2, weight: .bold))
@@ -174,11 +180,11 @@ struct HealthExploreView: View {
                         VStack(spacing: SparkSpacing.xs) {
                             if let score = hero.score {
                                 Text("\(score)")
-                                    .font(.system(size: 54, weight: .bold, design: .rounded))
+                                    .font(SparkFonts.display(size: 72))
                                     .foregroundStyle(tint)
                                     .lineLimit(1)
-                                    .minimumScaleFactor(0.65)
-                                Text(statusLabel(hero.status))
+                                    .minimumScaleFactor(0.55)
+                                Text(hero.status.replacingOccurrences(of: "_", with: " "))
                                     .font(SparkTypography.monoSmall)
                                     .foregroundStyle(.secondary)
                             } else {
@@ -189,7 +195,7 @@ struct HealthExploreView: View {
                                     .sparkGlass(.circle, tint: tint.opacity(0.18))
                             }
                         }
-                        .frame(minWidth: 72)
+                        .frame(minWidth: 88)
                     }
 
                     if !hero.factors.isEmpty {
@@ -200,7 +206,8 @@ struct HealthExploreView: View {
                         }
                     }
                 }
-                .contentShape(RoundedRectangle(cornerRadius: 22))
+                .frame(minHeight: 198, alignment: .topLeading)
+                .contentShape(RoundedRectangle(cornerRadius: 28))
             }
             .onTapGesture {
                 if let id = hero.primaryEventId {
@@ -208,7 +215,7 @@ struct HealthExploreView: View {
                 }
             }
         } else {
-            GlassCard(radius: 22, padding: SparkSpacing.xl, tint: Color.domainHealth.opacity(0.06)) {
+            GlassCard(radius: 28, padding: SparkSpacing.xl, tint: Color.domainHealth.opacity(0.08)) {
                 HStack(spacing: SparkSpacing.md) {
                     Image(systemName: "heart.text.square.fill")
                         .font(.system(size: 28, weight: .semibold))
@@ -234,17 +241,18 @@ struct HealthExploreView: View {
         HStack(spacing: SparkSpacing.xs) {
             Text(factor.label)
                 .lineLimit(1)
+                .foregroundStyle(.secondary)
             if let value = factor.value {
                 Text(formatSigned(value, unit: factor.unit))
                     .font(SparkTypography.monoSmall)
                     .fontWeight(.semibold)
+                    .foregroundStyle(Color.domainHealth)
             }
         }
         .font(SparkTypography.caption)
-        .foregroundStyle(color(forStatus: factor.status))
         .padding(.horizontal, SparkSpacing.sm)
         .padding(.vertical, SparkSpacing.xs + 1)
-        .sparkGlass(.capsule, tint: color(forStatus: factor.status).opacity(0.16))
+        .sparkGlass(.capsule)
     }
 
     private func fitnessSummary(_ today: HealthDashboard.Today) -> some View {
@@ -275,27 +283,6 @@ struct HealthExploreView: View {
                     delta: nil,
                     tint: Color.domainActivity
                 )
-                fitnessTile(
-                    "Duration",
-                    icon: "clock.fill",
-                    value: formatDuration(today.workoutDurationSeconds),
-                    unit: nil,
-                    delta: nil,
-                    tint: Color.sparkOcean
-                )
-                if today.workoutEnergyKcal > 0 {
-                    fitnessTile(
-                        "Workout Energy",
-                        icon: "flame.circle.fill",
-                        value: formatNumber(today.workoutEnergyKcal, unit: "kcal"),
-                        unit: "kcal",
-                        delta: nil,
-                        tint: Color.spark500
-                    )
-                }
-                if let volume = today.strengthVolume {
-                    fitnessTile("Strength", icon: "dumbbell.fill", quantity: volume, tint: Color.domainHealth)
-                }
             }
         }
     }
@@ -331,7 +318,7 @@ struct HealthExploreView: View {
         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
             HStack(spacing: SparkSpacing.xs) {
                 Image(systemName: icon)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(tint)
                 Text(title)
                     .font(SparkTypography.caption)
@@ -341,13 +328,13 @@ struct HealthExploreView: View {
 
             HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.xs) {
                 Text(value)
-                    .font(SparkFonts.display(.title3, weight: .bold))
+                    .font(SparkFonts.display(size: 26))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.65)
                 if let unit {
                     Text(unit)
-                        .font(SparkTypography.caption)
+                        .font(SparkTypography.monoSmall)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -357,9 +344,9 @@ struct HealthExploreView: View {
                 baselineDelta(delta)
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 94, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: 90, alignment: .topLeading)
         .padding(SparkSpacing.md)
-        .sparkGlass(.roundedRect(SparkRadii.md), tint: tint.opacity(0.08))
+        .sparkGlass(.roundedRect(18), tint: tint.opacity(0.08))
     }
 
     private func workoutsSection(_ workouts: [HealthDashboard.Workout]) -> some View {
@@ -380,40 +367,35 @@ struct HealthExploreView: View {
     }
 
     private func workoutRow(_ workout: HealthDashboard.Workout) -> some View {
-        GlassCard(radius: SparkRadii.lg, padding: SparkSpacing.md, tint: workoutTint(workout).opacity(0.08)) {
-            VStack(alignment: .leading, spacing: SparkSpacing.md) {
-                HStack(spacing: SparkSpacing.md) {
-                    Image(systemName: workout.kind == "strength" ? "dumbbell.fill" : "figure.run")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(workoutTint(workout))
-                        .frame(width: 42, height: 42)
-                        .sparkGlass(.circle, tint: workoutTint(workout).opacity(0.18))
+        GlassCard(radius: 18, padding: SparkSpacing.md) {
+            HStack(spacing: SparkSpacing.md) {
+                DomainGlyph(icon: workout.kind == "strength" ? "dumbbell.fill" : "figure.run", tint: workoutTint(workout), size: 42)
 
-                    VStack(alignment: .leading, spacing: SparkSpacing.xs) {
+                VStack(alignment: .leading, spacing: SparkSpacing.xs) {
+                    HStack(spacing: SparkSpacing.xs) {
                         Text(workout.title)
                             .font(SparkTypography.bodyStrong)
                             .foregroundStyle(.primary)
                             .lineLimit(1)
-                        Text(workoutSubtitle(workout))
-                            .font(SparkTypography.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                        if workout.routeAvailable == true {
+                            Image(systemName: "map.fill")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(Color.sparkOcean)
+                                .accessibilityLabel("Route available")
+                        }
                     }
-
-                    Spacer(minLength: SparkSpacing.sm)
-
-                    if workout.routeAvailable == true {
-                        Image(systemName: "map.fill")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Color.sparkOcean)
-                            .accessibilityLabel("Route available")
-                    }
+                    Text(workoutSubtitle(workout))
+                        .font(SparkTypography.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
 
-                if workout.kind == "strength" {
-                    strengthDetails(workout)
-                } else {
-                    cardioDetails(workout)
+                Spacer(minLength: SparkSpacing.xs)
+
+                HStack(spacing: SparkSpacing.sm) {
+                    ForEach(workoutCompactStats(workout)) { stat in
+                        compactWorkoutStat(stat)
+                    }
                 }
             }
         }
@@ -498,12 +480,10 @@ struct HealthExploreView: View {
     }
 
     private func bodyMetricTile(_ metric: HealthDashboard.BodyMetric) -> some View {
-        let tint = color(forStatus: metric.status)
+        let tint = Color.domainHealth
         return VStack(alignment: .leading, spacing: SparkSpacing.sm) {
             HStack(spacing: SparkSpacing.xs) {
-                Image(systemName: icon(forMetric: metric.label))
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(tint)
+                DomainGlyph(icon: icon(forMetric: metric.label), tint: tint, size: 20)
                 Text(metric.label)
                     .font(SparkTypography.caption)
                     .foregroundStyle(.secondary)
@@ -512,30 +492,29 @@ struct HealthExploreView: View {
 
             HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.xs) {
                 Text(formatNumber(metric.value, unit: metric.unit))
-                    .font(SparkFonts.display(.title3, weight: .bold))
+                    .font(SparkFonts.display(size: 26))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.65)
                 if let unit = unitLabel(metric.unit) {
                     Text(unit)
-                        .font(SparkTypography.caption)
+                        .font(SparkTypography.monoSmall)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
             }
 
-            HStack(spacing: SparkSpacing.xs) {
-                Text(statusLabel(metric.status))
-                    .font(SparkTypography.monoSmall)
-                    .foregroundStyle(tint)
-                if let delta = metric.vsBaselinePct {
-                    baselineDelta(delta)
-                }
+            if let delta = metric.vsBaselinePct {
+                baselineDelta(delta)
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: 90, alignment: .topLeading)
         .padding(SparkSpacing.md)
-        .sparkGlass(.roundedRect(SparkRadii.md), tint: tint.opacity(0.08))
+        .sparkGlass(.roundedRect(18))
+        .overlay(alignment: .topTrailing) {
+            AnomalyDot(active: metric.status == "critical")
+                .padding(8)
+        }
     }
 
     private func trendsSection(_ trends: [HealthDashboard.Trend]) -> some View {
@@ -556,7 +535,7 @@ struct HealthExploreView: View {
     }
 
     private func trendCard(_ trend: HealthDashboard.Trend) -> some View {
-        GlassCard(radius: SparkRadii.lg, padding: SparkSpacing.md, tint: trendTint(trend).opacity(0.07)) {
+        GlassCard(radius: SparkRadii.lg, padding: SparkSpacing.md) {
             VStack(alignment: .leading, spacing: SparkSpacing.md) {
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: SparkSpacing.xs) {
@@ -574,10 +553,10 @@ struct HealthExploreView: View {
                     Spacer(minLength: SparkSpacing.sm)
                     if let latest = trend.dailyValues.last?.value {
                         Text(formatNumber(latest, unit: trend.unit))
-                            .font(SparkTypography.monoBody)
-                            .fontWeight(.semibold)
+                            .font(SparkFonts.display(size: 34))
                             .foregroundStyle(trendTint(trend))
                             .lineLimit(1)
+                            .minimumScaleFactor(0.65)
                     }
                 }
 
@@ -596,27 +575,29 @@ struct HealthExploreView: View {
                     Button {
                         path.append(.event(id: insight.eventId))
                     } label: {
-                        GlassCard(radius: SparkRadii.lg, padding: SparkSpacing.md, tint: Color.sparkAccent.opacity(0.08)) {
-                            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                                HStack(spacing: SparkSpacing.xs) {
-                                    Image(systemName: "sparkles")
-                                        .foregroundStyle(Color.sparkAccent)
-                                    Text(insight.title)
-                                        .font(SparkTypography.bodyStrong)
-                                        .foregroundStyle(.primary)
-                                        .lineLimit(1)
-                                    Spacer(minLength: SparkSpacing.sm)
-                                    Text(timeLabel(insight.time))
-                                        .font(SparkTypography.monoSmall)
-                                        .foregroundStyle(.secondary)
-                                }
+                        GlassCard(radius: SparkRadii.lg, padding: SparkSpacing.md) {
+                            HStack(alignment: .top, spacing: SparkSpacing.md) {
+                                DomainGlyph(icon: "sparkles", tint: Color.sparkAccent, size: 34)
 
-                                if let content = insight.content, !content.isEmpty {
-                                    Text(content)
-                                        .font(SparkTypography.bodySmall)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(4)
-                                        .fixedSize(horizontal: false, vertical: true)
+                                VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                                    HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.xs) {
+                                        Text(insight.title)
+                                            .font(SparkTypography.bodyStrong)
+                                            .foregroundStyle(.primary)
+                                            .lineLimit(1)
+                                        Spacer(minLength: SparkSpacing.sm)
+                                        Text(timeLabel(insight.time))
+                                            .font(SparkTypography.monoSmall)
+                                            .foregroundStyle(.secondary)
+                                    }
+
+                                    if let content = insight.content, !content.isEmpty {
+                                        Text(content)
+                                            .font(SparkTypography.bodySmall)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(4)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
                                 }
                             }
                         }
@@ -642,15 +623,7 @@ struct HealthExploreView: View {
     }
 
     private func sectionHeader(_ title: String, icon: String, tint: Color) -> some View {
-        HStack(spacing: SparkSpacing.sm) {
-            Image(systemName: icon)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(tint)
-            Text(title)
-                .font(SparkTypography.bodyStrong)
-                .foregroundStyle(.primary)
-            Spacer(minLength: 0)
-        }
+        SparkSectionHeader(title: title, icon: icon, tint: tint)
     }
 
     private func baselineDelta(_ value: Double) -> some View {
@@ -664,27 +637,36 @@ struct HealthExploreView: View {
     }
 
     private var headerSubtitle: String {
-        guard let vm = viewModel else { return "Daily fitness from your connected sources" }
+        guard let vm = viewModel else { return "Loading health" }
         switch vm.loadState {
         case .loaded:
-            guard let dashboard = vm.dashboard else { return "Loading health signals" }
-            let workouts = dashboard.fitness.today.workoutCount
-            let appleHealth = dashboard.syncStatus["apple_health"]
-            if let last = appleHealth?.lastEventTime {
-                return "\(workouts) workout\(workouts == 1 ? "" : "s") today - Apple Health \(timeLabel(last))"
-            }
-            return "\(workouts) workout\(workouts == 1 ? "" : "s") today"
+            guard let dashboard = vm.dashboard else { return "No health data yet" }
+            return lastSyncedSubtitle(for: dashboard)
         case .loading:
             if let dashboard = vm.dashboard {
-                let workouts = dashboard.fitness.today.workoutCount
-                return "\(workouts) workout\(workouts == 1 ? "" : "s") today"
+                return lastSyncedSubtitle(for: dashboard)
             }
-            return "Loading health signals"
+            return "Loading health"
         case .error:
             return "Health data unavailable"
         case .idle:
-            return "Loading health signals"
+            return "Loading health"
         }
+    }
+
+    private func lastSyncedSubtitle(for dashboard: HealthDashboard) -> String {
+        guard let lastEventTime = dashboard.syncStatus.values.compactMap(\.lastEventTime).max() else {
+            return "No health data synced yet"
+        }
+
+        let calendar = Calendar.current
+        if calendar.isDateInToday(lastEventTime) {
+            return "Last synced today at \(Self.syncTimeFormatter.string(from: lastEventTime))"
+        }
+        if calendar.isDateInYesterday(lastEventTime) {
+            return "Last synced yesterday at \(Self.syncTimeFormatter.string(from: lastEventTime))"
+        }
+        return "Last synced \(Self.syncDateFormatter.string(from: lastEventTime))"
     }
 
     private func workoutSubtitle(_ workout: HealthDashboard.Workout) -> String {
@@ -704,19 +686,6 @@ struct HealthExploreView: View {
         case "apple_health": Color.domainActivity
         default: Color.sparkInfo
         }
-    }
-
-    private func color(forStatus status: String) -> Color {
-        switch status {
-        case "critical": Color.sparkError
-        case "low": Color.sparkWarning
-        case "high": Color.sparkSuccess
-        default: Color.domainHealth
-        }
-    }
-
-    private func statusLabel(_ status: String) -> String {
-        status.replacingOccurrences(of: "_", with: " ").uppercased()
     }
 
     private func icon(forHeroKind kind: String) -> String {
@@ -790,9 +759,56 @@ struct HealthExploreView: View {
         Self.timeFormatter.string(from: date)
     }
 
+    private struct WorkoutStat: Identifiable {
+        let label: String
+        let value: String
+        var id: String { label }
+    }
+
+    private func workoutCompactStats(_ workout: HealthDashboard.Workout) -> [WorkoutStat] {
+        var stats = [WorkoutStat(label: "Time", value: formatDuration(workout.durationSeconds))]
+        if let energy = workout.energyKcal {
+            stats.append(WorkoutStat(label: "Energy", value: "\(formatNumber(energy, unit: "kcal")) kcal"))
+        }
+        if let distance = workout.distance {
+            stats.append(WorkoutStat(label: "Distance", value: "\(formatNumber(distance.value, unit: distance.unit)) \(unitLabel(distance.unit) ?? distance.unit ?? "")"))
+        } else if let volume = workout.volume {
+            stats.append(WorkoutStat(label: "Volume", value: "\(formatNumber(volume.value, unit: volume.unit)) \(unitLabel(volume.unit) ?? volume.unit ?? "")"))
+        }
+        return Array(stats.prefix(3))
+    }
+
+    private func compactWorkoutStat(_ stat: WorkoutStat) -> some View {
+        VStack(alignment: .trailing, spacing: SparkSpacing.xxs) {
+            Text(stat.label)
+                .font(SparkTypography.caption)
+                .foregroundStyle(.tertiary)
+            Text(stat.value.trimmingCharacters(in: .whitespacesAndNewlines))
+                .font(SparkTypography.monoSmall)
+                .fontWeight(.semibold)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(minWidth: 42, alignment: .trailing)
+    }
+
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    private static let syncTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+
+    private static let syncDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return formatter
     }()

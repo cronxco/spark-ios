@@ -80,7 +80,6 @@ struct UpToSpeedView: View {
         }
         .onDisappear {
             guard !didRequestDismiss, let viewModel else { return }
-            viewModel.markCurrentRead()
             viewModel.flush()
         }
     }
@@ -93,9 +92,11 @@ struct UpToSpeedView: View {
 
         TabView(selection: $vm.currentIndex) {
             ForEach(Array(vm.screens.enumerated()), id: \.offset) { index, screen in
-                screenRenderer(screen, vm: vm)
+                screenRenderer(screen, index: index, vm: vm)
                     .tag(index)
             }
+            caughtUpStoryScreen(vm: vm)
+                .tag(vm.screens.count)
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .ignoresSafeArea()
@@ -110,12 +111,36 @@ struct UpToSpeedView: View {
         }
     }
 
+    @ViewBuilder
+    private func caughtUpStoryScreen(vm: UpToSpeedViewModel) -> some View {
+        VStack(spacing: SparkSpacing.lg) {
+            Spacer()
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 64))
+                .foregroundStyle(Color.sparkSuccess)
+
+            Text("You're all caught up!")
+                .font(SparkTypography.heroSmall)
+                .foregroundStyle(.primary)
+
+            Text("Nothing more to review right now.")
+                .font(SparkTypography.body)
+                .foregroundStyle(.secondary)
+
+            PillButton("Done") { dismissFlow(vm: vm) }
+                .padding(.top, SparkSpacing.sm)
+            Spacer()
+        }
+        .padding(SparkSpacing.xxl)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     // MARK: - Controls overlay
 
     private func controlsOverlay(vm: UpToSpeedViewModel) -> some View {
         VStack(spacing: SparkSpacing.sm) {
             HStack(alignment: .center, spacing: SparkSpacing.sm) {
-                StoryProgressBar(total: vm.screens.count, currentIndex: vm.currentIndex)
+                StoryProgressBar(total: vm.screens.count + 1, currentIndex: vm.currentIndex)
                     .padding(.horizontal, SparkSpacing.md)
                     .frame(height: 44)
                     .frame(maxWidth: .infinity)
@@ -184,7 +209,6 @@ struct UpToSpeedView: View {
     private func dismissFlow(vm: UpToSpeedViewModel) {
         guard !didRequestDismiss else { return }
         didRequestDismiss = true
-        vm.markCurrentRead()
         vm.flush()
         isPresented = false
         dismiss()
@@ -201,7 +225,7 @@ struct UpToSpeedView: View {
     // MARK: - Screen registry
 
     @ViewBuilder
-    private func screenRenderer(_ screen: UpToSpeedScreen, vm: UpToSpeedViewModel) -> some View {
+    private func screenRenderer(_ screen: UpToSpeedScreen, index: Int, vm: UpToSpeedViewModel) -> some View {
         switch screen {
         case .flintHeader(let item, let firstSection):
             FlintHeaderPage(item: item, firstSection: firstSection)
@@ -216,7 +240,7 @@ struct UpToSpeedView: View {
         case .anomaly(let item):
             AnomalyScreen(item: item, viewModel: vm)
         case .newsSummary(let item):
-            NewsSummaryScreen(item: item, viewModel: vm)
+            NewsSummaryScreen(item: item, viewModel: vm, onReachedBottom: { vm.markScrolledToBottom(at: index) })
         }
     }
 

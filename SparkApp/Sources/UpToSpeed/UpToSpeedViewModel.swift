@@ -15,6 +15,7 @@ final class UpToSpeedViewModel {
     private var allItems: [UpToSpeedItem] = []
     private var snapshotCount: Int = 0
     private var pendingReadRefs: [UpToSpeedReadRef] = []
+    private(set) var scrolledToBottomIndices: Set<Int> = []
 
     // itemID → ordered list of question blockIDs for that digest
     private var digestQuestionMap: [String: [String]] = [:]
@@ -100,11 +101,21 @@ final class UpToSpeedViewModel {
             }
         case .checkIn:
             break // uses CheckInsEndpoint.submit as its read signal
-        case .anomaly(let item):
-            enqueueMarkRead(itemID: item.id, type: .anomaly)
+        case .anomaly:
+            break // marked via markAnomalyRead when user acknowledges
         case .newsSummary(let item):
+            guard scrolledToBottomIndices.contains(index) else { return }
             enqueueMarkRead(itemID: item.id, type: .newsSummary)
         }
+    }
+
+    /// Called by AnomalyScreen when the user acknowledges or suppresses an anomaly.
+    func markAnomalyRead(itemID: String) {
+        enqueueMarkRead(itemID: itemID, type: .anomaly)
+    }
+
+    func markScrolledToBottom(at index: Int) {
+        scrolledToBottomIndices.insert(index)
     }
 
     /// Called by FlintQuestionPage after a successful answer submission.
@@ -159,6 +170,7 @@ final class UpToSpeedViewModel {
     private func buildScreenQueue(digests: [String: FlintDigest] = [:]) {
         digestQuestionMap = [:]
         answeredQuestionIDs = []
+        scrolledToBottomIndices = []
         let unread = visibleUnreadItems(from: allItems)
         snapshotCount = unread.count
         screens = unread.flatMap { item -> [UpToSpeedScreen] in

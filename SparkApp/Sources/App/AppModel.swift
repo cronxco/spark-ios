@@ -57,6 +57,7 @@ final class AppModel {
     var onboardingComplete: Bool
     var lastError: String?
     var pendingRoute: AppRoute?
+    private(set) var lastSyncAt: Date = .distantPast
     private(set) var profile: UserProfile? {
         didSet {
             if let name = profile?.name {
@@ -119,7 +120,8 @@ final class AppModel {
             ]
             guard syncEvents.contains(event.eventName) else { return }
             Task { @MainActor in
-                _ = await DeltaSyncer.sync(using: client, container: cont)
+                let didSync = await DeltaSyncer.sync(using: client, container: cont)
+                if didSync { self.lastSyncAt = .now }
                 WidgetCenter.shared.reloadAllTimelines()
             }
         }

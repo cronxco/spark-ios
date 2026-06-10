@@ -173,6 +173,20 @@ public struct HealthDashboard: Codable, Sendable, Hashable {
             case dailyValues = "daily_values"
         }
 
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+
+            metric = try container.decode(String.self, forKey: .metric)
+            label = try container.decodeIfPresent(String.self, forKey: .label)
+            service = try container.decode(String.self, forKey: .service)
+            action = try container.decode(String.self, forKey: .action)
+            unit = try container.decodeIfPresent(String.self, forKey: .unit)
+            range = try container.decode(Range.self, forKey: .range)
+            dailyValues = try container.decode([DailyValue].self, forKey: .dailyValues)
+            summary = try? container.decodeIfPresent(Summary.self, forKey: .summary)
+            baseline = try container.decodeIfPresent(Baseline.self, forKey: .baseline)
+        }
+
         public struct Range: Codable, Sendable, Hashable {
             public let from: String
             public let to: String

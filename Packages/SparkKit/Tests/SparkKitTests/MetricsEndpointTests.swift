@@ -105,4 +105,47 @@ struct MetricsEndpointTests {
         #expect(detail.anomalies.first?.id == "2026-03-03")
         #expect(detail.anomalies.first?.value == nil)
     }
+
+    @Test("metric detail tolerates empty array summary")
+    func metricDetailDecodesEmptyArraySummary() throws {
+        let json = """
+        {
+          "action": "finished_reading",
+          "baseline": {
+            "mean": 4.67,
+            "normal_lower": 3.56,
+            "normal_upper": 5.79,
+            "sample_days": 86,
+            "stddev": 0.56
+          },
+          "daily_values": [
+            {
+              "date": "2026-05-23",
+              "is_anomaly": true,
+              "value": null,
+              "vs_baseline_pct": -100
+            }
+          ],
+          "metric": "goodreads.finished_reading./5",
+          "range": {
+            "from": "2026-05-19",
+            "to": "2026-05-25"
+          },
+          "service": "goodreads",
+          "summary": [],
+          "unit": "/5"
+        }
+        """
+
+        let detail = try JSONDecoder().decode(MetricDetail.self, from: Data(json.utf8))
+
+        #expect(detail.id == "goodreads.finished_reading./5")
+        #expect(detail.title == "Finished Reading")
+        #expect(detail.average30d == nil)
+        #expect(detail.baseline?.low == 3.56)
+        #expect(detail.baseline?.high == 5.79)
+        #expect(detail.series.isEmpty)
+        #expect(detail.anomalies.count == 1)
+        #expect(detail.anomalies.first?.value == nil)
+    }
 }

@@ -54,6 +54,11 @@ final class TodayViewModel {
         await revalidateCheckIns()
     }
 
+    func backgroundRevalidate() async {
+        await revalidate(force: false, silent: true)
+        await revalidateCheckIns()
+    }
+
     func loadCheckIns() async {
         loadCachedCheckIns()
         await revalidateCheckIns()
@@ -142,8 +147,8 @@ final class TodayViewModel {
         }
     }
 
-    private func revalidate(force: Bool = false) async {
-        networkState = .loading
+    private func revalidate(force: Bool = false, silent: Bool = false) async {
+        if !silent { networkState = .loading }
         do {
             let response = try await apiClient.requestWithRawResponse(
                 BriefingEndpoint.today(date: Self.isoKey(for: date))

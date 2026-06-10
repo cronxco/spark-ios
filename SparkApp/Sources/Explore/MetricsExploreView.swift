@@ -8,6 +8,7 @@ struct MetricsExploreView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var viewModel: MetricsExploreViewModel?
     @State private var filterDomain: String? = nil
+    @State private var domainSelection: String = Self.allDomainsFilterID
     @State private var sortMode: MetricSortMode = .anomalies
     @State private var searchText = ""
     @State private var heroRange: HeroMetricRange = .week
@@ -60,6 +61,20 @@ struct MetricsExploreView: View {
                     pageHeader
                         .padding(.horizontal, SparkSpacing.lg)
 
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(.secondary)
+                            .font(.system(size: 14))
+                        TextField("Search service or action", text: $searchText)
+                            .font(SparkTypography.bodySmall)
+                            .foregroundStyle(.primary)
+                            .tint(.primary)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .sparkGlass(.capsule)
+                    .padding(.horizontal, SparkSpacing.lg)
+
                     sortControls
                         .padding(.horizontal, SparkSpacing.lg)
 
@@ -94,11 +109,6 @@ struct MetricsExploreView: View {
             .refreshable { await viewModel?.refresh() }
             .sparkMainAppToolbar()
         }
-        .searchable(
-            text: $searchText,
-            placement: .automatic,
-            prompt: "Search service or action"
-        )
         .task {
             if viewModel == nil {
                 viewModel = MetricsExploreViewModel(apiClient: appModel.apiClient)
@@ -119,20 +129,23 @@ struct MetricsExploreView: View {
     private var domainFilter: some View {
         if !availableDomains.isEmpty {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: SparkSpacing.sm) {
-                    Button { filterDomain = nil } label: {
-                        MetricsFilterChip("All", isSelected: filterDomain == nil)
-                    }
-                    .buttonStyle(.plain)
+                Picker("Domain", selection: $domainSelection) {
+                    Text("All").tag(Self.allDomainsFilterID)
                     ForEach(availableDomains, id: \.self) { domain in
-                        Button { filterDomain = domain } label: {
-                            MetricsFilterChip(
-                                displayLabel(forDomain: domain),
-                                isSelected: filterDomain == domain
-                            )
-                        }
-                        .buttonStyle(.plain)
+                        Text(displayLabel(forDomain: domain)).tag(domain)
                     }
+                }
+                .pickerStyle(.segmented)
+                .frame(minWidth: 360)
+                .onChange(of: domainSelection) { _, newValue in
+                    filterDomain = newValue == Self.allDomainsFilterID ? nil : newValue
+                }
+                .onChange(of: availableDomains) { _, domains in
+                    guard domainSelection != Self.allDomainsFilterID,
+                          !domains.contains(domainSelection)
+                    else { return }
+                    domainSelection = Self.allDomainsFilterID
+                    filterDomain = nil
                 }
             }
         }
@@ -159,12 +172,7 @@ struct MetricsExploreView: View {
                 .foregroundStyle(Color.sparkTextPrimary)
                 .padding(.horizontal, SparkSpacing.md)
                 .padding(.vertical, SparkSpacing.xs + 2)
-                .background {
-                    Capsule().fill(Color.primary.opacity(0.04))
-                }
-                .overlay {
-                    Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
-                }
+                .sparkGlass(.capsule)
             }
             .buttonStyle(.plain)
 
@@ -229,27 +237,22 @@ struct MetricsExploreView: View {
     @ViewBuilder
     private var heroChartCard: some View {
         if let metric = heroMetric {
-            GlassCard(radius: 22, padding: SparkSpacing.xl) {
-                VStack(alignment: .leading, spacing: SparkSpacing.md) {
+            GlassCard(radius: 28, padding: SparkSpacing.xl, tint: metric.tint.opacity(0.08)) {
+                VStack(alignment: .leading, spacing: SparkSpacing.lg) {
                     HStack(alignment: .top, spacing: SparkSpacing.sm) {
-                        VStack(alignment: .leading, spacing: SparkSpacing.xs) {
+                        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                             HStack(spacing: SparkSpacing.sm) {
-                                Image(systemName: metric.icon)
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(metric.tint)
+                                DomainGlyph(icon: metric.icon, tint: metric.tint, size: 26)
                                 Text(metric.title)
                                     .font(SparkTypography.bodyStrong)
                                     .foregroundStyle(headerTextColor)
+                                AnomalyDot(active: metric.latestAnomalyAt != nil)
                             }
 
                             if let detail = metric.detail {
                                 VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                                     if let today = detail.today {
-                                        Text(formatValue(today, unit: detail.unit))
-                                            .font(SparkFonts.display(.largeTitle, weight: .bold))
-                                            .foregroundStyle(metric.tint)
-                                            .lineLimit(1)
-                                            .minimumScaleFactor(0.75)
+                                        valueLine(today, unit: detail.unit, tint: metric.tint, size: 60)
                                     }
                                     if let delta = delta(for: detail) {
                                         deltaChip(delta, suffix: "vs 30-day avg")
@@ -263,20 +266,21 @@ struct MetricsExploreView: View {
 
                         Spacer(minLength: SparkSpacing.md)
 
-                        rangePicker
+                        rangePicker(tint: metric.tint)
                     }
 
                     if let detail = metric.detail {
                         SparklineMiniChart(series: series(for: detail), tint: metric.tint)
                             .frame(maxWidth: .infinity)
-                            .frame(height: 96)
+                            .frame(height: 118)
                     } else {
                         LoadingShimmerCard()
-                            .frame(height: 96)
+                            .frame(height: 118)
                     }
                 }
+                .frame(minHeight: 236, alignment: .topLeading)
             }
-            .contentShape(RoundedRectangle(cornerRadius: 22))
+            .contentShape(RoundedRectangle(cornerRadius: 28))
             .onTapGesture {
                 path.append(.metric(identifier: metric.identifier))
             }
@@ -305,10 +309,7 @@ struct MetricsExploreView: View {
 
     private var historySection: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.md) {
-            Text("Last 45 days")
-                .font(SparkTypography.monoSmall)
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
+            SparkSectionHeader(title: "Last 45 days", icon: "waveform", tint: .domainKnowledge)
 
             GlassCard(radius: SparkRadii.lg, padding: SparkSpacing.lg) {
                 Heatmap45(rows: heatmapRows)
@@ -321,6 +322,22 @@ struct MetricsExploreView: View {
     private func delta(for detail: MetricDetail) -> (value: Double, isPositive: Bool)? {
         guard let today = detail.today, let avg = detail.average30d else { return nil }
         return (today - avg, today >= avg)
+    }
+
+    private func valueLine(_ value: Double, unit: String?, tint: Color, size: CGFloat) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.xs) {
+            Text(formatValue(value, unit: unit))
+                .font(SparkFonts.display(size: size))
+                .foregroundStyle(tint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+            if let unit = unitLabel(unit) {
+                Text(unit)
+                    .font(SparkTypography.bodySmall)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
     }
 
     @ViewBuilder
@@ -363,35 +380,40 @@ struct MetricsExploreView: View {
     private var headerSubtitle: String {
         switch viewModel?.metadataState {
         case .loaded(let summary):
-            let sourceText = "\(summary.activeSourceCount) active sources"
-            guard let lastSyncAt = summary.lastSyncAt else { return sourceText }
-            return "\(sourceText) - last sync \(relativeSyncText(for: lastSyncAt)) ago"
+            guard let lastSyncAt = summary.lastSyncAt else { return "No metrics synced yet" }
+            return lastSyncedSubtitle(for: lastSyncAt)
         case .unavailable:
-            return "Sources unavailable"
+            return "Metrics unavailable"
         case .idle, .none:
-            return "Loading sources"
+            return "Loading metrics"
         }
     }
 
-    private var rangePicker: some View {
-        HStack(spacing: SparkSpacing.xs) {
+    private func rangePicker(tint: Color) -> some View {
+        HStack(spacing: 4) {
             ForEach(HeroMetricRange.allCases, id: \.self) { range in
+                let isSelected = heroRange == range
                 Button {
                     heroRange = range
                 } label: {
                     Text(range.label)
                         .font(SparkTypography.monoSmall)
                         .fontWeight(.semibold)
-                        .frame(width: 34, height: 34)
-                        .foregroundStyle(heroRange == range ? Color.sparkTextPrimary : Color.secondary)
+                        .foregroundStyle(isSelected ? Color.sparkTextPrimary : Color.secondary)
+                        .frame(minWidth: 34)
+                        .padding(.vertical, SparkSpacing.xs + 2)
                         .background {
-                            Circle()
-                                .fill(heroRange == range ? Color.spark100 : Color.primary.opacity(0.05))
+                            if isSelected {
+                                Capsule()
+                                    .fill(tint)
+                            }
                         }
                 }
                 .buttonStyle(.plain)
             }
         }
+        .padding(4)
+        .sparkGlass(.capsule)
     }
 
     private func series(for detail: MetricDetail) -> [MetricDetail.Point] {
@@ -405,19 +427,48 @@ struct MetricsExploreView: View {
         }
     }
 
-    private func relativeSyncText(for date: Date) -> String {
-        let seconds = max(0, Int(Date().timeIntervalSince(date)))
-        if seconds < 60 { return "\(max(1, seconds))s" }
-        let minutes = seconds / 60
-        if minutes < 60 { return "\(minutes)m" }
-        let hours = minutes / 60
-        if hours < 24 { return "\(hours)h" }
-        return "\(hours / 24)d"
+    private func unitLabel(_ unit: String?) -> String? {
+        switch unit {
+        case nil, "score", "steps":
+            nil
+        case "percent":
+            "percent"
+        case "GBP":
+            "GBP"
+        default:
+            unit
+        }
+    }
+
+    private func lastSyncedSubtitle(for date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) {
+            return "Last synced today at \(Self.syncTimeFormatter.string(from: date))"
+        }
+        if calendar.isDateInYesterday(date) {
+            return "Last synced yesterday at \(Self.syncTimeFormatter.string(from: date))"
+        }
+        return "Last synced \(Self.syncDateFormatter.string(from: date))"
     }
 
     private func displayLabel(forDomain domain: String) -> String {
         domain.replacingOccurrences(of: "_", with: " ").sparkActionTitle
     }
+
+    private static let syncTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+
+    private static let syncDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    private static let allDomainsFilterID = "__all__"
 }
 
 // MARK: - Full-bleed metric row
@@ -434,74 +485,101 @@ private struct FullBleedMetricRow: View {
         ZStack(alignment: .leading) {
             if !recentSeries.isEmpty {
                 SparklineMiniChart(series: recentSeries, tint: metric.tint)
-                    .opacity(0.28)
+                    .opacity(0.24)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 92)
-                    .offset(x: 70, y: 18)
+                    .frame(height: 118)
+                    .offset(x: 52, y: 8)
                     .clipShape(RoundedRectangle(cornerRadius: 20))
 
                 LinearGradient(
                     stops: [
                         .init(color: Color.sparkElevated.opacity(0.95), location: 0),
-                        .init(color: Color.sparkElevated.opacity(0.72), location: 0.40),
-                        .init(color: Color.sparkElevated.opacity(0), location: 0.75),
+                        .init(color: Color.sparkElevated.opacity(0.78), location: 0.34),
+                        .init(color: Color.sparkElevated.opacity(0), location: 0.74),
                     ],
                     startPoint: .leading,
                     endPoint: .trailing
                 )
-                .frame(height: 92)
+                .frame(height: 118)
+                .clipShape(RoundedRectangle(cornerRadius: 20))
+
+                LinearGradient(
+                    stops: [
+                        .init(color: Color.sparkElevated.opacity(0), location: 0.0),
+                        .init(color: Color.sparkElevated.opacity(0.66), location: 0.56),
+                        .init(color: Color.sparkElevated.opacity(0.92), location: 1.0),
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .frame(height: 118)
                 .clipShape(RoundedRectangle(cornerRadius: 20))
             }
 
-            HStack(spacing: SparkSpacing.md) {
-                Image(systemName: metric.icon)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-                    .background(
-                        RoundedRectangle(cornerRadius: SparkRadii.sm)
-                            .fill(metric.tint)
-                    )
-
-                VStack(alignment: .leading, spacing: SparkSpacing.xs) {
-                    Text(metric.title)
-                        .font(SparkTypography.bodySmall)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    if let today = metric.detail?.today {
-                        HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.xs) {
-                            Text(formatValue(today, unit: metric.detail?.unit))
-                                .font(SparkFonts.display(.title, weight: .bold))
-                                .foregroundStyle(metric.tint)
-                            if let unit = unitLabel(metric.detail?.unit) {
-                                Text(unit)
-                                    .font(SparkTypography.bodySmall)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-
-                        if let delta = delta(for: metric.detail) {
-                            HStack(spacing: 3) {
-                                Image(systemName: delta.isPositive ? "arrow.up.right" : "arrow.down.right")
-                                    .font(.caption2)
-                                Text(deltaLabel(delta.value))
-                                    .font(SparkTypography.monoSmall)
-                            }
-                            .foregroundStyle(delta.isPositive ? Color.sparkSuccess : Color.sparkWarning)
-                        }
-                    } else if isLoading {
-                        Text("—")
-                            .font(SparkTypography.monoBody)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                Spacer(minLength: 0)
+            HStack(alignment: .center, spacing: SparkSpacing.md) {
+                leadingContent
+                Spacer(minLength: SparkSpacing.sm)
+                trailingDelta
             }
             .padding(.horizontal, SparkSpacing.lg)
         }
-        .frame(height: 104)
+        .frame(height: 118)
         .sparkGlass(.roundedRect(20))
+        .overlay(alignment: .topTrailing) {
+            AnomalyDot(active: metric.latestAnomalyAt != nil)
+                .padding(8)
+        }
+    }
+
+    private var leadingContent: some View {
+        HStack(spacing: SparkSpacing.md) {
+            DomainGlyph(icon: metric.icon, tint: metric.tint, size: 44)
+
+            VStack(alignment: .leading, spacing: SparkSpacing.xs) {
+                Text(metric.title)
+                    .font(SparkTypography.bodySmall)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                if let today = metric.detail?.today {
+                    HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.xs) {
+                        Text(formatValue(today, unit: metric.detail?.unit))
+                            .font(SparkFonts.display(size: 34))
+                            .foregroundStyle(metric.tint)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.65)
+                        if let unit = unitLabel(metric.detail?.unit) {
+                            Text(unit)
+                                .font(SparkTypography.bodySmall)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                } else if isLoading {
+                    Text("--")
+                        .font(SparkTypography.monoBody)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.trailing, SparkSpacing.sm)
+    }
+
+    @ViewBuilder
+    private var trailingDelta: some View {
+        if let delta = delta(for: metric.detail) {
+            HStack(spacing: 3) {
+                Image(systemName: delta.isPositive ? "arrow.up.right" : "arrow.down.right")
+                    .font(.caption2)
+                Text(deltaLabel(delta.value))
+                    .font(SparkTypography.monoSmall)
+            }
+            .fontWeight(.semibold)
+            .foregroundStyle(delta.isPositive ? Color.sparkSuccess : Color.sparkWarning)
+            .padding(.horizontal, SparkSpacing.sm)
+            .padding(.vertical, SparkSpacing.xs)
+            .sparkGlass(.capsule)
+        }
     }
 
     private func delta(for detail: MetricDetail?) -> (value: Double, isPositive: Bool)? {
@@ -627,7 +705,13 @@ private struct MetricPresentation {
     var action: String { metric.action }
     var domain: String { Self.domain(for: metric) }
     var lastEventAt: Date? { metric.lastEventAt }
-    var latestAnomalyAt: Date? { detail?.anomalies.map(\.date).max() }
+    var latestAnomalyAt: Date? {
+        guard let detail,
+              let latestPointDate = detail.series.last?.date,
+              detail.anomalies.contains(where: { $0.date == latestPointDate })
+        else { return nil }
+        return latestPointDate
+    }
 
     var icon: String {
         EntityPresentation.icon(domain: domain, service: service, action: action)
@@ -651,32 +735,6 @@ private struct MetricPresentation {
             return metric.service
         }
         return domain
-    }
-}
-
-private struct MetricsFilterChip: View {
-    let title: String
-    let isSelected: Bool
-
-    init(_ title: String, isSelected: Bool) {
-        self.title = title
-        self.isSelected = isSelected
-    }
-
-    var body: some View {
-        Text(title)
-            .font(SparkTypography.captionStrong)
-            .padding(.horizontal, SparkSpacing.md)
-            .padding(.vertical, SparkSpacing.xs + 2)
-            .foregroundStyle(isSelected ? Color.sparkTextPrimary : Color.secondary)
-            .background {
-                Capsule()
-                    .fill(isSelected ? Color.spark100 : Color.primary.opacity(0.04))
-            }
-            .overlay {
-                Capsule()
-                    .strokeBorder(Color.primary.opacity(isSelected ? 0 : 0.08), lineWidth: 1)
-            }
     }
 }
 
