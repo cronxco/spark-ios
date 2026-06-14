@@ -64,11 +64,12 @@ private struct StatTile: View {
     let tint: Color
     let value: String
     let label: String
+    @ScaledMetric(relativeTo: .body) private var minimumWidth = 90.0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Image(systemName: icon)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(tint)
             Text(value)
                 .font(SparkTypography.heroSmall)
@@ -82,7 +83,8 @@ private struct StatTile: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .frame(width: 90, alignment: .leading)
+        .frame(minWidth: minimumWidth, alignment: .leading)
+        .fixedSize(horizontal: true, vertical: false)
         .sparkGlass(.roundedRect(16))
     }
 }

@@ -8,6 +8,7 @@ struct EventDetailView: View {
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: EventDetailViewModel?
     @State private var showNoteEditor = false
+    @State private var showDiscardNoteConfirmation = false
 
     private func aggregatedReferences(for detail: EventDetail) -> [EntityReference] {
         var seen = Set<String>()
@@ -377,13 +378,10 @@ struct EventDetailView: View {
                 .navigationTitle(detail.note?.isEmpty == false ? "Edit note" : "Add note")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            showNoteEditor = false
-                        } label: {
-                            Image(systemName: "xmark")
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") {
+                            cancelNoteEditing(originalNote: detail.note ?? "")
                         }
-                        .accessibilityLabel("Close")
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Save") {
@@ -391,7 +389,26 @@ struct EventDetailView: View {
                         }
                     }
                 }
+                .interactiveDismissDisabled(noteDraft != (detail.note ?? ""))
+                .confirmationDialog(
+                    "Discard changes?",
+                    isPresented: $showDiscardNoteConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button("Discard Changes", role: .destructive) {
+                        showNoteEditor = false
+                    }
+                    Button("Keep Editing", role: .cancel) {}
+                }
             }
+        }
+    }
+
+    private func cancelNoteEditing(originalNote: String) {
+        if noteDraft == originalNote {
+            showNoteEditor = false
+        } else {
+            showDiscardNoteConfirmation = true
         }
     }
 

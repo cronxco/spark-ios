@@ -8,11 +8,18 @@ public struct RangeChipBar: View {
     public let items: [String]
     @Binding public var selected: String
     public let tint: Color
+    public let accessibilityLabel: (String) -> String
 
-    public init(items: [String], selected: Binding<String>, tint: Color = .accentColor) {
+    public init(
+        items: [String],
+        selected: Binding<String>,
+        tint: Color = .accentColor,
+        accessibilityLabel: @escaping (String) -> String = { "\($0) range" }
+    ) {
         self.items = items
         self._selected = selected
         self.tint = tint
+        self.accessibilityLabel = accessibilityLabel
     }
 
     public var body: some View {
@@ -45,6 +52,8 @@ public struct RangeChipBar: View {
                         .sparkGlass(.capsule, tint: isActive ? tint : nil)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(accessibilityLabel(item))
+                .accessibilityAddTraits(isActive ? .isSelected : [])
             }
         }
     }

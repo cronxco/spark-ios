@@ -5,6 +5,7 @@ import SwiftUI
 struct SettingsRootView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.dismiss) private var dismiss
+    @State private var showsSignOutConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -25,7 +26,7 @@ struct SettingsRootView: View {
                     }
 
                     Button(role: .destructive) {
-                        Task { await appModel.signOut() }
+                        showsSignOutConfirmation = true
                     } label: {
                         Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
                     }
@@ -84,6 +85,18 @@ struct SettingsRootView: View {
                 }
             }
             .navigationTitle("Settings")
+            .confirmationDialog(
+                "Sign out of Spark?",
+                isPresented: $showsSignOutConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Sign Out", role: .destructive) {
+                    Task { await appModel.signOut() }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Your cached data on this device will be removed.")
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {

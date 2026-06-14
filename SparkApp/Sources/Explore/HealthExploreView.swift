@@ -122,31 +122,17 @@ struct HealthExploreView: View {
     }
 
     private func rangePicker(_ vm: HealthExploreViewModel) -> some View {
-        HStack(spacing: 4) {
-            ForEach(HealthExploreViewModel.DashboardRange.allCases, id: \.self) { range in
-                let isSelected = vm.selectedRange == range
-                Button {
+        RangeChipBar(
+            items: HealthExploreViewModel.DashboardRange.allCases.map(\.label),
+            selected: Binding(
+                get: { vm.selectedRange.label },
+                set: { label in
+                    guard let range = HealthExploreViewModel.DashboardRange.allCases.first(where: { $0.label == label }) else { return }
                     Task { await vm.selectRange(range) }
-                } label: {
-                    Text(range.label)
-                        .font(SparkTypography.monoSmall)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(isSelected ? Color.sparkTextPrimary : .secondary)
-                        .frame(minWidth: 42)
-                        .padding(.vertical, SparkSpacing.xs + 2)
-                        .background {
-                            if isSelected {
-                                Capsule()
-                                    .fill(Color.domainHealth)
-                            }
-                        }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(range.label) range")
-            }
-        }
-        .padding(4)
-        .sparkGlass(.capsule)
+            ),
+            tint: .domainHealth
+        )
     }
 
     @ViewBuilder

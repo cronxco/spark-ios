@@ -112,6 +112,7 @@ private struct CreateTokenSheet: View {
     @Bindable var viewModel: ApiTokensViewModel
     let onDone: () -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var showsDiscardConfirmation = false
 
     private let availableAbilities = ["mcp:read", "mcp:write", "webhooks:read", "data:export"]
 
@@ -144,14 +145,10 @@ private struct CreateTokenSheet: View {
             .navigationTitle("New Token")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        onDone()
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        cancelCreation()
                     }
-                    .accessibilityLabel("Close")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create") {
@@ -163,6 +160,31 @@ private struct CreateTokenSheet: View {
                     .disabled(viewModel.newTokenName.isEmpty || viewModel.isCreating)
                 }
             }
+            .interactiveDismissDisabled(hasDraft)
+            .confirmationDialog(
+                "Discard new token?",
+                isPresented: $showsDiscardConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Discard", role: .destructive) {
+                    onDone()
+                    dismiss()
+                }
+                Button("Keep Editing", role: .cancel) {}
+            }
+        }
+    }
+
+    private var hasDraft: Bool {
+        !viewModel.newTokenName.isEmpty || viewModel.newTokenAbilities != ["mcp:read"]
+    }
+
+    private func cancelCreation() {
+        if hasDraft {
+            showsDiscardConfirmation = true
+        } else {
+            onDone()
+            dismiss()
         }
     }
 }

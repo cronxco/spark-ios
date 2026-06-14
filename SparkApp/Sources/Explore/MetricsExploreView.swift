@@ -376,30 +376,17 @@ struct MetricsExploreView: View {
     }
 
     private func rangePicker(tint: Color) -> some View {
-        HStack(spacing: 4) {
-            ForEach(HeroMetricRange.allCases, id: \.self) { range in
-                let isSelected = heroRange == range
-                Button {
+        RangeChipBar(
+            items: HeroMetricRange.allCases.map(\.label),
+            selected: Binding(
+                get: { heroRange.label },
+                set: { label in
+                    guard let range = HeroMetricRange.allCases.first(where: { $0.label == label }) else { return }
                     heroRange = range
-                } label: {
-                    Text(range.label)
-                        .font(SparkTypography.monoSmall)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(isSelected ? Color.sparkTextPrimary : Color.secondary)
-                        .frame(minWidth: 34)
-                        .padding(.vertical, SparkSpacing.xs + 2)
-                        .background {
-                            if isSelected {
-                                Capsule()
-                                    .fill(tint)
-                            }
-                        }
                 }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(4)
-        .sparkGlass(.capsule)
+            ),
+            tint: tint
+        )
     }
 
     private func series(for detail: MetricDetail) -> [MetricDetail.Point] {

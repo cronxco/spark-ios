@@ -127,12 +127,15 @@ private enum TimelineFilter: CaseIterable {
 
 private struct TimelineFilterPill: View {
     @Binding var filter: TimelineFilter
+    @ScaledMetric(relativeTo: .caption) private var itemWidth = 32.0
+    @ScaledMetric(relativeTo: .caption) private var itemHeight = 28.0
 
     private let items: [(TimelineFilter, String)] = [
         (.home, "house.fill"),
         (.money, "sterlingsign"),
         (.health, "heart.fill"),
-        (.knowledge, "books.vertical.fill")
+        (.knowledge, "books.vertical.fill"),
+        (.all, "tray.full")
     ]
 
     var body: some View {
@@ -143,8 +146,8 @@ private struct TimelineFilterPill: View {
                 } label: {
                     let isActive = filter == option
                     Image(systemName: icon)
-                        .font(.system(size: 13, weight: .semibold))
-                        .frame(width: 32, height: 28)
+                        .font(.caption.weight(.semibold))
+                        .frame(width: itemWidth, height: itemHeight)
                         .foregroundStyle(isActive ? Color.sparkOnAccent : Color.secondary)
                         .background(isActive ? Color.sparkAccent : Color.clear, in: .capsule)
                 }
@@ -288,6 +291,7 @@ private struct HourGroup: View {
 private struct RaisedEventCard: View {
     let event: CachedEvent
     var surplusCount: Int = 0
+    @ScaledMetric(relativeTo: .headline) private var iconSize = 42.0
 
     var body: some View {
         HStack(alignment: .center, spacing: SparkSpacing.md) {
@@ -325,9 +329,9 @@ private struct RaisedEventCard: View {
 
     private var iconBox: some View {
         Image(systemName: domainIcon(event.domain))
-            .font(.system(size: 18, weight: .semibold))
+            .font(.headline.weight(.semibold))
             .foregroundStyle(.white)
-            .frame(width: 42, height: 42)
+            .frame(width: iconSize, height: iconSize)
             .background(Color.domainTint(for: event.domain), in: .rect(cornerRadius: 12))
     }
 }
@@ -485,15 +489,16 @@ private struct WebDigestEventCard: View {
 
 private struct HeroEventCard: View {
     let event: CachedEvent
+    @ScaledMetric(relativeTo: .title2) private var iconSize = 56.0
 
     var body: some View {
         let tint = Color.domainTint(for: event.domain)
         GlassCard(tint: tint.opacity(0.13)) {
             HStack(alignment: .center, spacing: 14) {
                 Image(systemName: domainIcon(event.domain))
-                    .font(.system(size: 26, weight: .semibold))
+                    .font(.title2.weight(.semibold))
                     .foregroundStyle(.white)
-                    .frame(width: 56, height: 56)
+                    .frame(width: iconSize, height: iconSize)
                     .background(tint, in: .rect(cornerRadius: 14))
                     .shadow(color: .black.opacity(0.10), radius: 12, x: 0, y: 4)
 
@@ -544,13 +549,14 @@ private struct HeroEventCard: View {
 private struct SubtleEventRow: View {
     let event: CachedEvent
     var surplusCount: Int = 0
+    @ScaledMetric(relativeTo: .caption2) private var iconWidth = 28.0
 
     var body: some View {
         HStack(alignment: .center, spacing: SparkSpacing.sm) {
             Image(systemName: domainIcon(event.domain))
-                .font(.system(size: 12, weight: .semibold))
+                .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
-                .frame(width: 28)
+                .frame(width: iconWidth)
 
             Text(titledWithSurplus(primaryTitle(for: event), surplus: surplusCount))
                 .font(SparkTypography.bodyStrong)

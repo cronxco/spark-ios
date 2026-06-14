@@ -159,29 +159,17 @@ struct MoneyExploreView: View {
     }
 
     private var rangeChips: some View {
-        HStack(spacing: 4) {
-            ForEach(HistoryRange.allCases) { range in
-                Button {
+        RangeChipBar(
+            items: HistoryRange.allCases.map(\.rawValue),
+            selected: Binding(
+                get: { selectedRange.rawValue },
+                set: { value in
+                    guard let range = HistoryRange(rawValue: value) else { return }
                     selectedRange = range
-                } label: {
-                    Text(range.rawValue)
-                        .font(SparkTypography.monoSmall)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(selectedRange == range ? Color.sparkTextPrimary : Color.secondary)
-                        .frame(minWidth: 42)
-                        .padding(.vertical, SparkSpacing.xs + 2)
-                        .background {
-                            if selectedRange == range {
-                                Capsule()
-                                    .fill(Color.domainMoney)
-                            }
-                        }
                 }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(4)
-        .sparkGlass(.capsule)
+            ),
+            tint: .domainMoney
+        )
     }
 
     @ViewBuilder

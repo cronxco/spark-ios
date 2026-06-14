@@ -261,24 +261,26 @@ private struct CheckInSheetSelection: Identifiable {
 private struct GetUpToSpeedButton: View {
     let unreadCount: Int
     let onTap: () -> Void
+    @ScaledMetric(relativeTo: .caption) private var countMinSize = 24.0
+    @ScaledMetric(relativeTo: .caption) private var buttonHeight = 32.0
 
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 6) {
                 Text("\(unreadCount)")
-                    .font(Font.custom(SparkFonts.displayPostScriptName, size: 12).bold())
+                    .font(SparkFonts.display(.caption2, weight: .bold))
                     .foregroundStyle(Color.sparkOnAccent)
                     .padding(.horizontal, 6)
-                    .frame(minWidth: 24, minHeight: 24)
+                    .frame(minWidth: countMinSize, minHeight: countMinSize)
                     .background(Color.sparkOnAccent.opacity(0.12), in: .capsule)
 
                 Text("Get Up to Speed")
-                    .font(.system(size: 12.5, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.sparkOnAccent)
             }
             .padding(.leading, 4)
             .padding(.trailing, 10)
-            .frame(height: 32)
+            .frame(minHeight: buttonHeight)
             .background(Color.sparkAccent, in: .capsule)
             .shadow(color: Color.sparkAccent.opacity(0.22), radius: 7, x: 0, y: 6)
         }

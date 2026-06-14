@@ -169,15 +169,16 @@ private struct EmbeddedMapSummary: View {
 
 private struct MapPin: View {
     let kind: MapDataPoint.Kind
+    @ScaledMetric(relativeTo: .callout) private var size = 32.0
 
     var body: some View {
         ZStack {
             Circle()
                 .fill(.background)
-                .frame(width: 32, height: 32)
+                .frame(width: size, height: size)
                 .shadow(color: .black.opacity(0.15), radius: 3, x: 0, y: 1)
             Image(systemName: glyph)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.callout.weight(.semibold))
                 .foregroundStyle(tint)
         }
         .accessibilityLabel(Text(accessibilityLabel))
