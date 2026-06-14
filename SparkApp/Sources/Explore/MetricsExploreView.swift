@@ -122,26 +122,41 @@ struct MetricsExploreView: View {
     private var domainFilter: some View {
         if !availableDomains.isEmpty {
             ScrollView(.horizontal, showsIndicators: false) {
-                Picker("Domain", selection: $domainSelection) {
-                    Text("All").tag(Self.allDomainsFilterID)
+                HStack(spacing: SparkSpacing.sm) {
+                    domainFilterChip(label: "All", value: Self.allDomainsFilterID)
                     ForEach(availableDomains, id: \.self) { domain in
-                        Text(displayLabel(forDomain: domain)).tag(domain)
+                        domainFilterChip(label: displayLabel(forDomain: domain), value: domain)
                     }
                 }
-                .pickerStyle(.segmented)
-                .frame(minWidth: 360)
-                .onChange(of: domainSelection) { _, newValue in
-                    filterDomain = newValue == Self.allDomainsFilterID ? nil : newValue
-                }
-                .onChange(of: availableDomains) { _, domains in
-                    guard domainSelection != Self.allDomainsFilterID,
-                          !domains.contains(domainSelection)
-                    else { return }
-                    domainSelection = Self.allDomainsFilterID
-                    filterDomain = nil
-                }
+            }
+            .onChange(of: availableDomains) { _, domains in
+                guard domainSelection != Self.allDomainsFilterID,
+                      !domains.contains(domainSelection)
+                else { return }
+                selectDomain(Self.allDomainsFilterID)
             }
         }
+    }
+
+    private func domainFilterChip(label: String, value: String) -> some View {
+        let isSelected = domainSelection == value
+        return Button {
+            selectDomain(value)
+        } label: {
+            Text(label)
+                .font(SparkTypography.captionStrong)
+                .foregroundStyle(isSelected ? Color.sparkOnAccent : Color.primary)
+                .padding(.horizontal, SparkSpacing.md)
+                .padding(.vertical, SparkSpacing.sm)
+                .sparkGlass(.capsule, tint: isSelected ? Color.sparkAccent : nil)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private func selectDomain(_ value: String) {
+        domainSelection = value
+        filterDomain = value == Self.allDomainsFilterID ? nil : value
     }
 
     private var sortControls: some View {

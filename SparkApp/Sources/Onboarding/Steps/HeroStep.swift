@@ -40,7 +40,7 @@ struct HeroStep: View {
             }
             .padding(.vertical, SparkSpacing.lg)
         } actions: {
-            PillButton("Get started", systemImage: "arrow.right.circle.fill", action: proceed)
+            PillButton("Get Started", systemImage: "arrow.right.circle.fill", action: proceed)
         }
         .navigationBarHidden(true)
     }

@@ -15,11 +15,10 @@ struct DevicesView: View {
                 } else {
                     List {
                         Section {
-                            SparkSystemScreenHeader(
-                                title: "Devices",
-                                subtitle: "Signed-in devices connected to your Spark account."
-                            )
-                            .padding(.vertical, SparkSpacing.sm)
+                            Text("Signed-in devices connected to your Spark account.")
+                                .font(SparkTypography.bodySmall)
+                                .foregroundStyle(.secondary)
+                                .padding(.vertical, SparkSpacing.sm)
                         }
                         .listRowBackground(Color.clear)
 
@@ -68,7 +67,13 @@ private struct DeviceRow: View {
                     Text(device.name)
                         .font(SparkTypography.body)
                     if device.isCurrentDevice {
-                        TagChip("this device")
+                        Text("This Device")
+                            .font(SparkTypography.captionStrong)
+                            .foregroundStyle(Color.sparkAccent)
+                            .padding(.horizontal, SparkSpacing.sm)
+                            .padding(.vertical, SparkSpacing.xxs)
+                            .background(Color.sparkAccent.opacity(0.12), in: .capsule)
+                            .accessibilityLabel("This device")
                     }
                 }
                 if let lastSeen = device.lastSeenAt {

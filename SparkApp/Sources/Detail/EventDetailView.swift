@@ -375,7 +375,7 @@ struct EventDetailView: View {
                 }
                 .padding(SparkSpacing.lg)
                 .background(Color.sparkSurface.ignoresSafeArea())
-                .navigationTitle(detail.note?.isEmpty == false ? "Edit note" : "Add note")
+                .navigationTitle(detail.note?.isEmpty == false ? "Edit Note" : "Add Note")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {

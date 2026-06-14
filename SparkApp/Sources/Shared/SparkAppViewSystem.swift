@@ -410,8 +410,6 @@ struct SparkSubViewToolbarModifier: ViewModifier {
                     .accessibilityLabel("Share")
 
                     Menu {
-                        Button("Tag") {}
-                            .disabled(true)
                         if feedbackContext != nil {
                             Button {
                                 showFeedbackSheet = true
@@ -424,18 +422,20 @@ struct SparkSubViewToolbarModifier: ViewModifier {
                         } label: {
                             Label("Refresh", systemImage: "arrow.clockwise")
                         }
-                        Button {
-                            Task { await reprocess?() }
-                        } label: {
-                            Label("Reprocess", systemImage: "wand.and.sparkles")
+                        if let reprocess {
+                            Button {
+                                Task { await reprocess() }
+                            } label: {
+                                Label("Reprocess", systemImage: "wand.and.sparkles")
+                            }
                         }
-                        .disabled(reprocess == nil)
-                        Button {
-                            showRawSheet = true
-                        } label: {
-                            Label("Raw", systemImage: "curlybraces")
+                        if rawPayload != nil {
+                            Button {
+                                showRawSheet = true
+                            } label: {
+                                Label("Raw", systemImage: "curlybraces")
+                            }
                         }
-                        .disabled(rawPayload == nil)
                     } label: {
                         Image(systemName: "ellipsis.circle")
                             .symbolRenderingMode(.monochrome)

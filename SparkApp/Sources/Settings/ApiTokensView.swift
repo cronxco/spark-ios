@@ -68,11 +68,10 @@ struct ApiTokensView: View {
             } else {
                 List {
                     Section {
-                        SparkSystemScreenHeader(
-                            title: "API Tokens",
-                            subtitle: "Create and manage tokens for external Spark tools."
-                        )
-                        .padding(.vertical, SparkSpacing.sm)
+                        Text("Create and manage tokens for external Spark tools.")
+                            .font(SparkTypography.bodySmall)
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, SparkSpacing.sm)
                     }
                     .listRowBackground(Color.clear)
 

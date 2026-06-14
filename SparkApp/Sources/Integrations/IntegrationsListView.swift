@@ -19,11 +19,10 @@ struct IntegrationsListView: View {
                 } else {
                     Form {
                         Section {
-                            SparkSystemScreenHeader(
-                                title: "Integrations",
-                                subtitle: "Connection health and sync controls for Spark sources."
-                            )
-                            .padding(.vertical, SparkSpacing.sm)
+                            Text("Connection health and sync controls for Spark sources.")
+                                .font(SparkTypography.bodySmall)
+                                .foregroundStyle(.secondary)
+                                .padding(.vertical, SparkSpacing.sm)
                         }
                         .listRowBackground(Color.clear)
 

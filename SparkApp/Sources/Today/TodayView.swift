@@ -55,8 +55,7 @@ struct TodayView: View {
                     }
                 }
                 .padding(.horizontal, SparkSpacing.lg)
-                .padding(.top, SparkSpacing.xl + 88)
-                .padding(.bottom, deviceSafeAreaBottom + 66)
+                .padding(.vertical, SparkSpacing.xl)
             }
             .scrollContentBackground(.hidden)
             .refreshable { await viewModel?.refresh() }
@@ -195,12 +194,6 @@ struct TodayView: View {
         } else {
             return Self.dayTitleFormatter.string(from: date)
         }
-    }
-
-    private var deviceSafeAreaBottom: CGFloat {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }.first?
-            .keyWindow?.safeAreaInsets.bottom ?? 34
     }
 
     private var firstName: String {

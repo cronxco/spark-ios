@@ -39,10 +39,10 @@ struct ProfileView: View {
     private func profileContent(_ profile: UserProfile) -> some View {
         ScrollView {
             VStack(spacing: SparkSpacing.lg) {
-                SparkSystemScreenHeader(
-                    title: "Profile",
-                    subtitle: "Your Spark account and appearance preferences."
-                )
+                Text("Your Spark account and appearance preferences.")
+                    .font(SparkTypography.bodySmall)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                 GlassCard {
                     VStack(spacing: SparkSpacing.md) {

@@ -20,28 +20,30 @@ struct UpToSpeedView: View {
     }
 
     var body: some View {
-        ZStack {
-            SparkResolvedAppBackground().ignoresSafeArea()
+        GeometryReader { proxy in
+            ZStack {
+                SparkResolvedAppBackground().ignoresSafeArea()
 
-            if let vm = viewModel {
-                if vm.isLoading && vm.screens.isEmpty {
-                    loadingView
-                } else if vm.screens.isEmpty {
-                    allCaughtUpView
+                if let vm = viewModel {
+                    if vm.isLoading && vm.screens.isEmpty {
+                        loadingView
+                    } else if vm.screens.isEmpty {
+                        allCaughtUpView
+                    } else {
+                        storiesContent(vm: vm)
+                    }
                 } else {
-                    storiesContent(vm: vm)
+                    loadingView
                 }
-            } else {
-                loadingView
             }
-        }
-        .overlay(alignment: .top) {
-            if let vm = viewModel, !vm.screens.isEmpty {
-                controlsOverlay(vm: vm)
+            .overlay(alignment: .top) {
+                if let vm = viewModel, !vm.screens.isEmpty {
+                    controlsOverlay(vm: vm, safeAreaTop: proxy.safeAreaInsets.top)
+                }
             }
+            .simultaneousGesture(dismissDragGesture)
+            .ignoresSafeArea()
         }
-        .simultaneousGesture(dismissDragGesture)
-        .ignoresSafeArea()
         .statusBarHidden()
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
             isKeyboardVisible = true
@@ -140,7 +142,7 @@ struct UpToSpeedView: View {
 
     // MARK: - Controls overlay
 
-    private func controlsOverlay(vm: UpToSpeedViewModel) -> some View {
+    private func controlsOverlay(vm: UpToSpeedViewModel, safeAreaTop: CGFloat) -> some View {
         VStack(spacing: SparkSpacing.sm) {
             HStack(alignment: .center, spacing: SparkSpacing.sm) {
                 StoryProgressBar(total: vm.screens.count + 1, currentIndex: vm.currentIndex)
@@ -168,7 +170,7 @@ struct UpToSpeedView: View {
                 )
             }
             .padding(.horizontal, SparkSpacing.lg)
-            .padding(.top, topSafeArea + SparkSpacing.sm)
+            .padding(.top, safeAreaTop + SparkSpacing.sm)
 
             if vm.newItemsAvailable > 0 {
                 Button {
@@ -276,11 +278,5 @@ struct UpToSpeedView: View {
             PillButton("Done") { isPresented = false }
         }
         .padding(SparkSpacing.xxl)
-    }
-
-    private var topSafeArea: CGFloat {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }.first?
-            .keyWindow?.safeAreaInsets.top ?? 44
     }
 }

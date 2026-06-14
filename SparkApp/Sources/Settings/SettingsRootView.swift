@@ -28,7 +28,7 @@ struct SettingsRootView: View {
                     Button(role: .destructive) {
                         showsSignOutConfirmation = true
                     } label: {
-                        Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
+                        Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
                     }
                 }
 
