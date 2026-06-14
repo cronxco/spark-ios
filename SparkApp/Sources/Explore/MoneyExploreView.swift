@@ -127,16 +127,11 @@ struct MoneyExploreView: View {
 
                 let netWorth = vm.netWorth
 
-                HStack(alignment: .firstTextBaseline, spacing: 1) {
-                    Text(formatInteger(netWorth))
-                        .font(SparkFonts.display(size: 44))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.55)
-                    Text(formatDecimal(netWorth))
-                        .font(SparkFonts.display(size: 26))
-                        .foregroundStyle(.secondary)
-                }
+                Text(SparkValueFormatting.currency(netWorth, code: "GBP"))
+                    .font(SparkFonts.display(size: 44))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.55)
 
                 let history = filteredHistory(vm: vm)
                 let delta = netWorthDelta(history: history)
@@ -436,20 +431,8 @@ struct MoneyExploreView: View {
         return (netWorthDelta(history: history) / abs(first)) * 100
     }
 
-    private func formatInteger(_ value: Double) -> String {
-        let f = NumberFormatter()
-        f.numberStyle = .decimal
-        f.maximumFractionDigits = 0
-        return "£" + (f.string(from: NSNumber(value: abs(value))) ?? "0")
-    }
-
-    private func formatDecimal(_ value: Double) -> String {
-        let cents = Int((abs(value) * 100).rounded()) % 100
-        return String(format: ".%02d", cents)
-    }
-
     private func formatAmount(_ value: Double) -> String {
-        formattedMoneyAmount(value, currency: "GBP")
+        SparkValueFormatting.currency(value, code: "GBP")
     }
 
     private func accountTypeLabel(_ type: String) -> String {
@@ -710,19 +693,11 @@ private struct MoneyAccountRow: View {
 }
 
 private func formattedMoneyAmount(_ value: Double, currency: String, fractionDigits: Int = 2) -> String {
-    let formatter = NumberFormatter()
-    formatter.numberStyle = .decimal
-    formatter.minimumFractionDigits = fractionDigits
-    formatter.maximumFractionDigits = fractionDigits
-
-    let symbol: String = switch currency {
-    case "GBP": "£"
-    case "EUR": "€"
-    case "USD": "$"
-    default: currency + " "
-    }
-
-    return symbol + (formatter.string(from: NSNumber(value: abs(value))) ?? "0")
+    SparkValueFormatting.currency(
+        value,
+        code: currency,
+        fractionDigits: fractionDigits
+    )
 }
 
 // MARK: - Issuer Tint Helper

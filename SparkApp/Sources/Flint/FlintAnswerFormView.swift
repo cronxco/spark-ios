@@ -73,7 +73,7 @@ struct FlintAnswerFormView: View {
                         } label: {
                             Text(option)
                                 .font(SparkTypography.captionStrong)
-                                .foregroundStyle(selectedAnswer == option ? Color.white : Color.primary)
+                                .foregroundStyle(selectedAnswer == option ? Color.sparkOnAccent : Color.primary)
                                 .padding(.horizontal, SparkSpacing.md)
                                 .padding(.vertical, SparkSpacing.sm)
                                 .sparkGlass(
@@ -114,7 +114,7 @@ struct FlintAnswerFormView: View {
                 }
                 .padding(.horizontal, SparkSpacing.lg)
                 .padding(.vertical, SparkSpacing.sm)
-                .foregroundStyle(Color.white)
+                .foregroundStyle(Color.sparkOnAccent)
                 .sparkGlass(.capsule, tint: Color.sparkAccent)
             }
             .buttonStyle(.plain)

@@ -172,20 +172,11 @@ private struct NotificationRow: View {
     }
 
     private var glyph: String {
-        switch item.domain?.lowercased() {
-        case "health": "heart.fill"
-        case "activity": "figure.run"
-        case "money": "creditcard.fill"
-        case "media": "music.note"
-        case "knowledge": "book.fill"
-        case "anomaly": "exclamationmark.triangle.fill"
-        default: "bell.fill"
-        }
+        EntityPresentation.icon(domain: item.domain, type: "event")
     }
 
     private var tint: Color {
-        guard let domain = item.domain else { return .sparkAccent }
-        return Color.domainTint(for: domain)
+        EntityPresentation.tint(domain: item.domain)
     }
 
     private static func relative(from date: Date) -> String {

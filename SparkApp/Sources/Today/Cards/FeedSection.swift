@@ -642,14 +642,7 @@ private func shortTime(_ date: Date) -> String {
 }
 
 private func domainIcon(_ domain: String) -> String {
-    switch domain {
-    case "health": return "moon.zzz.fill"
-    case "activity": return "figure.walk"
-    case "money": return "creditcard.fill"
-    case "media": return "music.note"
-    case "knowledge": return "book.fill"
-    default: return "bolt.fill"
-    }
+    EntityPresentation.icon(domain: domain, type: "event")
 }
 
 private extension String {

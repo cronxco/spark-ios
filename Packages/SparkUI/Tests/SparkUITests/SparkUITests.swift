@@ -36,6 +36,42 @@ struct SparkDateFormattingTests {
     private static let date = ISO8601DateFormatter().date(from: "2026-06-14T13:05:00Z")
 }
 
+@Suite("Spark value formatting")
+struct SparkValueFormattingTests {
+    @Test("currency formatting uses the supplied ISO currency code")
+    func formatsCurrencyCodes() {
+        let locale = Locale(identifier: "en_GB")
+
+        #expect(SparkValueFormatting.currency(12.5, code: "GBP", locale: locale).contains("£"))
+        #expect(SparkValueFormatting.currency(12.5, code: "USD", locale: locale).contains("$"))
+        #expect(SparkValueFormatting.currency(12.5, code: "EUR", locale: locale).contains("€"))
+    }
+
+    @Test("currency formatting preserves negative values")
+    func preservesNegativeCurrencyValues() {
+        let formatted = SparkValueFormatting.currency(
+            -12.5,
+            code: "GBP",
+            locale: Locale(identifier: "en_GB")
+        )
+
+        #expect(formatted.contains("-"))
+        #expect(formatted.contains("£"))
+    }
+
+    @Test("currency units are included in the value and not repeated as labels")
+    func currencyUnitPresentation() {
+        let formatted = SparkValueFormatting.value(
+            42,
+            unit: "EUR",
+            locale: Locale(identifier: "en_IE")
+        )
+
+        #expect(formatted.contains("€"))
+        #expect(SparkValueFormatting.unitLabel("EUR") == nil)
+    }
+}
+
 @Suite("Spark app background phase")
 struct SparkAppBackgroundPhaseTests {
     @Test("auto light mode resolves expected day phases")

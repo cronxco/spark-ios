@@ -31,12 +31,18 @@ struct SearchResultRow: View {
 
     var glyph: String {
         switch result {
-        case .event: "circle.dotted"
-        case .object: "shippingbox"
-        case .block: "square.stack.3d.up"
-        case .metric: "chart.line.uptrend.xyaxis"
-        case .integration: "link"
-        case .place: "mappin.circle.fill"
+        case .event(let hit):
+            EntityPresentation.icon(domain: hit.domain, type: "event")
+        case .object:
+            EntityPresentation.icon(type: "object")
+        case .block:
+            EntityPresentation.icon(type: "block")
+        case .metric(let hit):
+            EntityPresentation.icon(domain: hit.domain, type: "metric")
+        case .integration(let hit):
+            EntityPresentation.icon(service: hit.service, type: "integration")
+        case .place:
+            EntityPresentation.icon(type: "place")
         case .tag: "tag.fill"
         case .intent(let h): h.symbol ?? "sparkles"
         }
@@ -44,12 +50,12 @@ struct SearchResultRow: View {
 
     var tint: Color {
         switch result {
-        case .event(let h): h.domain.map(Color.domainTint(for:)) ?? .sparkAccent
-        case .object: .sparkAccent
-        case .block: .domainKnowledge
-        case .metric(let h): h.domain.map(Color.domainTint(for:)) ?? .sparkAccent
-        case .integration: .sparkOcean
-        case .place: .sparkAccent
+        case .event(let hit): EntityPresentation.tint(domain: hit.domain)
+        case .object: EntityPresentation.tint(domain: nil)
+        case .block: EntityPresentation.tint(domain: "knowledge")
+        case .metric(let hit): EntityPresentation.tint(domain: hit.domain)
+        case .integration: EntityPresentation.tint(domain: nil)
+        case .place: EntityPresentation.tint(domain: nil)
         case .tag(let h): EventTag(name: h.name, type: h.type).tagTint
         case .intent: .sparkAccent
         }

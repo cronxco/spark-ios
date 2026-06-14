@@ -350,14 +350,7 @@ struct MetricsExploreView: View {
     }
 
     private func formatValue(_ v: Double, unit: String?) -> String {
-        switch unit {
-        case "score", "bpm", "percent": return String(Int(v))
-        case "ms": return "\(Int(v))"
-        case "GBP", "USD", "EUR": return String(format: "£%.2f", v)
-        default:
-            if v >= 1000 { return String(format: "%.1fk", v / 1000) }
-            return v.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(v)) : String(format: "%.1f", v)
-        }
+        SparkValueFormatting.value(v, unit: unit)
     }
 
     private func deltaLabel(_ diff: Double) -> String {
@@ -421,16 +414,7 @@ struct MetricsExploreView: View {
     }
 
     private func unitLabel(_ unit: String?) -> String? {
-        switch unit {
-        case nil, "score", "steps":
-            nil
-        case "percent":
-            "percent"
-        case "GBP":
-            "GBP"
-        default:
-            unit
-        }
+        SparkValueFormatting.unitLabel(unit)
     }
 
     private func lastSyncedSubtitle(for date: Date) -> String {
@@ -575,26 +559,11 @@ private struct FullBleedMetricRow: View {
     }
 
     private func formatValue(_ v: Double, unit: String?) -> String {
-        switch unit {
-        case "score", "bpm", "percent": return String(Int(v))
-        case "steps": return String(Int(v))
-        case "kcal": return String(Int(v))
-        case "GBP", "USD", "EUR": return String(format: "£%.2f", v)
-        default:
-            if v >= 1000 { return String(format: "%.1fk", v / 1000) }
-            return v.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(v)) : String(format: "%.1f", v)
-        }
+        SparkValueFormatting.value(v, unit: unit)
     }
 
     private func unitLabel(_ unit: String?) -> String? {
-        switch unit {
-        case "score", "steps", "percent", nil:
-            return nil
-        case "GBP":
-            return nil
-        default:
-            return unit
-        }
+        SparkValueFormatting.unitLabel(unit)
     }
 
     private func deltaLabel(_ diff: Double) -> String {
