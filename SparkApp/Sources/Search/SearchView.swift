@@ -19,26 +19,7 @@ struct SearchView: View {
                 .sparkAppBackground()
                 .navigationTitle("Search")
                 .navigationBarTitleDisplayMode(.inline)
-                .navigationDestination(for: DetailRoute.self) { route in
-                    switch route {
-                    case .event(let id):
-                        EventDetailView(eventId: id)
-                    case .object(let id):
-                        ObjectDetailView(objectId: id)
-                    case .block(let id):
-                        BlockDetailView(blockId: id)
-                    case .metric(let identifier):
-                        MetricDetailView(identifier: identifier)
-                    case .place(let id):
-                        PlaceDetailView(placeId: id)
-                    case .integration(let service):
-                        IntegrationDetailView(integrationId: service)
-                    case .account(let id):
-                        AccountDetailView(accountId: id)
-                    case .tag(let name, let type):
-                        TagDetailView(tagName: name, tagType: type)
-                    }
-                }
+                .sparkDetailDestinations()
                 .sparkMainNavigationTitle("Search")
                 .sparkMainAppToolbar()
         }

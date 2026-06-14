@@ -37,4 +37,21 @@ public enum CheckInsEndpoint {
             ]
         )
     }
+
+    /// GET /check-ins/timezone — latest acknowledged timezone or profile fallback.
+    public static func timezone() -> Endpoint<TimezoneAcknowledgement> {
+        Endpoint(method: .get, path: "/check-ins/timezone", usesETag: false)
+    }
+
+    /// POST /check-ins/timezone — acknowledge the device's current IANA timezone.
+    public static func acknowledgeTimezone(
+        _ request: TimezoneAcknowledgementRequest
+    ) -> Endpoint<TimezoneAcknowledgement> {
+        Endpoint(
+            method: .post,
+            path: "/check-ins/timezone",
+            body: try? encoder.encode(request),
+            contentType: "application/json"
+        )
+    }
 }

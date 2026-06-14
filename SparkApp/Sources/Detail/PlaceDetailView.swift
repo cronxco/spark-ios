@@ -204,7 +204,7 @@ struct PlaceDetailView: View {
                 }
                 if let last = detail.lastVisitedAt {
                     InspectorRow("Last", isMono: true) {
-                        Text(Self.fullTimeFormatter.string(from: last))
+                        Text(SparkDateFormatting.fullDateTime(last))
                     }
                 }
                 if let lat = detail.place.latitude, let lng = detail.place.longitude {
@@ -223,7 +223,7 @@ struct PlaceDetailView: View {
                     Text(event.action)
                         .font(SparkTypography.bodySmall)
                     if let time = event.time {
-                        Text(Self.shortTimeFormatter.string(from: time))
+                        Text(SparkDateFormatting.compactDateTime(time))
                             .font(SparkTypography.monoSmall)
                             .foregroundStyle(.secondary)
                     }
@@ -245,15 +245,4 @@ struct PlaceDetailView: View {
         String(format: "%.4f", coord)
     }
 
-    private static let shortTimeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "d MMM, HH:mm"
-        return f
-    }()
-
-    private static let fullTimeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd  HH:mm"
-        return f
-    }()
 }

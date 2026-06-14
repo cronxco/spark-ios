@@ -131,8 +131,8 @@ struct EventDetailView: View {
     private func eyebrow(for event: Event) -> String {
         var parts: [String] = [event.service.uppercased()]
         if let time = event.time {
-            parts.append(SparkDetailFormatters.shortDate.string(from: time))
-            parts.append(SparkDetailFormatters.shortTime.string(from: time))
+            parts.append(SparkDetailFormatters.shortDate(time))
+            parts.append(SparkDetailFormatters.shortTime(time))
         }
         return parts.joined(separator: " — ")
     }

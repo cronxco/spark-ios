@@ -196,23 +196,17 @@ struct SparkDetailLinkedRow: View {
 }
 
 enum SparkDetailFormatters {
-    static let shortDate: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "d MMM yyyy"
-        return f
-    }()
+    static func shortDate(_ date: Date) -> String {
+        SparkDateFormatting.shortDate(date)
+    }
 
-    static let shortTime: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm"
-        return f
-    }()
+    static func shortTime(_ date: Date) -> String {
+        SparkDateFormatting.shortTime(date)
+    }
 
-    static let compactDateTime: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "d MMM, HH:mm"
-        return f
-    }()
+    static func compactDateTime(_ date: Date) -> String {
+        SparkDateFormatting.compactDateTime(date)
+    }
 }
 
 extension Color {

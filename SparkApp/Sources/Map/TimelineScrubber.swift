@@ -35,7 +35,7 @@ struct TimelineScrubber: View {
         let calendar = Calendar.current
         let start = calendar.startOfDay(for: anchorDay)
         let date = start.addingTimeInterval(24 * 60 * 60 * fraction)
-        return Self.timeFormatter.string(from: date)
+        return SparkDateFormatting.shortTime(date)
     }
 
     private var anchorLabel: String {
@@ -43,12 +43,6 @@ struct TimelineScrubber: View {
         if Calendar.current.isDateInYesterday(anchorDay) { return "Yesterday" }
         return Self.dateFormatter.string(from: anchorDay)
     }
-
-    private static let timeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm"
-        return f
-    }()
 
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()

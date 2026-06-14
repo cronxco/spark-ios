@@ -17,26 +17,7 @@ struct MapView: View {
     var body: some View {
         NavigationStack(path: $path) {
             content
-                .navigationDestination(for: DetailRoute.self) { route in
-                    switch route {
-                    case .place(let id):
-                        PlaceDetailView(placeId: id)
-                    case .event(let id):
-                        EventDetailView(eventId: id)
-                    case .object(let id):
-                        ObjectDetailView(objectId: id)
-                    case .block(let id):
-                        BlockDetailView(blockId: id)
-                    case .metric(let identifier):
-                        MetricDetailView(identifier: identifier)
-                    case .integration(let service):
-                        IntegrationDetailView(integrationId: service)
-                    case .account(let id):
-                        AccountDetailView(accountId: id)
-                    case .tag(let name, let type):
-                        TagDetailView(tagName: name, tagType: type)
-                    }
-                }
+                .sparkDetailDestinations()
                 .sparkMainNavigationTitle("Map")
                 .toolbar(.visible, for: .navigationBar)
                 .toolbarBackground(.hidden, for: .navigationBar)

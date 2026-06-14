@@ -97,6 +97,12 @@ struct TodayView: View {
         .onChange(of: appModel.lastSyncAt) {
             Task { await viewModel?.backgroundRevalidate() }
         }
+        .onChange(of: appModel.timezoneRefreshRevision) {
+            Task {
+                await viewModel?.load()
+                await upToSpeedViewModel?.reloadQueue()
+            }
+        }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
                 Task { await viewModel?.backgroundRevalidate() }
@@ -256,21 +262,19 @@ private struct GetUpToSpeedButton: View {
     let unreadCount: Int
     let onTap: () -> Void
 
-    private static let darkInk = Color(red: 0.086, green: 0.086, blue: 0.086)
-
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 6) {
                 Text("\(unreadCount)")
                     .font(Font.custom(SparkFonts.displayPostScriptName, size: 12).bold())
-                    .foregroundStyle(Self.darkInk)
+                    .foregroundStyle(Color.sparkOnAccent)
                     .padding(.horizontal, 6)
                     .frame(minWidth: 24, minHeight: 24)
-                    .background(Self.darkInk.opacity(0.12), in: .capsule)
+                    .background(Color.sparkOnAccent.opacity(0.12), in: .capsule)
 
                 Text("Get Up to Speed")
                     .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(Self.darkInk)
+                    .foregroundStyle(Color.sparkOnAccent)
             }
             .padding(.leading, 4)
             .padding(.trailing, 10)

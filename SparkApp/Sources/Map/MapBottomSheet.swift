@@ -85,7 +85,7 @@ private struct MapBottomSheetRow: View {
 
     private var timeLabel: String? {
         guard let time = point.time else { return nil }
-        return Self.timeFormatter.string(from: time)
+        return SparkDateFormatting.shortTime(time)
     }
 
     private var glyph: String {
@@ -106,9 +106,4 @@ private struct MapBottomSheetRow: View {
         }
     }
 
-    private static let timeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm"
-        return f
-    }()
 }

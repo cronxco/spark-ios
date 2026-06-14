@@ -78,6 +78,9 @@ struct UpToSpeedView: View {
             await viewModel?.load()
             await refreshLoop()
         }
+        .onChange(of: appModel.timezoneRefreshRevision) {
+            Task { await viewModel?.reloadQueue() }
+        }
         .onDisappear {
             guard !didRequestDismiss, let viewModel else { return }
             viewModel.flush()
@@ -249,10 +252,10 @@ struct UpToSpeedView: View {
     private var loadingView: some View {
         VStack(spacing: SparkSpacing.md) {
             ProgressView()
-                .tint(.white)
+                .tint(.primary)
             Text("Getting you up to speed…")
                 .font(SparkTypography.body)
-                .foregroundStyle(Color.white.opacity(0.7))
+                .foregroundStyle(.secondary)
         }
     }
 

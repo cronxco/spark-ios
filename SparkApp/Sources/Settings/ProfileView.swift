@@ -1,3 +1,4 @@
+import Foundation
 import SparkKit
 import SparkUI
 import SwiftUI
@@ -89,6 +90,30 @@ struct ProfileView: View {
                             }
                         }
                         .pickerStyle(.segmented)
+                    }
+                }
+
+                GlassCard {
+                    VStack(alignment: .leading, spacing: SparkSpacing.md) {
+                        GlassCardHeader(
+                            icon: "globe",
+                            tint: .sparkAccent,
+                            title: "Timezone"
+                        )
+
+                        LabeledContent(
+                            "Spark",
+                            value: appModel.timezoneState?.timezone ?? profile.timezone ?? "Unknown"
+                        )
+                        LabeledContent(
+                            "Device",
+                            value: TimeZone.autoupdatingCurrent.identifier
+                        )
+
+                        Button("Reconsider Device Timezone") {
+                            Task { await appModel.reconsiderTimezoneChange() }
+                        }
+                        .buttonStyle(.bordered)
                     }
                 }
             }

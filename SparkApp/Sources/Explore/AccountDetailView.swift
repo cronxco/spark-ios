@@ -182,7 +182,12 @@ struct AccountDetailView: View {
 
     private func actionsRow(account: MoneyAccount) -> some View {
         HStack(spacing: SparkSpacing.sm) {
-            PillButton("Add Balance", systemImage: "plus.circle.fill", tint: Color.domainMoney) {
+            PillButton(
+                "Add Balance",
+                systemImage: "plus.circle.fill",
+                tint: Color.domainMoney,
+                foreground: .sparkOnAccent
+            ) {
                 showAddBalance = true
             }
 

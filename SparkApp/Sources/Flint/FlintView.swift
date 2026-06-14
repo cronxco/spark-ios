@@ -106,7 +106,7 @@ struct FlintView: View {
                     title: "Couldn't load Flint",
                     message: message
                 )
-                PillButton("Retry", systemImage: "arrow.clockwise", tint: .sparkAccent) {
+                PillButton("Retry", systemImage: "arrow.clockwise") {
                     Task { await viewModel.refresh() }
                 }
             }
@@ -466,4 +466,3 @@ private struct FlintBlockRow: View {
         return trimmed.isEmpty ? nil : trimmed.capitalized
     }
 }
-

@@ -160,8 +160,8 @@ struct ObjectDetailView: View {
             object.type.replacingOccurrences(of: "_", with: " ").uppercased()
         ]
         if let time = object.time {
-            parts.append(SparkDetailFormatters.shortDate.string(from: time))
-            parts.append(SparkDetailFormatters.shortTime.string(from: time))
+            parts.append(SparkDetailFormatters.shortDate(time))
+            parts.append(SparkDetailFormatters.shortTime(time))
         }
         return parts.joined(separator: " — ")
     }
@@ -187,7 +187,7 @@ struct ObjectDetailView: View {
     private func eventRowSummary(_ event: Event) -> some View {
         SparkDetailLinkedRow(
             title: eventTitle(for: event),
-            subtitle: event.time.map { SparkDetailFormatters.compactDateTime.string(from: $0) },
+            subtitle: event.time.map(SparkDetailFormatters.compactDateTime),
             trailing: event.displayValue?.sparkPlainTextFromHTMLFragment ?? event.value?.sparkPlainTextFromHTMLFragment,
             tint: Color.domainTint(for: event.domain)
         )

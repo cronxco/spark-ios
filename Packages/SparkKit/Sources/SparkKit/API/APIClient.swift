@@ -186,7 +186,7 @@ public actor APIClient {
         if let accessToken {
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         }
-        if let etag = await etagCache.etag(for: url) {
+        if endpoint.usesETag, let etag = await etagCache.etag(for: url) {
             request.setValue(etag, forHTTPHeaderField: "If-None-Match")
         }
 
@@ -291,7 +291,7 @@ public actor APIClient {
             throw APIError.httpStatus(http.statusCode, data, url)
         }
 
-        if let etag = http.value(forHTTPHeaderField: "ETag") {
+        if endpoint.usesETag, let etag = http.value(forHTTPHeaderField: "ETag") {
             await etagCache.store(etag, for: url)
         }
 

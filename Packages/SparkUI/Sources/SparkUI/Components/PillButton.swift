@@ -4,12 +4,28 @@ public struct PillButton: View {
     let title: String
     let systemImage: String?
     let tint: Color
+    let foreground: Color
     let action: () -> Void
 
-    public init(_ title: String, systemImage: String? = nil, tint: Color = .sparkAccent, action: @escaping () -> Void) {
+    public init(_ title: String, systemImage: String? = nil, action: @escaping () -> Void) {
+        self.title = title
+        self.systemImage = systemImage
+        self.tint = .sparkAccent
+        self.foreground = .sparkOnAccent
+        self.action = action
+    }
+
+    public init(
+        _ title: String,
+        systemImage: String? = nil,
+        tint: Color,
+        foreground: Color = .white,
+        action: @escaping () -> Void
+    ) {
         self.title = title
         self.systemImage = systemImage
         self.tint = tint
+        self.foreground = foreground
         self.action = action
     }
 
@@ -24,7 +40,7 @@ public struct PillButton: View {
             }
             .padding(.horizontal, SparkSpacing.xl)
             .padding(.vertical, SparkSpacing.md)
-            .foregroundStyle(Color.white)
+            .foregroundStyle(foreground)
             .sparkGlass(.capsule, tint: tint)
         }
         .buttonStyle(.plain)

@@ -55,16 +55,7 @@ struct MoneyExploreView: View {
             }
             .sparkAppBackground()
             .sparkMainNavigationTitle("Money")
-            .navigationDestination(for: DetailRoute.self) { route in
-                switch route {
-                case .event(let id):
-                    EventDetailView(eventId: id)
-                case .account(let id):
-                    AccountDetailView(accountId: id)
-                default:
-                    EmptyView()
-                }
-            }
+            .sparkDetailDestinations()
             .refreshable {
                 await viewModel?.refresh()
             }
@@ -524,19 +515,13 @@ struct MoneyExploreView: View {
 
         let calendar = Calendar.current
         if calendar.isDateInToday(lastUpdatedAt) {
-            return "Last synced today at \(Self.syncTimeFormatter.string(from: lastUpdatedAt))"
+            return "Last synced today at \(SparkDateFormatting.shortTime(lastUpdatedAt))"
         }
         if calendar.isDateInYesterday(lastUpdatedAt) {
-            return "Last synced yesterday at \(Self.syncTimeFormatter.string(from: lastUpdatedAt))"
+            return "Last synced yesterday at \(SparkDateFormatting.shortTime(lastUpdatedAt))"
         }
         return "Last synced \(Self.syncDateFormatter.string(from: lastUpdatedAt))"
     }
-
-    private static let syncTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        return formatter
-    }()
 
     private static let syncDateFormatter: DateFormatter = {
         let formatter = DateFormatter()

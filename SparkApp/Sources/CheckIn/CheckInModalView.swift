@@ -160,7 +160,7 @@ struct CheckInModalView: View {
                 if isSubmitting {
                     ProgressView()
                         .scaleEffect(0.8)
-                        .tint(.white)
+                        .tint(.sparkOnAccent)
                 }
                 Text("Log it")
                     .font(SparkTypography.body)
@@ -169,7 +169,7 @@ struct CheckInModalView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, SparkSpacing.md)
             .background(physical != nil && mental != nil ? Color.sparkAccent : Color.secondary.opacity(0.25))
-            .foregroundStyle(physical != nil && mental != nil ? Color.white : Color.secondary)
+            .foregroundStyle(physical != nil && mental != nil ? Color.sparkOnAccent : Color.secondary)
             .clipShape(.rect(cornerRadius: SparkRadii.md))
         }
         .disabled(physical == nil || mental == nil || isSubmitting)
@@ -233,4 +233,3 @@ struct CheckInModalView: View {
         return f.string(from: date)
     }
 }
-

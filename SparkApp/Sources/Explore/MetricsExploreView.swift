@@ -98,14 +98,7 @@ struct MetricsExploreView: View {
             }
             .sparkAppBackground()
             .sparkMainNavigationTitle("Metrics")
-            .navigationDestination(for: DetailRoute.self) { route in
-                switch route {
-                case .metric(let identifier):
-                    MetricDetailView(identifier: identifier)
-                default:
-                    EmptyView()
-                }
-            }
+            .sparkDetailDestinations()
             .refreshable { await viewModel?.refresh() }
             .sparkMainAppToolbar()
         }
@@ -443,10 +436,10 @@ struct MetricsExploreView: View {
     private func lastSyncedSubtitle(for date: Date) -> String {
         let calendar = Calendar.current
         if calendar.isDateInToday(date) {
-            return "Last synced today at \(Self.syncTimeFormatter.string(from: date))"
+            return "Last synced today at \(SparkDateFormatting.shortTime(date))"
         }
         if calendar.isDateInYesterday(date) {
-            return "Last synced yesterday at \(Self.syncTimeFormatter.string(from: date))"
+            return "Last synced yesterday at \(SparkDateFormatting.shortTime(date))"
         }
         return "Last synced \(Self.syncDateFormatter.string(from: date))"
     }
@@ -454,12 +447,6 @@ struct MetricsExploreView: View {
     private func displayLabel(forDomain domain: String) -> String {
         domain.replacingOccurrences(of: "_", with: " ").sparkActionTitle
     }
-
-    private static let syncTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        return formatter
-    }()
 
     private static let syncDateFormatter: DateFormatter = {
         let formatter = DateFormatter()

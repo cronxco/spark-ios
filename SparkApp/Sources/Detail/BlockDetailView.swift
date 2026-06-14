@@ -131,7 +131,7 @@ struct BlockDetailView: View {
                 } label: {
                     SparkDetailLinkedRow(
                         title: eventTitle(for: parent),
-                        subtitle: parent.time.map { SparkDetailFormatters.compactDateTime.string(from: $0) },
+                        subtitle: parent.time.map(SparkDetailFormatters.compactDateTime),
                         trailing: parent.displayValue?.sparkPlainTextFromHTMLFragment ?? parent.value?.sparkPlainTextFromHTMLFragment,
                         tint: Color.domainTint(for: parent.domain)
                     )
@@ -146,7 +146,7 @@ struct BlockDetailView: View {
             eyebrow: blockEyebrow(for: detail.block),
             status: detail.event?.action.humanisedAction,
             title: detail.block.title,
-            subtitle: detail.event?.time.map { "From event on \(SparkDetailFormatters.compactDateTime.string(from: $0))" },
+            subtitle: detail.event?.time.map { "From event on \(SparkDetailFormatters.compactDateTime($0))" },
             value: blockDisplayValue(for: detail.block),
             valueTint: .sparkAccent
         )
@@ -155,8 +155,8 @@ struct BlockDetailView: View {
     private func blockEyebrow(for block: Block) -> String {
         var parts = [block.blockType.replacingOccurrences(of: "_", with: " ").uppercased()]
         if let time = block.time {
-            parts.append(SparkDetailFormatters.shortDate.string(from: time))
-            parts.append(SparkDetailFormatters.shortTime.string(from: time))
+            parts.append(SparkDetailFormatters.shortDate(time))
+            parts.append(SparkDetailFormatters.shortTime(time))
         }
         return parts.joined(separator: " — ")
     }

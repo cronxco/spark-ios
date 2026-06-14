@@ -151,7 +151,7 @@ struct CheckInScreen: View {
         } label: {
             HStack(spacing: SparkSpacing.sm) {
                 if isSubmitting {
-                    ProgressView().scaleEffect(0.8).tint(.white)
+                    ProgressView().scaleEffect(0.8).tint(.sparkOnAccent)
                 }
                 Text(isSubmitting ? "Saving…" : "Log it")
                     .font(SparkTypography.body)
@@ -160,7 +160,7 @@ struct CheckInScreen: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, SparkSpacing.md)
             .background(canSubmit ? Color.sparkAccent : Color.secondary.opacity(0.25))
-            .foregroundStyle(canSubmit ? Color.white : Color.secondary)
+            .foregroundStyle(canSubmit ? Color.sparkOnAccent : Color.secondary)
             .clipShape(.rect(cornerRadius: SparkRadii.md))
         }
         .disabled(!canSubmit || isSubmitting)

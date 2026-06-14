@@ -61,6 +61,9 @@ public extension Color {
     /// Brand primary. Use for CTAs, active tab tint, hero values.
     static let sparkAccent = Color.spark400
 
+    /// Foreground for content rendered directly on the amber brand accent.
+    static let sparkOnAccent = Color(red: 0.086, green: 0.086, blue: 0.086)
+
     /// Cool accent — sleep, health, depth.
     static let sparkOcean = Color.ocean300
 

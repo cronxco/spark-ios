@@ -13,7 +13,14 @@
       "Bash(xcodebuild -workspace Spark.xcworkspace -list)",
       "mcp__claude_ai_Linear__get_issue",
       "mcp__claude_ai_Linear__list_comments",
-      "WebSearch"
+      "WebSearch",
+      "mcp__claude_ai_Linear__list_teams",
+      "mcp__claude_ai_Linear__list_projects",
+      "mcp__claude_ai_Linear__save_issue",
+      "Bash(./vendor/bin/sail artisan tinker --execute ' *)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "context7"
+  ]
 }

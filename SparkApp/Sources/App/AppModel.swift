@@ -26,6 +26,23 @@ enum AppRoute: Hashable {
     case tag(name: String, type: String?)
 }
 
+struct TimezoneChangePrompt: Identifiable, Equatable {
+    let acknowledgedTimezone: String
+    let deviceTimezone: String
+    var id: String {
+        TimezoneChangePolicy.rejectionKey(
+            acknowledgedTimezone: acknowledgedTimezone,
+            deviceTimezone: deviceTimezone
+        )
+    }
+}
+
+struct TimezoneUpdateError: Identifiable, Equatable {
+    let prompt: TimezoneChangePrompt
+    let message: String
+    let id = UUID()
+}
+
 @MainActor
 @Observable
 final class AppModel {
@@ -57,7 +74,11 @@ final class AppModel {
     var onboardingComplete: Bool
     var lastError: String?
     var pendingRoute: AppRoute?
+    var timezonePrompt: TimezoneChangePrompt?
+    var timezoneUpdateError: TimezoneUpdateError?
     private(set) var lastSyncAt: Date = .distantPast
+    private(set) var timezoneState: TimezoneAcknowledgement?
+    private(set) var timezoneRefreshRevision = 0
     private(set) var profile: UserProfile? {
         didSet {
             if let name = profile?.name {
@@ -67,6 +88,10 @@ final class AppModel {
     }
     private var deviceRegistrationTask: Task<Void, Never>?
     private var deviceRegistrationTokenInFlight: String?
+    private var isCheckingTimezone = false
+    private var timezoneObserver: NSObjectProtocol?
+
+    private static let rejectedTimezonePairKey = "spark.timezone.rejectedPair"
 
     init(container: ModelContainer) {
         self.container = container
@@ -82,6 +107,15 @@ final class AppModel {
         if let cachedName = UserDefaults.sparkAppGroup.string(forKey: "spark.profile.name"), !cachedName.isEmpty {
             self.profile = UserProfile(id: "", name: cachedName, email: "")
         }
+        timezoneObserver = NotificationCenter.default.addObserver(
+            forName: .NSSystemTimeZoneDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                await self?.checkForTimezoneChange()
+            }
+        }
     }
 
     func bootstrap() async {
@@ -95,6 +129,7 @@ final class AppModel {
             consumePendingIntentRoute()
             await wireReverbHandler()
             await reverbConnect()
+            await checkForTimezoneChange()
         } else {
             session = .loggedOut
         }
@@ -139,6 +174,77 @@ final class AppModel {
     /// Disconnect Reverb when the app moves to the background.
     func reverbDisconnect() async {
         await reverb.disconnect()
+    }
+
+    func checkForTimezoneChange(forcePrompt: Bool = false) async {
+        guard session == .loggedIn, !isCheckingTimezone else { return }
+        isCheckingTimezone = true
+        defer { isCheckingTimezone = false }
+
+        do {
+            let state = try await apiClient.request(CheckInsEndpoint.timezone())
+            timezoneState = state
+            let deviceTimezone = TimeZone.autoupdatingCurrent.identifier
+            let rejectedKey = forcePrompt
+                ? nil
+                : UserDefaults.sparkAppGroup.string(forKey: Self.rejectedTimezonePairKey)
+
+            if TimezoneChangePolicy.shouldPrompt(
+                acknowledgedTimezone: state.timezone,
+                deviceTimezone: deviceTimezone,
+                rejectedKey: rejectedKey
+            ) {
+                timezonePrompt = TimezoneChangePrompt(
+                    acknowledgedTimezone: state.timezone,
+                    deviceTimezone: deviceTimezone
+                )
+            } else {
+                timezonePrompt = nil
+            }
+        } catch is CancellationError {
+        } catch APIError.transport(let underlying)
+            where (underlying as? URLError)?.code == .cancelled {
+        } catch {
+            SparkObservability.captureHandled(error)
+        }
+    }
+
+    func rejectTimezoneChange(_ prompt: TimezoneChangePrompt) {
+        UserDefaults.sparkAppGroup.set(prompt.id, forKey: Self.rejectedTimezonePairKey)
+        timezonePrompt = nil
+    }
+
+    func acceptTimezoneChange(_ prompt: TimezoneChangePrompt) async {
+        timezonePrompt = nil
+        timezoneUpdateError = nil
+
+        do {
+            let state = try await apiClient.request(
+                CheckInsEndpoint.acknowledgeTimezone(
+                    TimezoneAcknowledgementRequest(
+                        timezone: prompt.deviceTimezone,
+                        previousTimezone: prompt.acknowledgedTimezone,
+                        deviceId: UserDefaults.sparkAppGroup.string(forKey: "spark.apnsDeviceId")
+                    )
+                )
+            )
+            timezoneState = state
+            UserDefaults.sparkAppGroup.removeObject(forKey: Self.rejectedTimezonePairKey)
+            await etagCache.clearAll()
+            timezoneRefreshRevision += 1
+            WidgetCenter.shared.reloadAllTimelines()
+        } catch {
+            SparkObservability.captureHandled(error)
+            timezoneUpdateError = TimezoneUpdateError(
+                prompt: prompt,
+                message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            )
+        }
+    }
+
+    func reconsiderTimezoneChange() async {
+        UserDefaults.sparkAppGroup.removeObject(forKey: Self.rejectedTimezonePairKey)
+        await checkForTimezoneChange(forcePrompt: true)
     }
 
     /// Read a route written by an AppIntent (from the extension process) and
@@ -238,6 +344,7 @@ final class AppModel {
             session = .loggedIn
             await fetchAndCacheUserId()
             await registerDevice()
+            await checkForTimezoneChange()
             lastError = nil
         } catch AuthenticationError.cancelled {
             lastError = nil
@@ -258,6 +365,9 @@ final class AppModel {
         await authService.signOut()
         await etagCache.clearAll()
         profile = nil
+        timezoneState = nil
+        timezonePrompt = nil
+        timezoneUpdateError = nil
         UserDefaults.sparkAppGroup.removeObject(forKey: "spark.userId")
         await reverbDisconnect()
         session = .loggedOut

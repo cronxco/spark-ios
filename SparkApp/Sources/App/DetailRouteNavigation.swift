@@ -74,8 +74,8 @@ extension DeepLink {
 }
 
 extension View {
-    /// Standard `DetailRoute` → detail-view destinations. Mirrors the switch
-    /// in `DayPagerView`; applied wherever a tab owns its own stack.
+    /// Standard `DetailRoute` → detail-view destinations for every stack that
+    /// can present entity details.
     func sparkDetailDestinations() -> some View {
         navigationDestination(for: DetailRoute.self) { route in
             switch route {

@@ -22,6 +22,43 @@ struct RootView: View {
             }
         }
         .task { await model.bootstrap() }
+        .alert(
+            "Timezone Change",
+            isPresented: Binding(
+                get: { model.timezonePrompt != nil },
+                set: { if !$0 { model.timezonePrompt = nil } }
+            ),
+            presenting: model.timezonePrompt
+        ) { prompt in
+            Button("Use New Timezone") {
+                Task { await model.acceptTimezoneChange(prompt) }
+            }
+            Button("Keep \(prompt.acknowledgedTimezone)", role: .cancel) {
+                model.rejectTimezoneChange(prompt)
+            }
+        } message: { prompt in
+            Text(
+                "Your device is now using \(prompt.deviceTimezone). "
+                    + "Should Spark use this timezone?"
+            )
+        }
+        .alert(
+            "Couldn't Update Timezone",
+            isPresented: Binding(
+                get: { model.timezoneUpdateError != nil },
+                set: { if !$0 { model.timezoneUpdateError = nil } }
+            ),
+            presenting: model.timezoneUpdateError
+        ) { failure in
+            Button("Try Again") {
+                Task { await model.acceptTimezoneChange(failure.prompt) }
+            }
+            Button("Cancel", role: .cancel) {
+                model.timezoneUpdateError = nil
+            }
+        } message: { failure in
+            Text("\(failure.message)\n\nSpark is still using \(failure.prompt.acknowledgedTimezone).")
+        }
         .onOpenURL(perform: handle(url:))
         .environment(\.openURL, OpenURLAction { url in
             // In-app deep links embedded in rendered prose (e.g. Flint digest

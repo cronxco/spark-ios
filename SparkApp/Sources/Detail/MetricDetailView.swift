@@ -502,7 +502,7 @@ struct MetricDetailView: View {
     private func eventSubtitle(for event: Event) -> String? {
         var parts: [String] = [event.service.uppercased()]
         if let time = event.time {
-            parts.append(SparkDetailFormatters.compactDateTime.string(from: time))
+            parts.append(SparkDetailFormatters.compactDateTime(time))
         }
         return parts.joined(separator: " - ")
     }

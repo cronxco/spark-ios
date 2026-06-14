@@ -661,10 +661,10 @@ struct HealthExploreView: View {
 
         let calendar = Calendar.current
         if calendar.isDateInToday(lastEventTime) {
-            return "Last synced today at \(Self.syncTimeFormatter.string(from: lastEventTime))"
+            return "Last synced today at \(SparkDateFormatting.shortTime(lastEventTime))"
         }
         if calendar.isDateInYesterday(lastEventTime) {
-            return "Last synced yesterday at \(Self.syncTimeFormatter.string(from: lastEventTime))"
+            return "Last synced yesterday at \(SparkDateFormatting.shortTime(lastEventTime))"
         }
         return "Last synced \(Self.syncDateFormatter.string(from: lastEventTime))"
     }
@@ -756,7 +756,7 @@ struct HealthExploreView: View {
     }
 
     private func timeLabel(_ date: Date) -> String {
-        Self.timeFormatter.string(from: date)
+        SparkDateFormatting.shortTime(date)
     }
 
     private struct WorkoutStat: Identifiable {
@@ -792,19 +792,6 @@ struct HealthExploreView: View {
         }
         .frame(minWidth: 42, alignment: .trailing)
     }
-
-    private static let timeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
-        return formatter
-    }()
-
-    private static let syncTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        return formatter
-    }()
 
     private static let syncDateFormatter: DateFormatter = {
         let formatter = DateFormatter()

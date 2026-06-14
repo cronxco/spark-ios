@@ -156,7 +156,7 @@ struct IntegrationDetailView: View {
                 }
                 if let last = detail.lastSyncAt {
                     InspectorRow("Last sync", isMono: true) {
-                        Text(Self.fullTimeFormatter.string(from: last))
+                        Text(SparkDateFormatting.fullDateTime(last))
                     }
                 }
                 if let instance = detail.integration.instanceType {
@@ -173,7 +173,7 @@ struct IntegrationDetailView: View {
                     Text(event.action)
                         .font(SparkTypography.bodySmall)
                     if let time = event.time {
-                        Text(Self.shortTimeFormatter.string(from: time))
+                        Text(SparkDateFormatting.compactDateTime(time))
                             .font(SparkTypography.monoSmall)
                             .foregroundStyle(.secondary)
                     }
@@ -202,17 +202,6 @@ struct IntegrationDetailView: View {
         return formatter.localizedString(for: date, relativeTo: .now)
     }
 
-    private static let shortTimeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "d MMM, HH:mm"
-        return f
-    }()
-
-    private static let fullTimeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd  HH:mm"
-        return f
-    }()
 }
 
 private extension DetailLoadState where T == IntegrationDetail {

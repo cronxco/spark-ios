@@ -50,8 +50,12 @@ public struct DomainChip: View {
         .font(SparkTypography.captionStrong)
         .padding(.horizontal, SparkSpacing.md)
         .padding(.vertical, SparkSpacing.sm)
-        .foregroundStyle(isSelected ? Color.white : domain.tint)
+        .foregroundStyle(isSelected ? selectedForeground : domain.tint)
         .sparkGlass(.capsule, tint: isSelected ? domain.tint : domain.tint.opacity(0.15))
+    }
+
+    private var selectedForeground: Color {
+        domain == .money ? .sparkOnAccent : .white
     }
 }
 

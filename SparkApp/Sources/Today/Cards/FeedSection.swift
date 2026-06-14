@@ -128,8 +128,6 @@ private enum TimelineFilter: CaseIterable {
 private struct TimelineFilterPill: View {
     @Binding var filter: TimelineFilter
 
-    private static let darkInk = Color(red: 0.086, green: 0.086, blue: 0.086)
-
     private let items: [(TimelineFilter, String)] = [
         (.home, "house.fill"),
         (.money, "sterlingsign"),
@@ -147,7 +145,7 @@ private struct TimelineFilterPill: View {
                     Image(systemName: icon)
                         .font(.system(size: 13, weight: .semibold))
                         .frame(width: 32, height: 28)
-                        .foregroundStyle(isActive ? Self.darkInk : Color.secondary)
+                        .foregroundStyle(isActive ? Color.sparkOnAccent : Color.secondary)
                         .background(isActive ? Color.sparkAccent : Color.clear, in: .capsule)
                 }
                 .buttonStyle(.plain)
@@ -640,9 +638,7 @@ private func formattedValue(_ v: String, unit: String?) -> String {
 }
 
 private func shortTime(_ date: Date) -> String {
-    let f = DateFormatter()
-    f.dateFormat = "HH:mm"
-    return f.string(from: date)
+    SparkDateFormatting.shortTime(date)
 }
 
 private func domainIcon(_ domain: String) -> String {

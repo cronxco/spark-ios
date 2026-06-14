@@ -48,6 +48,7 @@ struct SparkApp: App {
                 switch phase {
                 case .active:
                     await model.reverbConnect()
+                    await model.checkForTimezoneChange()
                 case .background, .inactive:
                     await model.reverbDisconnect()
                 @unknown default:

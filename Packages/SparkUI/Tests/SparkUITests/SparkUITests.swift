@@ -3,6 +3,39 @@ import SwiftUI
 import SparkKit
 @testable import SparkUI
 
+@Suite("Spark date formatting")
+struct SparkDateFormattingTests {
+    @Test("short time respects 12-hour and 24-hour locale preferences")
+    func shortTimeRespectsLocale() throws {
+        let date = try #require(Self.date)
+        let timeZone = try #require(TimeZone(secondsFromGMT: 0))
+
+        #expect(
+            SparkDateFormatting.shortTime(
+                date,
+                locale: Locale(identifier: "en_US"),
+                timeZone: timeZone
+            ).contains("1:05")
+        )
+        #expect(
+            SparkDateFormatting.shortTime(
+                date,
+                locale: Locale(identifier: "en_US"),
+                timeZone: timeZone
+            ).localizedCaseInsensitiveContains("PM")
+        )
+        #expect(
+            SparkDateFormatting.shortTime(
+                date,
+                locale: Locale(identifier: "en_GB"),
+                timeZone: timeZone
+            ) == "13:05"
+        )
+    }
+
+    private static let date = ISO8601DateFormatter().date(from: "2026-06-14T13:05:00Z")
+}
+
 @Suite("Spark app background phase")
 struct SparkAppBackgroundPhaseTests {
     @Test("auto light mode resolves expected day phases")
