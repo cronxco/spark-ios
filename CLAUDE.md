@@ -118,7 +118,7 @@ tuist generate
 xcodebuild build \
   -workspace Spark.xcworkspace \
   -scheme SparkApp \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4.1' \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=27.0' \
   -configuration Debug
 
 # Build from Xcode
@@ -131,11 +131,11 @@ xcodebuild build \
 # SparkKit unit tests (SPM layer, fastest)
 cd Packages/SparkKit && swift test
 
-# Full app tests (requires iOS 26 simulator)
+# Full app tests (requires iOS 27 simulator)
 xcodebuild \
   -workspace Spark.xcworkspace \
   -scheme SparkApp \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4.1' \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=27.0' \
   -skipPackagePluginValidation \
   -skipMacroValidation \
   test
@@ -154,7 +154,7 @@ swiftformat --lint .
 xcodebuild \
   -workspace Spark.xcworkspace \
   -scheme SparkApp \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4.1' \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=27.0' \
   build \
   -skipPackagePluginValidation
 ```
@@ -292,7 +292,7 @@ Tests cover:
 xcodebuild \
   -workspace Spark.xcworkspace \
   -scheme SparkApp \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4.1' \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=27.0' \
   test
 ```
 
@@ -309,7 +309,7 @@ Test every family × size class × light/dark × extreme Dynamic Type before eac
 - Runs on every push to `main` / `dev` and every PR
 - Caches DerivedData + SPM packages
 - Runs `swift test` on SparkKit
-- Runs `xcodebuild test` on SparkApp (iPhone 17 Pro, iOS 26.4.1 simulator)
+- Runs `xcodebuild test` on SparkApp (iPhone 17 Pro, iOS 27.0 simulator)
 - Uploads xcresult on failure
 
 ## Version & Release

@@ -12,5 +12,10 @@ let package = Package(
             dependencies: ["SparkKit"],
             path: "Sources/SparkIntelligence"
         ),
+        .testTarget(
+            name: "SparkIntelligenceTests",
+            dependencies: ["SparkIntelligence", "SparkKit"],
+            path: "Tests/SparkIntelligenceTests"
+        ),
     ]
 )
