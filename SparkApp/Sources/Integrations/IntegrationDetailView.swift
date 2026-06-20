@@ -28,6 +28,7 @@ struct IntegrationDetailView: View {
             .padding(SparkSpacing.lg)
         }
         .sparkAppBackground()
+        .sparkScrollingNavigationBar()
         .navigationTitle(viewModel?.state.loadedTitle ?? "Integration")
         .navigationBarTitleDisplayMode(.inline)
         .sparkSubViewToolbar(

@@ -65,6 +65,7 @@ struct BlockDetailView: View {
             .padding(.bottom, SparkSpacing.xl)
         }
         .sparkAppBackground()
+        .sparkScrollingNavigationBar()
         .navigationTitle("Block")
         .navigationBarTitleDisplayMode(.inline)
         .sparkSubViewToolbar(

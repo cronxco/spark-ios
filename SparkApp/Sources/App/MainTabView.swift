@@ -16,6 +16,7 @@ struct MainTabView: View {
         ZStack {
             if selection == .day {
                 SparkResolvedAppBackground()
+                    .ignoresSafeArea()
             }
 
             tabs
@@ -27,7 +28,6 @@ struct MainTabView: View {
                 }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .ignoresSafeArea()
         .environment(\.tabAccessoryCoordinator, tabAccessoryCoordinator)
         .onChange(of: model.pendingRoute) { _, new in
             guard new != nil else { return }

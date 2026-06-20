@@ -197,6 +197,7 @@ struct MetricDetailView: View {
             .padding(SparkSpacing.lg)
         }
         .sparkAppBackground()
+        .sparkScrollingNavigationBar()
         .navigationTitle("Metric")
         .navigationBarTitleDisplayMode(.inline)
         .sparkSubViewToolbar(

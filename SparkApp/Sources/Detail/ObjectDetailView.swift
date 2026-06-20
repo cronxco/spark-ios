@@ -60,6 +60,7 @@ struct ObjectDetailView: View {
             .padding(.bottom, SparkSpacing.xl)
         }
         .sparkAppBackground()
+        .sparkScrollingNavigationBar()
         .navigationTitle("Object")
         .navigationBarTitleDisplayMode(.inline)
         .sparkSubViewToolbar(
@@ -67,6 +68,9 @@ struct ObjectDetailView: View {
             rawTitle: "Raw object",
             rawPayload: objectRawPayload,
             feedbackContext: objectFeedbackContext,
+            tagEntity: .object,
+            tagEntityID: objectId,
+            tags: objectTags,
             refresh: { await viewModel?.load() }
         )
         .task(id: objectId) {
@@ -75,6 +79,11 @@ struct ObjectDetailView: View {
             }
             await viewModel?.load()
         }
+    }
+
+    private var objectTags: [EventTag] {
+        guard case .loaded(let detail) = viewModel?.state else { return [] }
+        return detail.tags
     }
 
     private var objectShareItems: [Any] {
@@ -116,7 +125,20 @@ struct ObjectDetailView: View {
         if !detail.tags.isEmpty {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                 SectionLabel("Tags")
-                TagChipRow(detail.tags)
+                FlowLayout(spacing: SparkSpacing.xs + 2) {
+                    ForEach(detail.tags) { tag in
+                        NavigationLink(
+                            value: DetailRoute.tag(
+                                id: tag.serverID,
+                                name: tag.name,
+                                type: tag.type
+                            )
+                        ) {
+                            TagChip(tag)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
         }
 

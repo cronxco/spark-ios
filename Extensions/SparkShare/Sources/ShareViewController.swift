@@ -24,9 +24,7 @@ final class ShareViewController: UIViewController {
         let providers = items.flatMap { $0.attachments ?? [] }
 
         if let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.url.identifier) }) {
-            provider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { [weak self] item, _ in
-                // Cast to Sendable type before crossing actor boundary.
-                let url: URL? = item as? URL
+            _ = provider.loadObject(ofClass: URL.self) { [weak self] url, _ in
                 Task { @MainActor [weak self] in
                     if let url { self?.shareURL(url) } else { self?.complete() }
                 }
@@ -35,13 +33,11 @@ final class ShareViewController: UIViewController {
         }
 
         if let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.image.identifier) }) {
-            provider.loadItem(forTypeIdentifier: UTType.image.identifier, options: nil) { [weak self] item, _ in
-                let fileURL: URL? = item as? URL
-                // UIImage → convert to Data (Sendable) before crossing boundary.
-                let imageData: Data? = (item as? UIImage)?.jpegData(compressionQuality: 0.8)
+            provider.loadObject(ofClass: UIImage.self as NSItemProviderReading.Type) { [weak self] item, _ in
+                let image = item as? UIImage
+                let imageData = image?.jpegData(compressionQuality: 0.8)
                 Task { @MainActor [weak self] in
-                    if let fileURL { self?.shareImage(at: fileURL) }
-                    else if let imageData { self?.shareImageData(imageData) }
+                    if let imageData { self?.shareImageData(imageData) }
                     else { self?.complete() }
                 }
             }
@@ -49,8 +45,7 @@ final class ShareViewController: UIViewController {
         }
 
         if let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) }) {
-            provider.loadItem(forTypeIdentifier: UTType.plainText.identifier, options: nil) { [weak self] item, _ in
-                let text: String? = item as? String
+            _ = provider.loadObject(ofClass: String.self) { [weak self] text, _ in
                 Task { @MainActor [weak self] in
                     if let text { self?.shareText(text) } else { self?.complete() }
                 }

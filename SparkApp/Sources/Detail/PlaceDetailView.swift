@@ -60,6 +60,7 @@ struct PlaceDetailView: View {
             .padding(SparkSpacing.lg)
         }
         .sparkAppBackground()
+        .sparkScrollingNavigationBar()
         .navigationTitle("Place")
         .navigationBarTitleDisplayMode(.inline)
         .sparkSubViewToolbar(

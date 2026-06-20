@@ -26,6 +26,7 @@ struct HealthExploreView: View {
                 .padding(.bottom, SparkSpacing.xl)
             }
             .sparkAppBackground()
+            .sparkScrollingNavigationBar()
             .sparkMainNavigationTitle("Health")
             .sparkDetailDestinations()
             .refreshable {

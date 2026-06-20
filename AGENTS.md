@@ -6,11 +6,11 @@ Spark is a Tuist-generated native Swift iOS workspace. `Project.swift` defines t
 
 ## Build, Test, and Development Commands
 
-- `tuist generate` regenerates `Spark.xcworkspace` from `Project.swift`.
+- `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer tuist generate` regenerates `Spark.xcworkspace` from `Project.swift`.
 - `open Spark.xcworkspace` opens the generated workspace for Xcode development.
-- `xcodebuild build -workspace Spark.xcworkspace -scheme SparkApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4.1' -configuration Debug` builds the main app.
-- `cd Packages/SparkKit && swift test` runs the fastest package-level unit tests.
-- `xcodebuild -workspace Spark.xcworkspace -scheme SparkApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4.1' -skipPackagePluginValidation -skipMacroValidation test` runs the app test scheme.
+- `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild build -workspace Spark.xcworkspace -scheme SparkApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max,OS=27.0' -configuration Debug` builds the main app.
+- `cd Packages/SparkKit && DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer swift test` runs the fastest package-level unit tests.
+- `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild -workspace Spark.xcworkspace -scheme SparkApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max,OS=27.0' -skipPackagePluginValidation -skipMacroValidation test` runs the app test scheme.
 
 ## Coding Style & Naming Conventions
 

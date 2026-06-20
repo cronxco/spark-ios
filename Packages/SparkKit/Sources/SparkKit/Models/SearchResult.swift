@@ -153,6 +153,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
     }
 
     public struct TagHit: Codable, Sendable, Hashable {
+        public let id: String?
         public let name: String
         public let type: String?
         public let title: String
@@ -164,8 +165,9 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
 
         public init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decodeIfPresent(String.self, forKey: .id)
             name = try container.decodeIfPresent(String.self, forKey: .name)
-                ?? container.decodeIfPresent(String.self, forKey: .id)
+                ?? id
                 ?? container.decode(String.self, forKey: .title)
             type = try container.decodeIfPresent(String.self, forKey: .type)
             title = try container.decodeIfPresent(String.self, forKey: .title) ?? name
@@ -182,6 +184,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
 
         public func encode(to encoder: Encoder) throws {
             var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encodeIfPresent(id, forKey: .id)
             try container.encode(name, forKey: .name)
             try container.encodeIfPresent(type, forKey: .type)
             try container.encode(title, forKey: .title)

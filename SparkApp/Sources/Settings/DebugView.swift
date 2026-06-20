@@ -32,6 +32,10 @@ struct DebugView: View {
     // Notification permission
     @State private var notifStatus: UNAuthorizationStatus = .notDetermined
 
+    // Timezone prompt
+    @State private var timezoneEndpointState: TimezoneEndpointDebugState = .notLoaded
+    @State private var isRefreshingTimezone = false
+
     var body: some View {
         List {
             cacheSection
@@ -40,6 +44,7 @@ struct DebugView: View {
             environmentSection
             syncCursorSection
             notificationPermissionSection
+            timezoneSection
             widgetSection
             loggingSection
 
@@ -253,6 +258,57 @@ struct DebugView: View {
         }
     }
 
+    private var timezoneSection: some View {
+        Section("Timezone Prompt") {
+            debugValue("Session", value: String(describing: appModel.session))
+            debugValue("Profile", value: appModel.profile?.timezone ?? "nil")
+            debugValue("Device", value: TimeZone.autoupdatingCurrent.identifier)
+            debugValue("Cached server value", value: appModel.timezoneState?.timezone ?? "nil")
+            debugValue("Prompt in model", value: timezonePromptDescription)
+            debugValue("Stored rejection", value: rejectedTimezonePair ?? "nil")
+
+            switch timezoneEndpointState {
+            case .notLoaded:
+                debugValue("Direct endpoint", value: "Not loaded")
+            case .loaded(let state):
+                debugValue("Direct endpoint", value: state.timezone)
+                debugValue("Source", value: state.source)
+                debugValue(
+                    "Acknowledged",
+                    value: state.acknowledgedAt?.formatted(.iso8601) ?? "nil"
+                )
+                debugValue("Endpoint device ID", value: state.deviceId ?? "nil")
+                debugValue(
+                    "Policy result",
+                    value: timezonePolicyDescription(for: state.timezone)
+                )
+            case .failed(let message):
+                debugValue("Direct endpoint error", value: message, color: .sparkError)
+            }
+
+            Button(isRefreshingTimezone ? "Checking…" : "Refresh diagnostics") {
+                Task { await refreshTimezoneDiagnostics() }
+            }
+            .disabled(isRefreshingTimezone)
+
+            Button("Force prompt check") {
+                Task {
+                    await appModel.reconsiderTimezoneChange()
+                    await refreshTimezoneDiagnostics()
+                    statusMessage = appModel.timezonePrompt == nil
+                        ? "Forced timezone check completed without creating a prompt."
+                        : "Timezone prompt created."
+                }
+            }
+
+            Button("Clear stored rejection", role: .destructive) {
+                UserDefaults.sparkAppGroup.removeObject(forKey: "spark.timezone.rejectedPair")
+                statusMessage = "Stored timezone rejection cleared."
+            }
+            .disabled(rejectedTimezonePair == nil)
+        }
+    }
+
     private var widgetSection: some View {
         Section("Widgets") {
             Button("Reload all widget timelines") {
@@ -314,12 +370,22 @@ struct DebugView: View {
         }
     }
 
+    private var rejectedTimezonePair: String? {
+        UserDefaults.sparkAppGroup.string(forKey: "spark.timezone.rejectedPair")
+    }
+
+    private var timezonePromptDescription: String {
+        guard let prompt = appModel.timezonePrompt else { return "nil" }
+        return "\(prompt.acknowledgedTimezone) → \(prompt.deviceTimezone)"
+    }
+
     // MARK: - Actions
 
     private func loadAll() async {
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await refreshWS() }
             group.addTask { await refreshNotifStatus() }
+            group.addTask { await refreshTimezoneDiagnostics() }
             group.addTask { await MainActor.run { loadSyncCursors() } }
         }
     }
@@ -333,6 +399,20 @@ struct DebugView: View {
     private func refreshNotifStatus() async {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         notifStatus = settings.authorizationStatus
+    }
+
+    private func refreshTimezoneDiagnostics() async {
+        guard !isRefreshingTimezone else { return }
+        isRefreshingTimezone = true
+        defer { isRefreshingTimezone = false }
+
+        do {
+            timezoneEndpointState = .loaded(
+                try await appModel.apiClient.request(CheckInsEndpoint.timezone())
+            )
+        } catch {
+            timezoneEndpointState = .failed(debugErrorMessage(error))
+        }
     }
 
     private func loadSyncCursors() {
@@ -383,6 +463,37 @@ struct DebugView: View {
     private func debugErrorMessage(_ error: Error) -> String {
         (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
     }
+
+    private func timezonePolicyDescription(for acknowledgedTimezone: String) -> String {
+        let shouldPrompt = TimezoneChangePolicy.shouldPrompt(
+            acknowledgedTimezone: acknowledgedTimezone,
+            deviceTimezone: TimeZone.autoupdatingCurrent.identifier,
+            rejectedKey: rejectedTimezonePair
+        )
+        return shouldPrompt ? "Should prompt" : "Suppressed"
+    }
+
+    private func debugValue(
+        _ label: String,
+        value: String,
+        color: Color = .secondary
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(SparkTypography.bodySmall)
+            Text(value.replacingOccurrences(of: "\n", with: " → "))
+                .font(SparkTypography.monoSmall)
+                .foregroundStyle(color)
+                .textSelection(.enabled)
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+private enum TimezoneEndpointDebugState {
+    case notLoaded
+    case loaded(TimezoneAcknowledgement)
+    case failed(String)
 }
 
 // MARK: - Environment option

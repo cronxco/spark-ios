@@ -17,6 +17,7 @@ struct SearchView: View {
         NavigationStack(path: $path) {
             content
                 .sparkAppBackground()
+                .sparkScrollingNavigationBar()
                 .navigationTitle("Search")
                 .navigationBarTitleDisplayMode(.inline)
                 .sparkDetailDestinations()
@@ -248,7 +249,7 @@ struct SearchView: View {
         case .metric(let h): .metric(identifier: h.identifier)
         case .integration(let h): .integration(service: h.id)
         case .place(let h): .place(id: h.id)
-        case .tag(let h): .tag(name: h.name, type: h.type)
+        case .tag(let h): .tag(id: h.id, name: h.name, type: h.type)
         case .intent: nil  // Actions ride the App Intents pipeline (Phase 3).
         }
         if let route, path.last != route {

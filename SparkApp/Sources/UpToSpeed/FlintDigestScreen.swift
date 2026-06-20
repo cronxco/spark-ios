@@ -19,7 +19,7 @@ struct FlintHeaderPage: View {
         StoryScreenScaffold(label: summary?.period.map { "\($0.displayName) Digest" }) {
             VStack(alignment: .leading, spacing: SparkSpacing.lg) {
                 if let summary {
-                    if let title = summary.title {
+                    if let title = meaningfulText(summary.title) {
                         Text(title)
                             .font(SparkTypography.heroSmall)
                             .foregroundStyle(.primary)
@@ -50,6 +50,13 @@ struct FlintHeaderPage: View {
             .padding(.horizontal, SparkSpacing.md)
             .padding(.vertical, SparkSpacing.xs)
             .background(Capsule().fill(Color.primary.opacity(0.08)))
+    }
+
+    private func meaningfulText(_ text: String?) -> String? {
+        guard let text else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.contains(where: { $0.isLetter || $0.isNumber }) else { return nil }
+        return trimmed
     }
 }
 

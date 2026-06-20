@@ -97,6 +97,7 @@ struct MetricsExploreView: View {
                 .padding(.bottom, SparkSpacing.xl)
             }
             .sparkAppBackground()
+            .sparkScrollingNavigationBar()
             .sparkMainNavigationTitle("Metrics")
             .sparkDetailDestinations()
             .refreshable { await viewModel?.refresh() }

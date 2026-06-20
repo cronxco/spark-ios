@@ -3,15 +3,21 @@ import SparkUI
 import SwiftUI
 
 struct TagDetailView: View {
+    let tagID: String?
     let tagName: String
     let tagType: String?
 
     @Environment(AppModel.self) private var appModel
     @State private var results: [SearchResult] = []
+    @State private var resolvedTag: Tag?
+    @State private var nextCursor: String?
+    @State private var isLoadingMore = false
     @State private var isLoading = true
     @State private var errorMessage: String?
 
-    private var tag: EventTag { EventTag(name: tagName, type: tagType) }
+    private var tag: EventTag {
+        resolvedTag?.eventTag ?? EventTag(id: tagID, name: tagName, type: tagType)
+    }
 
     var body: some View {
         ScrollView {
@@ -24,8 +30,9 @@ struct TagDetailView: View {
             .padding(.bottom, SparkSpacing.xl)
         }
         .sparkAppBackground()
+        .sparkScrollingNavigationBar()
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: tagName) {
+        .task(id: "\(tagID ?? ""):\(tagType ?? ""):\(tagName)") {
             await load()
         }
     }
@@ -34,7 +41,7 @@ struct TagDetailView: View {
 
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-            Text(tagName)
+            Text(tag.name)
                 .font(SparkFonts.display(.largeTitle, weight: .bold))
                 .foregroundStyle(.primary)
                 .accessibilityAddTraits(.isHeader)
@@ -49,8 +56,9 @@ struct TagDetailView: View {
                         .sparkGlass(.capsule, tint: tag.tagTint.opacity(0.15))
                 }
 
-                if !isLoading, !results.isEmpty {
-                    Text("\(results.count) item\(results.count == 1 ? "" : "s")")
+                if !isLoading {
+                    let count = resolvedTag?.totalCount ?? results.count
+                    Text("\(count) item\(count == 1 ? "" : "s")")
                         .font(SparkTypography.captionStrong)
                         .foregroundStyle(.secondary)
                 }
@@ -77,7 +85,7 @@ struct TagDetailView: View {
             EmptyState(
                 systemImage: "tag",
                 title: "No items tagged",
-                message: "Nothing tagged \"\(tagName)\" yet."
+                message: "Nothing tagged \"\(tag.name)\" yet."
             )
         } else {
             LazyVStack(spacing: SparkSpacing.sm) {
@@ -90,6 +98,15 @@ struct TagDetailView: View {
                     } else {
                         SearchResultRow(result: result)
                     }
+                }
+
+                if nextCursor != nil {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, SparkSpacing.md)
+                        .task {
+                            await loadMore()
+                        }
                 }
             }
         }
@@ -105,7 +122,7 @@ struct TagDetailView: View {
         case .metric(let h): .metric(identifier: h.identifier)
         case .integration(let h): .integration(service: h.id)
         case .place(let h): .place(id: h.id)
-        case .tag(let h): .tag(name: h.name, type: h.type)
+        case .tag(let h): .tag(id: h.id, name: h.name, type: h.type)
         case .intent: nil
         }
     }
@@ -114,10 +131,11 @@ struct TagDetailView: View {
         isLoading = true
         errorMessage = nil
         do {
-            let response = try await appModel.apiClient.request(
-                SearchEndpoint.query(text: tagName)
-            )
-            results = response.results.filter(\.isTagDetailItem)
+            let id = try await resolveTagID()
+            let response = try await appModel.apiClient.request(TagsEndpoint.detail(id: id))
+            resolvedTag = response.tag
+            results = response.data
+            nextCursor = response.nextCursor
         } catch APIError.notModified {
             // No change — keep existing results
         } catch {
@@ -126,6 +144,45 @@ struct TagDetailView: View {
                 ?? "Couldn't load items for this tag."
         }
         isLoading = false
+    }
+
+    private func loadMore() async {
+        guard let id = resolvedTag?.id ?? tagID,
+              let cursor = nextCursor,
+              !isLoadingMore
+        else { return }
+
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+        do {
+            let response = try await appModel.apiClient.request(
+                TagsEndpoint.detail(id: id, cursor: cursor)
+            )
+            results.append(contentsOf: response.data.filter { item in
+                !results.contains(where: { $0.id == item.id })
+            })
+            nextCursor = response.nextCursor
+        } catch {
+            SparkObservability.captureHandled(error)
+        }
+    }
+
+    private func resolveTagID() async throws -> String {
+        if let tagID {
+            return tagID
+        }
+
+        let response = try await appModel.apiClient.request(
+            TagsEndpoint.suggest(query: tagName, limit: 20)
+        )
+        guard let match = response.data.first(where: {
+            $0.name.caseInsensitiveCompare(tagName) == .orderedSame
+                && (tagType == nil || $0.type == tagType)
+        }) else {
+            throw TagDetailError.notFound
+        }
+        resolvedTag = match
+        return match.id
     }
 }
 
@@ -197,19 +254,31 @@ struct TagPreviewCard: View {
         .sparkAppBackground()
         .task(id: tag.name) {
             guard !loaded else { return }
-            if let response = try? await appModel.apiClient.request(
-                SearchEndpoint.query(text: tag.name)
-            ) {
-                previewResults = response.results.filter(\.isTagDetailItem)
+            var resolvedID = tag.serverID
+            if resolvedID == nil,
+               let suggestions = try? await appModel.apiClient.request(
+                   TagsEndpoint.suggest(query: tag.name, limit: 10)
+               ) {
+                resolvedID = suggestions.data.first(where: {
+                    $0.name.caseInsensitiveCompare(tag.name) == .orderedSame
+                        && (tag.type == nil || $0.type == tag.type)
+                })?.id
+            }
+            if let resolvedID,
+               let response = try? await appModel.apiClient.request(
+                   TagsEndpoint.detail(id: resolvedID, limit: 4)
+               ) {
+                previewResults = response.data
             }
             loaded = true
         }
     }
 }
 
-private extension SearchResult {
-    var isTagDetailItem: Bool {
-        if case .tag = self { return false }
-        return true
+private enum TagDetailError: LocalizedError {
+    case notFound
+
+    var errorDescription: String? {
+        "This tag could not be found."
     }
 }

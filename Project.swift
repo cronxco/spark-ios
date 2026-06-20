@@ -9,7 +9,9 @@ let bundleIdBase = "co.cronx.sparkapp"
 let appGroup = "group.co.cronx.sparkapp"
 let keychainGroup = "\(appIdentifierPrefix)\(bundleIdBase)"
 let associatedDomain = "applinks:spark.cronx.co"
-let iosDeploymentTarget: DeploymentTargets = .iOS("26.4")
+let appVersion = "0.1.0"
+let buildVersion = "1"
+let iosDeploymentTarget: DeploymentTargets = .iOS("27.0")
 let watchDeploymentTarget: DeploymentTargets = .watchOS("26.0")
 
 // MARK: - Entitlements builders
@@ -38,8 +40,8 @@ func extensionEntitlements() -> Entitlements {
 func appInfoPlist() -> InfoPlist {
     .extendingDefault(with: [
         "CFBundleDisplayName": "Spark",
-        "CFBundleShortVersionString": "0.1.0",
-        "CFBundleVersion": "1",
+        "CFBundleShortVersionString": .string(appVersion),
+        "CFBundleVersion": .string(buildVersion),
         "UILaunchScreen": [:],
         "UISupportedInterfaceOrientations": [
             "UIInterfaceOrientationPortrait",
@@ -77,37 +79,50 @@ func appInfoPlist() -> InfoPlist {
 }
 
 func widgetInfoPlist() -> InfoPlist {
-    .extendingDefault(with: [
-        "CFBundleDisplayName": "Spark Widgets",
-        "NSExtension": [
-            "NSExtensionPointIdentifier": "com.apple.widgetkit-extension",
-        ],
+    extensionInfoPlist(displayName: "Spark Widgets", extensionDictionary: [
+        "NSExtensionPointIdentifier": "com.apple.widgetkit-extension",
     ])
 }
 
+func extensionInfoPlist(
+    displayName: String,
+    extensionDictionary: [String: Plist.Value],
+    additionalValues: [String: Plist.Value] = [:]
+) -> InfoPlist {
+    var values: [String: Plist.Value] = [
+        "CFBundleDisplayName": .string(displayName),
+        "CFBundleShortVersionString": .string(appVersion),
+        "CFBundleVersion": .string(buildVersion),
+        "NSExtension": .dictionary(extensionDictionary),
+    ]
+    for (key, value) in additionalValues {
+        values[key] = value
+    }
+    return .extendingDefault(with: values)
+}
+
 func controlsInfoPlist() -> InfoPlist {
-    .extendingDefault(with: [
-        "CFBundleDisplayName": "Spark Controls",
-        "NSExtension": [
-            "NSExtensionPointIdentifier": "com.apple.widgetkit-extension",
-        ],
+    extensionInfoPlist(displayName: "Spark Controls", extensionDictionary: [
+        "NSExtensionPointIdentifier": "com.apple.widgetkit-extension",
     ])
 }
 
 func liveActivitiesInfoPlist() -> InfoPlist {
-    .extendingDefault(with: [
-        "CFBundleDisplayName": "Spark Live Activities",
-        "NSSupportsLiveActivities": true,
-        "NSExtension": [
+    extensionInfoPlist(
+        displayName: "Spark Live Activities",
+        extensionDictionary: [
             "NSExtensionPointIdentifier": "com.apple.widgetkit-extension",
         ],
-    ])
+        additionalValues: [
+            "NSSupportsLiveActivities": true,
+        ]
+    )
 }
 
 func shareInfoPlist() -> InfoPlist {
-    .extendingDefault(with: [
-        "CFBundleDisplayName": "Share to Spark",
-        "NSExtension": [
+    extensionInfoPlist(
+        displayName: "Share to Spark",
+        extensionDictionary: [
             "NSExtensionPointIdentifier": "com.apple.share-services",
             "NSExtensionAttributes": [
                 "NSExtensionActivationRule": [
@@ -119,28 +134,24 @@ func shareInfoPlist() -> InfoPlist {
             "NSExtensionPrincipalClass":
                 "$(PRODUCT_MODULE_NAME).ShareViewController",
         ],
-        "NSCameraUsageDescription":
-            "Spark can attach photos you share to bookmarks and check-ins.",
-    ])
+        additionalValues: [
+            "NSCameraUsageDescription":
+                "Spark can attach photos you share to bookmarks and check-ins.",
+        ]
+    )
 }
 
 func intentsInfoPlist() -> InfoPlist {
-    .extendingDefault(with: [
-        "CFBundleDisplayName": "Spark Intents",
-        "NSExtension": [
-            "NSExtensionPointIdentifier": "com.apple.appintents-extension",
-        ],
+    extensionInfoPlist(displayName: "Spark Intents", extensionDictionary: [
+        "NSExtensionPointIdentifier": "com.apple.appintents-extension",
     ])
 }
 
 func notificationServiceInfoPlist() -> InfoPlist {
-    .extendingDefault(with: [
-        "CFBundleDisplayName": "Spark Notification Service",
-        "NSExtension": [
-            "NSExtensionPointIdentifier": "com.apple.usernotifications.service",
-            "NSExtensionPrincipalClass":
-                "$(PRODUCT_MODULE_NAME).NotificationService",
-        ],
+    extensionInfoPlist(displayName: "Spark Notification Service", extensionDictionary: [
+        "NSExtensionPointIdentifier": "com.apple.usernotifications.service",
+        "NSExtensionPrincipalClass":
+            "$(PRODUCT_MODULE_NAME).NotificationService",
     ])
 }
 
@@ -153,11 +164,8 @@ func watchInfoPlist() -> InfoPlist {
 }
 
 func watchWidgetsInfoPlist() -> InfoPlist {
-    .extendingDefault(with: [
-        "CFBundleDisplayName": "Spark Watch Widgets",
-        "NSExtension": [
-            "NSExtensionPointIdentifier": "com.apple.widgetkit-extension",
-        ],
+    extensionInfoPlist(displayName: "Spark Watch Widgets", extensionDictionary: [
+        "NSExtensionPointIdentifier": "com.apple.widgetkit-extension",
     ])
 }
 
@@ -171,6 +179,9 @@ let baseSettings: SettingsDictionary = [
     "ENABLE_USER_SCRIPT_SANDBOXING": "YES",
     "CODE_SIGN_STYLE": "Automatic",
     "DEVELOPMENT_TEAM": .string(developmentTeam),
+    "MARKETING_VERSION": .string(appVersion),
+    "CURRENT_PROJECT_VERSION": .string(buildVersion),
+    "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "",
 ]
 
 let debugSettings: SettingsDictionary = [

@@ -4,7 +4,7 @@ The native iOS companion app for [Spark](https://spark.cronx.co). Phase 1 delive
 
 ## Requirements
 
-- Xcode 26.0 (or Xcode 26 beta at `/Applications/Xcode-beta.app`)
+- Xcode 27.0 beta at `/Applications/Xcode-beta.app`
 - macOS 15+
 - [tuist](https://github.com/tuist/tuist) 4.x — `brew install tuist`
 - A Sanctum-backed Spark backend running on `spark.cronx.co` (or a LAN address you expose via App Group defaults — see *Environment overrides* below)
@@ -14,10 +14,10 @@ The native iOS companion app for [Spark](https://spark.cronx.co). Phase 1 delive
 ```bash
 git clone git@github.com:willscottuk/spark-ios.git
 cd spark-ios
-tuist generate
+DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer tuist generate
 ```
 
-`tuist generate` creates `Spark.xcworkspace`. Open it in Xcode 26.
+`tuist generate` creates `Spark.xcworkspace`. Open it in Xcode 27.
 
 ### Provisioning
 
@@ -42,19 +42,19 @@ Erase the keys to restore production.
 
 ```bash
 # Tests — SparkKit SPM layer
-cd Packages/SparkKit && swift test
+cd Packages/SparkKit && DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer swift test
 
-# Tests — full app (requires iOS 26 simulator)
-xcodebuild \
+# Tests — full app (requires iOS 27 simulator)
+DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild \
     -workspace Spark.xcworkspace \
     -scheme SparkApp \
-    -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4.1' \
+    -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max,OS=27.0' \
     -skipPackagePluginValidation \
     -skipMacroValidation \
     test
 ```
 
-In Xcode: select the `SparkApp` scheme + an iOS 26 simulator + ⌘R.
+In Xcode: select the `SparkApp` scheme + the iPhone 17 Pro Max iOS 27.0 simulator + ⌘R.
 
 ## Layout
 

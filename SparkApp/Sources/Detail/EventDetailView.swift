@@ -48,12 +48,16 @@ struct EventDetailView: View {
             .padding(.bottom, SparkSpacing.xl)
         }
         .sparkAppBackground()
+        .sparkScrollingNavigationBar()
         .navigationBarTitleDisplayMode(.inline)
         .sparkSubViewToolbar(
             shareItems: eventShareItems,
             rawTitle: "Raw event",
             rawPayload: eventRawPayload,
             feedbackContext: eventFeedbackContext,
+            tagEntity: .event,
+            tagEntityID: eventId,
+            tags: eventTags,
             refresh: { await viewModel?.retry() }
         )
         .task(id: eventId) {
@@ -62,6 +66,11 @@ struct EventDetailView: View {
             }
             await viewModel?.load()
         }
+    }
+
+    private var eventTags: [EventTag] {
+        guard case .loaded(let detail) = viewModel?.state else { return [] }
+        return detail.tags
     }
 
     @ViewBuilder
@@ -75,7 +84,7 @@ struct EventDetailView: View {
         if !detail.tags.isEmpty {
             FlowLayout(spacing: SparkSpacing.xs + 2) {
                 ForEach(detail.tags) { tag in
-                    let route = DetailRoute.tag(name: tag.name, type: tag.type)
+                    let route = DetailRoute.tag(id: tag.serverID, name: tag.name, type: tag.type)
                     NavigationLink(value: route) {
                         TagChip(tag)
                     }

@@ -193,22 +193,35 @@ final class UpToSpeedViewModel {
         UpToSpeedVisibility(now: .now, calendar: .current).visibleUnreadItems(from: items)
     }
 
-    private func expandFlintItem(
+    func expandFlintItem(
         item: UpToSpeedItem,
         summary: UpToSpeedFlintDigestSummary,
         digest: FlintDigest?
     ) -> [UpToSpeedScreen] {
-        // Parse summary into sections; first goes on the header card, rest become paragraph pages
         let sections = parseSections(summary.summary ?? "")
-        var pages: [UpToSpeedScreen] = [.flintHeader(item, firstSection: sections.first)]
+        var pages: [UpToSpeedScreen] = []
+
+        if meaningfulText(summary.title) != nil
+            || sections.first != nil
+            || summary.blockCount > 0
+            || summary.unansweredQuestionCount > 0 {
+            pages.append(.flintHeader(item, firstSection: sections.first))
+        }
 
         for (i, section) in sections.dropFirst().enumerated() {
             pages.append(.flintParagraph(item, text: section, index: i + 1))
         }
 
         if let digest {
-            let insights = digest.blocks.filter { !$0.isQuestion && $0.blockType != "flint_editorial_note" }
-            let questions = digest.blocks.filter { $0.isQuestion }
+            let insights = digest.blocks.filter {
+                !$0.isQuestion
+                    && $0.blockType != "flint_editorial_note"
+                    && (meaningfulText($0.title) != nil || meaningfulText($0.content) != nil)
+            }
+            let questions = digest.blocks.filter {
+                $0.isQuestion
+                    && (meaningfulText($0.question) != nil || meaningfulText($0.title) != nil)
+            }
             for block in insights { pages.append(.flintInsight(item, block)) }
             for block in questions { pages.append(.flintQuestion(item, block)) }
 
@@ -230,7 +243,7 @@ final class UpToSpeedViewModel {
     private func parseSections(_ text: String) -> [String] {
         let chunks = text.components(separatedBy: "\n\n")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+            .filter { meaningfulText($0) != nil }
 
         var sections: [String] = []
         var pending: [String] = []
@@ -253,6 +266,13 @@ final class UpToSpeedViewModel {
         let letters = chunk.filter { $0.isLetter }
         guard !letters.isEmpty else { return false }
         return letters.allSatisfy { $0.isUppercase }
+    }
+
+    private func meaningfulText(_ text: String?) -> String? {
+        guard let text else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.contains(where: { $0.isLetter || $0.isNumber }) else { return nil }
+        return trimmed
     }
 
     private func enqueueMarkRead(itemID: String, type: UpToSpeedItemType) {

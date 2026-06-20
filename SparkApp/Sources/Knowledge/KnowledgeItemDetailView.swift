@@ -35,7 +35,7 @@ struct KnowledgeItemDetailView: View {
                         if !payload.eventDetail.tags.isEmpty {
                             FlowLayout(spacing: SparkSpacing.xs + 2) {
                                 ForEach(payload.eventDetail.tags) { tag in
-                                    let route = DetailRoute.tag(name: tag.name, type: tag.type)
+                                    let route = DetailRoute.tag(id: tag.serverID, name: tag.name, type: tag.type)
                                     NavigationLink(value: route) {
                                         TagChip(tag)
                                     }
@@ -71,6 +71,7 @@ struct KnowledgeItemDetailView: View {
         }
         .ignoresSafeArea(edges: .top)
         .sparkAppBackground()
+        .sparkScrollingNavigationBar()
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
         .sparkSubViewToolbar(

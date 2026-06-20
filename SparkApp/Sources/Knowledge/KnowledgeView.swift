@@ -11,6 +11,7 @@ struct KnowledgeView: View {
     var body: some View {
         NavigationStack(path: $path) {
             content
+                .sparkScrollingNavigationBar()
                 .sparkMainNavigationTitle("Knowledge")
                 .navigationDestination(for: Event.self) { event in
                     KnowledgeItemDetailView(event: event)

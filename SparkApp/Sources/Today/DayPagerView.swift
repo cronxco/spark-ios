@@ -13,10 +13,12 @@ struct DayPagerView: View {
         @Bindable var appModel = appModel
         ZStack {
             SparkResolvedAppBackground()
+                .ignoresSafeArea()
 
             NavigationStack(path: $path) {
                 ZStack {
                     SparkResolvedAppBackground()
+                        .ignoresSafeArea()
 
                     TabView(selection: $selectedOffset) {
                         ForEach(dates) { key in
@@ -28,17 +30,14 @@ struct DayPagerView: View {
                         }
                     }
                     .tabViewStyle(.page(indexDisplayMode: .never))
-                    .ignoresSafeArea()
                 }
-                .ignoresSafeArea()
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbarBackground(.hidden, for: .navigationBar)
-                    .sparkDetailDestinations()
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
+                .sparkDetailDestinations()
             }
             .scrollContentBackground(.hidden)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .ignoresSafeArea()
         .onChange(of: appModel.pendingRoute) { _, route in
             apply(route: route)
         }
@@ -69,7 +68,7 @@ struct DayPagerView: View {
         case .account(let id):
             push(.account(id: id))
         case .tag(let name, let type):
-            push(.tag(name: name, type: type))
+            push(.tag(id: nil, name: name, type: type))
         }
         appModel.pendingRoute = nil
     }
@@ -98,7 +97,7 @@ enum DetailRoute: Hashable {
     case place(id: String)
     case integration(service: String)
     case account(id: String)
-    case tag(name: String, type: String?)
+    case tag(id: String?, name: String, type: String?)
 }
 
 private struct DayKey: Identifiable, Hashable {

@@ -4,6 +4,7 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         @Bindable var model = model
@@ -33,9 +34,11 @@ struct RootView: View {
             Button("Use New Timezone") {
                 Task { await model.acceptTimezoneChange(prompt) }
             }
+            .tint(dialogActionTint)
             Button("Keep \(prompt.acknowledgedTimezone)", role: .cancel) {
                 model.rejectTimezoneChange(prompt)
             }
+            .tint(dialogActionTint)
         } message: { prompt in
             Text(
                 "Your device is now using \(prompt.deviceTimezone). "
@@ -53,9 +56,11 @@ struct RootView: View {
             Button("Try Again") {
                 Task { await model.acceptTimezoneChange(failure.prompt) }
             }
+            .tint(dialogActionTint)
             Button("Cancel", role: .cancel) {
                 model.timezoneUpdateError = nil
             }
+            .tint(dialogActionTint)
         } message: { failure in
             Text("\(failure.message)\n\nSpark is still using \(failure.prompt.acknowledgedTimezone).")
         }
@@ -70,6 +75,10 @@ struct RootView: View {
             handle(url: url)
             return .handled
         })
+    }
+
+    private var dialogActionTint: Color {
+        colorScheme == .dark ? .spark200 : .spark700
     }
 
     private func handle(url: URL) {

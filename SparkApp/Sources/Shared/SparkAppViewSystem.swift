@@ -338,7 +338,7 @@ struct SparkMainAppToolbarModifier: ViewModifier {
         content
             .toolbar {
                 if isVisible {
-                    ToolbarItemGroup(placement: .topBarTrailing) {
+                    ToolbarItem(placement: .topBarTrailing) {
                         Button {
                             showSettings = true
                         } label: {
@@ -347,7 +347,10 @@ struct SparkMainAppToolbarModifier: ViewModifier {
                                 .foregroundStyle(hasUnhealthyIntegration ? Color.sparkError : Color.primary)
                         }
                         .accessibilityLabel("Settings")
+                    }
+                    .visibilityPriority(.low)
 
+                    ToolbarItem(placement: .topBarTrailing) {
                         Button {
                             showNotifications = true
                         } label: {
@@ -359,6 +362,7 @@ struct SparkMainAppToolbarModifier: ViewModifier {
                                 : "Notifications, \(unreadNotifications.count) unread"
                         )
                     }
+                    .visibilityPriority(.high)
                 }
             }
             .sheet(isPresented: $showSettings) {
@@ -388,6 +392,9 @@ struct SparkSubViewToolbarModifier: ViewModifier {
     let rawTitle: String
     let rawPayload: String?
     let feedbackContext: SparkFeedbackContext?
+    let tagEntity: TaggableEntity?
+    let tagEntityID: String?
+    let tags: [EventTag]
     let refresh: () async -> Void
     let reprocess: (() async -> Void)?
 
@@ -395,11 +402,12 @@ struct SparkSubViewToolbarModifier: ViewModifier {
     @State private var showShareSheet = false
     @State private var showRawSheet = false
     @State private var showFeedbackSheet = false
+    @State private var showTagPicker = false
 
     func body(content: Content) -> some View {
         content
             .toolbar {
-                ToolbarItemGroup(placement: .topBarTrailing) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showShareSheet = true
                     } label: {
@@ -408,8 +416,18 @@ struct SparkSubViewToolbarModifier: ViewModifier {
                             .foregroundStyle(Color.primary)
                     }
                     .accessibilityLabel("Share")
+                }
+                .visibilityPriority(.low)
 
+                ToolbarItem(placement: .topBarTrailing) {
                     Menu {
+                        if tagEntity != nil {
+                            Button {
+                                showTagPicker = true
+                            } label: {
+                                Label("Tags", systemImage: "tag")
+                            }
+                        }
                         if feedbackContext != nil {
                             Button {
                                 showFeedbackSheet = true
@@ -443,6 +461,7 @@ struct SparkSubViewToolbarModifier: ViewModifier {
                     }
                     .accessibilityLabel("More")
                 }
+                .visibilityPriority(.high)
             }
             .sheet(isPresented: $showShareSheet) {
                 SparkShareSheet(items: shareItems)
@@ -460,10 +479,28 @@ struct SparkSubViewToolbarModifier: ViewModifier {
                     )
                 }
             }
+            .sheet(isPresented: $showTagPicker) {
+                if let tagEntity, let tagEntityID {
+                    TagPickerSheet(
+                        entity: tagEntity,
+                        entityID: tagEntityID,
+                        initialTags: tags,
+                        onChanged: {
+                            Task { await refresh() }
+                        }
+                    )
+                    .environment(appModel)
+                }
+            }
     }
 }
 
 extension View {
+    func sparkScrollingNavigationBar() -> some View {
+        toolbarMinimizeBehavior(.onScrollDown, for: .navigationBar)
+            .toolbarMinimizationSafeAreaAdjustment(.enabled, for: .navigationBar)
+    }
+
     func sparkMainAppToolbar(isVisible: Bool = true) -> some View {
         modifier(SparkMainAppToolbarModifier(isVisible: isVisible))
     }
@@ -473,6 +510,9 @@ extension View {
         rawTitle: String = "Raw",
         rawPayload: String?,
         feedbackContext: SparkFeedbackContext? = nil,
+        tagEntity: TaggableEntity? = nil,
+        tagEntityID: String? = nil,
+        tags: [EventTag] = [],
         refresh: @escaping () async -> Void,
         reprocess: (() async -> Void)? = nil
     ) -> some View {
@@ -481,6 +521,9 @@ extension View {
             rawTitle: rawTitle,
             rawPayload: rawPayload,
             feedbackContext: feedbackContext,
+            tagEntity: tagEntity,
+            tagEntityID: tagEntityID,
+            tags: tags,
             refresh: refresh,
             reprocess: reprocess
         ))

@@ -60,6 +60,7 @@ struct TodayView: View {
             .scrollContentBackground(.hidden)
             .refreshable { await viewModel?.refresh() }
         }
+        .sparkScrollingNavigationBar()
         .sparkMainAppToolbar(isVisible: showsToolbar)
         .sheet(item: $checkInSelection) { selection in
             if let vm = viewModel {

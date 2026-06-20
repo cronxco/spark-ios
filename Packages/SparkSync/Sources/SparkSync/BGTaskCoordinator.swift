@@ -57,22 +57,47 @@ public enum BGTaskCoordinator {
 
     /// Submit a BGAppRefreshTaskRequest so the OS wakes the app in ~2 h.
     public static func scheduleAppRefresh() {
-        let request = BGAppRefreshTaskRequest(identifier: refreshTaskIdentifier)
-        request.earliestBeginDate = Date(timeIntervalSinceNow: 2 * 3600)
-        try? BGTaskScheduler.shared.submit(request)
+        submit(.appRefresh)
     }
 
     /// Submit a BGProcessingTaskRequest for nightly prefetch (power + network required).
     public static func scheduleProcessingTask() {
-        let request = BGProcessingTaskRequest(identifier: prefetchTaskIdentifier)
-        request.requiresNetworkConnectivity = true
-        request.requiresExternalPower = true
-        request.earliestBeginDate = Calendar.current.nextDate(
-            after: .now,
-            matching: DateComponents(hour: 3, minute: 0),
-            matchingPolicy: .nextTime
-        )
-        try? BGTaskScheduler.shared.submit(request)
+        submit(.processing)
+    }
+
+    private enum RequestKind: Sendable {
+        case appRefresh
+        case processing
+    }
+
+    private static func submit(_ kind: RequestKind) {
+        Task.detached {
+            let request: BGTaskRequest
+            switch kind {
+            case .appRefresh:
+                let refreshRequest = BGAppRefreshTaskRequest(identifier: refreshTaskIdentifier)
+                refreshRequest.earliestBeginDate = Date(timeIntervalSinceNow: 2 * 3600)
+                request = refreshRequest
+            case .processing:
+                let processingRequest = BGProcessingTaskRequest(identifier: prefetchTaskIdentifier)
+                processingRequest.requiresNetworkConnectivity = true
+                processingRequest.requiresExternalPower = true
+                processingRequest.earliestBeginDate = Calendar.current.nextDate(
+                    after: .now,
+                    matching: DateComponents(hour: 3, minute: 0),
+                    matchingPolicy: .nextTime
+                )
+                request = processingRequest
+            }
+
+            do {
+                try await BGTaskScheduler.shared.submitTaskRequest(request)
+            } catch {
+                logger.error(
+                    "Failed to submit background task \(request.identifier, privacy: .public): \(error, privacy: .public)"
+                )
+            }
+        }
     }
 
     // MARK: - Handlers

@@ -54,6 +54,7 @@ struct MoneyExploreView: View {
                 .padding(.bottom, SparkSpacing.xl)
             }
             .sparkAppBackground()
+            .sparkScrollingNavigationBar()
             .sparkMainNavigationTitle("Money")
             .sparkDetailDestinations()
             .refreshable {

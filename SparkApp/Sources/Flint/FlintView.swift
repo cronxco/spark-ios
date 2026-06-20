@@ -11,6 +11,7 @@ struct FlintView: View {
     var body: some View {
         NavigationStack(path: $path) {
             digestScrollView
+            .sparkScrollingNavigationBar()
             .sparkMainNavigationTitle("Flint")
             .sparkAppBackground()
             .sparkMainAppToolbar()
