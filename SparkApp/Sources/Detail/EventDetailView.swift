@@ -47,6 +47,12 @@ struct EventDetailView: View {
             .padding(.bottom, SparkSpacing.xl)
         }
         .sparkAppBackground()
+        .sparkOnscreenEntity(
+            type: "event",
+            identifier: eventId,
+            title: onscreenTitle,
+            subtitle: onscreenSubtitle
+        )
         .navigationBarTitleDisplayMode(.inline)
         .sparkSubViewToolbar(
             shareItems: eventShareItems,
@@ -61,6 +67,23 @@ struct EventDetailView: View {
             }
             await viewModel?.load()
         }
+    }
+
+    // Onscreen context advertised to Siri ("tell me more about this").
+    private var onscreenTitle: String {
+        if case .loaded(let detail) = viewModel?.state {
+            return detail.target?.title
+                ?? detail.event.displayName
+                ?? "\(detail.event.action.replacingOccurrences(of: "_", with: " ").capitalized)"
+        }
+        return "Event"
+    }
+
+    private var onscreenSubtitle: String? {
+        if case .loaded(let detail) = viewModel?.state {
+            return detail.aiSummary?.isEmpty == false ? detail.aiSummary : detail.event.service.capitalized
+        }
+        return nil
     }
 
     @ViewBuilder
