@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "SparkSync",
-    platforms: [.iOS(.v26)],
+    platforms: [.iOS(.v27)],
     products: [.library(name: "SparkSync", targets: ["SparkSync"])],
     dependencies: [.package(path: "../SparkKit")],
     targets: [

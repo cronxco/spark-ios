@@ -41,6 +41,7 @@ public struct LogCheckInIntent: AppIntent {
             notes: note
         )
         _ = try? await service.apiClient.request(CheckInsEndpoint.submit(request))
+        await IntentDonations.donate(self)
         return .result(dialog: "Check-in logged. Physical \(physical)/5, mental \(mental)/5.")
     }
 
@@ -122,6 +123,7 @@ public struct OpenTodayIntent: AppIntent {
         await MainActor.run {
             IntentService.setPendingRoute("today")
         }
+        await IntentDonations.donate(self)
         return .result()
     }
 }
@@ -131,16 +133,17 @@ public struct OpenEventIntent: AppIntent {
     public static let description = IntentDescription("Open a specific Spark event.")
     public static let openAppWhenRun: Bool = true
 
-    @Parameter(title: "Event ID")
-    public var eventID: String
+    @Parameter(title: "Event")
+    public var event: EventEntity
 
     public init() {}
-    public init(eventID: String) { self.eventID = eventID }
+    public init(event: EventEntity) { self.event = event }
 
     public func perform() async throws -> some IntentResult {
         await MainActor.run {
-            IntentService.setPendingRoute("event:\(eventID)")
+            IntentService.setPendingRoute("event:\(event.id)")
         }
+        await IntentDonations.donate(self)
         return .result()
     }
 }
@@ -151,16 +154,57 @@ public struct OpenMetricIntent: AppIntent {
     public static let openAppWhenRun: Bool = true
 
     @Parameter(title: "Metric")
-    public var identifier: String
+    public var metric: MetricEntity
 
     public init() {}
-    public init(identifier: String) { self.identifier = identifier }
+    public init(metric: MetricEntity) { self.metric = metric }
 
     public func perform() async throws -> some IntentResult {
         await MainActor.run {
-            IntentService.setPendingRoute("metric:\(identifier)")
+            IntentService.setPendingRoute("metric:\(metric.id)")
         }
+        await IntentDonations.donate(self)
         return .result()
+    }
+}
+
+public struct OpenPlaceIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Open Place"
+    public static let description = IntentDescription("Open a Spark place detail view.")
+    public static let openAppWhenRun: Bool = true
+
+    @Parameter(title: "Place")
+    public var place: PlaceEntity
+
+    public init() {}
+    public init(place: PlaceEntity) { self.place = place }
+
+    public func perform() async throws -> some IntentResult {
+        await MainActor.run {
+            IntentService.setPendingRoute("place:\(place.id)")
+        }
+        await IntentDonations.donate(self)
+        return .result()
+    }
+}
+
+public struct OpenAnomalyIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Open Anomaly"
+    public static let description = IntentDescription("Open a Spark anomaly to see the details.")
+    public static let openAppWhenRun: Bool = true
+
+    @Parameter(title: "Anomaly")
+    public var anomaly: AnomalyEntity
+
+    public init() {}
+    public init(anomaly: AnomalyEntity) { self.anomaly = anomaly }
+
+    public func perform() async throws -> some IntentResult & ProvidesDialog {
+        await MainActor.run {
+            IntentService.setPendingRoute("anomaly:\(anomaly.id)")
+        }
+        await IntentDonations.donate(self)
+        return .result(dialog: "\(anomaly.summary)")
     }
 }
 
@@ -189,20 +233,30 @@ public struct SearchSparkIntent: AppIntent {
 
 public struct AcknowledgeAnomalyIntent: AppIntent {
     public static let title: LocalizedStringResource = "Acknowledge Anomaly"
-    public static let description = IntentDescription("Acknowledge a Spark anomaly.")
+    public static let description = IntentDescription("Acknowledge a Spark anomaly so it stops being flagged.")
 
-    @Parameter(title: "Anomaly ID")
-    public var anomalyID: String
+    @Parameter(title: "Anomaly")
+    public var anomaly: AnomalyEntity
 
     public init() {}
-    public init(anomalyID: String) { self.anomalyID = anomalyID }
+    public init(anomaly: AnomalyEntity) { self.anomaly = anomaly }
 
     public func perform() async throws -> some IntentResult & ProvidesDialog {
-        // Phase 3 D12: wire to AnomaliesEndpoint.acknowledge(id:) once endpoint exists.
-        return .result(dialog: "Anomaly acknowledged.")
+        let service = await IntentService()
+        _ = try await service.apiClient.request(AnomaliesEndpoint.acknowledge(id: anomaly.id))
+        await MainActor.run { IntentService.markAnomalyAcknowledged(id: anomaly.id) }
+        await IntentDonations.donate(self)
+        return .result(dialog: "Acknowledged: \(anomaly.summary)")
     }
 }
 
-// MARK: - Shared types
+// MARK: - Intent donations
 
-private struct EmptyResponse: Decodable, Sendable {}
+/// Centralises the iOS 27 `IntentDonationManager` calls so Siri can learn the
+/// user's patterns after each successful perform. Donation failures are
+/// non-fatal — they only degrade Siri's suggestions, never the action.
+enum IntentDonations {
+    static func donate(_ intent: some AppIntent) async {
+        _ = try? await IntentDonationManager.shared.donate(intent: intent)
+    }
+}

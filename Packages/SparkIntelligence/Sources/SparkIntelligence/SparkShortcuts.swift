@@ -67,5 +67,41 @@ public struct SparkShortcuts: AppShortcutsProvider {
             shortTitle: "Search Spark",
             systemImageName: "magnifyingglass"
         )
+        AppShortcut(
+            intent: OpenPlaceIntent(),
+            phrases: [
+                "Open a place in \(.applicationName)",
+                "Show \(\.$place) in \(.applicationName)",
+            ],
+            shortTitle: "Open Place",
+            systemImageName: "mappin.and.ellipse"
+        )
+        AppShortcut(
+            intent: OpenMetricIntent(),
+            phrases: [
+                "Open a metric in \(.applicationName)",
+                "Show \(\.$metric) in \(.applicationName)",
+            ],
+            shortTitle: "Open Metric",
+            systemImageName: "chart.line.uptrend.xyaxis"
+        )
+        AppShortcut(
+            intent: OpenAnomalyIntent(),
+            phrases: [
+                "Open an anomaly in \(.applicationName)",
+                "What's unusual in \(.applicationName)",
+            ],
+            shortTitle: "Open Anomaly",
+            systemImageName: "exclamationmark.triangle.fill"
+        )
+        AppShortcut(
+            intent: AcknowledgeAnomalyIntent(),
+            phrases: [
+                "Acknowledge \(\.$anomaly) in \(.applicationName)",
+                "Acknowledge an anomaly in \(.applicationName)",
+            ],
+            shortTitle: "Acknowledge Anomaly",
+            systemImageName: "checkmark.circle.fill"
+        )
     }
 }

@@ -32,6 +32,98 @@ public struct IntentService {
         return TodayIntentSnapshot(summary: summary)
     }
 
+    // MARK: - Entity reads (shared by EntityQueries, Spotlight indexing, Tools)
+
+    /// Opens a fresh `ModelContext` against the shared App Group container, or
+    /// `nil` when the store is unavailable (e.g. first launch before migration).
+    public static func makeContext() -> ModelContext? {
+        guard let container = try? SparkDataStore.makeContainer() else { return nil }
+        return ModelContext(container)
+    }
+
+    public static func eventEntities(matching ids: [String]? = nil, limit: Int = 50) -> [EventEntity] {
+        guard let context = makeContext() else { return [] }
+        var descriptor = FetchDescriptor<CachedEvent>(sortBy: [SortDescriptor(\.time, order: .reverse)])
+        if ids == nil { descriptor.fetchLimit = limit }
+        let rows = (try? context.fetch(descriptor)) ?? []
+        let filtered = ids.map { idSet in rows.filter { idSet.contains($0.id) } } ?? rows
+        return filtered.map(EventEntity.init(cached:))
+    }
+
+    public static func eventEntities(query: String, limit: Int = 25) -> [EventEntity] {
+        let needle = query.lowercased()
+        return eventEntities(limit: 500)
+            .filter { entity in
+                entity.title.lowercased().contains(needle)
+                    || (entity.summary?.lowercased().contains(needle) ?? false)
+                    || entity.tags.contains { $0.lowercased().contains(needle) }
+            }
+            .prefix(limit)
+            .map { $0 }
+    }
+
+    public static func blockEntities(matching ids: [String]? = nil, limit: Int = 50) -> [BlockEntity] {
+        guard let context = makeContext() else { return [] }
+        var descriptor = FetchDescriptor<CachedBlock>(sortBy: [SortDescriptor(\.time, order: .reverse)])
+        if ids == nil { descriptor.fetchLimit = limit }
+        let rows = (try? context.fetch(descriptor)) ?? []
+        let filtered = ids.map { idSet in rows.filter { idSet.contains($0.id) } } ?? rows
+        return filtered.map(BlockEntity.init(cached:))
+    }
+
+    public static func placeEntities(matching ids: [String]? = nil, limit: Int = 100) -> [PlaceEntity] {
+        guard let context = makeContext() else { return [] }
+        var descriptor = FetchDescriptor<CachedPlace>(sortBy: [SortDescriptor(\.title)])
+        if ids == nil { descriptor.fetchLimit = limit }
+        let rows = (try? context.fetch(descriptor)) ?? []
+        let filtered = ids.map { idSet in rows.filter { idSet.contains($0.id) } } ?? rows
+        return filtered.map(PlaceEntity.init(cached:))
+    }
+
+    public static func metricEntities(matching ids: [String]? = nil, limit: Int = 100) -> [MetricEntity] {
+        guard let context = makeContext() else { return [] }
+        var descriptor = FetchDescriptor<CachedMetric>(sortBy: [SortDescriptor(\.lastEventAt, order: .reverse)])
+        if ids == nil { descriptor.fetchLimit = limit }
+        let rows = (try? context.fetch(descriptor)) ?? []
+        let filtered = ids.map { idSet in rows.filter { idSet.contains($0.identifier) } } ?? rows
+        return filtered.map(MetricEntity.init(cached:))
+    }
+
+    public static func anomalyEntities(matching ids: [String]? = nil, limit: Int = 100) -> [AnomalyEntity] {
+        guard let context = makeContext() else { return [] }
+        var descriptor = FetchDescriptor<CachedAnomaly>(sortBy: [SortDescriptor(\.detectedAt, order: .reverse)])
+        if ids == nil { descriptor.fetchLimit = limit }
+        let rows = (try? context.fetch(descriptor)) ?? []
+        let filtered = ids.map { idSet in rows.filter { idSet.contains($0.id) } } ?? rows
+        return filtered.map(AnomalyEntity.init(cached:))
+    }
+
+    public static func integrationEntities(matching ids: [String]? = nil) -> [IntegrationEntity] {
+        guard let context = makeContext() else { return [] }
+        let rows = (try? context.fetch(FetchDescriptor<CachedIntegration>())) ?? []
+        let filtered = ids.map { idSet in rows.filter { idSet.contains($0.service) } } ?? rows
+        return filtered.map(IntegrationEntity.init(cached:))
+    }
+
+    public static func daySummaryEntities(matching ids: [String]? = nil, limit: Int = 30) -> [DaySummaryEntity] {
+        guard let context = makeContext() else { return [] }
+        var descriptor = FetchDescriptor<CachedDaySummary>(sortBy: [SortDescriptor(\.date, order: .reverse)])
+        if ids == nil { descriptor.fetchLimit = limit }
+        let rows = (try? context.fetch(descriptor)) ?? []
+        let filtered = ids.map { idSet in rows.filter { idSet.contains($0.date) } } ?? rows
+        return filtered.map(DaySummaryEntity.init(cached:))
+    }
+
+    /// Optimistically marks the cached anomaly acknowledged so the Today screen
+    /// and Spotlight reflect the change before the next sync.
+    public static func markAnomalyAcknowledged(id: String) {
+        guard let context = makeContext() else { return }
+        let descriptor = FetchDescriptor<CachedAnomaly>(predicate: #Predicate { $0.id == id })
+        guard let row = (try? context.fetch(descriptor))?.first else { return }
+        row.acknowledgedAt = .now
+        try? context.save()
+    }
+
     // MARK: - UserDefaults routing (for open-app intents)
 
     public static func setPendingRoute(_ route: String) {

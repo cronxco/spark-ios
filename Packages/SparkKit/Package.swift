@@ -5,8 +5,8 @@ let package = Package(
     name: "SparkKit",
     platforms: [
         .macOS(.v15),
-        .iOS(.v26),
-        .watchOS(.v26),
+        .iOS(.v27),
+        .watchOS(.v27),
     ],
     products: [
         .library(name: "SparkKit", targets: ["SparkKit"]),

@@ -154,6 +154,9 @@ final class AppModel {
         case "event":   if let id = parts.last { pendingRoute = .event(id: id) }
         case "metric":  if let id = parts.last { pendingRoute = .metric(identifier: id) }
         case "place":   if let id = parts.last { pendingRoute = .place(id: id) }
+        // Anomalies surface on the Today screen; route there until a dedicated
+        // anomaly detail destination ships.
+        case "anomaly": pendingRoute = .today(date: nil)
         case "search":  break   // SearchView picks up the query separately
         case "action":
             if parts.last == "startSleep" {

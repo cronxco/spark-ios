@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "SparkHealth",
-    platforms: [.iOS(.v26)],
+    platforms: [.iOS(.v27)],
     products: [.library(name: "SparkHealth", targets: ["SparkHealth"])],
     dependencies: [.package(path: "../SparkKit")],
     targets: [

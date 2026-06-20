@@ -16,7 +16,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Tech Stack
 
 - **Language**: Swift 6.2 with strict concurrency enforcement (`SWIFT_STRICT_CONCURRENCY=complete`)
-- **Minimum OS**: iOS 26.4 (also watchOS 26.0 for Phase 5)
+- **Minimum OS**: iOS 27.0 (also watchOS 27.0 for Phase 5)
+- **AI / Siri**: iOS 27 Foundation Models (on-device + Private Cloud Compute), App Intents with `AppEntity`/`IndexedEntity` semantic indexing for the rebuilt Siri
 - **Project generation**: Tuist 4.x (not native Xcode workspace)
 - **Package management**: SPM (Swift Package Manager) with 6 local packages + Sentry remote dependency
 - **Data persistence**: SwiftData with App Group shared container
@@ -69,7 +70,7 @@ Watch/                       # Apple Watch (Phase 5 stubs)
 Tests/SparkAppTests/         # Cross-target app tests
 
 Project.swift                # Tuist project definition
-Tuist.swift                  # Tuist config (Xcode 26, Swift 6.0)
+Tuist.swift                  # Tuist config (Xcode 27, Swift 6.0)
 .github/workflows/ios.yml    # CI: runs tests on push/PR to main/dev
 ```
 
@@ -78,7 +79,7 @@ Tuist.swift                  # Tuist config (Xcode 26, Swift 6.0)
 ### Prerequisites
 
 ```bash
-# Xcode 26 (or Xcode 26 beta at /Applications/Xcode-beta.app)
+# Xcode 27 (or Xcode 27 beta at /Applications/Xcode-beta.app)
 # macOS 15+
 # Tuist 4.x
 brew install tuist
@@ -94,7 +95,7 @@ cd spark-ios
 tuist generate
 ```
 
-This creates `Spark.xcworkspace`. Open in Xcode 26.
+This creates `Spark.xcworkspace`. Open in Xcode 27.
 
 ### Provisioning
 
