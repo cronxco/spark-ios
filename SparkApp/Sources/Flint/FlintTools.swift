@@ -126,9 +126,83 @@ struct SearchEventsTool: Tool {
     }
 }
 
+/// Searches recent blocks for a free-text query.
+struct SearchBlocksTool: Tool {
+    typealias Output = String
+
+    let name = "searchBlocks"
+    let description = "Search the user's recent Spark text/content blocks by free text."
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "What to search for in text blocks or notes.")
+        var query: String
+    }
+
+    func call(arguments: Arguments) async throws -> String {
+        let needle = arguments.query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let results = await MainActor.run {
+            IntentService.blockEntities(limit: 500).filter { block in
+                block.title.lowercased().contains(needle)
+                    || (block.body?.lowercased().contains(needle) ?? false)
+                    || block.keywords.contains { $0.lowercased().contains(needle) }
+            }
+        }
+        guard !results.isEmpty else {
+            return "No blocks found for '\(arguments.query)'."
+        }
+        return results.prefix(8).map { block in
+            "- \(block.title): \(block.body ?? "No body")"
+        }.joined(separator: "\n")
+    }
+}
+
+/// Returns a metric's baseline/normal range where the backend has one.
+struct GetMetricBaselineTool: Tool {
+    typealias Output = String
+
+    let name = "getMetricBaseline"
+    let description = "Get the normal baseline range for a Spark metric by identifier."
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "Metric identifier like 'oura.sleep_score' or 'monzo.spend_daily'.")
+        var metric: String
+    }
+
+    func call(arguments: Arguments) async throws -> String {
+        let identifier = MetricsEndpoint.canonicalIdentifier(
+            arguments.metric.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+        let service = await IntentService()
+        if let detail = try? await service.apiClient.request(MetricsEndpoint.detail(identifier: identifier)),
+           let baseline = detail.baseline {
+            let unit = detail.unit.map { " \($0)" } ?? ""
+            return "\(detail.title) normal range: \(baseline.low)-\(baseline.high)\(unit)."
+        }
+
+        let cached = await MainActor.run {
+            IntentService.metricEntities(matching: [identifier]).first
+        }
+        if let cached {
+            var line = "\(cached.displayName)"
+            if let value = cached.latestValueDescription { line += " latest: \(value)." }
+            line += " No baseline range is cached."
+            return line
+        }
+        return "No baseline found for \(identifier)."
+    }
+}
+
 enum FlintTools {
     /// Tools available to the deep/digest reasoning profile.
     static var digestTools: [any Tool] {
-        [GetDaySummaryTool(), GetMetricTrendTool(), SearchEventsTool()]
+        [
+            GetDaySummaryTool(),
+            GetMetricTrendTool(),
+            SearchEventsTool(),
+            SearchBlocksTool(),
+            GetMetricBaselineTool(),
+        ]
     }
 }

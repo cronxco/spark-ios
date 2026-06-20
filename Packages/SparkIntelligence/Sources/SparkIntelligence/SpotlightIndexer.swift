@@ -29,8 +29,10 @@ public enum SpotlightIndexer {
         await index.indexEntities(IntentService.blockEntities(matching: nil, limit: 1000))
         await index.indexEntities(IntentService.placeEntities(matching: nil, limit: 1000))
         await index.indexEntities(IntentService.integrationEntities())
+        await index.indexEntities(IntentService.moneyAccountEntities(matching: nil, limit: 1000))
         await index.indexEntities(IntentService.metricEntities(matching: nil, limit: 1000))
         await index.indexEntities(IntentService.anomalyEntities(matching: nil, limit: 1000))
+        await index.indexEntities(IntentService.spendSummaryEntities(matching: nil, limit: 90))
         await index.indexEntities(IntentService.daySummaryEntities(matching: nil, limit: 90))
     }
 
@@ -59,10 +61,14 @@ public enum SpotlightIndexer {
         let staleMetrics = fetchStale(CachedMetric.self, before: cutoff, in: context)
         await delete(MetricEntity.self, ids: staleMetrics.map(\.identifier))
 
+        let staleMoneyAccounts = fetchStale(CachedMoneyAccount.self, before: cutoff, in: context)
+        await delete(MoneyAccountEntity.self, ids: staleMoneyAccounts.map(\.id))
+
         let staleAnomalies = fetchStale(CachedAnomaly.self, before: cutoff, in: context)
         await delete(AnomalyEntity.self, ids: staleAnomalies.map(\.id))
 
         let staleSummaries = fetchStale(CachedDaySummary.self, before: cutoff, in: context)
+        await delete(SpendSummaryEntity.self, ids: staleSummaries.map { "spend:\($0.date)" })
         await delete(DaySummaryEntity.self, ids: staleSummaries.map(\.date))
     }
 
@@ -92,6 +98,7 @@ extension CachedEvent: StaleDatable {}
 extension CachedBlock: StaleDatable {}
 extension CachedPlace: StaleDatable {}
 extension CachedMetric: StaleDatable {}
+extension CachedMoneyAccount: StaleDatable {}
 extension CachedAnomaly: StaleDatable {}
 extension CachedDaySummary: StaleDatable {}
 

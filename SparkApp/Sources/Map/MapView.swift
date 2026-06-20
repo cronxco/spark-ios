@@ -29,6 +29,8 @@ struct MapView: View {
                         BlockDetailView(blockId: id)
                     case .metric(let identifier):
                         MetricDetailView(identifier: identifier)
+                    case .anomaly(let id):
+                        AnomalyDetailView(anomalyId: id)
                     case .integration(let service):
                         IntegrationDetailView(integrationId: service)
                     case .account(let id):

@@ -89,3 +89,18 @@ public extension IntegrationEntity {
         )
     }
 }
+
+public extension MoneyAccountEntity {
+    init(model account: MoneyAccount) {
+        self.init(
+            id: account.id,
+            title: account.title,
+            kind: account.kind,
+            accountType: account.accountType,
+            currency: account.currency,
+            provider: account.provider,
+            latestBalance: account.latestBalance?.balance,
+            updatedAt: account.updatedAt
+        )
+    }
+}

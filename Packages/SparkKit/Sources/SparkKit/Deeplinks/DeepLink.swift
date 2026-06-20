@@ -15,6 +15,7 @@ public enum DeepLink: Sendable, Equatable {
     case block(id: String)
     case metric(identifier: String)
     case place(id: String)
+    case anomaly(id: String)
     case integration(service: String)
     case tag(name: String)
 
@@ -57,6 +58,9 @@ public enum DeepLink: Sendable, Equatable {
         case "places", "place":
             guard parts.count >= 2 else { return nil }
             return .place(id: parts[1])
+        case "anomalies", "anomaly":
+            guard parts.count >= 2 else { return nil }
+            return .anomaly(id: parts[1])
         case "integrations":
             // /integrations/{service}/details
             guard parts.count >= 3, parts[2] == "details" else { return nil }

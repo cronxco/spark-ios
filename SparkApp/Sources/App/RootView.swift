@@ -54,6 +54,8 @@ struct RootView: View {
             model.pendingRoute = .metric(identifier: identifier)
         case .place(let id):
             model.pendingRoute = .place(id: id)
+        case .anomaly(let id):
+            model.pendingRoute = .anomaly(id: id)
         case .integration(let service):
             model.pendingRoute = .integration(service: service)
         case .tag(let name):

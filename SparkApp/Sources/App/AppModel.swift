@@ -21,6 +21,7 @@ enum AppRoute: Hashable {
     case block(id: String)
     case metric(identifier: String)
     case place(id: String)
+    case anomaly(id: String)
     case integration(service: String)
     case account(id: String)
     case tag(name: String, type: String?)
@@ -154,9 +155,7 @@ final class AppModel {
         case "event":   if let id = parts.last { pendingRoute = .event(id: id) }
         case "metric":  if let id = parts.last { pendingRoute = .metric(identifier: id) }
         case "place":   if let id = parts.last { pendingRoute = .place(id: id) }
-        // Anomalies surface on the Today screen; route there until a dedicated
-        // anomaly detail destination ships.
-        case "anomaly": pendingRoute = .today(date: nil)
+        case "anomaly": if let id = parts.last { pendingRoute = .anomaly(id: id) }
         case "search":  break   // SearchView picks up the query separately
         case "action":
             if parts.last == "startSleep" {

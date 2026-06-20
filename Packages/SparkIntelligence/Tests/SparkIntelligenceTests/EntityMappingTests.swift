@@ -101,6 +101,60 @@ struct EntityMappingTests {
         #expect(entity.status == "connected")
     }
 
+    @Test("Money account maps balance and searchable keywords")
+    func moneyAccountMapping() {
+        let cached = CachedMoneyAccount(
+            id: "acct_1",
+            title: "Monzo Current",
+            kind: "depository",
+            accountType: "current",
+            currency: "GBP",
+            isNegativeBalance: false,
+            provider: "monzo",
+            latestBalance: 123.45,
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        let entity = MoneyAccountEntity(cached: cached)
+
+        #expect(entity.id == "acct_1")
+        #expect(entity.title == "Monzo Current")
+        #expect(entity.kind == "depository")
+        #expect(entity.keywords.contains("monzo"))
+        #expect(entity.balanceDescription?.contains("123.45") == true)
+    }
+
+    @Test("Spend summary maps day money section")
+    func spendSummaryMapping() throws {
+        let json = """
+        {
+          "date": "2026-06-20",
+          "timezone": "Europe/London",
+          "sync_status": { "up_to_date": true, "stale": [] },
+          "sections": {
+            "health": null,
+            "activity": null,
+            "money": {
+              "total_spend": 24.5,
+              "transactions": [{ "currency": "GBP" }],
+              "top_merchants": [{ "name": "Pret" }]
+            },
+            "media": null,
+            "knowledge": null
+          },
+          "anomalies": []
+        }
+        """
+        let data = Data(json.utf8)
+        let cached = CachedDaySummary(date: "2026-06-20", timezone: "Europe/London", payload: data)
+        let entity = try #require(SpendSummaryEntity(cached: cached))
+
+        #expect(entity.id == "spend:2026-06-20")
+        #expect(entity.total == 24.5)
+        #expect(entity.currency == "GBP")
+        #expect(entity.topMerchants == ["Pret"])
+        #expect(entity.summary?.contains("Pret") == true)
+    }
+
     @Test("Empty/whitespace strings collapse to nil")
     func nonEmptyHelper() {
         #expect("   ".nonEmpty == nil)

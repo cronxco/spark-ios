@@ -10,7 +10,7 @@ let appGroup = "group.co.cronx.sparkapp"
 let keychainGroup = "\(appIdentifierPrefix)\(bundleIdBase)"
 let associatedDomain = "applinks:spark.cronx.co"
 let iosDeploymentTarget: DeploymentTargets = .iOS("27.0")
-let watchDeploymentTarget: DeploymentTargets = .watchOS("26.0")
+let watchDeploymentTarget: DeploymentTargets = .watchOS("27.0")
 
 // MARK: - Entitlements builders
 
@@ -38,8 +38,8 @@ func extensionEntitlements() -> Entitlements {
 func appInfoPlist() -> InfoPlist {
     .extendingDefault(with: [
         "CFBundleDisplayName": "Spark",
-        "CFBundleShortVersionString": "0.1.0",
-        "CFBundleVersion": "1",
+        "CFBundleShortVersionString": "$(MARKETING_VERSION)",
+        "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
         "UILaunchScreen": [:],
         "UISupportedInterfaceOrientations": [
             "UIInterfaceOrientationPortrait",
@@ -79,6 +79,8 @@ func appInfoPlist() -> InfoPlist {
 func widgetInfoPlist() -> InfoPlist {
     .extendingDefault(with: [
         "CFBundleDisplayName": "Spark Widgets",
+        "CFBundleShortVersionString": "$(MARKETING_VERSION)",
+        "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
         "NSExtension": [
             "NSExtensionPointIdentifier": "com.apple.widgetkit-extension",
         ],
@@ -88,6 +90,8 @@ func widgetInfoPlist() -> InfoPlist {
 func controlsInfoPlist() -> InfoPlist {
     .extendingDefault(with: [
         "CFBundleDisplayName": "Spark Controls",
+        "CFBundleShortVersionString": "$(MARKETING_VERSION)",
+        "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
         "NSExtension": [
             "NSExtensionPointIdentifier": "com.apple.widgetkit-extension",
         ],
@@ -97,6 +101,8 @@ func controlsInfoPlist() -> InfoPlist {
 func liveActivitiesInfoPlist() -> InfoPlist {
     .extendingDefault(with: [
         "CFBundleDisplayName": "Spark Live Activities",
+        "CFBundleShortVersionString": "$(MARKETING_VERSION)",
+        "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
         "NSSupportsLiveActivities": true,
         "NSExtension": [
             "NSExtensionPointIdentifier": "com.apple.widgetkit-extension",
@@ -107,6 +113,8 @@ func liveActivitiesInfoPlist() -> InfoPlist {
 func shareInfoPlist() -> InfoPlist {
     .extendingDefault(with: [
         "CFBundleDisplayName": "Share to Spark",
+        "CFBundleShortVersionString": "$(MARKETING_VERSION)",
+        "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
         "NSExtension": [
             "NSExtensionPointIdentifier": "com.apple.share-services",
             "NSExtensionAttributes": [
@@ -127,6 +135,8 @@ func shareInfoPlist() -> InfoPlist {
 func intentsInfoPlist() -> InfoPlist {
     .extendingDefault(with: [
         "CFBundleDisplayName": "Spark Intents",
+        "CFBundleShortVersionString": "$(MARKETING_VERSION)",
+        "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
         "NSExtension": [
             "NSExtensionPointIdentifier": "com.apple.appintents-extension",
         ],
@@ -136,6 +146,8 @@ func intentsInfoPlist() -> InfoPlist {
 func notificationServiceInfoPlist() -> InfoPlist {
     .extendingDefault(with: [
         "CFBundleDisplayName": "Spark Notification Service",
+        "CFBundleShortVersionString": "$(MARKETING_VERSION)",
+        "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
         "NSExtension": [
             "NSExtensionPointIdentifier": "com.apple.usernotifications.service",
             "NSExtensionPrincipalClass":
@@ -147,6 +159,8 @@ func notificationServiceInfoPlist() -> InfoPlist {
 func watchInfoPlist() -> InfoPlist {
     .extendingDefault(with: [
         "CFBundleDisplayName": "Spark",
+        "CFBundleShortVersionString": "$(MARKETING_VERSION)",
+        "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
         "WKApplication": true,
         "WKWatchOnly": false,
     ])
@@ -155,6 +169,8 @@ func watchInfoPlist() -> InfoPlist {
 func watchWidgetsInfoPlist() -> InfoPlist {
     .extendingDefault(with: [
         "CFBundleDisplayName": "Spark Watch Widgets",
+        "CFBundleShortVersionString": "$(MARKETING_VERSION)",
+        "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
         "NSExtension": [
             "NSExtensionPointIdentifier": "com.apple.widgetkit-extension",
         ],
@@ -164,6 +180,8 @@ func watchWidgetsInfoPlist() -> InfoPlist {
 // MARK: - Shared settings
 
 let baseSettings: SettingsDictionary = [
+    "MARKETING_VERSION": "0.1.0",
+    "CURRENT_PROJECT_VERSION": "1",
     "SWIFT_VERSION": "6.2",
     "SWIFT_STRICT_CONCURRENCY": "complete",
     "SWIFT_TREAT_WARNINGS_AS_ERRORS": "YES",
@@ -366,9 +384,24 @@ let sparkAppTests: Target = .target(
     sources: ["Tests/SparkAppTests/**"],
     dependencies: [
         .target(name: "SparkApp"),
-        .package(product: "SparkKit"),
     ],
     settings: sharedSettings(bundleId: "\(bundleIdBase).tests")
+)
+
+let sparkIntelligenceTests: Target = .target(
+    name: "SparkIntelligenceTests",
+    destinations: [.iPhone, .iPad],
+    product: .unitTests,
+    bundleId: "\(bundleIdBase).intelligence.tests",
+    deploymentTargets: iosDeploymentTarget,
+    infoPlist: .default,
+    sources: ["Packages/SparkIntelligence/Tests/SparkIntelligenceTests/**"],
+    dependencies: [
+        .target(name: "SparkApp"),
+        .package(product: "SparkIntelligence"),
+        .package(product: "SparkKit"),
+    ],
+    settings: sharedSettings(bundleId: "\(bundleIdBase).intelligence.tests")
 )
 
 // MARK: - Schemes
@@ -378,7 +411,7 @@ let sparkAppScheme: Scheme = .scheme(
     shared: true,
     buildAction: .buildAction(targets: ["SparkApp"]),
     testAction: .targets(
-        ["SparkAppTests"],
+        ["SparkAppTests", "SparkIntelligenceTests"],
         configuration: .debug,
         options: .options(coverage: true, codeCoverageTargets: ["SparkApp"])
     ),
@@ -427,6 +460,7 @@ let project = Project(
         sparkWatch,
         sparkWatchWidgets,
         sparkAppTests,
+        sparkIntelligenceTests,
     ],
     schemes: [sparkAppScheme]
 )

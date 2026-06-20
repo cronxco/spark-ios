@@ -105,6 +105,26 @@ public struct IntentService {
         return filtered.map(IntegrationEntity.init(cached:))
     }
 
+    public static func moneyAccountEntities(matching ids: [String]? = nil, limit: Int = 100) -> [MoneyAccountEntity] {
+        guard let context = makeContext() else { return [] }
+        var descriptor = FetchDescriptor<CachedMoneyAccount>(sortBy: [SortDescriptor(\.updatedAt, order: .reverse)])
+        if ids == nil { descriptor.fetchLimit = limit }
+        let rows = (try? context.fetch(descriptor)) ?? []
+        let filtered = ids.map { idSet in rows.filter { idSet.contains($0.id) } } ?? rows
+        return filtered.map(MoneyAccountEntity.init(cached:))
+    }
+
+    public static func spendSummaryEntities(matching ids: [String]? = nil, limit: Int = 30) -> [SpendSummaryEntity] {
+        guard let context = makeContext() else { return [] }
+        var descriptor = FetchDescriptor<CachedDaySummary>(sortBy: [SortDescriptor(\.date, order: .reverse)])
+        if ids == nil { descriptor.fetchLimit = limit }
+        let rows = (try? context.fetch(descriptor)) ?? []
+        let filtered = ids.map { idSet in
+            rows.filter { idSet.contains("spend:\($0.date)") }
+        } ?? rows
+        return filtered.compactMap(SpendSummaryEntity.init(cached:))
+    }
+
     public static func daySummaryEntities(matching ids: [String]? = nil, limit: Int = 30) -> [DaySummaryEntity] {
         guard let context = makeContext() else { return [] }
         var descriptor = FetchDescriptor<CachedDaySummary>(sortBy: [SortDescriptor(\.date, order: .reverse)])

@@ -372,6 +372,179 @@ public extension IntegrationEntity {
     }
 }
 
+// MARK: Money Account
+
+public struct MoneyAccountEntity: AppEntity, IndexedEntity {
+    public static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "Money Account")
+    public static let defaultQuery = MoneyAccountEntityQuery()
+
+    public let id: String
+
+    @Property(indexingKey: \.title)
+    public var title: String
+
+    @Property(indexingKey: \.contentDescription)
+    public var balanceDescription: String?
+
+    @Property(indexingKey: \.keywords)
+    public var keywords: [String]
+
+    public var kind: String
+    public var accountType: String?
+    public var currency: String
+    public var provider: String?
+    public var latestBalance: Double?
+    public var updatedAt: Date?
+
+    public init(
+        id: String,
+        title: String,
+        kind: String,
+        accountType: String?,
+        currency: String,
+        provider: String?,
+        latestBalance: Double?,
+        updatedAt: Date?
+    ) {
+        self.id = id
+        self.kind = kind
+        self.accountType = accountType
+        self.currency = currency
+        self.provider = provider
+        self.latestBalance = latestBalance
+        self.updatedAt = updatedAt
+        self.title = title
+        self.keywords = [kind, accountType, currency, provider].compactMap { $0?.nonEmpty }
+        if let latestBalance {
+            self.balanceDescription = Self.currencyFormatter(currency: currency)
+                .string(from: NSNumber(value: latestBalance))
+        } else {
+            self.balanceDescription = nil
+        }
+    }
+
+    public var displayRepresentation: DisplayRepresentation {
+        DisplayRepresentation(
+            title: "\(title)",
+            subtitle: balanceDescription.map { "\($0)" } ?? accountType.map { "\($0.capitalized)" }
+        )
+    }
+
+    static func currencyFormatter(currency: String) -> NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = currency
+        formatter.maximumFractionDigits = 2
+        return formatter
+    }
+}
+
+public extension MoneyAccountEntity {
+    init(cached account: CachedMoneyAccount) {
+        self.init(
+            id: account.id,
+            title: account.title,
+            kind: account.kind,
+            accountType: account.accountType,
+            currency: account.currency,
+            provider: account.provider,
+            latestBalance: account.latestBalance,
+            updatedAt: account.updatedAt
+        )
+    }
+}
+
+// MARK: Spend Summary
+
+public struct SpendSummaryEntity: AppEntity, IndexedEntity {
+    public static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "Spend Summary")
+    public static let defaultQuery = SpendSummaryEntityQuery()
+
+    /// Stable identifier scoped away from `DaySummaryEntity` (`spend:yyyy-MM-dd`).
+    public let id: String
+
+    @Property(indexingKey: \.title)
+    public var title: String
+
+    @Property(indexingKey: \.contentDescription)
+    public var summary: String?
+
+    @Property(indexingKey: \.keywords)
+    public var keywords: [String]
+
+    public var date: Date?
+    public var total: Double?
+    public var currency: String
+    public var transactionCount: Int?
+    public var topMerchants: [String]
+
+    public init(
+        dateKey: String,
+        date: Date?,
+        total: Double?,
+        currency: String,
+        transactionCount: Int?,
+        topMerchants: [String]
+    ) {
+        self.id = "spend:\(dateKey)"
+        self.date = date
+        self.total = total
+        self.currency = currency
+        self.transactionCount = transactionCount
+        self.topMerchants = topMerchants
+        self.title = "Spend on \(dateKey)"
+        self.keywords = ["money", "spend", "transactions"] + topMerchants
+
+        var parts: [String] = []
+        if let total {
+            let formatted = MoneyAccountEntity.currencyFormatter(currency: currency)
+                .string(from: NSNumber(value: abs(total))) ?? "\(abs(total)) \(currency)"
+            parts.append("Spent \(formatted)")
+        }
+        if let transactionCount {
+            parts.append("\(transactionCount) transaction\(transactionCount == 1 ? "" : "s")")
+        }
+        if !topMerchants.isEmpty {
+            parts.append("Top merchants: \(topMerchants.prefix(3).joined(separator: ", "))")
+        }
+        self.summary = parts.isEmpty ? nil : parts.joined(separator: "; ")
+    }
+
+    public var displayRepresentation: DisplayRepresentation {
+        DisplayRepresentation(title: "\(title)", subtitle: summary.map { "\($0)" })
+    }
+}
+
+public extension SpendSummaryEntity {
+    init?(cached summary: CachedDaySummary) {
+        guard let decoded = try? summary.decoded(),
+              let money = decoded.sections.money?.objectValue
+        else { return nil }
+
+        let total = money["total_spend"]?.doubleValue
+            ?? money["total"]?.doubleValue
+            ?? money["amount"]?.doubleValue
+        let transactions = money["transactions"]?.arrayValue ?? []
+        let currency = money["currency"]?.stringValue
+            ?? transactions.first?.objectValue?["currency"]?.stringValue
+            ?? "GBP"
+        let topMerchants = (money["top_merchants"]?.arrayValue ?? [])
+            .compactMap { item -> String? in
+                if let name = item.objectValue?["name"]?.stringValue { return name }
+                return item.stringValue
+            }
+
+        self.init(
+            dateKey: decoded.date,
+            date: DaySummaryEntity.isoFormatter.date(from: decoded.date),
+            total: total,
+            currency: currency,
+            transactionCount: transactions.isEmpty ? nil : transactions.count,
+            topMerchants: topMerchants
+        )
+    }
+}
+
 // MARK: DaySummary
 
 public struct DaySummaryEntity: AppEntity, IndexedEntity {
@@ -427,7 +600,7 @@ public extension DaySummaryEntity {
         )
     }
 
-    private static let isoFormatter: DateFormatter = {
+    static let isoFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
         f.timeZone = .current

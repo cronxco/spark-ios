@@ -15,7 +15,9 @@ struct StatStripView: View {
                         icon: "figure.walk",
                         tint: .domainActivity,
                         value: formatSteps(steps),
-                        label: "Steps"
+                        label: "Steps",
+                        entityType: "metric",
+                        entityIdentifier: "apple_health.steps"
                     )
                 }
                 if let display = snapshot.money?.spentTodayDisplay {
@@ -23,7 +25,9 @@ struct StatStripView: View {
                         icon: "sterlingsign.circle.fill",
                         tint: .domainMoney,
                         value: display,
-                        label: "Spent"
+                        label: "Spent",
+                        entityType: "spend",
+                        entityIdentifier: Self.isoKey(for: snapshot.date)
                     )
                 }
                 if let score = snapshot.health?.sleepScore {
@@ -31,7 +35,9 @@ struct StatStripView: View {
                         icon: "moon.zzz.fill",
                         tint: .domainHealth,
                         value: "\(score)",
-                        label: "Sleep"
+                        label: "Sleep",
+                        entityType: "metric",
+                        entityIdentifier: "oura.sleep_score"
                     )
                 }
                 if let bookmarks = snapshot.knowledge?.bookmarksToday, bookmarks > 0 {
@@ -46,7 +52,9 @@ struct StatStripView: View {
                     icon: "heart.fill",
                     tint: .domainHealth,
                     value: snapshot.health?.restingHeartRate.map { "\($0)" } ?? "—",
-                    label: "Heart"
+                    label: "Heart",
+                    entityType: "metric",
+                    entityIdentifier: "apple_health.resting_heart_rate"
                 )
             }
             .padding(.horizontal, SparkSpacing.lg)
@@ -57,6 +65,13 @@ struct StatStripView: View {
     private func formatSteps(_ count: Int) -> String {
         count >= 1_000 ? String(format: "%.1fk", Double(count) / 1_000) : String(count)
     }
+
+    private static func isoKey(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = .current
+        return formatter.string(from: date)
+    }
 }
 
 private struct StatTile: View {
@@ -64,6 +79,8 @@ private struct StatTile: View {
     let tint: Color
     let value: String
     let label: String
+    var entityType: String? = nil
+    var entityIdentifier: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -84,5 +101,6 @@ private struct StatTile: View {
         .padding(.vertical, 12)
         .frame(width: 90, alignment: .leading)
         .sparkGlass(.roundedRect(16))
+        .sparkAppEntityIdentifier(type: entityType ?? "", identifier: entityIdentifier)
     }
 }

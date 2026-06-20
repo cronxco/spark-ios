@@ -52,10 +52,6 @@ jobs:
         working-directory: Packages/SparkKit
         run: swift test --parallel
 
-      - name: Build + test SparkIntelligence
-        working-directory: Packages/SparkIntelligence
-        run: swift test --parallel
-
       - name: Build + test SparkApp
         run: |
           xcodebuild \

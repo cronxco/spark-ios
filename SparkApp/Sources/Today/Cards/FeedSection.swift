@@ -220,6 +220,7 @@ private struct HourGroup: View {
                         NavigationLink(value: DetailRoute.event(id: event.id)) {
                             row(for: event)
                         }
+                        .sparkAppEntityIdentifier(type: "event", identifier: event.id)
                         .buttonStyle(.plain)
                     case .collapsed(let groupEvents):
                         let groupID = group.id
@@ -228,6 +229,7 @@ private struct HourGroup: View {
                                 NavigationLink(value: DetailRoute.event(id: event.id)) {
                                     row(for: event)
                                 }
+                                .sparkAppEntityIdentifier(type: "event", identifier: event.id)
                                 .buttonStyle(.plain)
                             }
                         } else {
@@ -238,6 +240,7 @@ private struct HourGroup: View {
                             } label: {
                                 row(for: groupEvents[0], surplusCount: groupEvents.count - 1)
                             }
+                            .sparkAppEntityIdentifier(type: "event", identifier: groupEvents[0].id)
                             .buttonStyle(.plain)
                             .accessibilityLabel("\(primaryTitle(for: groupEvents[0])), \(groupEvents.count - 1) others")
                             .accessibilityHint("Expands the grouped timeline events")

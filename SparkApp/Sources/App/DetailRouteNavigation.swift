@@ -50,6 +50,7 @@ extension EntityReference {
         case .block: .block(id: id)
         case .metric: .metric(identifier: id)
         case .place: .place(id: id)
+        case .anomaly: .anomaly(id: id)
         case .integration: .integration(service: id)
         case .unknown: nil
         }
@@ -66,6 +67,7 @@ extension DeepLink {
         case .block(let id): .block(id: id)
         case .metric(let identifier): .metric(identifier: identifier)
         case .place(let id): .place(id: id)
+        case .anomaly(let id): .anomaly(id: id)
         case .integration(let service): .integration(service: service)
         case .tag(let name): .tag(name: name, type: nil)
         case .today, .day, .authCallback: nil
@@ -89,6 +91,8 @@ extension View {
                 MetricDetailView(identifier: identifier)
             case .place(let id):
                 PlaceDetailView(placeId: id)
+            case .anomaly(let id):
+                AnomalyDetailView(anomalyId: id)
             case .integration(let service):
                 IntegrationDetailView(integrationId: service)
             case .account(let id):

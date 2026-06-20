@@ -46,6 +46,7 @@ public enum EntityReferenceType: String, Codable, Sendable, Hashable, CaseIterab
     case block
     case metric
     case place
+    case anomaly
     case integration
     case unknown
 

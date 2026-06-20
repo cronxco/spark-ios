@@ -50,6 +50,11 @@ struct FlintGenerationUsage: Sendable, Equatable {
     let tier: FlintGenerationTier
     /// Token budget requested for the response (upper bound).
     let responseTokenBudget: Int
+    let inputTokens: Int
+    let cachedInputTokens: Int
+    let outputTokens: Int
+    let reasoningTokens: Int
+    let totalTokens: Int
 }
 
 struct FlintGenerationResult: Sendable, Equatable {
@@ -85,7 +90,12 @@ enum FlintGenerationService {
         case .success(let model):
             let response = try await model.session.respond(
                 generating: GeneratedFlintDailyNote.self,
-                options: FlintModelProvider.generationOptions(for: .deep)
+                options: FlintModelProvider.generationOptions(for: .deep),
+                contextOptions: FlintModelProvider.contextOptions(for: .deep),
+                metadata: [
+                    "spark.generation.path": "digest",
+                    "spark.generation.tier": model.tier.rawValue,
+                ]
             ) {
                 """
                 Create a daily highlight note from these facts.
@@ -104,7 +114,8 @@ enum FlintGenerationService {
                 note: response.content.note,
                 tier: model.tier,
                 availability: model.availability,
-                reasoning: .deep
+                reasoning: .deep,
+                usage: response.usage
             )
         }
     }
@@ -151,7 +162,12 @@ enum FlintGenerationService {
         case .success(let model):
             let response = try await model.session.respond(
                 generating: GeneratedTodaySummaryLine.self,
-                options: FlintModelProvider.generationOptions(for: .light)
+                options: FlintModelProvider.generationOptions(for: .light),
+                contextOptions: FlintModelProvider.contextOptions(for: .light),
+                metadata: [
+                    "spark.generation.path": "summary_line",
+                    "spark.generation.tier": model.tier.rawValue,
+                ]
             ) {
                 """
                 Write one sentence for the top of the day page.
@@ -173,7 +189,8 @@ enum FlintGenerationService {
                 note: note,
                 tier: model.tier,
                 availability: model.availability,
-                reasoning: .light
+                reasoning: .light,
+                usage: response.usage
             )
         }
     }
@@ -184,14 +201,23 @@ enum FlintGenerationService {
         note: FlintDailyNote,
         tier: FlintGenerationTier,
         availability: FlintGenerationAvailability,
-        reasoning: FlintReasoning
+        reasoning: FlintReasoning,
+        usage: LanguageModelSession.Usage
     ) -> FlintGenerationResult {
         FlintGenerationResult(
             note: note,
             availability: availability,
             usedAppleIntelligence: true,
             tier: tier,
-            usage: FlintGenerationUsage(tier: tier, responseTokenBudget: reasoning.maximumResponseTokens)
+            usage: FlintGenerationUsage(
+                tier: tier,
+                responseTokenBudget: reasoning.maximumResponseTokens,
+                inputTokens: usage.input.totalTokenCount,
+                cachedInputTokens: usage.input.cachedTokenCount,
+                outputTokens: usage.output.totalTokenCount,
+                reasoningTokens: usage.output.reasoningTokenCount,
+                totalTokens: usage.totalTokenCount
+            )
         )
     }
 

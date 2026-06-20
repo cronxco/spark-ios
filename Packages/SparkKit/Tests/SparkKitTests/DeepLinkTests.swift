@@ -98,6 +98,14 @@ struct DeepLinkTests {
         #expect(DeepLink.parse(url) == .place(id: "plc_42"))
     }
 
+    @Test("parses /anomalies/:id")
+    func anomaly() throws {
+        let plural = try #require(URL(string: "https://spark.cronx.co/anomalies/anom_123"))
+        let singular = try #require(URL(string: "https://spark.cronx.co/anomaly/anom_456"))
+        #expect(DeepLink.parse(plural) == .anomaly(id: "anom_123"))
+        #expect(DeepLink.parse(singular) == .anomaly(id: "anom_456"))
+    }
+
     @Test("parses /integrations/:service/details")
     func integration() throws {
         let url = try #require(URL(string: "https://spark.cronx.co/integrations/monzo/details"))

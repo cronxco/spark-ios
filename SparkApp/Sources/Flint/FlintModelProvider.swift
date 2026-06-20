@@ -30,6 +30,13 @@ enum FlintReasoning: Sendable {
         case .deep: 500
         }
     }
+
+    var contextReasoningLevel: ContextOptions.ReasoningLevel {
+        switch self {
+        case .light: .light
+        case .deep: .deep
+        }
+    }
 }
 
 /// A resolved session plus the tier it represents.
@@ -77,6 +84,10 @@ enum FlintModelProvider {
 
     static func generationOptions(for reasoning: FlintReasoning) -> GenerationOptions {
         GenerationOptions(maximumResponseTokens: reasoning.maximumResponseTokens)
+    }
+
+    static func contextOptions(for reasoning: FlintReasoning) -> ContextOptions {
+        ContextOptions(includeSchemaInPrompt: true, reasoningLevel: reasoning.contextReasoningLevel)
     }
 
     // MARK: - Private Cloud Compute resolution

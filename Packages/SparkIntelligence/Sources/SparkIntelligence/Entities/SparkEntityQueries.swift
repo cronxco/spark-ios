@@ -135,6 +135,53 @@ public struct IntegrationEntityQuery: EntityQuery, EntityStringQuery {
     }
 }
 
+public struct MoneyAccountEntityQuery: EntityQuery, EntityStringQuery {
+    public init() {}
+
+    public func entities(for identifiers: [MoneyAccountEntity.ID]) async throws -> [MoneyAccountEntity] {
+        await MainActor.run { IntentService.moneyAccountEntities(matching: identifiers) }
+    }
+
+    public func suggestedEntities() async throws -> [MoneyAccountEntity] {
+        await MainActor.run { IntentService.moneyAccountEntities(limit: 25) }
+    }
+
+    public func entities(matching string: String) async throws -> [MoneyAccountEntity] {
+        let needle = string.lowercased()
+        return await MainActor.run {
+            IntentService.moneyAccountEntities(limit: 200).filter {
+                $0.title.lowercased().contains(needle)
+                    || $0.kind.lowercased().contains(needle)
+                    || ($0.accountType?.lowercased().contains(needle) ?? false)
+                    || ($0.provider?.lowercased().contains(needle) ?? false)
+            }
+        }
+    }
+}
+
+public struct SpendSummaryEntityQuery: EntityQuery, EntityStringQuery {
+    public init() {}
+
+    public func entities(for identifiers: [SpendSummaryEntity.ID]) async throws -> [SpendSummaryEntity] {
+        await MainActor.run { IntentService.spendSummaryEntities(matching: identifiers) }
+    }
+
+    public func suggestedEntities() async throws -> [SpendSummaryEntity] {
+        await MainActor.run { IntentService.spendSummaryEntities(limit: 14) }
+    }
+
+    public func entities(matching string: String) async throws -> [SpendSummaryEntity] {
+        let needle = string.lowercased()
+        return await MainActor.run {
+            IntentService.spendSummaryEntities(limit: 60).filter {
+                $0.title.lowercased().contains(needle)
+                    || ($0.summary?.lowercased().contains(needle) ?? false)
+                    || $0.keywords.contains { $0.lowercased().contains(needle) }
+            }
+        }
+    }
+}
+
 public struct DaySummaryEntityQuery: EntityQuery, EntityStringQuery {
     public init() {}
 
