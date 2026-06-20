@@ -94,14 +94,5 @@ public struct SparkShortcuts: AppShortcutsProvider {
             shortTitle: "Open Anomaly",
             systemImageName: "exclamationmark.triangle.fill"
         )
-        AppShortcut(
-            intent: AcknowledgeAnomalyIntent(),
-            phrases: [
-                "Acknowledge \(\.$anomaly) in \(.applicationName)",
-                "Acknowledge an anomaly in \(.applicationName)",
-            ],
-            shortTitle: "Acknowledge Anomaly",
-            systemImageName: "checkmark.circle.fill"
-        )
     }
 }
