@@ -50,7 +50,7 @@ enum FlintModelProvider {
     ) -> Result<FlintResolvedSession, FlintGenerationAvailability> {
         // 1. Private Cloud Compute (primary).
         if let pcc = privateCloudComputeModel(), pccIsAvailable(pcc) {
-            let session = LanguageModelSession(model: pcc, tools: tools) { instructions }
+            let session = LanguageModelSession(model: pcc, tools: tools, instructions: instructions)
             return .success(FlintResolvedSession(
                 session: session,
                 tier: .privateCloudCompute,
@@ -62,7 +62,7 @@ enum FlintModelProvider {
         let device = SystemLanguageModel.default
         switch device.availability {
         case .available:
-            let session = LanguageModelSession(model: device, tools: tools) { instructions }
+            let session = LanguageModelSession(model: device, tools: tools, instructions: instructions)
             return .success(FlintResolvedSession(
                 session: session,
                 tier: .onDevice,
@@ -86,11 +86,11 @@ enum FlintModelProvider {
     // EU, on ineligible devices, when Apple Intelligence is off, or offline. The
     // call is isolated here so the rest of Flint is provider-agnostic.
 
-    private static func privateCloudComputeModel() -> SystemLanguageModel? {
-        SystemLanguageModel(useCase: .privateCloudCompute)
+    private static func privateCloudComputeModel() -> PrivateCloudComputeLanguageModel? {
+        PrivateCloudComputeLanguageModel()
     }
 
-    private static func pccIsAvailable(_ model: SystemLanguageModel) -> Bool {
+    private static func pccIsAvailable(_ model: PrivateCloudComputeLanguageModel) -> Bool {
         if case .available = model.availability { return true }
         return false
     }

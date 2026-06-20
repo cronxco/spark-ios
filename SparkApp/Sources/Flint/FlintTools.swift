@@ -15,6 +15,8 @@ import SparkIntelligence
 
 /// Returns the compact day summary for a given date (defaults to today).
 struct GetDaySummaryTool: Tool {
+    typealias Output = String
+
     let name = "getDaySummary"
     let description = "Get Spark's compact day summary (sleep, activity, spend, anomalies) for a date."
 
@@ -24,17 +26,17 @@ struct GetDaySummaryTool: Tool {
         var date: String?
     }
 
-    func call(arguments: Arguments) async throws -> ToolOutput {
+    func call(arguments: Arguments) async throws -> String {
         let dateKey = Self.resolveDate(arguments.date)
         let service = await IntentService()
         if let summary = try? await service.apiClient.request(BriefingEndpoint.today(date: dateKey)) {
-            return ToolOutput(Self.describe(summary))
+            return Self.describe(summary)
         }
         // Offline fallback: today's cached snapshot.
         if let snapshot = await service.todaySnapshot() {
-            return ToolOutput(Self.describe(snapshot))
+            return Self.describe(snapshot)
         }
-        return ToolOutput("No day summary available for \(dateKey).")
+        return "No day summary available for \(dateKey)."
     }
 
     private static func resolveDate(_ raw: String?) -> String {
@@ -65,6 +67,8 @@ struct GetDaySummaryTool: Tool {
 
 /// Returns the recent trend for a named metric.
 struct GetMetricTrendTool: Tool {
+    typealias Output = String
+
     let name = "getMetricTrend"
     let description = "Get the recent trend (latest value, mean) for a Spark metric by identifier or name."
 
@@ -74,10 +78,16 @@ struct GetMetricTrendTool: Tool {
         var metric: String
     }
 
-    func call(arguments: Arguments) async throws -> ToolOutput {
-        let matches = await MainActor.run { IntentService.metricEntities(query: arguments.metric) }
+    func call(arguments: Arguments) async throws -> String {
+        let query = arguments.metric.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let matches = await MainActor.run {
+            IntentService.metricEntities(limit: 500).filter { metric in
+                metric.id.lowercased().contains(query)
+                    || metric.displayName.lowercased().contains(query)
+            }
+        }
         guard let metric = matches.first else {
-            return ToolOutput("No metric found matching '\(arguments.metric)'.")
+            return "No metric found matching '\(arguments.metric)'."
         }
         var line = metric.displayName
         if let value = metric.latestValueDescription { line += ": latest \(value)" }
@@ -85,12 +95,14 @@ struct GetMetricTrendTool: Tool {
             let f = RelativeDateTimeFormatter()
             line += " (updated \(f.localizedString(for: last, relativeTo: .now)))"
         }
-        return ToolOutput(line)
+        return line
     }
 }
 
 /// Searches recent events for a free-text query.
 struct SearchEventsTool: Tool {
+    typealias Output = String
+
     let name = "searchEvents"
     let description = "Search the user's recent Spark events by free text."
 
@@ -100,17 +112,17 @@ struct SearchEventsTool: Tool {
         var query: String
     }
 
-    func call(arguments: Arguments) async throws -> ToolOutput {
+    func call(arguments: Arguments) async throws -> String {
         let results = await MainActor.run { IntentService.eventEntities(query: arguments.query, limit: 8) }
         guard !results.isEmpty else {
-            return ToolOutput("No events found for '\(arguments.query)'.")
+            return "No events found for '\(arguments.query)'."
         }
         let f = DateFormatter(); f.dateFormat = "MMM d HH:mm"
         let lines = results.map { entity -> String in
-            let when = entity.timestamp.map { f.string(from: $0) } ?? "—"
-            return "• \(when): \(entity.title)"
+            let when = entity.timestamp.map { f.string(from: $0) } ?? "-"
+            return "- \(when): \(entity.title)"
         }
-        return ToolOutput(lines.joined(separator: "\n"))
+        return lines.joined(separator: "\n")
     }
 }
 

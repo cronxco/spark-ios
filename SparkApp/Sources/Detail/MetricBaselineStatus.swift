@@ -115,11 +115,10 @@ struct MetricBaselineStatus: Equatable, Sendable {
     }
 
     private static func formatPercent(_ ratio: Double) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .percent
-        formatter.maximumFractionDigits = 0
-        formatter.minimumFractionDigits = 0
-        formatter.positivePrefix = "+"
-        return formatter.string(from: NSNumber(value: ratio)) ?? "\(Int((ratio * 100).rounded()))%"
+        let percent = Int((ratio * 100).rounded(.toNearestOrAwayFromZero))
+        if percent > 0 {
+            return "+\(percent)%"
+        }
+        return "\(percent)%"
     }
 }

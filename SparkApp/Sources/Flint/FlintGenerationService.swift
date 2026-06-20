@@ -30,7 +30,7 @@ private struct GeneratedTodaySummaryLine {
     var text: String
 }
 
-enum FlintGenerationAvailability: Equatable, Sendable {
+enum FlintGenerationAvailability: Error, Equatable, Sendable {
     case privateCloudCompute
     case onDevice
     case deviceNotEligible

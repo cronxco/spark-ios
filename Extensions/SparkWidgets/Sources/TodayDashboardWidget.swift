@@ -118,7 +118,7 @@ struct TodayDashboardWidgetView: View {
                     Spacer()
                     // Interactive acknowledge button (iOS 17+)
                     Button(
-                        intent: AcknowledgeAnomalyIntent(anomalyID: anomaly.id)
+                        intent: AcknowledgeAnomalyIntent(anomaly: AnomalyEntity(model: anomaly))
                     ) {
                         Image(systemName: "checkmark.circle")
                             .font(.caption)
