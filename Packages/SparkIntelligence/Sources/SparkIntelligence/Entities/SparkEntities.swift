@@ -53,13 +53,13 @@ public struct EventEntity: AppEntity, IndexedEntity {
         timestamp: Date?
     ) {
         self.id = id
-        self.title = title
-        self.summary = summary
-        self.tags = tags
         self.service = service
         self.domain = domain
         self.action = action
         self.timestamp = timestamp
+        self.title = title
+        self.summary = summary
+        self.tags = tags
     }
 
     public var displayRepresentation: DisplayRepresentation {
@@ -110,11 +110,11 @@ public struct BlockEntity: AppEntity, IndexedEntity {
 
     public init(id: String, title: String, body: String?, blockType: String, timestamp: Date?) {
         self.id = id
+        self.blockType = blockType
+        self.timestamp = timestamp
         self.title = title
         self.body = body
         self.keywords = [blockType].filter { !$0.isEmpty }
-        self.blockType = blockType
-        self.timestamp = timestamp
     }
 
     public var displayRepresentation: DisplayRepresentation {
@@ -298,11 +298,11 @@ public struct AnomalyEntity: AppEntity, IndexedEntity {
         acknowledged: Bool
     ) {
         self.id = id
-        self.summary = summary
         self.metric = metric
         self.direction = direction
         self.detectedAt = detectedAt
         self.acknowledged = acknowledged
+        self.summary = summary
         self.keywords = [metric, direction, "anomaly"].compactMap { $0?.nonEmpty }
     }
 
@@ -350,9 +350,9 @@ public struct IntegrationEntity: AppEntity, IndexedEntity {
 
     public init(id: String, name: String, service: String, status: String) {
         self.id = id
-        self.name = name
         self.service = service
         self.status = status
+        self.name = name
         self.statusDescription = "Status: \(status.capitalized)"
     }
 
