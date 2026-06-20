@@ -1,8 +1,10 @@
 import Foundation
+import FoundationModels
 import SparkKit
 
-#if canImport(FoundationModels)
-import FoundationModels
+// iOS 27 baseline: FoundationModels is always available, so the previous
+// `#if canImport(FoundationModels)` compile-time fallbacks are gone. Runtime
+// availability fallbacks (PCC → on-device → static) live in FlintModelProvider.
 
 @Generable
 private struct GeneratedFlintDailyNote {
@@ -27,41 +29,63 @@ private struct GeneratedFlintDailyNote {
 private struct GeneratedTodaySummaryLine {
     var text: String
 }
-#endif
 
 enum FlintGenerationAvailability: Equatable, Sendable {
-    case available
+    case privateCloudCompute
+    case onDevice
     case deviceNotEligible
     case appleIntelligenceNotEnabled
     case modelNotReady
     case unavailable
+
+    /// Whether the result came from a real model (PCC or on-device) rather than
+    /// the static fallback.
+    var isModelBacked: Bool {
+        self == .privateCloudCompute || self == .onDevice
+    }
+}
+
+/// Lightweight usage record for telemetry / PCC budgeting.
+struct FlintGenerationUsage: Sendable, Equatable {
+    let tier: FlintGenerationTier
+    /// Token budget requested for the response (upper bound).
+    let responseTokenBudget: Int
 }
 
 struct FlintGenerationResult: Sendable, Equatable {
     let note: FlintDailyNote
     let availability: FlintGenerationAvailability
     let usedAppleIntelligence: Bool
+    let tier: FlintGenerationTier
+    let usage: FlintGenerationUsage?
 }
 
 enum FlintGenerationService {
-    static func generateNote(from facts: FlintBriefingFacts) async throws -> FlintGenerationResult {
-        #if canImport(FoundationModels)
-        let model = SystemLanguageModel.default
+    // MARK: - Daily note (digest) — deep reasoning + live-data tools
 
-        switch model.availability {
-        case .available:
-            let session = LanguageModelSession(
-                instructions: """
-                You are Flint, Spark's concise daily briefing assistant.
-                Use only the supplied Spark briefing facts.
-                Do not invent missing data.
-                Avoid medical or financial advice; phrase suggestions as lightweight observations.
-                Keep the note calm, specific, and useful.
-                """
-            )
-            let response = try await session.respond(
+    static func generateNote(from facts: FlintBriefingFacts) async throws -> FlintGenerationResult {
+        let instructions = """
+        You are Flint, Spark's concise daily briefing assistant.
+        Use the supplied Spark briefing facts; you may call the provided tools to
+        fetch additional Spark data when it improves accuracy.
+        Do not invent missing data.
+        Avoid medical or financial advice; phrase suggestions as lightweight observations.
+        Keep the note calm, specific, and useful.
+        """
+
+        let resolved = FlintModelProvider.resolve(
+            reasoning: .deep,
+            instructions: instructions,
+            tools: FlintTools.digestTools
+        )
+
+        switch resolved {
+        case .failure(let availability):
+            return staticResult(note: facts.fallbackNote, availability: availability)
+        case .success(let model):
+            let response = try await model.session.respond(
                 generating: GeneratedFlintDailyNote.self,
-                options: GenerationOptions(maximumResponseTokens: 500)
+                options: FlintModelProvider.generationOptions(for: .deep)
             ) {
                 """
                 Create a daily highlight note from these facts.
@@ -76,32 +100,16 @@ enum FlintGenerationService {
                 \(facts.promptText)
                 """
             }
-            return FlintGenerationResult(
+            return modelResult(
                 note: response.content.note,
-                availability: .available,
-                usedAppleIntelligence: true
-            )
-        case .unavailable(let reason):
-            return FlintGenerationResult(
-                note: facts.fallbackNote,
-                availability: availability(from: reason),
-                usedAppleIntelligence: false
-            )
-        @unknown default:
-            return FlintGenerationResult(
-                note: facts.fallbackNote,
-                availability: .unavailable,
-                usedAppleIntelligence: false
+                tier: model.tier,
+                availability: model.availability,
+                reasoning: .deep
             )
         }
-        #else
-        return FlintGenerationResult(
-            note: facts.fallbackNote,
-            availability: .unavailable,
-            usedAppleIntelligence: false
-        )
-        #endif
     }
+
+    // MARK: - Today summary line — light reasoning, no tools
 
     static func generateTodaySummaryLine(
         from facts: FlintBriefingFacts,
@@ -115,35 +123,35 @@ enum FlintGenerationService {
             suggestedActions: []
         )
 
-        #if canImport(FoundationModels)
-        let model = SystemLanguageModel.default
+        let instructions = """
+        You write the subtitle under the user's Day page heading.
+        Use only the supplied briefing facts.
+        The app is named Spark, but Spark is not the user and must not be described as doing the user's actions.
+        Do not write phrases like "Spark slept", "Spark walked", "Spark spent", or "Spark had".
+        Write about the user directly ("You slept...") or use neutral phrasing ("Sleep held steady...").
+        Help the user understand the main pattern at a glance.
+        Choose the single most useful pattern for the user to notice.
+        Prefer anomalies or unusual changes, then activity, sleep, or spend highlights, then a neutral recap.
+        Do not invent missing data.
+        For today, describe the day so far.
+        For past dates, describe the day in review.
+        Do not say "today" for past dates.
+        Avoid raw metric names, IDs, source names, and jargon.
+        Avoid medical or financial advice.
+        Avoid percentage changes; they are not meaningful in this header.
+        Write one warm, plain-English sentence.
+        Keep it ideally 80-140 characters and never more than 180 characters.
+        """
 
-        switch model.availability {
-        case .available:
-            let session = LanguageModelSession(
-                instructions: """
-                You write the subtitle under the user's Day page heading.
-                Use only the supplied briefing facts.
-                The app is named Spark, but Spark is not the user and must not be described as doing the user's actions.
-                Do not write phrases like "Spark slept", "Spark walked", "Spark spent", or "Spark had".
-                Write about the user directly ("You slept...") or use neutral phrasing ("Sleep held steady...").
-                Help the user understand the main pattern at a glance.
-                Choose the single most useful pattern for the user to notice.
-                Prefer anomalies or unusual changes, then activity, sleep, or spend highlights, then a neutral recap.
-                Do not invent missing data.
-                For today, describe the day so far.
-                For past dates, describe the day in review.
-                Do not say "today" for past dates.
-                Avoid raw metric names, IDs, source names, and jargon.
-                Avoid medical or financial advice.
-                Avoid percentage changes; they are not meaningful in this header.
-                Write one warm, plain-English sentence.
-                Keep it ideally 80-140 characters and never more than 180 characters.
-                """
-            )
-            let response = try await session.respond(
+        let resolved = FlintModelProvider.resolve(reasoning: .light, instructions: instructions)
+
+        switch resolved {
+        case .failure(let availability):
+            return staticResult(note: fallback, availability: availability)
+        case .success(let model):
+            let response = try await model.session.respond(
                 generating: GeneratedTodaySummaryLine.self,
-                options: GenerationOptions(maximumResponseTokens: 80)
+                options: FlintModelProvider.generationOptions(for: .light)
             ) {
                 """
                 Write one sentence for the top of the day page.
@@ -154,53 +162,49 @@ enum FlintGenerationService {
                 \(facts.promptText)
                 """
             }
-            return FlintGenerationResult(
-                note: FlintDailyNote(
-                    title: "",
-                    summary: response.content.text,
-                    highlights: [],
-                    watchouts: [],
-                    suggestedActions: []
-                ),
-                availability: .available,
-                usedAppleIntelligence: true
+            let note = FlintDailyNote(
+                title: "",
+                summary: response.content.text,
+                highlights: [],
+                watchouts: [],
+                suggestedActions: []
             )
-        case .unavailable(let reason):
-            return FlintGenerationResult(
-                note: fallback,
-                availability: availability(from: reason),
-                usedAppleIntelligence: false
-            )
-        @unknown default:
-            return FlintGenerationResult(
-                note: fallback,
-                availability: .unavailable,
-                usedAppleIntelligence: false
+            return modelResult(
+                note: note,
+                tier: model.tier,
+                availability: model.availability,
+                reasoning: .light
             )
         }
-        #else
-        return FlintGenerationResult(
-            note: fallback,
-            availability: .unavailable,
-            usedAppleIntelligence: false
-        )
-        #endif
     }
 
-    #if canImport(FoundationModels)
-    private static func availability(
-        from reason: SystemLanguageModel.Availability.UnavailableReason
-    ) -> FlintGenerationAvailability {
-        switch reason {
-        case .deviceNotEligible:
-            return .deviceNotEligible
-        case .appleIntelligenceNotEnabled:
-            return .appleIntelligenceNotEnabled
-        case .modelNotReady:
-            return .modelNotReady
-        @unknown default:
-            return .unavailable
-        }
+    // MARK: - Result builders
+
+    private static func modelResult(
+        note: FlintDailyNote,
+        tier: FlintGenerationTier,
+        availability: FlintGenerationAvailability,
+        reasoning: FlintReasoning
+    ) -> FlintGenerationResult {
+        FlintGenerationResult(
+            note: note,
+            availability: availability,
+            usedAppleIntelligence: true,
+            tier: tier,
+            usage: FlintGenerationUsage(tier: tier, responseTokenBudget: reasoning.maximumResponseTokens)
+        )
     }
-    #endif
+
+    private static func staticResult(
+        note: FlintDailyNote,
+        availability: FlintGenerationAvailability
+    ) -> FlintGenerationResult {
+        FlintGenerationResult(
+            note: note,
+            availability: availability,
+            usedAppleIntelligence: false,
+            tier: .staticFallback,
+            usage: nil
+        )
+    }
 }
