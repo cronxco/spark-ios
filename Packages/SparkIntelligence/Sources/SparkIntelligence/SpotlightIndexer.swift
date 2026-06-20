@@ -21,7 +21,7 @@ public enum SpotlightIndexer {
     @MainActor
     public static func indexBatch(container: ModelContainer) async {
         // Honour auth state: never index personal data while signed out.
-        guard KeychainTokenStore().accessToken() != nil else { return }
+        guard await KeychainTokenStore().accessToken() != nil else { return }
 
         let index = CSSearchableIndex.default()
 
@@ -42,7 +42,7 @@ public enum SpotlightIndexer {
         let context = ModelContext(container)
 
         // Signed out: drop everything Spark contributed to the index.
-        guard KeychainTokenStore().accessToken() != nil else {
+        guard await KeychainTokenStore().accessToken() != nil else {
             try? await CSSearchableIndex.default().deleteAllSearchableItems()
             return
         }
@@ -79,9 +79,9 @@ public enum SpotlightIndexer {
         return all.filter { ($0 as? StaleDatable)?.lastSyncedAt ?? .distantFuture < cutoff }
     }
 
-    private static func delete<E: IndexedEntity>(_ type: E.Type, ids: [String]) async {
+    private static func delete<E: IndexedEntity>(_ type: E.Type, ids: [E.ID]) async {
         guard !ids.isEmpty else { return }
-        try? await CSSearchableIndex.default().deleteAppEntities(identifiers: ids, ofType: type)
+        try? await CSSearchableIndex.default().deleteAppEntities(identifiedBy: ids, ofType: type)
     }
 }
 
