@@ -39,11 +39,15 @@ struct MoneyExploreView: View {
     @State private var path: [DetailRoute] = []
     @State private var showCreateAccount = false
     @State private var selectedRange: HistoryRange = .oneMonth
+    @State private var expandedAccountGroupTypes: Set<String> = []
 
     var body: some View {
         NavigationStack(path: $path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: SparkSpacing.lg) {
+                    pageHeader
+                        .padding(.horizontal, SparkSpacing.lg)
+
                     content
                 }
                 .padding(.top, SparkSpacing.md)
@@ -77,6 +81,10 @@ struct MoneyExploreView: View {
             }
             await viewModel?.load()
         }
+    }
+
+    private var pageHeader: some View {
+        SparkMainPageHeader(title: "Money", subtitle: headerSubtitle)
     }
 
     @ViewBuilder
@@ -120,26 +128,23 @@ struct MoneyExploreView: View {
     // MARK: - Net Worth Hero
 
     private func netWorthHero(vm: MoneyExploreViewModel) -> some View {
-        GlassCard(radius: 22, padding: SparkSpacing.xl, tint: Color.domainMoney.opacity(0.06)) {
+        GlassCard(radius: 28, padding: SparkSpacing.xl) {
             VStack(alignment: .leading, spacing: SparkSpacing.md) {
-                Text("NET WORTH")
+                Text("Net worth")
                     .font(SparkTypography.monoSmall)
                     .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
 
                 let netWorth = vm.netWorth
-                let isPositive = netWorth >= 0
-                let netWorthColor: Color = isPositive ? .sparkSuccess : .sparkError
 
                 HStack(alignment: .firstTextBaseline, spacing: 1) {
                     Text(formatInteger(netWorth))
-                        .font(.system(size: 52, weight: .bold, design: .default))
-                        .foregroundStyle(netWorthColor)
+                        .font(SparkFonts.display(size: 44))
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.55)
                     Text(formatDecimal(netWorth))
-                        .font(.system(size: 24, weight: .semibold, design: .default))
-                        .foregroundStyle(netWorthColor.opacity(0.7))
+                        .font(SparkFonts.display(size: 26))
+                        .foregroundStyle(.secondary)
                 }
 
                 let history = filteredHistory(vm: vm)
@@ -149,24 +154,26 @@ struct MoneyExploreView: View {
                 if delta != 0 {
                     HStack(spacing: SparkSpacing.xs) {
                         Image(systemName: delta > 0 ? "arrow.up" : "arrow.down")
-                            .font(.system(size: 13, weight: .semibold))
-                        Text("\(formatAmount(abs(delta)))  \(String(format: "%.1f%%", abs(percent)))  \(selectedRange.rangeLabel)")
-                            .font(SparkTypography.bodySmall)
+                        Text("\(formatAmount(abs(delta))) · \(String(format: "%.1f%%", abs(percent))) · \(selectedRange.rangeLabel)")
+                            .font(SparkTypography.caption)
                             .fontWeight(.semibold)
                     }
-                    .foregroundStyle(delta > 0 ? Color.sparkSuccess : Color.sparkError)
+                    .foregroundStyle(Color.primary)
+                    .padding(.horizontal, SparkSpacing.md)
+                    .padding(.vertical, SparkSpacing.xs)
+                    .background(Color.domainMoney, in: Capsule())
                 }
 
-                rangeChips
+                chartBody(history: history, tint: Color.domainMoney)
+                    .frame(height: 160)
 
-                chartBody(history: history, tint: netWorthColor)
-                    .frame(height: 100)
+                rangeChips
             }
         }
     }
 
     private var rangeChips: some View {
-        HStack(spacing: SparkSpacing.xs) {
+        HStack(spacing: 4) {
             ForEach(HistoryRange.allCases) { range in
                 Button {
                     selectedRange = range
@@ -174,22 +181,21 @@ struct MoneyExploreView: View {
                     Text(range.rawValue)
                         .font(SparkTypography.monoSmall)
                         .fontWeight(.semibold)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
+                        .foregroundStyle(selectedRange == range ? Color.sparkTextPrimary : Color.secondary)
+                        .frame(minWidth: 42)
+                        .padding(.vertical, SparkSpacing.xs + 2)
                         .background {
                             if selectedRange == range {
-                                RoundedRectangle(cornerRadius: SparkRadii.sm)
+                                Capsule()
                                     .fill(Color.domainMoney)
-                            } else {
-                                RoundedRectangle(cornerRadius: SparkRadii.sm)
-                                    .fill(.primary.opacity(0.06))
                             }
                         }
-                        .foregroundStyle(selectedRange == range ? .black : .secondary)
                 }
                 .buttonStyle(.plain)
             }
         }
+        .padding(4)
+        .sparkGlass(.capsule)
     }
 
     @ViewBuilder
@@ -197,7 +203,7 @@ struct MoneyExploreView: View {
         if case .loading = viewModel?.historyState {
             LoadingShimmerCard()
         } else if history.count >= 2 {
-            BalanceAreaChart(data: history, tint: tint)
+            BalanceAreaChart(data: history, tint: tint, showMidline: true, showEndpoint: true)
         } else {
             RoundedRectangle(cornerRadius: SparkRadii.sm)
                 .fill(.primary.opacity(0.04))
@@ -217,7 +223,12 @@ struct MoneyExploreView: View {
         if !segments.isEmpty {
             GlassCard {
                 VStack(alignment: .leading, spacing: 0) {
-                    GlassCardHeader(icon: "chart.pie.fill", tint: Color.domainMoney, title: "Where It Lives")
+                    HStack(spacing: SparkSpacing.sm) {
+                        DomainGlyph(icon: "chart.pie.fill", tint: Color.domainMoney, size: 26)
+                        Text("Where it lives")
+                            .font(SparkFonts.display(.headline, weight: .bold))
+                            .foregroundStyle(.primary)
+                    }
                         .padding(.bottom, SparkSpacing.md)
 
                     HStack(alignment: .center, spacing: SparkSpacing.lg) {
@@ -243,7 +254,7 @@ struct MoneyExploreView: View {
                                         .foregroundStyle(.secondary)
                                         .lineLimit(1)
                                     Spacer(minLength: 4)
-                                    Text(formatAmount(segment.value))
+                                    Text(formattedMoneyAmount(segment.value, currency: "GBP", fractionDigits: 0))
                                         .font(SparkTypography.monoSmall)
                                         .fontWeight(.semibold)
                                         .foregroundStyle(.primary)
@@ -296,20 +307,19 @@ struct MoneyExploreView: View {
 
     private func accountsSection(vm: MoneyExploreViewModel) -> some View {
         VStack(alignment: .leading, spacing: SparkSpacing.md) {
-            HStack {
-                Text("Accounts")
-                    .font(SparkTypography.monoSmall)
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                Spacer()
+            HStack(spacing: SparkSpacing.sm) {
+                SparkSectionHeader(title: "Accounts", icon: "sterlingsign", tint: Color.domainMoney)
                 Button {
                     showCreateAccount = true
                 } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 18))
-                        .foregroundStyle(Color.domainMoney)
+                    Image(systemName: "plus")
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundStyle(Color.sparkTextPrimary)
+                        .frame(width: 32, height: 32)
+                        .background(Color.domainMoney, in: Circle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Add Account")
             }
 
             if vm.accounts.isEmpty {
@@ -333,20 +343,36 @@ struct MoneyExploreView: View {
     }
 
     private func accountGroup(group: AccountGroup) -> some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.xs) {
-            AccountGroupHeader(
-                label: group.type,
-                count: group.accounts.count,
-                total: group.total,
-                currency: group.currency,
-                isDebt: group.isDebt
-            )
+        let isExpanded = !group.collapsedByDefault || expandedAccountGroupTypes.contains(group.rawType)
 
-            ForEach(group.accounts) { account in
+        return VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+            Button {
+                guard group.collapsedByDefault else { return }
+                withAnimation(.snappy(duration: 0.22)) {
+                    toggleGroup(group.rawType)
+                }
+            } label: {
+                AccountGroupHeader(group: group, isExpanded: isExpanded)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(group.collapsedByDefault ? "Toggles account group" : "")
+
+            if isExpanded {
+                ForEach(group.accounts) { account in
+                    Button {
+                        path.append(.account(id: account.id))
+                    } label: {
+                        MoneyAccountRow(account: account)
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
                 Button {
-                    path.append(.account(id: account.id))
+                    withAnimation(.snappy(duration: 0.22)) {
+                        toggleGroup(group.rawType)
+                    }
                 } label: {
-                    MoneyAccountRow(account: account)
+                    CollapsedAccountGroupRow(group: group)
                 }
                 .buttonStyle(.plain)
             }
@@ -354,24 +380,47 @@ struct MoneyExploreView: View {
     }
 
     private func groupedAccounts(_ accounts: [MoneyAccount]) -> [AccountGroup] {
-        let assetTypes = ["current_account", "savings_account", "investment_account", "pension"]
-        let debtTypes = ["credit_card", "mortgage", "loan"]
-        let order = assetTypes + debtTypes + ["other"]
+        let order = [
+            "current_account",
+            "credit_card",
+            "savings_account",
+            "investment_account",
+            "pension",
+            "mortgage",
+            "loan",
+            "other"
+        ]
 
         let grouped = Dictionary(grouping: accounts) { $0.accountType ?? "other" }
-        return order.compactMap { type in
+        let orderedTypes = order + grouped.keys
+            .filter { !order.contains($0) }
+            .sorted()
+
+        return orderedTypes.compactMap { type in
             guard let accs = grouped[type], !accs.isEmpty else { return nil }
             let sorted = accs.sorted { $0.title < $1.title }
-            let isDebt = debtTypes.contains(type)
+            let isDebt = isDebtAccountType(type)
             let balances = sorted.compactMap { $0.latestBalance?.balance }
             let total: Double? = balances.isEmpty ? nil : balances.reduce(0, +)
             return AccountGroup(
+                rawType: type,
                 type: accountTypeLabel(type),
                 accounts: sorted,
                 total: total,
                 currency: sorted.first?.currency ?? "GBP",
-                isDebt: isDebt
+                isDebt: isDebt,
+                tint: accountGroupTint(for: type),
+                icon: accountGroupIcon(for: type),
+                collapsedByDefault: collapsedByDefault(for: type)
             )
+        }
+    }
+
+    private func toggleGroup(_ rawType: String) {
+        if expandedAccountGroupTypes.contains(rawType) {
+            expandedAccountGroupTypes.remove(rawType)
+        } else {
+            expandedAccountGroupTypes.insert(rawType)
         }
     }
 
@@ -409,7 +458,7 @@ struct MoneyExploreView: View {
     }
 
     private func formatAmount(_ value: Double) -> String {
-        "£\(String(format: "%.2f", abs(value)))"
+        formattedMoneyAmount(value, currency: "GBP")
     }
 
     private func accountTypeLabel(_ type: String) -> String {
@@ -425,6 +474,77 @@ struct MoneyExploreView: View {
         }
     }
 
+    private func isDebtAccountType(_ type: String) -> Bool {
+        ["credit_card", "mortgage", "loan"].contains(type)
+    }
+
+    private func collapsedByDefault(for type: String) -> Bool {
+        ["savings_account", "investment_account", "pension"].contains(type)
+    }
+
+    private func accountGroupTint(for type: String) -> Color {
+        switch type {
+        case "savings_account": Color.sparkSuccess
+        case "investment_account", "pension": Color.ocean300
+        case "credit_card", "mortgage", "loan": Color.sparkError
+        case "current_account": Color.domainMoney
+        default: Color.secondary.opacity(0.6)
+        }
+    }
+
+    private func accountGroupIcon(for type: String) -> String {
+        switch type {
+        case "current_account": "sterlingsign"
+        case "savings_account": "banknote.fill"
+        case "investment_account": "chart.line.uptrend.xyaxis"
+        case "pension": "building.columns.fill"
+        case "credit_card": "creditcard.fill"
+        case "mortgage": "house.fill"
+        case "loan": "doc.text.fill"
+        default: "folder.fill"
+        }
+    }
+
+    private var headerSubtitle: String {
+        guard let vm = viewModel else { return "Loading accounts" }
+        switch vm.loadState {
+        case .idle, .loading:
+            return vm.accounts.isEmpty ? "Loading accounts" : lastSyncedSubtitle(for: vm.accounts)
+        case .error:
+            return "Accounts unavailable"
+        case .loaded:
+            return vm.accounts.isEmpty ? "No accounts synced yet" : lastSyncedSubtitle(for: vm.accounts)
+        }
+    }
+
+    private func lastSyncedSubtitle(for accounts: [MoneyAccount]) -> String {
+        guard let lastUpdatedAt = accounts.map(\.updatedAt).max() else {
+            return "No accounts synced yet"
+        }
+
+        let calendar = Calendar.current
+        if calendar.isDateInToday(lastUpdatedAt) {
+            return "Last synced today at \(Self.syncTimeFormatter.string(from: lastUpdatedAt))"
+        }
+        if calendar.isDateInYesterday(lastUpdatedAt) {
+            return "Last synced yesterday at \(Self.syncTimeFormatter.string(from: lastUpdatedAt))"
+        }
+        return "Last synced \(Self.syncDateFormatter.string(from: lastUpdatedAt))"
+    }
+
+    private static let syncTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+
+    private static let syncDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
     private var shimmerPlaceholder: some View {
         VStack(spacing: SparkSpacing.sm) {
             LoadingShimmerCard().frame(height: 240)
@@ -439,51 +559,81 @@ struct MoneyExploreView: View {
 // MARK: - Supporting Types
 
 private struct AccountGroup {
+    let rawType: String
     let type: String
     let accounts: [MoneyAccount]
     let total: Double?
     let currency: String
     let isDebt: Bool
+    let tint: Color
+    let icon: String
+    let collapsedByDefault: Bool
 }
 
 // MARK: - AccountGroupHeader
 
 private struct AccountGroupHeader: View {
-    let label: String
-    let count: Int
-    let total: Double?
-    let currency: String
-    let isDebt: Bool
+    let group: AccountGroup
+    let isExpanded: Bool
 
     var body: some View {
         HStack(spacing: SparkSpacing.sm) {
-            RoundedRectangle(cornerRadius: 2)
-                .fill(isDebt ? Color.sparkError : Color.sparkSuccess)
-                .frame(width: 7, height: 7)
-            Text(label)
-                .font(SparkTypography.monoSmall)
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
+            SparkSectionHeader(title: group.type, icon: group.icon, tint: group.tint)
             Spacer()
-            if let total {
-                Text(formatAmount(total, currency: currency))
+            if let total = group.total {
+                Text(formattedMoneyAmount(total, currency: group.currency))
                     .font(SparkTypography.monoSmall)
                     .fontWeight(.semibold)
-                    .foregroundStyle(isDebt ? Color.sparkError : Color.sparkSuccess)
+                    .foregroundStyle(group.isDebt ? Color.sparkError : Color.primary)
+            }
+            if group.collapsedByDefault {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
             }
         }
         .padding(.top, SparkSpacing.xs)
     }
 
-    private func formatAmount(_ value: Double, currency: String) -> String {
-        let symbol: String = switch currency {
-        case "GBP": "£"
-        case "EUR": "€"
-        case "USD": "$"
-        default: currency + " "
+}
+
+// MARK: - CollapsedAccountGroupRow
+
+private struct CollapsedAccountGroupRow: View {
+    let group: AccountGroup
+
+    var body: some View {
+        HStack(spacing: SparkSpacing.md) {
+            DomainGlyph(icon: "chevron.right", tint: group.tint, size: 42)
+
+            VStack(alignment: .leading, spacing: SparkSpacing.xxs) {
+                Text(group.type)
+                    .font(SparkTypography.bodySmall)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Text("\(group.accounts.count) account\(group.accounts.count == 1 ? "" : "s")")
+                    .font(SparkTypography.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: SparkSpacing.sm)
+
+            if let total = group.total {
+                Text(formattedMoneyAmount(total, currency: group.currency))
+                    .font(SparkFonts.display(size: 18))
+                    .foregroundStyle(group.isDebt ? Color.sparkError : Color.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
         }
-        return "\(symbol)\(String(format: "%.2f", abs(value)))"
+        .padding(.horizontal, SparkSpacing.lg)
+        .frame(height: 72)
+        .contentShape(Rectangle())
+        .sparkGlass(.roundedRect(20))
     }
+
 }
 
 // MARK: - BankTile
@@ -531,21 +681,11 @@ private struct MoneyAccountRow: View {
             BankTile(provider: account.provider, title: account.title)
 
             VStack(alignment: .leading, spacing: SparkSpacing.xxs) {
-                HStack(spacing: SparkSpacing.xs) {
-                    Text(account.title)
-                        .font(SparkTypography.bodySmall)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    if let type = account.accountType {
-                        Text(accountTypeChip(type))
-                            .font(SparkTypography.caption)
-                            .foregroundStyle(Color.domainMoney)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.domainMoney.opacity(0.12), in: Capsule())
-                    }
-                }
+                Text(account.title)
+                    .font(SparkTypography.bodySmall)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
                 if let provider = account.provider {
                     Text(provider.capitalized)
                         .font(SparkTypography.monoSmall)
@@ -557,8 +697,8 @@ private struct MoneyAccountRow: View {
 
             VStack(alignment: .trailing, spacing: SparkSpacing.xxs) {
                 if let balance = account.latestBalance {
-                    Text(formattedBalance(balance.balance, currency: account.currency))
-                        .font(SparkFonts.display(.callout, weight: .bold))
+                    Text(formattedMoneyAmount(balance.balance, currency: account.currency))
+                        .font(SparkFonts.display(size: 18))
                         .foregroundStyle(balanceColor(balance: balance.balance, isNegative: account.isNegativeBalance))
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
@@ -579,32 +719,25 @@ private struct MoneyAccountRow: View {
         .sparkGlass(.roundedRect(20))
     }
 
-    private func accountTypeChip(_ type: String) -> String {
-        switch type {
-        case "current_account": "Current"
-        case "savings_account": "Savings"
-        case "mortgage": "Mortgage"
-        case "investment_account": "Investment"
-        case "credit_card": "Credit"
-        case "loan": "Loan"
-        case "pension": "Pension"
-        default: type.capitalized
-        }
-    }
-
-    private func formattedBalance(_ value: Double, currency: String) -> String {
-        let symbol: String = switch currency {
-        case "GBP": "£"
-        case "EUR": "€"
-        case "USD": "$"
-        default: currency + " "
-        }
-        return "\(symbol)\(String(format: "%.2f", abs(value)))"
-    }
-
     private func balanceColor(balance: Double, isNegative: Bool) -> Color {
-        isNegative ? Color.sparkError : (balance >= 0 ? Color.sparkSuccess : Color.sparkError)
+        isNegative || balance < 0 ? Color.sparkError : Color.primary
     }
+}
+
+private func formattedMoneyAmount(_ value: Double, currency: String, fractionDigits: Int = 2) -> String {
+    let formatter = NumberFormatter()
+    formatter.numberStyle = .decimal
+    formatter.minimumFractionDigits = fractionDigits
+    formatter.maximumFractionDigits = fractionDigits
+
+    let symbol: String = switch currency {
+    case "GBP": "£"
+    case "EUR": "€"
+    case "USD": "$"
+    default: currency + " "
+    }
+
+    return symbol + (formatter.string(from: NSNumber(value: abs(value))) ?? "0")
 }
 
 // MARK: - Issuer Tint Helper

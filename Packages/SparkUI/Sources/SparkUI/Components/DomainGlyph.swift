@@ -19,7 +19,7 @@ public struct DomainGlyph: View {
             .font(.system(size: size * 0.5, weight: .medium))
             .foregroundStyle(tint)
             .frame(width: size, height: size)
-            .background(.thinMaterial, in: .rect(cornerRadius: SparkRadii.sm))
+            .sparkGlass(.roundedRect(SparkRadii.sm), tint: tint.opacity(0.12))
             .accessibilityHidden(true)
     }
 }

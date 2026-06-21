@@ -5,10 +5,7 @@ import SwiftUI
 
 struct FeedSection: View {
     let date: Date
-    @Environment(AppModel.self) private var appModel
     @State private var filter: TimelineFilter = .home
-    @State private var showRawFeed = false
-    @State private var rawFeedState: RawFeedState = .idle
     @Query private var allEvents: [CachedEvent]
 
     private var rawDayEvents: [CachedEvent] {
@@ -53,58 +50,17 @@ struct FeedSection: View {
                         HourGroup(hour: group.hour, events: group.events)
                     }
                 }
-
-                rawFeedButton
-            }
-            .sheet(isPresented: $showRawFeed) {
-                rawFeedSheet
             }
         }
     }
 
     private var timelineHeader: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .center, spacing: SparkSpacing.md) {
-                timelineTitle
-                Spacer(minLength: SparkSpacing.sm)
-                filterButtons
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-
-            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                timelineTitle
-                filterRow
-            }
-        }
-    }
-
-    private var timelineTitle: some View {
-        Text("Timeline")
-            .font(SparkFonts.display(.title2, weight: .bold))
-            .lineLimit(1)
-    }
-
-    private var filterRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            filterButtons
-        }
-    }
-
-    private var filterButtons: some View {
-        HStack(spacing: SparkSpacing.sm) {
-            ForEach(TimelineFilter.allCases, id: \.self) { option in
-                Button {
-                    filter = option
-                } label: {
-                    TimelineFilterChip(
-                        option.label,
-                        systemImage: option.systemImage,
-                        isSelected: filter == option
-                    )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(option.accessibilityLabel)
-            }
+        HStack(alignment: .center, spacing: SparkSpacing.md) {
+            Text("Timeline")
+                .font(SparkFonts.display(.title2, weight: .bold))
+                .lineLimit(1)
+            Spacer(minLength: SparkSpacing.sm)
+            TimelineFilterPill(filter: $filter)
         }
     }
 
@@ -118,105 +74,6 @@ struct FeedSection: View {
             "No \(filter.label.lowercased()) events for this day."
         }
     }
-
-    private var rawFeedButton: some View {
-        Button {
-            showRawFeed = true
-            if case .loaded = rawFeedState {
-                return
-            }
-            Task { await loadRawFeed() }
-        } label: {
-            HStack(spacing: SparkSpacing.sm) {
-                Image(systemName: "curlybraces")
-                    .font(.caption)
-                Text("Raw feed JSON")
-                    .font(SparkTypography.bodySmall)
-                Spacer(minLength: 0)
-                Text(Self.isoKey(for: date))
-                    .font(SparkTypography.monoSmall)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                Image(systemName: "chevron.right")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
-            .foregroundStyle(.secondary)
-            .padding(SparkSpacing.md)
-            .sparkGlass(.roundedRect(SparkRadii.md))
-        }
-        .buttonStyle(.plain)
-        .padding(.top, SparkSpacing.xs)
-    }
-
-    private var rawFeedSheet: some View {
-        SparkSheetScaffold("Raw feed") {
-            switch rawFeedState {
-            case .idle, .loading:
-                ProgressView()
-                    .frame(maxWidth: .infinity, minHeight: 220)
-            case .loaded(let entries):
-                RawFeedJSONView(title: "Raw feed JSON", entries: entries)
-            case .error(let message):
-                EmptyState(
-                    systemImage: "exclamationmark.triangle.fill",
-                    title: "Couldn't load raw feed",
-                    message: message,
-                    actionTitle: "Retry"
-                ) { Task { await loadRawFeed() } }
-            }
-        }
-        .presentationDetents([.medium, .large])
-    }
-
-    @MainActor
-    private func loadRawFeed() async {
-        rawFeedState = .loading
-        do {
-            let entries = try await fetchAllFeedResponses()
-            rawFeedState = .loaded(entries)
-        } catch APIError.notModified {
-            rawFeedState = .error("The feed endpoint returned 304 Not Modified, so no raw response body was available.")
-        } catch {
-            SparkObservability.captureHandled(error)
-            rawFeedState = .error((error as? LocalizedError)?.errorDescription ?? String(describing: error))
-        }
-    }
-
-    private func fetchAllFeedResponses() async throws -> [RawFeedJSONEntry] {
-        var cursor: String?
-        var entries: [RawFeedJSONEntry] = []
-        let dateKey = Self.isoKey(for: date)
-
-        repeat {
-            let response = try await appModel.apiClient.requestWithRawResponse(
-                FeedEndpoint.feed(cursor: cursor, limit: 100, date: dateKey)
-            )
-            let cursorSuffix = cursor.map { "&cursor=\($0)" } ?? ""
-            entries.append(RawFeedJSONEntry(
-                title: "GET /feed?date=\(dateKey)&limit=100\(cursorSuffix)",
-                body: response.utf8Body
-            ))
-            let page = response.decoded
-            cursor = page.hasMore ? page.nextCursor : nil
-        } while cursor != nil
-
-        return entries
-    }
-
-    private static func isoKey(for date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.timeZone = .current
-        return formatter.string(from: date)
-    }
-}
-
-private enum RawFeedState {
-    case idle
-    case loading
-    case loaded([RawFeedJSONEntry])
-    case error(String)
 }
 
 private enum TimelineFilter: CaseIterable {
@@ -268,43 +125,37 @@ private enum TimelineFilter: CaseIterable {
     }
 }
 
-private struct TimelineFilterChip: View {
-    let title: String
-    let systemImage: String?
-    let isSelected: Bool
+private struct TimelineFilterPill: View {
+    @Binding var filter: TimelineFilter
 
-    init(_ title: String, systemImage: String? = nil, isSelected: Bool) {
-        self.title = title
-        self.systemImage = systemImage
-        self.isSelected = isSelected
-    }
+    private static let darkInk = Color(red: 0.086, green: 0.086, blue: 0.086)
+
+    private let items: [(TimelineFilter, String)] = [
+        (.home, "house.fill"),
+        (.money, "sterlingsign"),
+        (.health, "heart.fill"),
+        (.knowledge, "books.vertical.fill")
+    ]
 
     var body: some View {
-        Group {
-            if let systemImage {
-                Image(systemName: systemImage)
-                    .font(.caption.weight(.semibold))
-                    .frame(width: 16, height: 16)
-                    .accessibilityHidden(true)
-            } else {
-                Text(title)
-                    .font(SparkTypography.captionStrong)
-                    .lineLimit(1)
+        HStack(spacing: 2) {
+            ForEach(items, id: \.0) { option, icon in
+                Button {
+                    filter = option
+                } label: {
+                    let isActive = filter == option
+                    Image(systemName: icon)
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 32, height: 28)
+                        .foregroundStyle(isActive ? Self.darkInk : Color.secondary)
+                        .background(isActive ? Color.sparkAccent : Color.clear, in: .capsule)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(option.accessibilityLabel)
             }
         }
-            .font(SparkTypography.captionStrong)
-            .frame(minWidth: systemImage == nil ? 0 : 20)
-            .padding(.horizontal, systemImage == nil ? SparkSpacing.md : SparkSpacing.sm)
-            .padding(.vertical, SparkSpacing.xs + 2)
-            .foregroundStyle(isSelected ? Color.sparkTextPrimary : Color.secondary)
-            .background {
-                Capsule()
-                    .fill(isSelected ? Color.spark100 : Color.primary.opacity(0.04))
-            }
-            .overlay {
-                Capsule()
-                    .strokeBorder(Color.primary.opacity(isSelected ? 0 : 0.08), lineWidth: 1)
-            }
+        .padding(3)
+        .sparkGlass(.capsule)
     }
 }
 
@@ -401,6 +252,8 @@ private struct HourGroup: View {
     private func row(for event: CachedEvent, surplusCount: Int = 0) -> some View {
         if isWebDigest(event) {
             WebDigestEventCard(event: event, surplusCount: surplusCount)
+        } else if isHeroMedia(event) {
+            HeroEventCard(event: event)
         } else if isStandout(event) {
             StandoutEventCard(event: event, surplusCount: surplusCount)
         } else if isSubtle(event) {
@@ -412,6 +265,11 @@ private struct HourGroup: View {
 
     private func isWebDigest(_ event: CachedEvent) -> Bool {
         event.domain == "knowledge" && (event.service == "fetch" || event.value?.lowercased().contains("web") == true)
+    }
+
+    private func isHeroMedia(_ event: CachedEvent) -> Bool {
+        event.service == "untappd" ||
+        (event.domain == "media" && event.value != nil)
     }
 
     private func isStandout(_ event: CachedEvent) -> Bool {
@@ -622,6 +480,64 @@ private struct WebDigestEventCard: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .padding(SparkSpacing.sm)
         }
+    }
+}
+
+// MARK: - Hero event card
+
+private struct HeroEventCard: View {
+    let event: CachedEvent
+
+    var body: some View {
+        let tint = Color.domainTint(for: event.domain)
+        GlassCard(tint: tint.opacity(0.13)) {
+            HStack(alignment: .center, spacing: 14) {
+                Image(systemName: domainIcon(event.domain))
+                    .font(.system(size: 26, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 56, height: 56)
+                    .background(tint, in: .rect(cornerRadius: 14))
+                    .shadow(color: .black.opacity(0.10), radius: 12, x: 0, y: 4)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(strippedTitle(for: event))
+                        .font(SparkFonts.display(.headline, weight: .bold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                    if let meta = metaLine(for: event).nilIfEmpty {
+                        Text(meta)
+                            .font(SparkTypography.captionStrong)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                VStack(alignment: .trailing, spacing: 6) {
+                    if let value = displayValue(for: event) {
+                        Text(value)
+                            .font(SparkFonts.display(.title, weight: .bold))
+                            .foregroundStyle(tint)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                    }
+                    if let time = event.time {
+                        Text(shortTime(time))
+                            .font(SparkTypography.monoSmall)
+                            .foregroundStyle(.tertiary)
+                            .frame(maxHeight: .infinity, alignment: .bottom)
+                    }
+                }
+            }
+        }
+    }
+
+    private func strippedTitle(for event: CachedEvent) -> String {
+        var title = primaryTitle(for: event)
+        for prefix in ["Finished ", "Started "] {
+            if title.hasPrefix(prefix) { title = String(title.dropFirst(prefix.count)) }
+        }
+        return title
     }
 }
 

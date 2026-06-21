@@ -169,4 +169,52 @@ struct HealthDashboardEndpointTests {
         #expect(dashboard.trends.isEmpty)
         #expect(dashboard.insights.isEmpty)
     }
+
+    @Test("dashboard tolerates trend summary array")
+    func dashboardToleratesTrendSummaryArray() throws {
+        let json = """
+        {
+          "date": "2026-05-25",
+          "timezone": "UTC",
+          "range": "7d",
+          "generated_at": "2026-05-25T07:32:29+00:00",
+          "sync_status": {},
+          "hero": null,
+          "fitness": {
+            "today": {
+              "workout_count": 0,
+              "workout_duration_seconds": 0,
+              "workout_energy_kcal": 0
+            },
+            "workouts": []
+          },
+          "body_metrics": [],
+          "trends": [
+            {
+              "metric": "oura.had_cardiovascular_age.years",
+              "label": "Cardiovascular Age",
+              "service": "oura",
+              "action": "had_cardiovascular_age",
+              "unit": "years",
+              "range": {"from": "2026-05-19", "to": "2026-05-25"},
+              "daily_values": [
+                {"date": "2026-05-25", "value": 37, "vs_baseline_pct": -1, "is_anomaly": false}
+              ],
+              "summary": [],
+              "baseline": {"mean": 37.4, "stddev": 1.2, "normal_lower": 35, "normal_upper": 40, "sample_days": 90}
+            }
+          ],
+          "insights": []
+        }
+        """
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let dashboard = try decoder.decode(HealthDashboard.self, from: Data(json.utf8))
+
+        #expect(dashboard.trends.count == 1)
+        #expect(dashboard.trends.first?.summary == nil)
+        #expect(dashboard.trends.first?.baseline?.mean == 37.4)
+    }
 }

@@ -133,6 +133,19 @@ extension MetricDetail: Codable {
             case displayName = "display_name"
             case dailyValues = "daily_values"
         }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            metric = try container.decode(String.self, forKey: .metric)
+            service = try container.decode(String.self, forKey: .service)
+            action = try container.decode(String.self, forKey: .action)
+            displayName = try container.decodeIfPresent(String.self, forKey: .displayName)
+            domain = try container.decodeIfPresent(String.self, forKey: .domain)
+            unit = try container.decodeIfPresent(String.self, forKey: .unit)
+            dailyValues = try container.decode([DailyValue].self, forKey: .dailyValues)
+            summary = try? container.decodeIfPresent(Summary.self, forKey: .summary)
+            baseline = try container.decodeIfPresent(APIBaseline.self, forKey: .baseline)
+        }
     }
 
     private static let dateFormatter: DateFormatter = {
