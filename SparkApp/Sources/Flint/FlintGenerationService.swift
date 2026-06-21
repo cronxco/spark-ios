@@ -88,35 +88,55 @@ enum FlintGenerationService {
         case .failure(let availability):
             return staticResult(note: facts.fallbackNote, availability: availability)
         case .success(let model):
-            let response = try await model.session.respond(
-                generating: GeneratedFlintDailyNote.self,
-                options: FlintModelProvider.generationOptions(for: .deep),
-                contextOptions: FlintModelProvider.contextOptions(for: .deep),
-                metadata: [
-                    "spark.generation.path": "digest",
-                    "spark.generation.tier": model.tier.rawValue,
-                ]
-            ) {
-                """
-                Create a daily highlight note from these facts.
-                Return:
-                - a short title
-                - a two sentence summary
-                - up to four highlights
-                - up to three watchouts
-                - up to three suggested actions
+            func respond(using model: FlintResolvedSession) async throws -> FlintGenerationResult {
+                let response = try await model.session.respond(
+                    generating: GeneratedFlintDailyNote.self,
+                    options: FlintModelProvider.generationOptions(for: .deep),
+                    contextOptions: FlintModelProvider.contextOptions(for: .deep),
+                    metadata: [
+                        "spark.generation.path": "digest",
+                        "spark.generation.tier": model.tier.rawValue,
+                    ]
+                ) {
+                    """
+                    Create a daily highlight note from these facts.
+                    Return:
+                    - a short title
+                    - a two sentence summary
+                    - up to four highlights
+                    - up to three watchouts
+                    - up to three suggested actions
 
-                Spark briefing facts:
-                \(facts.promptText)
-                """
+                    Spark briefing facts:
+                    \(facts.promptText)
+                    """
+                }
+                return modelResult(
+                    note: response.content.note,
+                    tier: model.tier,
+                    availability: model.availability,
+                    reasoning: .deep,
+                    usage: response.usage
+                )
             }
-            return modelResult(
-                note: response.content.note,
-                tier: model.tier,
-                availability: model.availability,
-                reasoning: .deep,
-                usage: response.usage
-            )
+
+            do {
+                return try await respond(using: model)
+            } catch where error.isFoundationModelManagerRuntimeFailure {
+                let retry = FlintModelProvider.resolve(
+                    reasoning: .deep,
+                    instructions: instructions,
+                    tools: FlintTools.digestTools
+                )
+                guard case .success(let retryModel) = retry else {
+                    return staticResult(note: facts.fallbackNote, availability: .modelNotReady)
+                }
+                do {
+                    return try await respond(using: retryModel)
+                } catch where error.isFoundationModelManagerRuntimeFailure {
+                    return staticResult(note: facts.fallbackNote, availability: .modelNotReady)
+                }
+            }
         }
     }
 
@@ -160,38 +180,54 @@ enum FlintGenerationService {
         case .failure(let availability):
             return staticResult(note: fallback, availability: availability)
         case .success(let model):
-            let response = try await model.session.respond(
-                generating: GeneratedTodaySummaryLine.self,
-                options: FlintModelProvider.generationOptions(for: .light),
-                contextOptions: FlintModelProvider.contextOptions(for: .light),
-                metadata: [
-                    "spark.generation.path": "summary_line",
-                    "spark.generation.tier": model.tier.rawValue,
-                ]
-            ) {
-                """
-                Write one sentence for the top of the day page.
-                Tone: calm, specific, concise, and human.
-                Context: \(context == .daySoFar ? "today's day so far" : "the day in review").
+            func respond(using model: FlintResolvedSession) async throws -> FlintGenerationResult {
+                let response = try await model.session.respond(
+                    generating: GeneratedTodaySummaryLine.self,
+                    options: FlintModelProvider.generationOptions(for: .light),
+                    contextOptions: FlintModelProvider.contextOptions(for: .light),
+                    metadata: [
+                        "spark.generation.path": "summary_line",
+                        "spark.generation.tier": model.tier.rawValue,
+                    ]
+                ) {
+                    """
+                    Write one sentence for the top of the day page.
+                    Tone: calm, specific, concise, and human.
+                    Context: \(context == .daySoFar ? "today's day so far" : "the day in review").
 
-                Briefing facts:
-                \(facts.promptText)
-                """
+                    Spark briefing facts:
+                    \(facts.promptText)
+                    """
+                }
+                let note = FlintDailyNote(
+                    title: "",
+                    summary: response.content.text,
+                    highlights: [],
+                    watchouts: [],
+                    suggestedActions: []
+                )
+                return modelResult(
+                    note: note,
+                    tier: model.tier,
+                    availability: model.availability,
+                    reasoning: .light,
+                    usage: response.usage
+                )
             }
-            let note = FlintDailyNote(
-                title: "",
-                summary: response.content.text,
-                highlights: [],
-                watchouts: [],
-                suggestedActions: []
-            )
-            return modelResult(
-                note: note,
-                tier: model.tier,
-                availability: model.availability,
-                reasoning: .light,
-                usage: response.usage
-            )
+
+            do {
+                return try await respond(using: model)
+            } catch where error.isFoundationModelManagerRuntimeFailure {
+                let retry = FlintModelProvider.resolve(reasoning: .light, instructions: instructions)
+                guard case .success(let retryModel) = retry else {
+                    return staticResult(note: fallback, availability: .modelNotReady)
+                }
+                do {
+                    return try await respond(using: retryModel)
+                } catch where error.isFoundationModelManagerRuntimeFailure {
+                    return staticResult(note: fallback, availability: .modelNotReady)
+                }
+            }
         }
     }
 
@@ -232,5 +268,39 @@ enum FlintGenerationService {
             tier: .staticFallback,
             usage: nil
         )
+    }
+}
+
+private extension Error {
+    var isFoundationModelManagerRuntimeFailure: Bool {
+        let nsError = self as NSError
+        return nsError.containsNSError(
+            domain: "ModelManagerServices.ModelManagerError",
+            code: 1046
+        )
+    }
+}
+
+private extension NSError {
+    func containsNSError(domain: String, code: Int? = nil) -> Bool {
+        if self.domain == domain {
+            if let code {
+                return self.code == code
+            }
+            return true
+        }
+
+        if let underlying = userInfo[NSUnderlyingErrorKey] as? NSError,
+           underlying.containsNSError(domain: domain, code: code) {
+            return true
+        }
+
+        let multipleUnderlyingErrors = userInfo[NSMultipleUnderlyingErrorsKey] as? [NSError]
+            ?? (userInfo[NSMultipleUnderlyingErrorsKey] as? [Error])?.map { $0 as NSError }
+            ?? []
+
+        return multipleUnderlyingErrors.contains {
+            $0.containsNSError(domain: domain, code: code)
+        }
     }
 }

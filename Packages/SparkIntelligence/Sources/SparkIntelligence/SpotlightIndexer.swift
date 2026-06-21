@@ -4,6 +4,8 @@ import Foundation
 import SparkKit
 import SwiftData
 
+extension CSSearchableIndex: @retroactive @unchecked Sendable {}
+
 /// Feeds Spark's SwiftData cache into the iOS 27 Spotlight **semantic index**
 /// via `IndexedEntity` conformances, so the rebuilt Siri can reason over Spark's
 /// personal data (events, blocks, places, integrations, metrics, anomalies, and
@@ -20,20 +22,52 @@ public enum SpotlightIndexer {
 
     @MainActor
     public static func indexBatch(container: ModelContainer) async {
+        _ = await indexBatchWithReport(container: container)
+    }
+
+    @MainActor
+    public static func indexBatchWithReport(container: ModelContainer) async -> SpotlightIndexReport {
+        var report = SpotlightIndexReport(startedAt: .now)
+
         // Honour auth state: never index personal data while signed out.
-        guard await KeychainTokenStore().accessToken() != nil else { return }
+        guard await KeychainTokenStore().accessToken() != nil else {
+            report.skippedReason = "Signed out"
+            report.finishedAt = .now
+            return report
+        }
 
         let index = CSSearchableIndex.default()
 
-        await index.indexEntities(IntentService.eventEntities(matching: nil, limit: 1000))
-        await index.indexEntities(IntentService.blockEntities(matching: nil, limit: 1000))
-        await index.indexEntities(IntentService.placeEntities(matching: nil, limit: 1000))
-        await index.indexEntities(IntentService.integrationEntities())
-        await index.indexEntities(IntentService.moneyAccountEntities(matching: nil, limit: 1000))
-        await index.indexEntities(IntentService.metricEntities(matching: nil, limit: 1000))
-        await index.indexEntities(IntentService.anomalyEntities(matching: nil, limit: 1000))
-        await index.indexEntities(IntentService.spendSummaryEntities(matching: nil, limit: 90))
-        await index.indexEntities(IntentService.daySummaryEntities(matching: nil, limit: 90))
+        await report.record("events") {
+            try await index.indexEntities(IntentService.eventEntities(matching: nil, limit: 1000))
+        }
+        await report.record("blocks") {
+            try await index.indexEntities(IntentService.blockEntities(matching: nil, limit: 1000))
+        }
+        await report.record("places") {
+            try await index.indexEntities(IntentService.placeEntities(matching: nil, limit: 1000))
+        }
+        await report.record("integrations") {
+            try await index.indexEntities(IntentService.integrationEntities())
+        }
+        await report.record("money_accounts") {
+            try await index.indexEntities(IntentService.moneyAccountEntities(matching: nil, limit: 1000))
+        }
+        await report.record("metrics") {
+            try await index.indexEntities(IntentService.metricEntities(matching: nil, limit: 1000))
+        }
+        await report.record("anomalies") {
+            try await index.indexEntities(IntentService.anomalyEntities(matching: nil, limit: 1000))
+        }
+        await report.record("spend_summaries") {
+            try await index.indexEntities(IntentService.spendSummaryEntities(matching: nil, limit: 90))
+        }
+        await report.record("day_summaries") {
+            try await index.indexEntities(IntentService.daySummaryEntities(matching: nil, limit: 90))
+        }
+
+        report.finishedAt = .now
+        return report
     }
 
     // MARK: - Purge
@@ -102,11 +136,18 @@ extension CachedMoneyAccount: StaleDatable {}
 extension CachedAnomaly: StaleDatable {}
 extension CachedDaySummary: StaleDatable {}
 
+@MainActor
 private extension CSSearchableIndex {
     /// Indexes a batch of entities, swallowing transient indexing errors (the
     /// nightly task re-runs and CoreSpotlight de-dupes by identifier).
     func indexEntities<E: IndexedEntity>(_ entities: [E]) async {
         guard !entities.isEmpty else { return }
         try? await indexAppEntities(entities)
+    }
+
+    func indexEntities<E: IndexedEntity>(_ entities: [E]) async throws -> Int {
+        guard !entities.isEmpty else { return 0 }
+        try await indexAppEntities(entities)
+        return entities.count
     }
 }

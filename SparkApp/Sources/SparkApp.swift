@@ -161,7 +161,8 @@ final class SparkAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
             container: { @Sendable in try SparkDataStore.makeContainer() },
             onPrefetch: { @Sendable in
                 guard let container = try? SparkDataStore.makeContainer() else { return }
-                await SpotlightIndexer.indexBatch(container: container)
+                let report = await SpotlightIndexer.indexBatchWithReport(container: container)
+                SparkObservability.captureSpotlightIndexReport(report, source: "background")
                 await SpotlightIndexer.purgeStaleItems(container: container)
             }
         )
@@ -293,6 +294,35 @@ enum SparkObservability {
         }
     }
 
+    static func captureSpotlightDiagnostics(_ snapshot: SpotlightDiagnosticsSnapshot, source: String) {
+        let crumb = Breadcrumb(level: .info, category: "spotlight")
+        crumb.type = "debug"
+        crumb.message = "Spotlight diagnostics refreshed"
+        crumb.data = [
+            "source": source,
+            "is_signed_in": snapshot.isSignedIn,
+            "can_open_store": snapshot.canOpenStore,
+            "total_count": snapshot.totalCount,
+        ]
+        SentrySDK.addBreadcrumb(crumb)
+    }
+
+    static func captureSpotlightIndexReport(_ report: SpotlightIndexReport, source: String) {
+        let crumb = Breadcrumb(level: report.hasFailures ? .error : .info, category: "spotlight")
+        crumb.type = "debug"
+        crumb.message = "Spotlight index run"
+        crumb.data = spotlightIndexContext(report, source: source)
+        SentrySDK.addBreadcrumb(crumb)
+
+        guard report.hasFailures else { return }
+
+        SentrySDK.capture(message: "Spotlight indexing failed") { scope in
+            scope.setTag(value: source, key: "spotlight.source")
+            scope.setTag(value: "failed", key: "spotlight.outcome")
+            scope.setContext(value: spotlightIndexContext(report, source: source), key: "spotlight_index")
+        }
+    }
+
     static func captureUserFeedback(
         comments: String,
         context: SparkFeedbackContext,
@@ -334,6 +364,23 @@ enum SparkObservability {
         let statusCode = response?["status_code"] as? Int
             ?? (response?["status_code"] as? NSNumber)?.intValue
         return statusCode == 404
+    }
+
+    private static func spotlightIndexContext(_ report: SpotlightIndexReport, source: String) -> [String: Any] {
+        [
+            "source": source,
+            "started_at": ISO8601DateFormatter().string(from: report.startedAt),
+            "finished_at": report.finishedAt.map { ISO8601DateFormatter().string(from: $0) } as Any,
+            "skipped_reason": report.skippedReason as Any,
+            "indexed_count": report.indexedCount,
+            "batches": report.batches.map {
+                [
+                    "name": $0.name,
+                    "indexed_count": $0.indexedCount,
+                    "error": $0.errorDescription as Any,
+                ]
+            },
+        ]
     }
 
     private static func releaseName() -> String {

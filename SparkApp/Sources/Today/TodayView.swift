@@ -44,9 +44,10 @@ struct TodayView: View {
                         },
                         onTapAfternoon: {
                             checkInSelection = CheckInSheetSelection(date: date, period: .afternoon)
-                        },
-                        showHistory: $showHistory
+                        }
                     )
+
+                    CheckInHeatmapCard(date: date, showHistory: $showHistory)
 
                     FeedSection(date: date)
 
