@@ -1,0 +1,198 @@
+import Foundation
+import Testing
+@testable import SparkIntelligence
+import SparkKit
+
+@Suite("Entity mappings")
+struct EntityMappingTests {
+    @Test("Event maps display name, summary, and keyword tags")
+    func eventMapping() {
+        let event = Event(
+            id: "evt_1",
+            time: Date(timeIntervalSince1970: 1_700_000_000),
+            service: "github",
+            domain: "code",
+            action: "push_commit",
+            displayName: "Pushed 3 commits",
+            displayValue: "3 commits to main",
+            tags: []
+        )
+        let entity = EventEntity(model: event)
+
+        #expect(entity.id == "evt_1")
+        #expect(entity.title == "Pushed 3 commits")
+        #expect(entity.summary == "3 commits to main")
+        #expect(entity.tags == ["github", "code", "push_commit"])
+        #expect(entity.timestamp == event.time)
+    }
+
+    @Test("Event summaries strip escaped HTML fragments before indexing")
+    func eventSummaryStripsEscapedHTML() {
+        let event = Event(
+            id: "evt_html",
+            time: nil,
+            service: "oura",
+            domain: "health",
+            action: "sleep_score",
+            displayName: #"Sleep <span class="text-muted">Score</span>"#,
+            displayValue: #"76&lt;span class=&quot;text-[0.875em]&quot;&gt;%&lt;/span&gt;"#,
+            tags: []
+        )
+        let entity = EventEntity(model: event)
+
+        #expect(entity.title == "Sleep Score")
+        #expect(entity.summary == "76%")
+    }
+
+    @Test("Cached event summaries strip escaped HTML fragments before indexing")
+    func cachedEventSummaryStripsEscapedHTML() {
+        let event = CachedEvent(
+            id: "cached_evt_html",
+            time: nil,
+            service: "oura",
+            domain: "health",
+            action: "sleep_score",
+            displayName: "Sleep Score",
+            displayValue: #"72&lt;span class=&quot;text-[0.875em]&quot;&gt;%&lt;/span&gt;"#
+        )
+        let entity = EventEntity(cached: event)
+
+        #expect(entity.summary == "72%")
+    }
+
+    @Test("Event without display name derives a humanized title")
+    func eventDerivedTitle() {
+        let event = Event(
+            id: "evt_2",
+            time: nil,
+            service: "oura",
+            domain: "sleep_session",
+            action: "record_sleep"
+        )
+        let entity = EventEntity(model: event)
+        #expect(entity.title == "Record Sleep Sleep Session")
+        // Falls back to the capitalized service when no value/tldr is present.
+        #expect(entity.summary == "Oura")
+    }
+
+    @Test("Metric maps identifier as id and formats latest value")
+    func metricMapping() {
+        let metric = Metric(
+            id: "m_1",
+            identifier: "oura.sleep_score",
+            displayName: "Sleep Score",
+            service: "oura",
+            action: "sleep_score",
+            unit: "pts",
+            eventCount: 30,
+            mean: 82.4,
+            lastEventAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        let entity = MetricEntity(model: metric)
+
+        #expect(entity.id == "oura.sleep_score")
+        #expect(entity.displayName == "Sleep Score")
+        #expect(entity.latestValueDescription == "82.4 pts")
+        #expect(entity.keywords == ["oura", "sleep_score"])
+    }
+
+    @Test("Place maps coordinates and falls back to type for category")
+    func placeMapping() {
+        let place = Place(
+            id: "p_1",
+            title: "Home",
+            type: "residence",
+            latitude: 51.5,
+            longitude: -0.12,
+            address: "1 Example Street",
+            category: nil
+        )
+        let entity = PlaceEntity(model: place)
+
+        #expect(entity.name == "Home")
+        #expect(entity.address == "1 Example Street")
+        #expect(entity.category == "residence")
+        #expect(entity.latitude == 51.5)
+        #expect(entity.longitude == -0.12)
+    }
+
+    @Test("Anomaly summary prefers display name then metric")
+    func anomalyMapping() {
+        let withName = Anomaly(id: "a_1", metric: "oura.sleep_score", displayName: "Sleep dipped", direction: "down")
+        #expect(AnomalyEntity(model: withName).summary == "Sleep dipped")
+
+        let withoutName = Anomaly(id: "a_2", metric: "monzo.spend_daily")
+        #expect(AnomalyEntity(model: withoutName).summary == "Unusual reading for monzo.spend_daily")
+        #expect(AnomalyEntity(model: withoutName).keywords.contains("anomaly"))
+    }
+
+    @Test("Integration uses service slug as routable id")
+    func integrationMapping() {
+        let integration = Integration(id: "i_1", service: "monzo", name: "Monzo", status: "connected")
+        let entity = IntegrationEntity(model: integration)
+        #expect(entity.id == "monzo")
+        #expect(entity.service == "monzo")
+        #expect(entity.status == "connected")
+    }
+
+    @Test("Money account maps balance and searchable keywords")
+    func moneyAccountMapping() {
+        let cached = CachedMoneyAccount(
+            id: "acct_1",
+            title: "Monzo Current",
+            kind: "depository",
+            accountType: "current",
+            currency: "GBP",
+            isNegativeBalance: false,
+            provider: "monzo",
+            latestBalance: 123.45,
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        let entity = MoneyAccountEntity(cached: cached)
+
+        #expect(entity.id == "acct_1")
+        #expect(entity.title == "Monzo Current")
+        #expect(entity.kind == "depository")
+        #expect(entity.keywords.contains("monzo"))
+        #expect(entity.balanceDescription?.contains("123.45") == true)
+    }
+
+    @Test("Spend summary maps day money section")
+    func spendSummaryMapping() throws {
+        let json = """
+        {
+          "date": "2026-06-20",
+          "timezone": "Europe/London",
+          "sync_status": { "up_to_date": true, "stale": [] },
+          "sections": {
+            "health": null,
+            "activity": null,
+            "money": {
+              "total_spend": 24.5,
+              "transactions": [{ "currency": "GBP" }],
+              "top_merchants": [{ "name": "Pret" }]
+            },
+            "media": null,
+            "knowledge": null
+          },
+          "anomalies": []
+        }
+        """
+        let data = Data(json.utf8)
+        let cached = CachedDaySummary(date: "2026-06-20", timezone: "Europe/London", payload: data)
+        let entity = try #require(SpendSummaryEntity(cached: cached))
+
+        #expect(entity.id == "spend:2026-06-20")
+        #expect(entity.total == 24.5)
+        #expect(entity.currency == "GBP")
+        #expect(entity.topMerchants == ["Pret"])
+        #expect(entity.summary?.contains("Pret") == true)
+    }
+
+    @Test("Empty/whitespace strings collapse to nil")
+    func nonEmptyHelper() {
+        #expect("   ".nonEmpty == nil)
+        #expect("".nonEmpty == nil)
+        #expect("  hi ".nonEmpty == "hi")
+    }
+}

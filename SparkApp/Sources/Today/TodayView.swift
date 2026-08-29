@@ -30,6 +30,11 @@ struct TodayView: View {
                     let unreadCount = upToSpeedViewModel?.unreadCount ?? 0
 
                     hero(snapshot: snapshot, unreadCount: unreadCount)
+                        .sparkAppEntityIdentifier(type: "day", identifier: TodayViewModel.isoKey(for: date))
+
+                    StatStripView(snapshot: snapshot)
+
+                    anomalyPill(for: snapshot)
 
                     CheckInCard(
                         date: date,
@@ -55,7 +60,7 @@ struct TodayView: View {
                     }
                 }
                 .padding(.horizontal, SparkSpacing.lg)
-                .padding(.top, SparkSpacing.xl + 88)
+                .padding(.top, SparkSpacing.xl + 72)
                 .padding(.bottom, deviceSafeAreaBottom + 66)
             }
             .scrollContentBackground(.hidden)
@@ -207,6 +212,24 @@ struct TodayView: View {
         f.dateFormat = "EEEE\nd MMMM yyyy"
         return f
     }()
+
+    // MARK: - Anomaly pill
+
+    @ViewBuilder
+    private func anomalyPill(for snapshot: TodaySnapshot) -> some View {
+        if snapshot.anomalies.isEmpty {
+            StatusPill(.ok, message: "Baselines holding", trailing: "0 anomalies")
+        } else {
+            StatusPill(
+                .warning,
+                message: snapshot.anomalies.first?.displayName
+                    ?? snapshot.anomalies.first?.metric
+                    ?? "Anomaly detected",
+                trailing: "\(snapshot.anomalies.count) anomal\(snapshot.anomalies.count == 1 ? "y" : "ies")"
+            )
+            .sparkAppEntityIdentifier(type: "anomaly", identifier: snapshot.anomalies.first?.id)
+        }
+    }
 
     // MARK: - Loading / empty
 

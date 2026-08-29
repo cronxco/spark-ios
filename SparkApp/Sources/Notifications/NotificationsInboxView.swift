@@ -26,6 +26,8 @@ struct NotificationsInboxView: View {
                         MetricDetailView(identifier: identifier)
                     case .place(let id):
                         PlaceDetailView(placeId: id)
+                    case .anomaly(let id):
+                        AnomalyDetailView(anomalyId: id)
                     case .integration(let service):
                         IntegrationDetailView(integrationId: service)
                     case .account(let id):

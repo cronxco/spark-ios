@@ -197,6 +197,11 @@ struct MetricDetailView: View {
             .padding(SparkSpacing.lg)
         }
         .sparkAppBackground()
+        .sparkOnscreenEntity(
+            type: "metric",
+            identifier: identifier,
+            title: metricOnscreenTitle
+        )
         .navigationTitle("Metric")
         .navigationBarTitleDisplayMode(.inline)
         .sparkSubViewToolbar(
@@ -215,6 +220,11 @@ struct MetricDetailView: View {
             }
             await viewModel?.load()
         }
+    }
+
+    private var metricOnscreenTitle: String {
+        if case .loaded(let detail) = viewModel?.state { return detail.title }
+        return identifier
     }
 
     private var metricShareItems: [Any] {

@@ -45,6 +45,8 @@ struct DayPagerView: View {
                             MetricDetailView(identifier: identifier)
                         case .place(let id):
                             PlaceDetailView(placeId: id)
+                        case .anomaly(let id):
+                            AnomalyDetailView(anomalyId: id)
                         case .integration(let service):
                             IntegrationDetailView(integrationId: service)
                         case .account(let id):
@@ -83,6 +85,8 @@ struct DayPagerView: View {
             push(.metric(identifier: identifier))
         case .place(let id):
             push(.place(id: id))
+        case .anomaly(let id):
+            push(.anomaly(id: id))
         case .integration(let service):
             push(.integration(service: service))
         case .account(let id):
@@ -115,6 +119,7 @@ enum DetailRoute: Hashable {
     case block(id: String)
     case metric(identifier: String)
     case place(id: String)
+    case anomaly(id: String)
     case integration(service: String)
     case account(id: String)
     case tag(name: String, type: String?)

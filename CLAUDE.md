@@ -16,7 +16,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Tech Stack
 
 - **Language**: Swift 6.2 with strict concurrency enforcement (`SWIFT_STRICT_CONCURRENCY=complete`)
-- **Minimum OS**: iOS 26.4 (also watchOS 26.0 for Phase 5)
+- **Minimum OS**: iOS 27.0 (also watchOS 27.0 for Phase 5)
+- **AI / Siri**: iOS 27 Foundation Models (on-device + Private Cloud Compute), App Intents with `AppEntity`/`IndexedEntity` semantic indexing for the rebuilt Siri
 - **Project generation**: Tuist 4.x (not native Xcode workspace)
 - **Package management**: SPM (Swift Package Manager) with 6 local packages + Sentry remote dependency
 - **Data persistence**: SwiftData with App Group shared container
@@ -69,7 +70,7 @@ Watch/                       # Apple Watch (Phase 5 stubs)
 Tests/SparkAppTests/         # Cross-target app tests
 
 Project.swift                # Tuist project definition
-Tuist.swift                  # Tuist config (Xcode 26, Swift 6.0)
+Tuist.swift                  # Tuist config (Xcode 27, Swift 6.0)
 .github/workflows/ios.yml    # CI: runs tests on push/PR to main/dev
 ```
 
@@ -78,7 +79,7 @@ Tuist.swift                  # Tuist config (Xcode 26, Swift 6.0)
 ### Prerequisites
 
 ```bash
-# Xcode 26 (or Xcode 26 beta at /Applications/Xcode-beta.app)
+# Xcode 27 (or Xcode 27 beta at /Applications/Xcode-beta.app)
 # macOS 15+
 # Tuist 4.x
 brew install tuist
@@ -94,7 +95,7 @@ cd spark-ios
 tuist generate
 ```
 
-This creates `Spark.xcworkspace`. Open in Xcode 26.
+This creates `Spark.xcworkspace`. Open in Xcode 27.
 
 ### Provisioning
 
@@ -117,7 +118,7 @@ tuist generate
 xcodebuild build \
   -workspace Spark.xcworkspace \
   -scheme SparkApp \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4.1' \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=27.0' \
   -configuration Debug
 
 # Build from Xcode
@@ -130,11 +131,11 @@ xcodebuild build \
 # SparkKit unit tests (SPM layer, fastest)
 cd Packages/SparkKit && swift test
 
-# Full app tests (requires iOS 26 simulator)
+# Full app tests (requires iOS 27 simulator)
 xcodebuild \
   -workspace Spark.xcworkspace \
   -scheme SparkApp \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4.1' \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=27.0' \
   -skipPackagePluginValidation \
   -skipMacroValidation \
   test
@@ -153,7 +154,7 @@ swiftformat --lint .
 xcodebuild \
   -workspace Spark.xcworkspace \
   -scheme SparkApp \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4.1' \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=27.0' \
   build \
   -skipPackagePluginValidation
 ```
@@ -291,7 +292,7 @@ Tests cover:
 xcodebuild \
   -workspace Spark.xcworkspace \
   -scheme SparkApp \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4.1' \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=27.0' \
   test
 ```
 
@@ -308,7 +309,7 @@ Test every family × size class × light/dark × extreme Dynamic Type before eac
 - Runs on every push to `main` / `dev` and every PR
 - Caches DerivedData + SPM packages
 - Runs `swift test` on SparkKit
-- Runs `xcodebuild test` on SparkApp (iPhone 17 Pro, iOS 26.4.1 simulator)
+- Runs `xcodebuild test` on SparkApp (iPhone 17 Pro, iOS 27.0 simulator)
 - Uploads xcresult on failure
 
 ## Version & Release

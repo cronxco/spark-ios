@@ -1,4 +1,5 @@
 #if DEBUG
+import SparkIntelligence
 import SparkKit
 import SparkSync
 import SparkUI
@@ -32,6 +33,12 @@ struct DebugView: View {
     // Notification permission
     @State private var notifStatus: UNAuthorizationStatus = .notDetermined
 
+    // Spotlight / App Intents
+    @State private var spotlightSnapshot: SpotlightDiagnosticsSnapshot?
+    @State private var spotlightReport: SpotlightIndexReport?
+    @State private var isRefreshingSpotlight = false
+    @State private var isIndexingSpotlight = false
+
     var body: some View {
         List {
             cacheSection
@@ -41,6 +48,7 @@ struct DebugView: View {
             syncCursorSection
             notificationPermissionSection
             widgetSection
+            spotlightSection
             loggingSection
 
             if let msg = statusMessage {
@@ -283,6 +291,86 @@ struct DebugView: View {
         }
     }
 
+    private var spotlightSection: some View {
+        Section("Spotlight & Intents") {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Entity cache")
+                        .font(SparkTypography.body)
+                    Text(spotlightStatusLabel)
+                        .font(SparkTypography.bodySmall)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button(isRefreshingSpotlight ? "Refreshing..." : "Refresh") {
+                    Task { await refreshSpotlightDiagnostics(source: "debug_menu") }
+                }
+                .font(SparkTypography.bodySmall)
+                .foregroundStyle(Color.sparkAccent)
+                .disabled(isRefreshingSpotlight)
+            }
+
+            if let spotlightSnapshot {
+                HStack {
+                    Label(
+                        spotlightSnapshot.isSignedIn ? "Signed in" : "Signed out",
+                        systemImage: spotlightSnapshot.isSignedIn ? "checkmark.circle.fill" : "xmark.circle.fill"
+                    )
+                    .foregroundStyle(spotlightSnapshot.isSignedIn ? Color.sparkSuccess : Color.sparkWarning)
+                    Spacer()
+                    Label(
+                        spotlightSnapshot.canOpenStore ? "Store open" : "Store unavailable",
+                        systemImage: spotlightSnapshot.canOpenStore ? "externaldrive.fill" : "externaldrive.badge.xmark"
+                    )
+                    .foregroundStyle(spotlightSnapshot.canOpenStore ? Color.sparkSuccess : Color.sparkError)
+                }
+                .font(SparkTypography.bodySmall)
+
+                ForEach(spotlightSnapshot.counts) { count in
+                    HStack {
+                        Text(count.name)
+                        Spacer()
+                        Text(count.count, format: .number)
+                            .font(SparkTypography.monoSmall)
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(SparkTypography.bodySmall)
+                }
+            }
+
+            Button(isIndexingSpotlight ? "Indexing..." : "Run Spotlight indexing now") {
+                Task { await runSpotlightIndexing() }
+            }
+            .disabled(isIndexingSpotlight)
+
+            if let spotlightReport {
+                VStack(alignment: .leading, spacing: SparkSpacing.xs) {
+                    Text(spotlightReportSummary(spotlightReport))
+                        .font(SparkTypography.bodySmall)
+                        .foregroundStyle(spotlightReport.hasFailures ? Color.sparkError : Color.sparkSuccess)
+
+                    ForEach(spotlightReport.batches) { batch in
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(batch.name)
+                            Spacer()
+                            if let error = batch.errorDescription {
+                                Text(error)
+                                    .lineLimit(2)
+                                    .multilineTextAlignment(.trailing)
+                                    .foregroundStyle(Color.sparkError)
+                            } else {
+                                Text(batch.indexedCount, format: .number)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .font(SparkTypography.monoSmall)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        }
+    }
+
     // MARK: - Helpers
 
     private var wsStatusColor: Color {
@@ -314,6 +402,11 @@ struct DebugView: View {
         }
     }
 
+    private var spotlightStatusLabel: String {
+        guard let spotlightSnapshot else { return "Not loaded" }
+        return "\(spotlightSnapshot.totalCount) candidate entities, captured \(spotlightSnapshot.capturedAt.formatted(date: .omitted, time: .standard))"
+    }
+
     // MARK: - Actions
 
     private func loadAll() async {
@@ -321,6 +414,7 @@ struct DebugView: View {
             group.addTask { await refreshWS() }
             group.addTask { await refreshNotifStatus() }
             group.addTask { await MainActor.run { loadSyncCursors() } }
+            group.addTask { await refreshSpotlightDiagnostics(source: "debug_menu_initial") }
         }
     }
 
@@ -348,6 +442,31 @@ struct DebugView: View {
         try? context.save()
         syncCursors = []
         statusMessage = "Sync cursors cleared. Next sync will be a full fetch."
+    }
+
+    private func refreshSpotlightDiagnostics(source: String) async {
+        isRefreshingSpotlight = true
+        let snapshot = await SpotlightDiagnostics.snapshot()
+        spotlightSnapshot = snapshot
+        SparkObservability.captureSpotlightDiagnostics(snapshot, source: source)
+        isRefreshingSpotlight = false
+    }
+
+    private func runSpotlightIndexing() async {
+        isIndexingSpotlight = true
+        let report = await SpotlightIndexer.indexBatchWithReport(container: appModel.container)
+        spotlightReport = report
+        SparkObservability.captureSpotlightIndexReport(report, source: "debug_menu")
+        await refreshSpotlightDiagnostics(source: "debug_menu_after_index")
+
+        if let reason = report.skippedReason {
+            statusMessage = "Spotlight indexing skipped: \(reason)"
+        } else if report.hasFailures {
+            statusMessage = "Spotlight indexing failed for \(report.failures.count) batch(es)."
+        } else {
+            statusMessage = "Spotlight indexed \(report.indexedCount) entities."
+        }
+        isIndexingSpotlight = false
     }
 
     private func resetCache() {
@@ -382,6 +501,16 @@ struct DebugView: View {
 
     private func debugErrorMessage(_ error: Error) -> String {
         (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+    }
+
+    private func spotlightReportSummary(_ report: SpotlightIndexReport) -> String {
+        if let reason = report.skippedReason {
+            return "Skipped: \(reason)"
+        }
+        if report.hasFailures {
+            return "Indexed \(report.indexedCount), \(report.failures.count) failed"
+        }
+        return "Indexed \(report.indexedCount) entities"
     }
 }
 

@@ -60,6 +60,11 @@ struct PlaceDetailView: View {
             .padding(SparkSpacing.lg)
         }
         .sparkAppBackground()
+        .sparkOnscreenEntity(
+            type: "place",
+            identifier: placeId,
+            title: placeOnscreenTitle
+        )
         .navigationTitle("Place")
         .navigationBarTitleDisplayMode(.inline)
         .sparkSubViewToolbar(
@@ -75,6 +80,11 @@ struct PlaceDetailView: View {
             }
             await viewModel?.load()
         }
+    }
+
+    private var placeOnscreenTitle: String {
+        if case .loaded(let detail) = viewModel?.state { return detail.place.title }
+        return "Place"
     }
 
     private var placeShareItems: [Any] {

@@ -1,12 +1,12 @@
-// swift-tools-version: 6.2
+// swift-tools-version: 6.4
 import PackageDescription
 
 let package = Package(
     name: "SparkKit",
     platforms: [
         .macOS(.v15),
-        .iOS(.v26),
-        .watchOS(.v26),
+        .iOS(.v27),
+        .watchOS(.v27),
     ],
     products: [
         .library(name: "SparkKit", targets: ["SparkKit"]),

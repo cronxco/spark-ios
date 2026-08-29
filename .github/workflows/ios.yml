@@ -12,15 +12,12 @@ concurrency:
 
 jobs:
   test:
-    runs-on: macos-15
-    env:
-      DEVELOPER_DIR: /Applications/Xcode_26.0.app/Contents/Developer
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode
+      - name: Report toolchain
         run: |
-          sudo xcode-select -s "$DEVELOPER_DIR"
           xcodebuild -version
           swift --version
 
@@ -57,7 +54,7 @@ jobs:
           xcodebuild \
             -workspace Spark.xcworkspace \
             -scheme SparkApp \
-            -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=27.0' \
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \

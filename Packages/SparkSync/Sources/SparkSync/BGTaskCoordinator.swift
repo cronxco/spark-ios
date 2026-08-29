@@ -59,7 +59,7 @@ public enum BGTaskCoordinator {
     public static func scheduleAppRefresh() {
         let request = BGAppRefreshTaskRequest(identifier: refreshTaskIdentifier)
         request.earliestBeginDate = Date(timeIntervalSinceNow: 2 * 3600)
-        try? BGTaskScheduler.shared.submit(request)
+        submit(request)
     }
 
     /// Submit a BGProcessingTaskRequest for nightly prefetch (power + network required).
@@ -72,7 +72,16 @@ public enum BGTaskCoordinator {
             matching: DateComponents(hour: 3, minute: 0),
             matchingPolicy: .nextTime
         )
-        try? BGTaskScheduler.shared.submit(request)
+        submit(request)
+    }
+
+    private static func submit(_ request: BGTaskRequest) {
+        let identifier = request.identifier
+        BGTaskScheduler.shared.submitTaskRequest(request) { error in
+            if let error {
+                logger.debug("Failed to schedule BG task \(identifier, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
 
     // MARK: - Handlers
