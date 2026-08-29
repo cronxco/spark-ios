@@ -74,11 +74,11 @@ public extension EventEntity {
     init(cached event: CachedEvent) {
         let actionLabel = event.action.replacingOccurrences(of: "_", with: " ").capitalized
         let domainLabel = event.domain.replacingOccurrences(of: "_", with: " ").capitalized
-        let title = event.displayName?.nonEmpty ?? "\(actionLabel) \(domainLabel)"
+        let title = event.displayName?.sparkPlainTextFromHTMLFragment.nonEmpty ?? "\(actionLabel) \(domainLabel)"
         self.init(
             id: event.id,
             title: title,
-            summary: event.displayValue?.nonEmpty ?? event.service.capitalized,
+            summary: event.displayValue?.sparkPlainTextFromHTMLFragment.nonEmpty ?? event.service.capitalized,
             tags: [event.service, event.domain, event.action].filter { !$0.isEmpty },
             service: event.service,
             domain: event.domain,

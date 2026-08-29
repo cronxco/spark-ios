@@ -98,7 +98,11 @@ enum FlintModelProvider {
     // call is isolated here so the rest of Flint is provider-agnostic.
 
     private static func privateCloudComputeModel() -> PrivateCloudComputeLanguageModel? {
-        PrivateCloudComputeLanguageModel()
+        // Constructing PCC without `com.apple.developer.private-cloud-compute`
+        // is a framework-level fatal error, not a throwable availability state.
+        // Spark does not currently ship that entitlement, so skip PCC and let
+        // the existing on-device/static fallback path handle generation.
+        nil
     }
 
     private static func pccIsAvailable(_ model: PrivateCloudComputeLanguageModel) -> Bool {

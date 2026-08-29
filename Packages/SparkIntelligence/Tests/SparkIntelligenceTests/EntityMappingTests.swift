@@ -26,6 +26,40 @@ struct EntityMappingTests {
         #expect(entity.timestamp == event.time)
     }
 
+    @Test("Event summaries strip escaped HTML fragments before indexing")
+    func eventSummaryStripsEscapedHTML() {
+        let event = Event(
+            id: "evt_html",
+            time: nil,
+            service: "oura",
+            domain: "health",
+            action: "sleep_score",
+            displayName: #"Sleep <span class="text-muted">Score</span>"#,
+            displayValue: #"76&lt;span class=&quot;text-[0.875em]&quot;&gt;%&lt;/span&gt;"#,
+            tags: []
+        )
+        let entity = EventEntity(model: event)
+
+        #expect(entity.title == "Sleep Score")
+        #expect(entity.summary == "76%")
+    }
+
+    @Test("Cached event summaries strip escaped HTML fragments before indexing")
+    func cachedEventSummaryStripsEscapedHTML() {
+        let event = CachedEvent(
+            id: "cached_evt_html",
+            time: nil,
+            service: "oura",
+            domain: "health",
+            action: "sleep_score",
+            displayName: "Sleep Score",
+            displayValue: #"72&lt;span class=&quot;text-[0.875em]&quot;&gt;%&lt;/span&gt;"#
+        )
+        let entity = EventEntity(cached: event)
+
+        #expect(entity.summary == "72%")
+    }
+
     @Test("Event without display name derives a humanized title")
     func eventDerivedTitle() {
         let event = Event(
