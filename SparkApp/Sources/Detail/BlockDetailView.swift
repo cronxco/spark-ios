@@ -4,13 +4,13 @@ import SwiftUI
 
 @MainActor
 @Observable
-final class BlockDetailViewModel {
+final class BlockDetailViewModel: ETagDetailMutationHandling {
     let blockId: String
-    private(set) var state: DetailLoadState<BlockDetail> = .loading
-    private(set) var rawPayload: String?
-    private var etag: String?
+    var state: DetailLoadState<BlockDetail> = .loading
+    var rawPayload: String?
+    var etag: String?
 
-    private let apiClient: APIClient
+    let apiClient: APIClient
 
     init(blockId: String, apiClient: APIClient) {
         self.blockId = blockId
@@ -36,7 +36,7 @@ final class BlockDetailViewModel {
     func createRelationship(_ request: RelationshipCreateRequest) async throws -> EntityRelationship {
         guard let etag else { throw TagMutationError.missingETag }
         let response = try await apiClient.requestWithRawResponse(
-            EntityMutationsEndpoint.createRelationship(kind: .blocks, id: blockId, request: request, etag: etag)
+            try EntityMutationsEndpoint.createRelationship(kind: .blocks, id: blockId, request: request, etag: etag)
         )
         self.etag = response.etag ?? etag
         return response.decoded
@@ -52,8 +52,9 @@ final class BlockDetailViewModel {
 
     func update(_ attributes: [String: AnyCodable]) async throws {
         guard let etag else { throw TagMutationError.missingETag }
-        let response = try await apiClient.requestWithRawResponse(EntityMutationsEndpoint.update(kind: .blocks, id: blockId, attributes: attributes, etag: etag, response: BlockDetail.self))
-        rawPayload = response.utf8Body; self.etag = response.etag ?? etag; state = .loaded(response.decoded)
+        try await applyMutation(
+            try EntityMutationsEndpoint.update(kind: .blocks, id: blockId, attributes: attributes, etag: etag, response: BlockDetail.self)
+        )
     }
 }
 
@@ -100,14 +101,14 @@ struct BlockDetailView: View {
             feedbackContext: blockFeedbackContext,
             refresh: { await viewModel?.load() }
         )
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Edit") { showEditor = true } } }
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Edit") { showEditor = true }.disabled(!isLoaded) } }
         .task(id: blockId) {
             if viewModel == nil {
                 viewModel = BlockDetailViewModel(blockId: blockId, apiClient: appModel.apiClient)
             }
             await viewModel?.load()
         }
-        .sheet(isPresented: $showEditor) { if case .loaded(let detail) = viewModel?.state { EntityEditorSheet(title: "Block", initial: ["title": detail.block.title, "block_type": detail.block.blockType, "value": detail.block.value ?? "", "value_multiplier": "", "value_unit": detail.block.unit ?? "", "time": detail.block.time?.ISO8601Format() ?? "", "url": ""]) { try await viewModel?.update($0) } } }
+        .sheet(isPresented: $showEditor) { if case .loaded(let detail) = viewModel?.state { EntityEditorSheet(title: "Block", initial: ["title": detail.block.title, "block_type": detail.block.blockType, "value": detail.block.value ?? "", "value_unit": detail.block.unit ?? "", "time": detail.block.time?.ISO8601Format() ?? ""]) { try await viewModel?.update($0) } } }
     }
 
     private var blockShareItems: [Any] {
@@ -115,6 +116,11 @@ struct BlockDetailView: View {
             return ["Spark Block: \(blockId)"]
         }
         return ["Spark Block: \(detail.block.title)"]
+    }
+
+    private var isLoaded: Bool {
+        if case .loaded = viewModel?.state { return true }
+        return false
     }
 
     private var blockRawPayload: String? {

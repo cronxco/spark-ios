@@ -20,11 +20,13 @@ final class ApiTokensViewModel {
     }
 
     func load() async {
+        let previousState = state
         state = .loading
         do {
             let tokens = try await apiClient.request(ApiTokensEndpoint.list())
             state = .loaded(tokens)
         } catch APIError.notModified {
+            state = previousState
             return
         } catch {
             SparkObservability.captureHandled(error)

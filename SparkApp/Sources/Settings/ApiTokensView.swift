@@ -60,12 +60,18 @@ struct ApiTokensView: View {
         ) { token in
             Button("Revoke", role: .destructive) {
                 Task {
-                    _ = await viewModel?.revoke(token)
-                    tokenPendingRevocation = nil
+                    if await viewModel?.revoke(token) == true {
+                        tokenPendingRevocation = nil
+                    }
                 }
             }
         } message: { token in
             Text("\(token.name) will stop working immediately. This cannot be undone.")
+        }
+        .alert("Couldn't revoke token", isPresented: Binding(get: { viewModel?.revokeError != nil }, set: { if !$0 { viewModel?.revokeError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(viewModel?.revokeError ?? "Please try again.")
         }
         .task {
             if viewModel == nil {

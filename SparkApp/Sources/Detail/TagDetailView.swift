@@ -203,6 +203,7 @@ struct TagPreviewCard: View {
 
     @Environment(AppModel.self) private var appModel
     @State private var previewResults: [TagDetailItem] = []
+    @State private var previewTotal = 0
     @State private var loaded = false
 
     var body: some View {
@@ -241,8 +242,8 @@ struct TagPreviewCard: View {
                             }
                         }
 
-                        if previewResults.count > 3 {
-                            Text("+\(previewResults.count - 3) more")
+                        if previewTotal > previewResults.count {
+                            Text("+\(previewTotal - previewResults.count) more")
                                 .font(SparkTypography.captionStrong)
                                 .foregroundStyle(.secondary)
                         }
@@ -273,6 +274,7 @@ struct TagPreviewCard: View {
             }
             if let id, let page = try? await appModel.apiClient.request(TagsEndpoint.detail(id: id, limit: 3)) {
                 previewResults = page.data
+                previewTotal = page.tag.totalCount
             }
             loaded = true
         }

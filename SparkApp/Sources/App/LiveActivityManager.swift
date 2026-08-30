@@ -124,7 +124,7 @@ final class LiveActivityManager {
             for await tokenData in activity.pushTokenUpdates {
                 let tokenString = tokenData.map { String(format: "%02x", $0) }.joined()
                 do {
-                    if self.registeredActivityIDs.insert(activityID).inserted {
+                    if !self.registeredActivityIDs.contains(activityID) {
                         let record = try await apiClient.request(
                             LiveActivitiesEndpoint.create(
                                 activityID: activityID,
@@ -134,6 +134,7 @@ final class LiveActivityManager {
                             )
                         )
                         self.serverActivityIDs[activityID] = record.id
+                        self.registeredActivityIDs.insert(activityID)
                     } else {
                         guard let serverID = self.serverActivityIDs[activityID] else { continue }
                         _ = try await apiClient.request(

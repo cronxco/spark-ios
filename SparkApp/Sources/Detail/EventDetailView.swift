@@ -66,7 +66,7 @@ struct EventDetailView: View {
             feedbackContext: eventFeedbackContext,
             refresh: { await viewModel?.retry() }
         )
-        .toolbar { ToolbarItemGroup(placement: .topBarTrailing) { Button("Edit") { showEditor = true }; Button { showLocationEditor = true } label: { Image(systemName: "mappin.and.ellipse") } } }
+        .toolbar { ToolbarItemGroup(placement: .topBarTrailing) { Button("Edit") { showEditor = true }.disabled(!isLoaded); Button { showLocationEditor = true } label: { Image(systemName: "mappin.and.ellipse") }.accessibilityLabel("Edit location").disabled(!isLoaded) } }
         .task(id: eventId) {
             if viewModel == nil {
                 viewModel = EventDetailViewModel(eventId: eventId, apiClient: appModel.apiClient)
@@ -106,6 +106,11 @@ struct EventDetailView: View {
                 ?? "\(detail.event.action.replacingOccurrences(of: "_", with: " ").capitalized)"
         }
         return "Event"
+    }
+
+    private var isLoaded: Bool {
+        if case .loaded = viewModel?.state { return true }
+        return false
     }
 
     private var onscreenSubtitle: String? {

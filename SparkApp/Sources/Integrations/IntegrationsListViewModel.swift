@@ -24,11 +24,13 @@ final class IntegrationsListViewModel {
     }
 
     func load() async {
+        let previousState = state
         state = .loading
         do {
             let response = try await apiClient.request(IntegrationsEndpoint.list())
             state = .loaded(response.data)
         } catch APIError.notModified {
+            state = previousState
             return
         } catch {
             SparkObservability.captureHandled(error)

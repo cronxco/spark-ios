@@ -79,6 +79,33 @@ struct APIClientTests {
         }
     }
 
+    @Test("cached ETags are only used to revalidate GET requests")
+    func cachedETagsAreOnlyAddedToGETRequests() async throws {
+        let cache = makeCache()
+        let environment = APIEnvironment(
+            baseURL: URL(string: "https://test.spark.cronx.co/api/v1/mobile")!,
+            oauthAuthorizeURL: URL(string: "https://test.spark.cronx.co/oauth/authorize")!,
+            name: "test"
+        )
+        let url = URL(string: "https://test.spark.cronx.co/api/v1/mobile/briefing/today")!
+        await cache.store("\"cached\"", for: url)
+        let client = APIClient(
+            environment: environment,
+            session: makeSession(),
+            tokenStore: makeStore(),
+            etagCache: cache,
+            telemetry: APITelemetry()
+        )
+
+        await StubURLProtocol.set { _ in (Data("{}".utf8), 200, [:]) }
+        _ = try await client.request(Endpoint<EmptyResponse>(method: .get, path: "/briefing/today", requiresAuth: false))
+        _ = try await client.request(Endpoint<EmptyResponse>(method: .post, path: "/briefing/today", requiresAuth: false))
+
+        let requests = await StubURLProtocol.recorded()
+        #expect(requests.dropLast().last?.value(forHTTPHeaderField: "If-None-Match") == "\"cached\"")
+        #expect(requests.last?.value(forHTTPHeaderField: "If-None-Match") == nil)
+    }
+
     @Test("401 with refresh token refreshes and retries once")
     func refreshThenRetry() async throws {
         let (client, tokenStore) = makeClient()

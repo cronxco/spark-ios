@@ -37,11 +37,15 @@ struct IntegrationsListView: View {
                                     }
                                 }
                                 #if DEBUG
-                                Button(viewModel?.syncingService == group.1.first?.service ? "Syncing all \(group.1.first?.service ?? "")…" : "Sync all \(group.1.first?.service ?? "")") {
-                                    guard let service = group.1.first?.service else { return }
-                                    Task { await viewModel?.syncAll(service: service) }
+                                ForEach(Array(Set(group.1.map(\.service))).sorted(), id: \.self) { service in
+                                    Button(viewModel?.syncingService == service ? "Syncing all \(service)…" : "Sync all \(service)") {
+                                        Task { await viewModel?.syncAll(service: service) }
+                                    }
+                                    .disabled(
+                                        viewModel?.syncingService != nil
+                                            || group.1.filter { $0.service == service }.allSatisfy { $0.statusValue.lowercased() == "paused" }
+                                    )
                                 }
-                                .disabled(viewModel?.syncingService != nil || group.1.allSatisfy { $0.statusValue.lowercased() == "paused" })
                                 #endif
                             } header: {
                                 Text(group.0)

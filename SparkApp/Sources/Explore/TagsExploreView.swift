@@ -12,20 +12,29 @@ private final class TagsExploreViewModel {
     private(set) var hasMore = false
     private(set) var isLoading = false
     private(set) var error: String?
+    private var requestGeneration = 0
 
     init(apiClient: APIClient) { self.apiClient = apiClient }
 
     func load(query: String? = nil, reset: Bool = true) async {
-        guard !isLoading else { return }
+        if !reset, isLoading { return }
+        requestGeneration += 1
+        let generation = requestGeneration
         isLoading = true
         error = nil
-        defer { isLoading = false }
+        defer {
+            if generation == requestGeneration {
+                isLoading = false
+            }
+        }
         do {
             let page = try await apiClient.request(TagsEndpoint.list(query: query, cursor: reset ? nil : nextCursor))
+            guard generation == requestGeneration, !Task.isCancelled else { return }
             tags = reset ? page.data : tags + page.data
             nextCursor = page.nextCursor
             hasMore = page.hasMore
         } catch APIError.notModified { } catch {
+            guard generation == requestGeneration, !Task.isCancelled else { return }
             SparkObservability.captureHandled(error)
             self.error = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
         }

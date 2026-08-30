@@ -16,6 +16,7 @@ struct ObjectDetailDecodingTests {
           "content": "# Heading\\n\\nFull article body",
           "url": "https://www.404media.co/story",
           "media_url": "https://cdn.example.com/image.jpeg",
+          "location": { "lat": 51.5074, "lng": -0.1278 },
           "recent_events": [
             {
               "id": "evt_1",
@@ -47,6 +48,7 @@ struct ObjectDetailDecodingTests {
         #expect(detail.id == "obj_1")
         #expect(detail.object.content == "# Heading\n\nFull article body")
         #expect(detail.object.url == "https://www.404media.co/story")
+        #expect(detail.location == EventDetail.Location(lat: 51.5074, lng: -0.1278))
         #expect(detail.recentEvents.count == 1)
         #expect(detail.relatedObjects.isEmpty)
         #expect(detail.tags.isEmpty)

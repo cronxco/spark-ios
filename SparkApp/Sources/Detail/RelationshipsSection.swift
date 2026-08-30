@@ -14,6 +14,7 @@ struct RelationshipsSection: View {
     @State private var isLoading = true
     @State private var isMutating = false
     @State private var errorMessage: String?
+    @State private var mutationError: String?
     @State private var showingAddSheet = false
     @State private var pendingDeletion: EntityRelationship?
 
@@ -46,9 +47,9 @@ struct RelationshipsSection: View {
                 Task { await remove(relationship) }
             }
         } message: { Text("This removes the relationship from both entities.") }
-        .alert("Couldn't update relationships", isPresented: Binding(get: { errorMessage != nil && !isLoading }, set: { if !$0 { errorMessage = nil } })) {
+        .alert("Couldn't update relationships", isPresented: Binding(get: { mutationError != nil }, set: { if !$0 { mutationError = nil } })) {
             Button("OK", role: .cancel) {}
-        } message: { Text(errorMessage ?? "Please try again.") }
+        } message: { Text(mutationError ?? "Please try again.") }
     }
 
     @ViewBuilder private func relationshipRow(_ relationship: EntityRelationship) -> some View {
@@ -87,13 +88,13 @@ struct RelationshipsSection: View {
     private func add(_ request: RelationshipCreateRequest) async throws {
         isMutating = true; defer { isMutating = false }
         do { relationships.append(try await create(request)) }
-        catch { errorMessage = (error as? LocalizedError)?.errorDescription ?? "Please try again."; throw error }
+        catch { mutationError = (error as? LocalizedError)?.errorDescription ?? "Please try again."; throw error }
     }
 
     private func remove(_ relationship: EntityRelationship) async {
         isMutating = true; defer { isMutating = false; pendingDeletion = nil }
         do { try await delete(relationship.id); relationships.removeAll { $0.id == relationship.id } }
-        catch { errorMessage = (error as? LocalizedError)?.errorDescription ?? "Please try again." }
+        catch { mutationError = (error as? LocalizedError)?.errorDescription ?? "Please try again." }
     }
 }
 
@@ -120,7 +121,13 @@ private struct RelationshipEditorSheet: View {
             Form {
                 Section("Target") {
                     Picker("Kind", selection: $targetKind) { ForEach(SearchEndpoint.EntityType.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) } }
-                    TextField("Search \(targetKind.rawValue)", text: $query).textInputAutocapitalization(.never).onChange(of: query) { _, _ in Task { await search() } }
+                    TextField("Search \(targetKind.rawValue)", text: $query)
+                        .textInputAutocapitalization(.never)
+                        .task(id: query) {
+                            try? await Task.sleep(for: .milliseconds(300))
+                            guard !Task.isCancelled else { return }
+                            await search(query: query)
+                        }
                     if isSearching { ProgressView() }
                     ForEach(results, id: \.id) { result in
                         Button { target = result } label: {
@@ -143,11 +150,12 @@ private struct RelationshipEditorSheet: View {
         }
     }
 
-    private func search() async {
+    private func search(query: String) async {
         guard query.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2 else { results = []; return }
         isSearching = true; defer { isSearching = false }
         do {
             let response = try await appModel.apiClient.request(SearchEndpoint.entity(targetKind, query: query))
+            guard !Task.isCancelled else { return }
             results = response.results.filter {
                 switch (targetKind, $0) { case (.events, .event), (.objects, .object), (.blocks, .block): true; default: false }
             }

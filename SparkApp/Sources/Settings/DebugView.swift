@@ -546,7 +546,7 @@ struct DebugView: View {
     }
 
     private var apiDateString: String {
-        apiDate.formatted(.iso8601.year().month().day().dateSeparator(.dash))
+        PowerToolsEndpoint.calendarDate(from: apiDate)
     }
 
     private func inspectDayContext() async {

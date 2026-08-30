@@ -4,13 +4,13 @@ import SwiftUI
 
 @MainActor
 @Observable
-final class ObjectDetailViewModel {
+final class ObjectDetailViewModel: ETagDetailMutationHandling {
     let objectId: String
-    private(set) var state: DetailLoadState<ObjectDetail> = .loading
-    private(set) var rawPayload: String?
-    private var etag: String?
+    var state: DetailLoadState<ObjectDetail> = .loading
+    var rawPayload: String?
+    var etag: String?
 
-    private let apiClient: APIClient
+    let apiClient: APIClient
 
     init(objectId: String, apiClient: APIClient) {
         self.objectId = objectId
@@ -57,7 +57,7 @@ final class ObjectDetailViewModel {
     func createRelationship(_ request: RelationshipCreateRequest) async throws -> EntityRelationship {
         guard let etag else { throw TagMutationError.missingETag }
         let response = try await apiClient.requestWithRawResponse(
-            EntityMutationsEndpoint.createRelationship(kind: .objects, id: objectId, request: request, etag: etag)
+            try EntityMutationsEndpoint.createRelationship(kind: .objects, id: objectId, request: request, etag: etag)
         )
         self.etag = response.etag ?? etag
         return response.decoded
@@ -73,13 +73,15 @@ final class ObjectDetailViewModel {
 
     func update(_ attributes: [String: AnyCodable]) async throws {
         guard let etag else { throw TagMutationError.missingETag }
-        let response = try await apiClient.requestWithRawResponse(EntityMutationsEndpoint.update(kind: .objects, id: objectId, attributes: attributes, etag: etag, response: ObjectDetail.self))
-        rawPayload = response.utf8Body; self.etag = response.etag ?? etag; state = .loaded(response.decoded)
+        try await applyMutation(
+            try EntityMutationsEndpoint.update(kind: .objects, id: objectId, attributes: attributes, etag: etag, response: ObjectDetail.self)
+        )
     }
 
-    func geocode(address: String) async throws { guard let etag else { throw TagMutationError.missingETag }; let response = try await apiClient.requestWithRawResponse(EntityMutationsEndpoint.geocode(kind: .objects, id: objectId, address: address, etag: etag, response: ObjectDetail.self)); rawPayload = response.utf8Body; self.etag = response.etag ?? etag; state = .loaded(response.decoded) }
-    func setLocation(_ location: LocationRequest) async throws { guard let etag else { throw TagMutationError.missingETag }; let response = try await apiClient.requestWithRawResponse(EntityMutationsEndpoint.setLocation(kind: .objects, id: objectId, location: location, etag: etag, response: ObjectDetail.self)); rawPayload = response.utf8Body; self.etag = response.etag ?? etag; state = .loaded(response.decoded) }
-    func clearLocation() async throws { guard let etag else { throw TagMutationError.missingETag }; let response = try await apiClient.requestWithRawResponse(EntityMutationsEndpoint.clearLocation(kind: .objects, id: objectId, etag: etag, response: ObjectDetail.self)); rawPayload = response.utf8Body; self.etag = response.etag ?? etag; state = .loaded(response.decoded) }
+    func geocode(address: String) async throws { try await applyMutation(try EntityMutationsEndpoint.geocode(kind: .objects, id: objectId, address: address, etag: currentETag(), response: ObjectDetail.self)) }
+    func setLocation(_ location: LocationRequest) async throws { try await applyMutation(try EntityMutationsEndpoint.setLocation(kind: .objects, id: objectId, location: location, etag: currentETag(), response: ObjectDetail.self)) }
+    func clearLocation() async throws { try await applyMutation(EntityMutationsEndpoint.clearLocation(kind: .objects, id: objectId, etag: currentETag(), response: ObjectDetail.self)) }
+
 }
 
 struct ObjectDetailView: View {
@@ -124,7 +126,7 @@ struct ObjectDetailView: View {
             feedbackContext: objectFeedbackContext,
             refresh: { await viewModel?.load() }
         )
-        .toolbar { ToolbarItemGroup(placement: .topBarTrailing) { Button("Edit") { showEditor = true }; Button { showLocationEditor = true } label: { Image(systemName: "mappin.and.ellipse") } } }
+        .toolbar { ToolbarItemGroup(placement: .topBarTrailing) { Button("Edit") { showEditor = true }.disabled(!isLoaded); Button { showLocationEditor = true } label: { Image(systemName: "mappin.and.ellipse") }.accessibilityLabel("Edit location").disabled(!isLoaded) } }
         .task(id: objectId) {
             if viewModel == nil {
                 viewModel = ObjectDetailViewModel(objectId: objectId, apiClient: appModel.apiClient)
@@ -137,7 +139,7 @@ struct ObjectDetailView: View {
             }
         }
         .sheet(isPresented: $showEditor) { if case .loaded(let detail) = viewModel?.state { EntityEditorSheet(title: "Object", initial: ["title": detail.object.title, "type": detail.object.type, "concept": detail.object.concept, "url": detail.object.url ?? ""]) { try await viewModel?.update($0) } } }
-        .sheet(isPresented: $showLocationEditor) { LocationEditorSheet(hasLocation: false, geocode: { try await viewModel?.geocode(address: $0) }, coordinates: { try await viewModel?.setLocation($0) }, clear: { try await viewModel?.clearLocation() }) }
+        .sheet(isPresented: $showLocationEditor) { LocationEditorSheet(hasLocation: { if case .loaded(let detail) = viewModel?.state { return detail.location != nil }; return false }(), geocode: { try await viewModel?.geocode(address: $0) }, coordinates: { try await viewModel?.setLocation($0) }, clear: { try await viewModel?.clearLocation() }) }
         .confirmationDialog(
             "Remove tag?",
             isPresented: Binding(get: { tagPendingRemoval != nil }, set: { if !$0 { tagPendingRemoval = nil } })
@@ -164,6 +166,11 @@ struct ObjectDetailView: View {
             return [url]
         }
         return ["Spark Object: \(detail.object.title)"]
+    }
+
+    private var isLoaded: Bool {
+        if case .loaded = viewModel?.state { return true }
+        return false
     }
 
     private var objectRawPayload: String? {

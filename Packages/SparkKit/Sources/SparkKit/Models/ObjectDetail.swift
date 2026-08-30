@@ -8,6 +8,7 @@ public struct ObjectDetail: Codable, Sendable, Hashable, Identifiable {
     public let relatedObjects: [Related]
     public let tags: [EventTag]
     public let aiSummary: String?
+    public let location: EventDetail.Location?
 
     public var id: String { object.id }
 
@@ -30,6 +31,7 @@ public struct ObjectDetail: Codable, Sendable, Hashable, Identifiable {
         case recentEvents = "recent_events"
         case relatedObjects = "related_objects"
         case aiSummary = "summary_ai"
+        case location
     }
 
     public init(
@@ -37,13 +39,15 @@ public struct ObjectDetail: Codable, Sendable, Hashable, Identifiable {
         recentEvents: [Event] = [],
         relatedObjects: [Related] = [],
         tags: [EventTag] = [],
-        aiSummary: String? = nil
+        aiSummary: String? = nil,
+        location: EventDetail.Location? = nil
     ) {
         self.object = object
         self.recentEvents = recentEvents
         self.relatedObjects = relatedObjects
         self.tags = tags
         self.aiSummary = aiSummary
+        self.location = location ?? object.location
     }
 
     public init(from decoder: Decoder) throws {
@@ -57,5 +61,6 @@ public struct ObjectDetail: Codable, Sendable, Hashable, Identifiable {
         relatedObjects = try container.decodeIfPresent([Related].self, forKey: .relatedObjects) ?? []
         tags = try container.decodeIfPresent([EventTag].self, forKey: .tags) ?? []
         aiSummary = try container.decodeIfPresent(String.self, forKey: .aiSummary)
+        location = try container.decodeIfPresent(EventDetail.Location.self, forKey: .location) ?? object.location
     }
 }
