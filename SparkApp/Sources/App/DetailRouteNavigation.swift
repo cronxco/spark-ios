@@ -97,8 +97,8 @@ extension View {
                 IntegrationDetailView(integrationId: service)
             case .account(let id):
                 AccountDetailView(accountId: id)
-            case .tag(let name, let type):
-                TagDetailView(tagName: name, tagType: type)
+            case .tag(let id, let name, let type):
+                TagDetailView(tagID: id, tagName: name, tagType: type)
             }
         }
     }

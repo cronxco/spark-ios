@@ -8,6 +8,9 @@ struct EventDetailView: View {
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: EventDetailViewModel?
     @State private var showNoteEditor = false
+    @State private var showTagPicker = false
+    @State private var tagPendingRemoval: EventTag?
+    @State private var tagMutationError: String?
 
     private func aggregatedReferences(for detail: EventDetail) -> [EntityReference] {
         var seen = Set<String>()
@@ -67,6 +70,27 @@ struct EventDetailView: View {
             }
             await viewModel?.load()
         }
+        .sheet(isPresented: $showTagPicker) {
+            TagPickerSheet { request in
+                try await viewModel?.attachTag(request)
+            }
+        }
+        .confirmationDialog(
+            "Remove tag?",
+            isPresented: Binding(get: { tagPendingRemoval != nil }, set: { if !$0 { tagPendingRemoval = nil } })
+        ) {
+            Button("Remove tag", role: .destructive) {
+                guard let tag = tagPendingRemoval else { return }
+                Task { await detach(tag) }
+            }
+        } message: {
+            Text("This removes the tag from this event.")
+        }
+        .alert("Couldn't update tags", isPresented: Binding(get: { tagMutationError != nil }, set: { if !$0 { tagMutationError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(tagMutationError ?? "Please try again.")
+        }
     }
 
     // Onscreen context advertised to Siri ("tell me more about this").
@@ -94,27 +118,7 @@ struct EventDetailView: View {
             aiCalloutCard(summary)
         }
 
-        if !detail.tags.isEmpty {
-            FlowLayout(spacing: SparkSpacing.xs + 2) {
-                ForEach(detail.tags) { tag in
-                    let route = DetailRoute.tag(name: tag.name, type: tag.type)
-                    NavigationLink(value: route) {
-                        TagChip(tag)
-                    }
-                    .buttonStyle(.plain)
-                    .contextMenu {
-                        Button {
-                            appModel.pendingRoute = .tag(name: tag.name, type: tag.type)
-                        } label: {
-                            Label("Open Tag", systemImage: "tag")
-                        }
-                    } preview: {
-                        TagPreviewCard(tag: tag)
-                            .environment(appModel)
-                    }
-                }
-            }
-        }
+        tagSection(for: detail)
 
         metricBaselineStatusRow()
 
@@ -135,6 +139,38 @@ struct EventDetailView: View {
         }
 
         noteSection(for: detail)
+    }
+
+    private func tagSection(for detail: EventDetail) -> some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+            SparkDetailSectionHeader("Tags")
+            FlowLayout(spacing: SparkSpacing.xs + 2) {
+                ForEach(detail.tags) { tag in
+                    let route = DetailRoute.tag(id: tag.tagID, name: tag.name, type: tag.type)
+                    NavigationLink(value: route) { TagChip(tag) }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button(role: .destructive) { tagPendingRemoval = tag } label: {
+                                Label("Remove tag", systemImage: "trash")
+                            }
+                        } preview: {
+                            TagPreviewCard(tag: tag).environment(appModel)
+                        }
+                }
+                Button { showTagPicker = true } label: { TagChip("+", isGhost: true) }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Add tag")
+            }
+        }
+    }
+
+    private func detach(_ tag: EventTag) async {
+        do {
+            try await viewModel?.detachTag(tag)
+        } catch {
+            tagMutationError = (error as? LocalizedError)?.errorDescription ?? "Please try again."
+        }
+        tagPendingRemoval = nil
     }
 
     // MARK: - Cinematic hero

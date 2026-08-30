@@ -2,7 +2,7 @@ import Foundation
 
 public enum DevicesEndpoint {
     /// GET /devices
-    public static func list() -> Endpoint<[RegisteredDevice]> {
+    public static func list() -> Endpoint<DevicesListResponse> {
         Endpoint(method: .get, path: "/devices")
     }
 
@@ -45,6 +45,23 @@ public enum DevicesEndpoint {
         let bundleId: String
         let osVersion: String
     }
+}
+
+/// Newer mobile API responses wrap the device collection in `devices` while
+/// older deployments return the array directly. Support both during rollout.
+public struct DevicesListResponse: Decodable, Sendable {
+    public let devices: [RegisteredDevice]
+
+    public init(from decoder: Decoder) throws {
+        if let devices = try? decoder.singleValueContainer().decode([RegisteredDevice].self) {
+            self.devices = devices
+            return
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        devices = try container.decode([RegisteredDevice].self, forKey: .devices)
+    }
+
+    private enum CodingKeys: String, CodingKey { case devices }
 }
 
 public struct DeviceRegistrationResponse: Decodable, Sendable {

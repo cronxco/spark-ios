@@ -51,4 +51,16 @@ struct ObjectDetailDecodingTests {
         #expect(detail.relatedObjects.isEmpty)
         #expect(detail.tags.isEmpty)
     }
+
+    @Test("preserves typed tag IDs while accepting legacy strings")
+    func decodesTypedAndLegacyTags() throws {
+        let detail = try JSONDecoder().decode(ObjectDetail.self, from: Data("""
+        {
+          "id":"obj_1", "concept":"bookmark", "type":"article", "title":"Article",
+          "tags":["reading", {"id": 12, "name":"coffee", "type":"merchant"}]
+        }
+        """.utf8))
+        #expect(detail.tags.map(\.name) == ["reading", "coffee"])
+        #expect(detail.tags.last?.tagID == "12")
+    }
 }

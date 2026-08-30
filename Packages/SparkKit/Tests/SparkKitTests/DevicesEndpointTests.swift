@@ -70,4 +70,28 @@ struct DevicesEndpointTests {
         #expect(device.id == "device_3")
         #expect(device.isCurrentDevice == false)
     }
+
+    @Test("device list accepts legacy array and wrapped response with diagnostics")
+    func deviceListResponseCompatibility() throws {
+        let decoder = JSONDecoder()
+        let legacy = try decoder.decode(DevicesListResponse.self, from: Data("""
+        [{"id": 1, "name": "Phone", "platform": "ios"}]
+        """.utf8))
+        #expect(legacy.devices.count == 1)
+
+        let wrapped = try decoder.decode(DevicesListResponse.self, from: Data("""
+        {"devices": [{
+          "id": "device_2", "name": "iPad", "platform": "ios",
+          "device_type": "tablet", "app_environment": "sandbox",
+          "bundle_id": "co.cronx.sparkapp", "app_version": "1.2.3",
+          "os_version": "26.0", "created_at": null, "updated_at": null
+        }]}
+        """.utf8))
+        let device = try #require(wrapped.devices.first)
+        #expect(device.deviceType == "tablet")
+        #expect(device.appEnvironment == "sandbox")
+        #expect(device.bundleID == "co.cronx.sparkapp")
+        #expect(device.appVersion == "1.2.3")
+        #expect(device.osVersion == "26.0")
+    }
 }

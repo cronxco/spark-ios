@@ -16,8 +16,8 @@ final class DevicesViewModel {
     func load() async {
         state = .loading
         do {
-            let devices = try await apiClient.request(DevicesEndpoint.list())
-            state = .loaded(devices)
+            let response = try await apiClient.request(DevicesEndpoint.list())
+            state = .loaded(response.devices)
         } catch APIError.notModified {
             return
         } catch {

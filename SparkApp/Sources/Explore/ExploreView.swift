@@ -30,6 +30,8 @@ struct ExploreView: View {
             MetricsExploreView()
         case .money:
             MoneyExploreView()
+        case .tags:
+            TagsExploreView()
         }
     }
 
@@ -50,7 +52,7 @@ struct ExploreView: View {
 }
 
 enum ExploreSection: CaseIterable, Equatable {
-    case health, money, metrics, map
+    case health, money, metrics, map, tags
 
     var id: String {
         switch self {
@@ -58,6 +60,7 @@ enum ExploreSection: CaseIterable, Equatable {
         case .health: "health"
         case .metrics: "metrics"
         case .money: "money"
+        case .tags: "tags"
         }
     }
 
@@ -67,6 +70,7 @@ enum ExploreSection: CaseIterable, Equatable {
         case .health: "Health"
         case .metrics: "Metrics"
         case .money: "Money"
+        case .tags: "Tags"
         }
     }
 
@@ -76,6 +80,7 @@ enum ExploreSection: CaseIterable, Equatable {
         case .health: "heart.fill"
         case .metrics: "bolt.fill"
         case .money: "sterlingsign"
+        case .tags: "tag.fill"
         }
     }
 }
