@@ -15,6 +15,7 @@ final class EventDetailViewModel {
     private(set) var state: DetailLoadState<EventDetail> = .loading
     private(set) var metricBaselineStatus: MetricBaselineStatus?
     private(set) var rawPayload: String?
+    private var etag: String?
 
     private let apiClient: APIClient
 
@@ -30,6 +31,7 @@ final class EventDetailViewModel {
             let response = try await apiClient.requestWithRawResponse(EventsEndpoint.detail(id: eventId))
             let detail = response.decoded
             rawPayload = response.utf8Body
+            etag = response.etag
             state = .loaded(detail)
             await loadMetricBaselineStatus(for: detail)
         } catch APIError.notModified {
@@ -53,8 +55,30 @@ final class EventDetailViewModel {
         )
         let updated = response.decoded
         rawPayload = response.utf8Body
+        etag = response.etag ?? etag
         state = .loaded(updated)
         await loadMetricBaselineStatus(for: updated)
+    }
+
+    func attachTag(_ request: TagMutationRequest) async throws {
+        guard let etag else { throw TagMutationError.missingETag }
+        let response = try await apiClient.requestWithRawResponse(
+            TagsEndpoint.attach(kind: .events, id: eventId, request: request, etag: etag, response: EventDetail.self)
+        )
+        rawPayload = response.utf8Body
+        self.etag = response.etag ?? etag
+        state = .loaded(response.decoded)
+    }
+
+    func detachTag(_ tag: EventTag) async throws {
+        guard let tagID = tag.tagID else { throw TagMutationError.missingTagID }
+        guard let etag else { throw TagMutationError.missingETag }
+        let response = try await apiClient.requestWithRawResponse(
+            TagsEndpoint.detach(kind: .events, id: eventId, tagID: tagID, etag: etag, response: EventDetail.self)
+        )
+        rawPayload = response.utf8Body
+        self.etag = response.etag ?? etag
+        state = .loaded(response.decoded)
     }
 
     private func loadMetricBaselineStatus(for detail: EventDetail) async {
@@ -74,6 +98,18 @@ final class EventDetailViewModel {
         } catch {
             SparkObservability.captureHandled(error)
             metricBaselineStatus = nil
+        }
+    }
+}
+
+enum TagMutationError: LocalizedError {
+    case missingETag
+    case missingTagID
+
+    var errorDescription: String? {
+        switch self {
+        case .missingETag: "Refresh this detail before changing tags."
+        case .missingTagID: "This older tag can't be removed until the detail is refreshed."
         }
     }
 }

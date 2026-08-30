@@ -37,4 +37,10 @@ public enum CheckInsEndpoint {
             ]
         )
     }
+
+    public static func timezone() -> Endpoint<CheckInTimezone> { Endpoint(method: .get, path: "/check-ins/timezone") }
+    public static func setTimezone(_ timezone: String, previous: String? = nil, deviceID: String? = nil) -> Endpoint<CheckInTimezone> {
+        struct Request: Encodable { let timezone: String; let previousTimezone: String?; let deviceID: String?; enum CodingKeys: String, CodingKey { case timezone; case previousTimezone = "previous_timezone"; case deviceID = "device_id" } }
+        return Endpoint(method: .post, path: "/check-ins/timezone", body: try? encoder.encode(Request(timezone: timezone, previousTimezone: previous, deviceID: deviceID)))
+    }
 }
