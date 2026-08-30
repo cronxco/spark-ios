@@ -76,12 +76,6 @@ private struct DeviceRow: View {
                         .font(SparkTypography.monoSmall)
                         .foregroundStyle(.secondary)
                 }
-                if let diagnostics = diagnostics {
-                    Text(diagnostics)
-                        .font(SparkTypography.monoSmall)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
             }
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -100,11 +94,5 @@ private struct DeviceRow: View {
         case "mac", "macos": "laptopcomputer"
         default: "rectangle.on.rectangle"
         }
-    }
-
-    private var diagnostics: String? {
-        let values = [device.deviceType, device.appEnvironment, device.appVersion, device.osVersion]
-            .compactMap { $0 }
-        return values.isEmpty ? nil : values.joined(separator: " · ")
     }
 }

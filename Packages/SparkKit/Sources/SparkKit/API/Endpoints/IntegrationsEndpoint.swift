@@ -20,11 +20,6 @@ public enum IntegrationsEndpoint {
         Endpoint(method: .post, path: "/integrations/\(id)/sync")
     }
 
-    public static func syncService(_ service: String) -> Endpoint<BulkSyncResponse> {
-        struct Request: Encodable { let service: String }
-        return Endpoint(method: .post, path: "/integrations/sync", body: try? JSONEncoder().encode(Request(service: service)))
-    }
-
     public struct OAuthStartResponse: Decodable, Sendable {
         public let url: URL
     }
@@ -35,5 +30,3 @@ public enum IntegrationsEndpoint {
         Endpoint(method: .post, path: "/integrations/\(id)/oauth/start")
     }
 }
-
-public struct BulkSyncResponse: Codable, Sendable { public let service: String; public let totalJobsDispatched: Int; enum CodingKeys: String, CodingKey { case service; case totalJobsDispatched = "total_jobs_dispatched" } }

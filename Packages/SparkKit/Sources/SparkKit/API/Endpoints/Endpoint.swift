@@ -15,7 +15,6 @@ public struct Endpoint<Response: Decodable & Sendable>: Sendable {
     public let body: Data?
     public let contentType: String?
     public let requiresAuth: Bool
-    public let headers: [String: String]
 
     public init(
         method: HTTPMethod,
@@ -23,8 +22,7 @@ public struct Endpoint<Response: Decodable & Sendable>: Sendable {
         query: [URLQueryItem] = [],
         body: Data? = nil,
         contentType: String? = nil,
-        requiresAuth: Bool = true,
-        headers: [String: String] = [:]
+        requiresAuth: Bool = true
     ) {
         self.method = method
         self.path = path
@@ -32,6 +30,5 @@ public struct Endpoint<Response: Decodable & Sendable>: Sendable {
         self.body = body
         self.contentType = contentType
         self.requiresAuth = requiresAuth
-        self.headers = headers
     }
 }

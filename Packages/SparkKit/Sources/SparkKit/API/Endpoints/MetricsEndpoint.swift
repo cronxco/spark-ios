@@ -22,10 +22,6 @@ public enum MetricsEndpoint {
         Endpoint(method: .get, path: "/metrics")
     }
 
-    public static func baselines() -> Endpoint<MetricBaselinesResponse> {
-        Endpoint(method: .get, path: "/metrics/baselines")
-    }
-
     /// GET /metrics/{identifier}?range=…
     public static func detail(identifier: String, range: Range = .thirtyDays) -> Endpoint<MetricDetail> {
         Endpoint(

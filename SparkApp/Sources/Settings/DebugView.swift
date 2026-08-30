@@ -39,11 +39,6 @@ struct DebugView: View {
     @State private var isRefreshingSpotlight = false
     @State private var isIndexingSpotlight = false
 
-    // Mobile API power tools
-    @State private var apiDate = Date.now
-    @State private var apiInspectorResult: String?
-    @State private var isInspectingAPI = false
-
     var body: some View {
         List {
             cacheSection
@@ -54,7 +49,6 @@ struct DebugView: View {
             notificationPermissionSection
             widgetSection
             spotlightSection
-            mobileAPIPowerToolsSection
             loggingSection
 
             if let msg = statusMessage {
@@ -239,22 +233,6 @@ struct DebugView: View {
                 clearSyncCursors()
             }
             .disabled(syncCursors.isEmpty)
-        }
-    }
-
-    private var mobileAPIPowerToolsSection: some View {
-        Section("Mobile API Power Tools") {
-            DatePicker("Date", selection: $apiDate, displayedComponents: .date)
-            Button("Inspect day context") { Task { await inspectDayContext() } }
-            Button("Inspect service status") { Task { await inspectServiceStatus() } }
-            Button("Browse metric baselines") { Task { await inspectBaselines() } }
-            if isInspectingAPI { ProgressView() }
-            if let apiInspectorResult {
-                Text(apiInspectorResult)
-                    .font(SparkTypography.monoSmall)
-                    .textSelection(.enabled)
-                    .lineLimit(12)
-            }
         }
     }
 
@@ -511,36 +489,6 @@ struct DebugView: View {
                 statusMessage = "Error: \(debugErrorMessage(error))"
             }
         }
-    }
-
-    private var apiDateString: String {
-        apiDate.formatted(.iso8601.year().month().day().dateSeparator(.dash))
-    }
-
-    private func inspectDayContext() async {
-        await inspect(PowerToolsEndpoint.dayContext(date: apiDateString))
-    }
-
-    private func inspectServiceStatus() async {
-        await inspect(PowerToolsEndpoint.serviceStatus(date: apiDateString))
-    }
-
-    private func inspectBaselines() async {
-        isInspectingAPI = true
-        defer { isInspectingAPI = false }
-        do {
-            let response = try await appModel.apiClient.request(MetricsEndpoint.baselines())
-            apiInspectorResult = String(data: try JSONEncoder().encode(response), encoding: .utf8)
-        } catch { apiInspectorResult = debugErrorMessage(error) }
-    }
-
-    private func inspect(_ endpoint: Endpoint<AnyCodable>) async {
-        isInspectingAPI = true
-        defer { isInspectingAPI = false }
-        do {
-            let response = try await appModel.apiClient.request(endpoint)
-            apiInspectorResult = String(data: try JSONEncoder().encode(response), encoding: .utf8)
-        } catch { apiInspectorResult = debugErrorMessage(error) }
     }
 
     private func statusMessageColor(for message: String) -> Color {

@@ -176,9 +176,6 @@ public actor APIClient {
         var request = URLRequest(url: url)
         request.httpMethod = endpoint.method.rawValue
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        for (field, value) in endpoint.headers {
-            request.setValue(value, forHTTPHeaderField: field)
-        }
         if let body = endpoint.body {
             request.httpBody = body
             request.setValue(endpoint.contentType ?? "application/json", forHTTPHeaderField: "Content-Type")
@@ -317,7 +314,7 @@ public actor APIClient {
                 metrics: metricsCollector.snapshot,
                 outcome: .success
             )
-            return RawAPIResponse(decoded: empty, data: data, headers: http.stringHeaderFields)
+            return RawAPIResponse(decoded: empty, data: data)
         }
 
         do {
@@ -337,7 +334,7 @@ public actor APIClient {
                 outcome: .success,
                 decodeDurationMillis: Date().timeIntervalSince(decodeStartedAt) * 1_000
             )
-            return RawAPIResponse(decoded: decoded, data: data, headers: http.stringHeaderFields)
+            return RawAPIResponse(decoded: decoded, data: data)
         } catch {
             let bodyString = String(data: data, encoding: .utf8) ?? "<binary>"
             logger.error("Decoding failed for \(endpoint.path, privacy: .public): \(error.localizedDescription, privacy: .public) — body: \(bodyString, privacy: .public)")
@@ -552,9 +549,6 @@ public struct EmptyResponse: Codable, Sendable {
 public struct RawAPIResponse<Response: Sendable>: Sendable {
     public let decoded: Response
     public let data: Data
-    public let headers: [String: String]
-
-    public var etag: String? { headers.first { $0.key.caseInsensitiveCompare("ETag") == .orderedSame }?.value }
 
     public var utf8Body: String {
         String(data: data, encoding: .utf8) ?? "<binary response: \(data.count) bytes>"

@@ -3,26 +3,13 @@ import SparkUI
 import SwiftUI
 
 struct TagDetailView: View {
-    let tagID: String?
     let tagName: String
     let tagType: String?
 
     @Environment(AppModel.self) private var appModel
-    @State private var results: [TagDetailItem] = []
+    @State private var results: [SearchResult] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
-    @State private var resolvedTagID: String?
-    @State private var nextCursor: String?
-    @State private var hasMore = false
-    @State private var serverTotal: Int?
-    @State private var isLoadingMore = false
-    @State private var loadMoreError: String?
-
-    init(tagID: String? = nil, tagName: String, tagType: String?) {
-        self.tagID = tagID
-        self.tagName = tagName
-        self.tagType = tagType
-    }
 
     private var tag: EventTag { EventTag(name: tagName, type: tagType) }
 
@@ -38,7 +25,7 @@ struct TagDetailView: View {
         }
         .sparkAppBackground()
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: tagID ?? "\(tagType ?? ""):\(tagName)") {
+        .task(id: tagName) {
             await load()
         }
     }
@@ -62,8 +49,8 @@ struct TagDetailView: View {
                         .sparkGlass(.capsule, tint: tag.tagTint.opacity(0.15))
                 }
 
-                if !isLoading, let serverTotal {
-                    Text("\(serverTotal) item\(serverTotal == 1 ? "" : "s")")
+                if !isLoading, !results.isEmpty {
+                    Text("\(results.count) item\(results.count == 1 ? "" : "s")")
                         .font(SparkTypography.captionStrong)
                         .foregroundStyle(.secondary)
                 }
@@ -95,24 +82,13 @@ struct TagDetailView: View {
         } else {
             LazyVStack(spacing: SparkSpacing.sm) {
                 ForEach(results) { result in
-                    NavigationLink(value: detailRoute(for: result)) {
-                        TagDetailItemRow(item: result)
-                    }
-                    .buttonStyle(.plain)
-                }
-                if hasMore {
-                    if isLoadingMore {
-                        ProgressView().frame(maxWidth: .infinity)
-                    } else if let loadMoreError {
-                        VStack(spacing: SparkSpacing.sm) {
-                            Text(loadMoreError).font(SparkTypography.bodySmall).foregroundStyle(.secondary)
-                            Button("Retry") { Task { await loadMore() } }.buttonStyle(.bordered)
+                    if let route = detailRoute(for: result) {
+                        NavigationLink(value: route) {
+                            SearchResultRow(result: result)
                         }
-                        .frame(maxWidth: .infinity)
+                        .buttonStyle(.plain)
                     } else {
-                        Button("Load more") { Task { await loadMore() } }
-                            .buttonStyle(.bordered)
-                            .frame(maxWidth: .infinity)
+                        SearchResultRow(result: result)
                     }
                 }
             }
@@ -121,37 +97,27 @@ struct TagDetailView: View {
 
     // MARK: - Helpers
 
-    private func detailRoute(for result: TagDetailItem) -> DetailRoute {
-        switch result.kind {
-        case .event: .event(id: result.id)
-        case .object: .object(id: result.id)
-        case .block: .block(id: result.id)
+    private func detailRoute(for result: SearchResult) -> DetailRoute? {
+        switch result {
+        case .event(let h): .event(id: h.id)
+        case .object(let h): .object(id: h.id)
+        case .block(let h): .block(id: h.id)
+        case .metric(let h): .metric(identifier: h.identifier)
+        case .integration(let h): .integration(service: h.id)
+        case .place(let h): .place(id: h.id)
+        case .tag(let h): .tag(name: h.name, type: h.type)
+        case .intent: nil
         }
     }
 
     private func load() async {
         isLoading = true
         errorMessage = nil
-        loadMoreError = nil
         do {
-            let id: String
-            if let tagID {
-                id = tagID
-            } else {
-                let list = try await appModel.apiClient.request(TagsEndpoint.list(query: tagName))
-                guard let match = list.data.first(where: { $0.name == tagName && $0.type == tagType }) else {
-                    results = []
-                    isLoading = false
-                    return
-                }
-                id = match.id
-            }
-            let page = try await appModel.apiClient.request(TagsEndpoint.detail(id: id))
-            resolvedTagID = id
-            serverTotal = page.tag.totalCount
-            results = page.data
-            nextCursor = page.nextCursor
-            hasMore = page.hasMore
+            let response = try await appModel.apiClient.request(
+                SearchEndpoint.query(text: tagName)
+            )
+            results = response.results.filter(\.isTagDetailItem)
         } catch APIError.notModified {
             // No change — keep existing results
         } catch {
@@ -160,38 +126,6 @@ struct TagDetailView: View {
                 ?? "Couldn't load items for this tag."
         }
         isLoading = false
-    }
-
-    private func loadMore() async {
-        guard let resolvedTagID, let nextCursor else { return }
-        isLoadingMore = true
-        loadMoreError = nil
-        defer { isLoadingMore = false }
-        do {
-            let page = try await appModel.apiClient.request(TagsEndpoint.detail(id: resolvedTagID, cursor: nextCursor))
-            results.append(contentsOf: page.data)
-            self.nextCursor = page.nextCursor
-            hasMore = page.hasMore
-        } catch {
-            SparkObservability.captureHandled(error)
-            loadMoreError = (error as? LocalizedError)?.errorDescription ?? "Couldn't load more tagged items."
-        }
-    }
-}
-
-private struct TagDetailItemRow: View {
-    let item: TagDetailItem
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.xs) {
-            Text(item.title).font(SparkTypography.bodyStrong)
-            if let subtitle = item.subtitle {
-                Text(subtitle).font(SparkTypography.bodySmall).foregroundStyle(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(SparkSpacing.md)
-        .sparkGlass(.roundedRect(SparkRadii.md))
     }
 }
 
@@ -202,7 +136,7 @@ struct TagPreviewCard: View {
     let tag: EventTag
 
     @Environment(AppModel.self) private var appModel
-    @State private var previewResults: [TagDetailItem] = []
+    @State private var previewResults: [SearchResult] = []
     @State private var loaded = false
 
     var body: some View {
@@ -263,18 +197,19 @@ struct TagPreviewCard: View {
         .sparkAppBackground()
         .task(id: tag.name) {
             guard !loaded else { return }
-            let id: String?
-            if let tagID = tag.tagID {
-                id = tagID
-            } else if let page = try? await appModel.apiClient.request(TagsEndpoint.list(query: tag.name)) {
-                id = page.data.first(where: { $0.name == tag.name && $0.type == tag.type })?.id
-            } else {
-                id = nil
-            }
-            if let id, let page = try? await appModel.apiClient.request(TagsEndpoint.detail(id: id, limit: 3)) {
-                previewResults = page.data
+            if let response = try? await appModel.apiClient.request(
+                SearchEndpoint.query(text: tag.name)
+            ) {
+                previewResults = response.results.filter(\.isTagDetailItem)
             }
             loaded = true
         }
+    }
+}
+
+private extension SearchResult {
+    var isTagDetailItem: Bool {
+        if case .tag = self { return false }
+        return true
     }
 }

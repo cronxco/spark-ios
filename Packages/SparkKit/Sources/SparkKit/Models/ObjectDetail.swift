@@ -6,7 +6,7 @@ public struct ObjectDetail: Codable, Sendable, Hashable, Identifiable {
     public let object: EventObject
     public let recentEvents: [Event]
     public let relatedObjects: [Related]
-    public let tags: [EventTag]
+    public let tags: [String]
     public let aiSummary: String?
 
     public var id: String { object.id }
@@ -36,7 +36,7 @@ public struct ObjectDetail: Codable, Sendable, Hashable, Identifiable {
         object: EventObject,
         recentEvents: [Event] = [],
         relatedObjects: [Related] = [],
-        tags: [EventTag] = [],
+        tags: [String] = [],
         aiSummary: String? = nil
     ) {
         self.object = object
@@ -55,7 +55,7 @@ public struct ObjectDetail: Codable, Sendable, Hashable, Identifiable {
             ?? EventObject(from: decoder)
         recentEvents = try container.decodeIfPresent([Event].self, forKey: .recentEvents) ?? []
         relatedObjects = try container.decodeIfPresent([Related].self, forKey: .relatedObjects) ?? []
-        tags = try container.decodeIfPresent([EventTag].self, forKey: .tags) ?? []
+        tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
         aiSummary = try container.decodeIfPresent(String.self, forKey: .aiSummary)
     }
 }

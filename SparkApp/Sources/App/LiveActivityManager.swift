@@ -13,9 +13,6 @@ final class LiveActivityManager {
     private var sleepActivity: Activity<SleepActivityAttributes>?
     private var dailyActivity: Activity<DailyActivityAttributes>?
     private var tokenTasks: [String: Task<Void, Never>] = [:]
-    private var registeredActivityIDs = Set<String>()
-    private var serverActivityIDs: [String: String] = [:]
-    private var serverUpdateTimes: [String: [Date]] = [:]
 
     private nonisolated let logger = Logger(subsystem: "co.cronx.sparkapp", category: "LiveActivity")
 
@@ -49,7 +46,6 @@ final class LiveActivityManager {
     func updateSleepActivity(state: SleepActivityAttributes.SleepContentState) async {
         guard let activity = sleepActivity else { return }
         await activity.update(.init(state: state, staleDate: nil))
-        await mirrorUpdate(state, for: activity)
     }
 
     func endSleepActivity(score: Int, durationMinutes: Int) async {
@@ -59,9 +55,6 @@ final class LiveActivityManager {
             sleepScore: score,
             durationMinutes: durationMinutes
         )
-        // Tell the server before clearing local state so it can issue its
-        // remote end request while it still has the activity record.
-        await endServerActivity(id: activity.id)
         await activity.end(
             .init(state: resolvedState, staleDate: nil),
             dismissalPolicy: .after(.now.addingTimeInterval(60))
@@ -97,12 +90,10 @@ final class LiveActivityManager {
     func updateDailyActivity(state: DailyActivityAttributes.DailyContentState) async {
         guard let activity = dailyActivity else { return }
         await activity.update(.init(state: state, staleDate: nil))
-        await mirrorUpdate(state, for: activity)
     }
 
     func endDailyActivity() async {
         guard let activity = dailyActivity else { return }
-        await endServerActivity(id: activity.id)
         await activity.end(
             .init(state: activity.content.state, staleDate: nil),
             dismissalPolicy: .immediate
@@ -124,25 +115,13 @@ final class LiveActivityManager {
             for await tokenData in activity.pushTokenUpdates {
                 let tokenString = tokenData.map { String(format: "%02x", $0) }.joined()
                 do {
-                    if self.registeredActivityIDs.insert(activityID).inserted {
-                        let record = try await apiClient.request(
-                            LiveActivitiesEndpoint.create(
-                                activityID: activityID,
-                                token: tokenString,
-                                type: activityType,
-                                contentState: activity.content.state
-                            )
+                    _ = try await apiClient.request(
+                        LiveActivitiesEndpoint.registerToken(
+                            activityID: activityID,
+                            token: tokenString,
+                            type: activityType
                         )
-                        self.serverActivityIDs[activityID] = record.id
-                    } else {
-                        guard let serverID = self.serverActivityIDs[activityID] else { continue }
-                        _ = try await apiClient.request(
-                            LiveActivitiesEndpoint.registerToken(
-                                activityID: serverID,
-                                token: tokenString
-                            )
-                        )
-                    }
+                    )
                     log.info("Registered LA push token for \(activityID)")
                 } catch {
                     log.error("Failed to register LA token: \(error)")
@@ -155,42 +134,5 @@ final class LiveActivityManager {
     private func cancelTokenTask(for activityID: String) {
         tokenTasks[activityID]?.cancel()
         tokenTasks.removeValue(forKey: activityID)
-        registeredActivityIDs.remove(activityID)
-        serverActivityIDs.removeValue(forKey: activityID)
-        serverUpdateTimes.removeValue(forKey: activityID)
-    }
-
-    private func mirrorUpdate<A: ActivityAttributes>(
-        _ state: A.ContentState,
-        for activity: Activity<A>
-    ) async where A.ContentState: Encodable & Sendable {
-        guard let serverID = serverActivityIDs[activity.id] else { return }
-        let now = Date()
-        let cutoff = now.addingTimeInterval(-3600)
-        let recent = (serverUpdateTimes[activity.id] ?? []).filter { $0 >= cutoff }
-        guard recent.count < 16 else {
-            logger.notice("Skipping server Live Activity update; hourly limit reached")
-            serverUpdateTimes[activity.id] = recent
-            return
-        }
-        serverUpdateTimes[activity.id] = recent + [now]
-        do {
-            _ = try await AppModel.shared.apiClient.request(
-                LiveActivitiesEndpoint.update(activityID: serverID, state: state)
-            )
-        } catch {
-            // The local ActivityKit update already succeeded. Server mirroring
-            // is best-effort and must never degrade the lock-screen activity.
-            logger.error("Failed to mirror Live Activity update: \(error)")
-        }
-    }
-
-    private func endServerActivity(id: String) async {
-        guard let serverID = serverActivityIDs[id] else { return }
-        do {
-            _ = try await AppModel.shared.apiClient.request(LiveActivitiesEndpoint.end(activityID: serverID))
-        } catch {
-            logger.error("Failed to end server Live Activity: \(error)")
-        }
     }
 }
