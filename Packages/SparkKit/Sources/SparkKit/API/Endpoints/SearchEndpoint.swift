@@ -1,6 +1,9 @@
 import Foundation
 
 public enum SearchEndpoint {
+    public enum EntityType: String, Sendable, CaseIterable {
+        case events, objects, blocks
+    }
     public enum Mode: String, Sendable, CaseIterable {
         case `default`
         case actions
@@ -49,6 +52,18 @@ public enum SearchEndpoint {
             query: [
                 URLQueryItem(name: "q", value: text),
                 URLQueryItem(name: "mode", value: mode.queryValue),
+            ]
+        )
+    }
+
+    /// Typed entity search used by relationship selection and DEBUG tools.
+    public static func entity(_ type: EntityType, query: String, semantic: Bool = false) -> Endpoint<SearchResponse> {
+        Endpoint(
+            method: .get,
+            path: "/search/\(type.rawValue)",
+            query: [
+                URLQueryItem(name: "q", value: query),
+                URLQueryItem(name: "semantic", value: semantic ? "true" : "false"),
             ]
         )
     }

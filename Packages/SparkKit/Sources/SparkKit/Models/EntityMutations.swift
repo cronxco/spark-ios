@@ -34,6 +34,15 @@ public struct RelationshipCreateRequest: Codable, Sendable {
         case toKind = "to_kind", toID = "to_id", type, value
         case valueMultiplier = "value_multiplier", valueUnit = "value_unit", metadata
     }
+    public init(toKind: SparkEntityKind, toID: String, type: String, value: Double? = nil, valueMultiplier: Double? = nil, valueUnit: String? = nil, metadata: [String: AnyCodable]? = nil) {
+        self.toKind = toKind
+        self.toID = toID
+        self.type = type
+        self.value = value
+        self.valueMultiplier = valueMultiplier
+        self.valueUnit = valueUnit
+        self.metadata = metadata
+    }
 }
 
 public struct LocationRequest: Codable, Sendable { public let latitude: Double; public let longitude: Double; public let address: String? }

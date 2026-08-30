@@ -43,6 +43,14 @@ struct DebugView: View {
     @State private var apiDate = Date.now
     @State private var apiInspectorResult: String?
     @State private var isInspectingAPI = false
+    @State private var debugSearchKind: SparkEntityKind = .events
+    @State private var debugSearchQuery = ""
+    @State private var debugSearchSemantic = true
+    @State private var filterService = ""
+    @State private var filterAction = ""
+    @State private var filterLimit = 50
+    @State private var checkInTimezone: CheckInTimezone?
+    @State private var timezoneInput = ""
 
     var body: some View {
         List {
@@ -248,12 +256,36 @@ struct DebugView: View {
             Button("Inspect day context") { Task { await inspectDayContext() } }
             Button("Inspect service status") { Task { await inspectServiceStatus() } }
             Button("Browse metric baselines") { Task { await inspectBaselines() } }
+            Picker("Search kind", selection: $debugSearchKind) {
+                ForEach(SparkEntityKind.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
+            }
+            TextField("Typed search query", text: $debugSearchQuery)
+            Toggle("Semantic search", isOn: $debugSearchSemantic)
+            Button("Run typed search") { Task { await inspectTypedSearch() } }
+                .disabled(debugSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            TextField("Event filter service", text: $filterService)
+            TextField("Action (optional)", text: $filterAction)
+            Stepper("Filter limit: \(filterLimit)", value: $filterLimit, in: 1...100)
+            Button("Run exact event filter") { Task { await inspectEventFilter() } }
+                .disabled(filterService.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            if let checkInTimezone {
+                Text("Check-in timezone: \(checkInTimezone.timezone) (\(checkInTimezone.source))")
+                    .font(SparkTypography.bodySmall)
+            }
+            TextField("IANA timezone", text: $timezoneInput)
+                .textInputAutocapitalization(.never)
+            HStack {
+                Button("Refresh check-in timezone") { Task { await loadCheckInTimezone() } }
+                Button("Set timezone") { Task { await saveCheckInTimezone() } }
+                    .disabled(timezoneInput.isEmpty)
+            }
             if isInspectingAPI { ProgressView() }
             if let apiInspectorResult {
                 Text(apiInspectorResult)
                     .font(SparkTypography.monoSmall)
                     .textSelection(.enabled)
                     .lineLimit(12)
+                Button("Copy result") { UIPasteboard.general.string = apiInspectorResult; statusMessage = "API result copied." }
             }
         }
     }
@@ -534,6 +566,41 @@ struct DebugView: View {
         } catch { apiInspectorResult = debugErrorMessage(error) }
     }
 
+    private func inspectTypedSearch() async {
+        await inspect(PowerToolsEndpoint.typedSearch(kind: debugSearchKind, query: debugSearchQuery, semantic: debugSearchSemantic))
+    }
+
+    private func inspectEventFilter() async {
+        await inspect(PowerToolsEndpoint.eventFilter(
+            service: filterService.trimmingCharacters(in: .whitespacesAndNewlines),
+            action: filterAction.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            limit: filterLimit
+        ))
+    }
+
+    private func loadCheckInTimezone() async {
+        isInspectingAPI = true
+        defer { isInspectingAPI = false }
+        do {
+            let timezone = try await appModel.apiClient.request(CheckInsEndpoint.timezone())
+            checkInTimezone = timezone
+            timezoneInput = timezone.timezone
+        } catch { apiInspectorResult = debugErrorMessage(error) }
+    }
+
+    private func saveCheckInTimezone() async {
+        let trimmed = timezoneInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard TimeZone(identifier: trimmed) != nil else {
+            apiInspectorResult = "Enter a valid IANA timezone, e.g. Europe/London."
+            return
+        }
+        isInspectingAPI = true
+        defer { isInspectingAPI = false }
+        do {
+            checkInTimezone = try await appModel.apiClient.request(CheckInsEndpoint.setTimezone(trimmed, previous: checkInTimezone?.timezone))
+        } catch { apiInspectorResult = debugErrorMessage(error) }
+    }
+
     private func inspect(_ endpoint: Endpoint<AnyCodable>) async {
         isInspectingAPI = true
         defer { isInspectingAPI = false }
@@ -563,6 +630,13 @@ struct DebugView: View {
             return "Indexed \(report.indexedCount), \(report.failures.count) failed"
         }
         return "Indexed \(report.indexedCount) entities"
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 

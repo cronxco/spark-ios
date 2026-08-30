@@ -8,6 +8,7 @@ final class BlockDetailViewModel {
     let blockId: String
     private(set) var state: DetailLoadState<BlockDetail> = .loading
     private(set) var rawPayload: String?
+    private var etag: String?
 
     private let apiClient: APIClient
 
@@ -21,6 +22,7 @@ final class BlockDetailViewModel {
         do {
             let response = try await apiClient.requestWithRawResponse(BlocksEndpoint.detail(id: blockId))
             rawPayload = response.utf8Body
+            etag = response.etag
             state = .loaded(response.decoded)
         } catch APIError.notModified {
             return
@@ -29,6 +31,23 @@ final class BlockDetailViewModel {
             let msg = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
             state = .error(msg)
         }
+    }
+
+    func createRelationship(_ request: RelationshipCreateRequest) async throws -> EntityRelationship {
+        guard let etag else { throw TagMutationError.missingETag }
+        let response = try await apiClient.requestWithRawResponse(
+            EntityMutationsEndpoint.createRelationship(kind: .blocks, id: blockId, request: request, etag: etag)
+        )
+        self.etag = response.etag ?? etag
+        return response.decoded
+    }
+
+    func deleteRelationship(_ relationshipID: String) async throws {
+        guard let etag else { throw TagMutationError.missingETag }
+        let response = try await apiClient.requestWithRawResponse(
+            EntityMutationsEndpoint.deleteRelationship(id: relationshipID, etag: etag)
+        )
+        self.etag = response.etag ?? etag
     }
 }
 
@@ -118,6 +137,20 @@ struct BlockDetailView: View {
         }
 
         referencesSection(for: detail.block)
+
+        RelationshipsSection(
+            kind: .blocks,
+            entityID: detail.id,
+            apiClient: appModel.apiClient,
+            create: { request in
+                guard let viewModel else { throw TagMutationError.missingETag }
+                return try await viewModel.createRelationship(request)
+            },
+            delete: { relationshipID in
+                guard let viewModel else { throw TagMutationError.missingETag }
+                try await viewModel.deleteRelationship(relationshipID)
+            }
+        )
 
         if let summary = detail.aiSummary, !summary.isEmpty {
             SparkDetailInsightCard(label: "Insight", text: summary)

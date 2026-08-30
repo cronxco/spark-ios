@@ -128,6 +128,20 @@ struct EventDetailView: View {
 
         linkedObjectsSection(for: detail)
 
+        RelationshipsSection(
+            kind: .events,
+            entityID: detail.id,
+            apiClient: appModel.apiClient,
+            create: { request in
+                guard let viewModel else { throw TagMutationError.missingETag }
+                return try await viewModel.createRelationship(request)
+            },
+            delete: { relationshipID in
+                guard let viewModel else { throw TagMutationError.missingETag }
+                try await viewModel.deleteRelationship(relationshipID)
+            }
+        )
+
         referencesSection(for: detail)
 
         if !detail.blocks.isEmpty {

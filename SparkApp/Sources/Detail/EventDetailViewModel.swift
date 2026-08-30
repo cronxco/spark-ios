@@ -81,6 +81,23 @@ final class EventDetailViewModel {
         state = .loaded(response.decoded)
     }
 
+    func createRelationship(_ request: RelationshipCreateRequest) async throws -> EntityRelationship {
+        guard let etag else { throw TagMutationError.missingETag }
+        let response = try await apiClient.requestWithRawResponse(
+            EntityMutationsEndpoint.createRelationship(kind: .events, id: eventId, request: request, etag: etag)
+        )
+        self.etag = response.etag ?? etag
+        return response.decoded
+    }
+
+    func deleteRelationship(_ relationshipID: String) async throws {
+        guard let etag else { throw TagMutationError.missingETag }
+        let response = try await apiClient.requestWithRawResponse(
+            EntityMutationsEndpoint.deleteRelationship(id: relationshipID, etag: etag)
+        )
+        self.etag = response.etag ?? etag
+    }
+
     private func loadMetricBaselineStatus(for detail: EventDetail) async {
         let identifier = MetricIdentifier.from(event: detail.event)
         guard MetricIdentifier.split(identifier) != nil else { return }
