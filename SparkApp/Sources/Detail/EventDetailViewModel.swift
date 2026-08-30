@@ -98,6 +98,18 @@ final class EventDetailViewModel {
         self.etag = response.etag ?? etag
     }
 
+    func update(_ attributes: [String: AnyCodable]) async throws {
+        guard let etag else { throw TagMutationError.missingETag }
+        let response = try await apiClient.requestWithRawResponse(EntityMutationsEndpoint.update(kind: .events, id: eventId, attributes: attributes, etag: etag, response: EventDetail.self))
+        rawPayload = response.utf8Body; self.etag = response.etag ?? etag; state = .loaded(response.decoded)
+    }
+
+    func geocode(address: String) async throws { try await updateLocation(EntityMutationsEndpoint.geocode(kind: .events, id: eventId, address: address, etag: try currentETag(), response: EventDetail.self)) }
+    func setLocation(_ location: LocationRequest) async throws { try await updateLocation(EntityMutationsEndpoint.setLocation(kind: .events, id: eventId, location: location, etag: try currentETag(), response: EventDetail.self)) }
+    func clearLocation() async throws { try await updateLocation(EntityMutationsEndpoint.clearLocation(kind: .events, id: eventId, etag: try currentETag(), response: EventDetail.self)) }
+    private func currentETag() throws -> String { guard let etag else { throw TagMutationError.missingETag }; return etag }
+    private func updateLocation(_ endpoint: Endpoint<EventDetail>) async throws { let response = try await apiClient.requestWithRawResponse(endpoint); rawPayload = response.utf8Body; etag = response.etag ?? etag; state = .loaded(response.decoded) }
+
     private func loadMetricBaselineStatus(for detail: EventDetail) async {
         let identifier = MetricIdentifier.from(event: detail.event)
         guard MetricIdentifier.split(identifier) != nil else { return }

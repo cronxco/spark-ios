@@ -70,6 +70,16 @@ final class ObjectDetailViewModel {
         )
         self.etag = response.etag ?? etag
     }
+
+    func update(_ attributes: [String: AnyCodable]) async throws {
+        guard let etag else { throw TagMutationError.missingETag }
+        let response = try await apiClient.requestWithRawResponse(EntityMutationsEndpoint.update(kind: .objects, id: objectId, attributes: attributes, etag: etag, response: ObjectDetail.self))
+        rawPayload = response.utf8Body; self.etag = response.etag ?? etag; state = .loaded(response.decoded)
+    }
+
+    func geocode(address: String) async throws { guard let etag else { throw TagMutationError.missingETag }; let response = try await apiClient.requestWithRawResponse(EntityMutationsEndpoint.geocode(kind: .objects, id: objectId, address: address, etag: etag, response: ObjectDetail.self)); rawPayload = response.utf8Body; self.etag = response.etag ?? etag; state = .loaded(response.decoded) }
+    func setLocation(_ location: LocationRequest) async throws { guard let etag else { throw TagMutationError.missingETag }; let response = try await apiClient.requestWithRawResponse(EntityMutationsEndpoint.setLocation(kind: .objects, id: objectId, location: location, etag: etag, response: ObjectDetail.self)); rawPayload = response.utf8Body; self.etag = response.etag ?? etag; state = .loaded(response.decoded) }
+    func clearLocation() async throws { guard let etag else { throw TagMutationError.missingETag }; let response = try await apiClient.requestWithRawResponse(EntityMutationsEndpoint.clearLocation(kind: .objects, id: objectId, etag: etag, response: ObjectDetail.self)); rawPayload = response.utf8Body; self.etag = response.etag ?? etag; state = .loaded(response.decoded) }
 }
 
 struct ObjectDetailView: View {
@@ -79,6 +89,8 @@ struct ObjectDetailView: View {
     @State private var showTagPicker = false
     @State private var tagPendingRemoval: EventTag?
     @State private var tagMutationError: String?
+    @State private var showEditor = false
+    @State private var showLocationEditor = false
 
     var body: some View {
         ScrollView {
@@ -112,6 +124,7 @@ struct ObjectDetailView: View {
             feedbackContext: objectFeedbackContext,
             refresh: { await viewModel?.load() }
         )
+        .toolbar { ToolbarItemGroup(placement: .topBarTrailing) { Button("Edit") { showEditor = true }; Button { showLocationEditor = true } label: { Image(systemName: "mappin.and.ellipse") } } }
         .task(id: objectId) {
             if viewModel == nil {
                 viewModel = ObjectDetailViewModel(objectId: objectId, apiClient: appModel.apiClient)
@@ -123,6 +136,8 @@ struct ObjectDetailView: View {
                 try await viewModel?.attachTag(request)
             }
         }
+        .sheet(isPresented: $showEditor) { if case .loaded(let detail) = viewModel?.state { EntityEditorSheet(title: "Object", initial: ["title": detail.object.title, "type": detail.object.type, "concept": detail.object.concept, "url": detail.object.url ?? ""]) { try await viewModel?.update($0) } } }
+        .sheet(isPresented: $showLocationEditor) { LocationEditorSheet(hasLocation: false, geocode: { try await viewModel?.geocode(address: $0) }, coordinates: { try await viewModel?.setLocation($0) }, clear: { try await viewModel?.clearLocation() }) }
         .confirmationDialog(
             "Remove tag?",
             isPresented: Binding(get: { tagPendingRemoval != nil }, set: { if !$0 { tagPendingRemoval = nil } })

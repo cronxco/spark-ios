@@ -49,12 +49,19 @@ final class BlockDetailViewModel {
         )
         self.etag = response.etag ?? etag
     }
+
+    func update(_ attributes: [String: AnyCodable]) async throws {
+        guard let etag else { throw TagMutationError.missingETag }
+        let response = try await apiClient.requestWithRawResponse(EntityMutationsEndpoint.update(kind: .blocks, id: blockId, attributes: attributes, etag: etag, response: BlockDetail.self))
+        rawPayload = response.utf8Body; self.etag = response.etag ?? etag; state = .loaded(response.decoded)
+    }
 }
 
 struct BlockDetailView: View {
     let blockId: String
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: BlockDetailViewModel?
+    @State private var showEditor = false
 
     @ViewBuilder
     private func referencesSection(for block: Block) -> some View {
@@ -93,12 +100,14 @@ struct BlockDetailView: View {
             feedbackContext: blockFeedbackContext,
             refresh: { await viewModel?.load() }
         )
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Edit") { showEditor = true } } }
         .task(id: blockId) {
             if viewModel == nil {
                 viewModel = BlockDetailViewModel(blockId: blockId, apiClient: appModel.apiClient)
             }
             await viewModel?.load()
         }
+        .sheet(isPresented: $showEditor) { if case .loaded(let detail) = viewModel?.state { EntityEditorSheet(title: "Block", initial: ["title": detail.block.title, "block_type": detail.block.blockType, "value": detail.block.value ?? "", "value_multiplier": "", "value_unit": detail.block.unit ?? "", "time": detail.block.time?.ISO8601Format() ?? "", "url": ""]) { try await viewModel?.update($0) } } }
     }
 
     private var blockShareItems: [Any] {

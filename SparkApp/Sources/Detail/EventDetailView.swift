@@ -11,6 +11,8 @@ struct EventDetailView: View {
     @State private var showTagPicker = false
     @State private var tagPendingRemoval: EventTag?
     @State private var tagMutationError: String?
+    @State private var showEditor = false
+    @State private var showLocationEditor = false
 
     private func aggregatedReferences(for detail: EventDetail) -> [EntityReference] {
         var seen = Set<String>()
@@ -64,6 +66,7 @@ struct EventDetailView: View {
             feedbackContext: eventFeedbackContext,
             refresh: { await viewModel?.retry() }
         )
+        .toolbar { ToolbarItemGroup(placement: .topBarTrailing) { Button("Edit") { showEditor = true }; Button { showLocationEditor = true } label: { Image(systemName: "mappin.and.ellipse") } } }
         .task(id: eventId) {
             if viewModel == nil {
                 viewModel = EventDetailViewModel(eventId: eventId, apiClient: appModel.apiClient)
@@ -75,6 +78,8 @@ struct EventDetailView: View {
                 try await viewModel?.attachTag(request)
             }
         }
+        .sheet(isPresented: $showEditor) { if case .loaded(let detail) = viewModel?.state { EntityEditorSheet(title: "Event", initial: ["action": detail.event.action, "value": detail.event.value ?? "", "value_multiplier": "", "value_unit": detail.event.unit ?? "", "time": detail.event.time?.ISO8601Format() ?? ""]) { try await viewModel?.update($0) } } }
+        .sheet(isPresented: $showLocationEditor) { LocationEditorSheet(hasLocation: { if case .loaded(let detail) = viewModel?.state { return detail.location != nil }; return false }(), geocode: { try await viewModel?.geocode(address: $0) }, coordinates: { try await viewModel?.setLocation($0) }, clear: { try await viewModel?.clearLocation() }) }
         .confirmationDialog(
             "Remove tag?",
             isPresented: Binding(get: { tagPendingRemoval != nil }, set: { if !$0 { tagPendingRemoval = nil } })

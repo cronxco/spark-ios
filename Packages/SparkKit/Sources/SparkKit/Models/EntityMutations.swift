@@ -45,7 +45,7 @@ public struct RelationshipCreateRequest: Codable, Sendable {
     }
 }
 
-public struct LocationRequest: Codable, Sendable { public let latitude: Double; public let longitude: Double; public let address: String? }
+public struct LocationRequest: Codable, Sendable { public let latitude: Double; public let longitude: Double; public let address: String?; public init(latitude: Double, longitude: Double, address: String? = nil) { self.latitude = latitude; self.longitude = longitude; self.address = address } }
 public struct GeocodeLocationRequest: Codable, Sendable { public let address: String }
 
 public struct CheckInTimezone: Codable, Sendable, Hashable { public let timezone: String; public let source: String }
