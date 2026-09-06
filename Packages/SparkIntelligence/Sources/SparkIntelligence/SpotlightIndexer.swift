@@ -79,8 +79,8 @@ public enum SpotlightIndexer {
     /// so until iOS chose to schedule that, the departing user's events,
     /// blocks, places and metrics stayed searchable from Spotlight.
     @MainActor
-    public static func purgeAll() async {
-        try? await CSSearchableIndex.default().deleteAllSearchableItems()
+    public static func purgeAll() async throws {
+        try await CSSearchableIndex.default().deleteAllSearchableItems()
     }
 
     @MainActor

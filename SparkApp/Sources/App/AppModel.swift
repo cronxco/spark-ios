@@ -70,17 +70,40 @@ final class AppModel {
     }
     private var deviceRegistrationTask: Task<Void, Never>?
     private var deviceRegistrationTokenInFlight: String?
+    private let purgeDataStore: @MainActor (ModelContainer) throws -> Void
+    private let purgeSpotlight: @MainActor () async throws -> Void
 
-    init(container: ModelContainer) {
+    init(
+        container: ModelContainer,
+        environment: APIEnvironment = .current(),
+        session: URLSession = .shared,
+        tokenStore: KeychainTokenStore = KeychainTokenStore(),
+        etagCache: ETagCache = ETagCache(),
+        purgeDataStore: @escaping @MainActor (ModelContainer) throws -> Void = { container in
+            try SparkDataStore.purgeAll(in: container)
+        },
+        purgeSpotlight: @escaping @MainActor () async throws -> Void = {
+            try await SpotlightIndexer.purgeAll()
+        }
+    ) {
         self.container = container
-        let tokenStore = KeychainTokenStore()
-        let etagCache = ETagCache()
-        let client = APIClient(tokenStore: tokenStore, etagCache: etagCache)
+        let client = APIClient(
+            environment: environment,
+            session: session,
+            tokenStore: tokenStore,
+            etagCache: etagCache
+        )
         self.tokenStore = tokenStore
         self.etagCache = etagCache
         self.apiClient = client
-        self.authService = AuthenticationService(tokenStore: tokenStore, apiClient: client)
+        self.authService = AuthenticationService(
+            environment: environment,
+            tokenStore: tokenStore,
+            apiClient: client
+        )
         self.reverb = ReverbClient(tokenStore: tokenStore)
+        self.purgeDataStore = purgeDataStore
+        self.purgeSpotlight = purgeSpotlight
         self.onboardingComplete = UserDefaults(suiteName: "group.co.cronx.sparkapp")?.bool(forKey: "onboarding.completed") == true
         if let cachedName = UserDefaults.sparkAppGroup.string(forKey: "spark.profile.name"), !cachedName.isEmpty {
             self.profile = UserProfile(id: "", name: cachedName, email: "")
@@ -92,6 +115,10 @@ final class AppModel {
         if let token = await tokenStore.accessToken() {
             onboardingComplete = true
             session = .loggedIn
+            if UserDefaults.sparkAppGroup.string(forKey: Self.pendingDeviceRevocationKey) != nil {
+                await signOut()
+                return
+            }
             await registerDevice()
             await fetchAndCacheUserId()
             configureHealthUploader(accessToken: token)
@@ -134,6 +161,10 @@ final class AppModel {
     /// The user ID is cached in UserDefaults after bootstrap via GET /me.
     func reverbConnect() async {
         guard session == .loggedIn else { return }
+        if UserDefaults.sparkAppGroup.string(forKey: Self.pendingDeviceRevocationKey) != nil {
+            await signOut()
+            return
+        }
         let userId = UserDefaults.sparkAppGroup.string(forKey: "spark.userId") ?? ""
         guard !userId.isEmpty else { return }
         await reverb.connect(userId: userId)
@@ -310,47 +341,65 @@ final class AppModel {
     /// intact — all of which the next account could see. `spark.profile.name`
     /// was even re-read at init, so the previous user's display name came back.
     ///
-    /// Local sign-out always completes. Remote calls are best-effort and, when
-    /// they fail, leave a non-secret marker so the revocation can be retried
-    /// rather than being lost.
+    /// Revocation and privacy-sensitive local erasure must complete before the
+    /// credentials are cleared and another account can enter the shared store.
     func signOut() async {
-        await revokeRemoteSession()
-        await purgeLocalState()
+        guard await revokeRemoteDevice() else {
+            lastError = "Couldn't revoke this device. Spark will retry when the connection returns."
+            return
+        }
 
-        session = .loggedOut
+        do {
+            try await purgeLocalState()
+            UserDefaults.sparkAppGroup.removeObject(forKey: Self.pendingDeviceRevocationKey)
+            session = .loggedOut
+            lastError = nil
+        } catch {
+            SparkObservability.captureHandled(error)
+            SentrySDK.capture(error: error)
+            lastError = "Couldn't finish signing out. Please try again before changing accounts."
+        }
     }
 
-    /// Best-effort server-side teardown.
-    private func revokeRemoteSession() async {
-        // Order matters: the device row is revoked while the access token is
-        // still valid, and the session is revoked last.
-        if let deviceId = UserDefaults.sparkAppGroup.string(forKey: "spark.apnsDeviceId") {
+    /// Revokes a pending device while this account's authorization is intact.
+    private func revokeRemoteDevice() async -> Bool {
+        let defaults = UserDefaults.sparkAppGroup
+        let deviceId = defaults.string(forKey: Self.pendingDeviceRevocationKey)
+            ?? defaults.string(forKey: "spark.apnsDeviceId")
+
+        if let deviceId {
+            // Persist before the request so termination or an offline failure
+            // cannot lose the id needed by the foreground retry.
+            defaults.set(deviceId, forKey: Self.pendingDeviceRevocationKey)
+
+            guard await tokenStore.accessToken() != nil else { return false }
             do {
                 _ = try await apiClient.request(DevicesEndpoint.revoke(id: deviceId))
-                UserDefaults.sparkAppGroup.removeObject(forKey: Self.pendingDeviceRevocationKey)
+            } catch APIError.httpStatus(404, _, _) {
+                // A missing device is terminal: the desired server state has
+                // already been reached.
             } catch {
-                // Offline sign-out used to discard the device id on the next
-                // line regardless, destroying the only identifier a retry
-                // needs. Keep it under a separate key so the purge below can
-                // still clear `spark.apnsDeviceId`.
-                UserDefaults.sparkAppGroup.set(deviceId, forKey: Self.pendingDeviceRevocationKey)
+                SparkObservability.captureHandled(error)
+                return false
             }
         }
 
-        _ = try? await apiClient.request(SessionEndpoint.logout())
+        return true
     }
 
     /// Removes all locally held user state. Idempotent.
-    private func purgeLocalState() async {
-        await authService.signOut()
-        await etagCache.clearAll()
-        profile = nil
-        pendingRoute = nil
+    private func purgeLocalState() async throws {
+        // Both durable stores are erased before credentials. If either throws,
+        // the current account stays active and can safely retry; a second
+        // account is never admitted to partially purged shared state.
+        try purgeDataStore(container)
+        try await purgeSpotlight()
 
-        do {
-            try SparkDataStore.purgeAll(in: container)
-        } catch {
-            SentrySDK.capture(error: error)
+        // Invalidate the remote session only once durable local erasure has
+        // succeeded. Until this point a failed purge must keep the departing
+        // account usable so sign-out can be retried safely.
+        if await tokenStore.accessToken() != nil {
+            _ = try? await apiClient.request(SessionEndpoint.logout())
         }
 
         for key in Self.userScopedDefaultsKeys {
@@ -360,7 +409,11 @@ final class AppModel {
         // Recent searches live in standard defaults rather than the App Group.
         UserDefaults.standard.removeObject(forKey: "spark.search.recents")
 
-        await SpotlightIndexer.purgeAll()
+        await authService.signOut()
+        await etagCache.clearAll()
+        profile = nil
+        pendingRoute = nil
+
         await endAllLiveActivities()
         await reverbDisconnect()
 

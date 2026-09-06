@@ -31,6 +31,10 @@ final class NotificationsInboxViewModel {
     var hasMore: Bool { nextCursor != nil }
 
     func refresh() async {
+        _ = await refreshReturningSuccess()
+    }
+
+    private func refreshReturningSuccess() async -> Bool {
         state = .loading
         do {
             let page = try await apiClient.request(NotificationsEndpoint.list())
@@ -38,12 +42,15 @@ final class NotificationsInboxViewModel {
             nextCursor = page.nextCursor
             await persist(page.data, replaceAll: true)
             state = .loaded
+            return true
         } catch APIError.notModified {
             state = .loaded
+            return true
         } catch {
             SparkObservability.captureHandled(error)
             logger.error("Notifications fetch failed: \(String(describing: error))")
             state = .error("Couldn't load notifications.")
+            return false
         }
     }
 
@@ -124,7 +131,10 @@ final class NotificationsInboxViewModel {
             await removeCached(id: id)
         } catch let error as APIError where error.isPreconditionFailure {
             logger.notice("delete precondition failed for \(id); refreshing inbox")
-            await refresh()
+            if !(await refreshReturningSuccess()), let removed {
+                items.append(removed)
+                items.sort { $0.receivedAt > $1.receivedAt }
+            }
         } catch {
             if let removed {
                 items.append(removed)

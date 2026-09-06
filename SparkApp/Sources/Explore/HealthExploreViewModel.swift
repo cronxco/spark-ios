@@ -16,7 +16,9 @@ final class HealthExploreViewModel {
     }
 
     private(set) var dashboard: HealthDashboard?
-    private(set) var rawFeedEntries: [RawFeedJSONEntry] = []
+    #if DEBUG
+        private(set) var rawFeedEntries: [RawFeedJSONEntry] = []
+    #endif
     private(set) var loadState: LoadState = .idle
     var selectedRange: DashboardRange = .sevenDays
 
@@ -46,14 +48,18 @@ final class HealthExploreViewModel {
         loadState = .loading
 
         do {
-            let response = try await apiClient.requestWithRawResponse(
-                HealthEndpoint.dashboard(date: "today", range: selectedRange)
-            )
-            dashboard = response.decoded
             #if DEBUG
+                let response = try await apiClient.requestWithRawResponse(
+                    HealthEndpoint.dashboard(date: "today", range: selectedRange)
+                )
+                dashboard = response.decoded
                 rawFeedEntries = [
                     RawFeedJSONEntry(title: "GET /health/dashboard", body: response.utf8Body)
                 ]
+            #else
+                dashboard = try await apiClient.request(
+                    HealthEndpoint.dashboard(date: "today", range: selectedRange)
+                )
             #endif
             loadState = .loaded
         } catch where error.isAPICancellation {

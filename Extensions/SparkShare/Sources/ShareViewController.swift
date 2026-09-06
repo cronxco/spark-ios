@@ -45,8 +45,13 @@ final class ShareViewController: UIViewController {
                 }
             } else {
                 _ = provider.loadFileRepresentation(forTypeIdentifier: UTType.image.identifier) { [weak self] fileURL, _ in
+                    // The provider owns `fileURL` and may delete it as soon as
+                    // this completion returns. Copy it while the lease is
+                    // still valid, then only send our durable URL across the
+                    // actor boundary.
+                    let copiedURL = fileURL.flatMap { Self.copySharedImage(from: $0) }
                     Task { @MainActor [weak self] in
-                        if let fileURL { self?.shareImage(at: fileURL) }
+                        if let copiedURL { self?.shareImage(at: copiedURL) }
                         else { self?.complete() }
                     }
                 }
@@ -91,8 +96,11 @@ final class ShareViewController: UIViewController {
     private func shareImage(at fileURL: URL) {
         Task {
             let scheduled = await scheduleBackgroundImageUpload(fileURL: fileURL)
+            if !scheduled {
+                try? FileManager.default.removeItem(at: fileURL)
+            }
             await MainActor.run {
-                self.showToast(scheduled ? "Photo saved to Spark." : "Couldn't save photo.")
+                self.showToast(scheduled ? "Photo upload queued." : "Couldn't save photo.")
             }
             complete()
         }
@@ -120,9 +128,29 @@ final class ShareViewController: UIViewController {
                 try? FileManager.default.removeItem(at: dest)
             }
             await MainActor.run {
-                self.showToast(scheduled ? "Photo saved to Spark." : "Couldn't save photo.")
+                self.showToast(scheduled ? "Photo upload queued." : "Couldn't save photo.")
             }
             complete()
+        }
+    }
+
+    /// Copies a provider-owned image into storage that survives its callback.
+    private static func copySharedImage(from source: URL) -> URL? {
+        let directory = FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: "group.co.cronx.sparkapp")?
+            .appendingPathComponent("ShareUploads", isDirectory: true)
+            ?? FileManager.default.temporaryDirectory
+
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let pathExtension = source.pathExtension.isEmpty ? "jpg" : source.pathExtension
+            let destination = directory
+                .appendingPathComponent(UUID().uuidString)
+                .appendingPathExtension(pathExtension)
+            try FileManager.default.copyItem(at: source, to: destination)
+            return destination
+        } catch {
+            return nil
         }
     }
 

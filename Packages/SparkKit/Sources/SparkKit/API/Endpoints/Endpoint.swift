@@ -15,7 +15,6 @@ public struct Endpoint<Response: Decodable & Sendable>: Sendable {
     public let body: Data?
     public let contentType: String?
     public let requiresAuth: Bool
-    public let headers: [String: String]
 
     /// Extra request headers.
     ///

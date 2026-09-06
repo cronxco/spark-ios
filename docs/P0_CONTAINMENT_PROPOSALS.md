@@ -205,14 +205,14 @@ registers five SCREAMING_CASE categories (`SparkApp.swift:197-226`): `ANOMALY`, 
 `integration_failed` / `INTEGRATION_FAILED` matched, and every action (`ACKNOWLEDGE`, `VIEW`, `REAUTH`, `SNOOZE`)
 was inert.
 
-Server side, `ApnsChannel::CLIENT_CATEGORIES` now maps the failure-shaped types onto `INTEGRATION_FAILED`, the one
-registered category with matching actions. Types with no registered counterpart send no category at all, which is a
-plain notification — the honest outcome. The client's other four categories have no server-side producer.
+Server side, `ApnsChannel::CLIENT_CATEGORIES` groups actionable authentication and cookie warnings under
+`INTEGRATION_ATTENTION`, integration and migration outcomes under `INTEGRATION_STATUS`, and account-level export,
+maintenance, and test notifications under `SYSTEM`. The client registers those same three identifiers and matching
+actions.
 
-A third vocabulary exists: `NotificationPreferencesController::CATEGORIES` is the lowercase form of the client's
-five, but only `integration_failed` corresponds to a real notification class — so four of the five preference
-toggles gate nothing, and the eleven real types cannot be gated at all. **Reconciling this needs a product
-decision** about which categories the product actually has.
+Notification preferences remain a separate, lower-case vocabulary because they gate individual notification types,
+not APNs action groups. `NotificationPreferencesController::CATEGORIES` and the client's preference cases now mirror
+the configurable notification types the server emits.
 
 ### What was done, client-side
 

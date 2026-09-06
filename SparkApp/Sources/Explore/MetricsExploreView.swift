@@ -88,12 +88,12 @@ struct MetricsExploreView: View {
                             .padding(.horizontal, SparkSpacing.lg)
                     }
 
-                    if let viewModel, case .loaded = viewModel.loadState, !viewModel.rawFeedEntries.isEmpty {
-                        #if DEBUG
+                    #if DEBUG
+                        if let viewModel, case .loaded = viewModel.loadState, !viewModel.rawFeedEntries.isEmpty {
                             RawFeedJSONView(entries: viewModel.rawFeedEntries)
-                        #endif
-                            .padding(.horizontal, SparkSpacing.lg)
-                    }
+                                .padding(.horizontal, SparkSpacing.lg)
+                        }
+                    #endif
                 }
                 .padding(.top, SparkSpacing.md)
                 .padding(.bottom, SparkSpacing.xl)

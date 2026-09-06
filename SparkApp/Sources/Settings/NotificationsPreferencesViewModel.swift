@@ -61,9 +61,10 @@ final class NotificationsPreferencesViewModel {
     private func save(_ prefs: NotificationPreferences, isRetry: Bool = false) async {
         saveStatus = .saving
         do {
-            _ = try await apiClient.request(
+            let response = try await apiClient.requestWithRawResponse(
                 NotificationsPreferencesEndpoint.update(prefs, version: version)
             )
+            version = response.etag
             saveStatus = .saved
             try? await Task.sleep(for: .seconds(2))
             if case .saved = saveStatus { saveStatus = .idle }

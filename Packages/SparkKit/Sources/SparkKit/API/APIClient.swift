@@ -590,9 +590,6 @@ public struct EmptyResponse: Codable, Sendable {
 public struct RawAPIResponse<Response: Sendable>: Sendable {
     public let decoded: Response
     public let data: Data
-    public let headers: [String: String]
-
-    public var etag: String? { headers.first { $0.key.caseInsensitiveCompare("ETag") == .orderedSame }?.value }
 
     /// The response `ETag`, when the server sent one.
     ///
