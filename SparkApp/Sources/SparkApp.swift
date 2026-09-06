@@ -179,11 +179,9 @@ final class SparkAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
         entityType: String?,
         entityId: String?
     ) {
-        switch actionIdentifier {
-        case "SNOOZE", UNNotificationDismissActionIdentifier:
+        // An explicit dismiss is a decision, not a request to navigate.
+        if actionIdentifier == UNNotificationDismissActionIdentifier {
             return
-        default:
-            break
         }
 
         // REAUTH sends the user to the integration regardless of the
@@ -228,12 +226,14 @@ final class SparkAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
 
     // MARK: - Notification categories
 
+    /// Registers the categories the server actually sends.
+    ///
+    /// These identifiers must match `NotificationCatalogue::apnsCategoryIdentifiers()`
+    /// on the backend exactly — matching is case-sensitive, and a category the
+    /// client has not registered leaves every action button inert. The previous
+    /// five (ANOMALY, DIGEST, NEW_BOOKMARK, CALENDAR_EVENT and INTEGRATION_FAILED)
+    /// were aspirational: only INTEGRATION_FAILED had a server-side producer.
     private func registerNotificationCategories() {
-        let acknowledge = UNNotificationAction(
-            identifier: "ACKNOWLEDGE",
-            title: "Acknowledge",
-            options: .destructive
-        )
         let view = UNNotificationAction(
             identifier: "VIEW",
             title: "View",
@@ -244,40 +244,28 @@ final class SparkAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
             title: "Reconnect",
             options: .foreground
         )
-        let snooze = UNNotificationAction(
-            identifier: "SNOOZE",
-            title: "Snooze",
-            options: []
-        )
 
         UNUserNotificationCenter.current().setNotificationCategories([
+            // Needs the user to do something: re-authorize an integration, or
+            // refresh a saved website login that is about to expire.
             UNNotificationCategory(
-                identifier: "ANOMALY",
-                actions: [acknowledge, view],
+                identifier: NotificationPreferences.PushCategory.integrationAttention.rawValue,
+                actions: [reauth, view],
                 intentIdentifiers: [],
                 options: .customDismissAction
             ),
+            // Informational outcomes — sync finished, sync failed, a tracked
+            // page changed, a historical import completed or failed.
             UNNotificationCategory(
-                identifier: "DIGEST",
+                identifier: NotificationPreferences.PushCategory.integrationStatus.rawValue,
                 actions: [view],
                 intentIdentifiers: [],
                 options: []
             ),
+            // Account-level: data export ready, maintenance, test pushes.
             UNNotificationCategory(
-                identifier: "INTEGRATION_FAILED",
-                actions: [reauth],
-                intentIdentifiers: [],
-                options: []
-            ),
-            UNNotificationCategory(
-                identifier: "NEW_BOOKMARK",
+                identifier: NotificationPreferences.PushCategory.system.rawValue,
                 actions: [view],
-                intentIdentifiers: [],
-                options: []
-            ),
-            UNNotificationCategory(
-                identifier: "CALENDAR_EVENT",
-                actions: [view, snooze],
                 intentIdentifiers: [],
                 options: []
             ),

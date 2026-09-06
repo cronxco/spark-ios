@@ -1,32 +1,73 @@
 import Foundation
 
 public struct NotificationPreferences: Codable, Sendable {
+    /// The notification types the backend can gate.
+    ///
+    /// These raw values must match `NotificationCatalogue::configurableTypes()`
+    /// exactly: they are the strings a notification's `getNotificationType()`
+    /// returns, which is what `SparkNotification::via()` gates delivery on.
+    /// Decoding drops unrecognised keys, so a case missing here silently
+    /// removes that toggle from Settings — and the PATCH endpoint requires the
+    /// whole set, so an incomplete list is also rejected on save.
+    ///
+    /// The previous five cases (anomaly, digest, newBookmark, calendarEvent and
+    /// integrationFailed) were the mobile API's invention; only
+    /// integration_failed named a notification that is ever sent.
     public enum Category: String, Codable, Sendable, CaseIterable {
-        case anomaly
-        case digest
+        case integrationCompleted = "integration_completed"
         case integrationFailed = "integration_failed"
-        case newBookmark = "new_bookmark"
-        case calendarEvent = "calendar_event"
+        case integrationAuthenticationFailed = "integration_authentication_failed"
+        case cookieExpiryWarning = "cookie_expiry_warning"
+        case fetchMultipleFailures = "fetch_multiple_failures"
+        case fetchContentChanged = "fetch_content_changed"
+        case migrationCompleted = "migration_completed"
+        case migrationFailed = "migration_failed"
+        case dataExportReady = "data_export_ready"
+        case systemMaintenance = "system_maintenance"
 
         public var displayName: String {
             switch self {
-            case .anomaly: "Anomaly Alerts"
-            case .digest: "Daily Digest"
-            case .integrationFailed: "Integration Failures"
-            case .newBookmark: "New Bookmarks"
-            case .calendarEvent: "Calendar Events"
+            case .integrationCompleted: "Sync Complete"
+            case .integrationFailed: "Sync Failed"
+            case .integrationAuthenticationFailed: "Reconnection Needed"
+            case .cookieExpiryWarning: "Saved Login Expiring"
+            case .fetchMultipleFailures: "Repeated Fetch Failures"
+            case .fetchContentChanged: "Tracked Page Changed"
+            case .migrationCompleted: "Import Complete"
+            case .migrationFailed: "Import Failed"
+            case .dataExportReady: "Export Ready"
+            case .systemMaintenance: "System Maintenance"
             }
         }
 
         public var subtitle: String {
             switch self {
-            case .anomaly: "When a baseline shifts unexpectedly"
-            case .digest: "A summary of your day each morning"
+            case .integrationCompleted: "When a connected service finishes syncing"
             case .integrationFailed: "When a connected service stops syncing"
-            case .newBookmark: "When Spark saves something from the web"
-            case .calendarEvent: "Reminders before upcoming meetings"
+            case .integrationAuthenticationFailed: "When a service needs you to sign in again"
+            case .cookieExpiryWarning: "When a saved website login is about to expire"
+            case .fetchMultipleFailures: "When a tracked page keeps failing to load"
+            case .fetchContentChanged: "When a tracked page's content changes"
+            case .migrationCompleted: "When a historical import finishes"
+            case .migrationFailed: "When a historical import fails"
+            case .dataExportReady: "When your data export is ready to download"
+            case .systemMaintenance: "Planned maintenance and service updates"
             }
         }
+    }
+
+    /// The `UNNotificationCategory` identifiers the app registers.
+    ///
+    /// Must match `NotificationCatalogue::apnsCategoryIdentifiers()` on the
+    /// backend: category matching is case-sensitive, and a category the client
+    /// has not registered arrives with no action buttons at all.
+    public enum PushCategory: String, Sendable, CaseIterable {
+        /// Needs the user to act — reconnect an integration, refresh a login.
+        case integrationAttention = "INTEGRATION_ATTENTION"
+        /// Informational sync and import outcomes.
+        case integrationStatus = "INTEGRATION_STATUS"
+        /// Account-level: exports, maintenance, delivery tests.
+        case system = "SYSTEM"
     }
 
     public enum DeliveryMode: String, Codable, Sendable, CaseIterable {
