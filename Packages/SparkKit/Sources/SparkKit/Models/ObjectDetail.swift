@@ -6,8 +6,9 @@ public struct ObjectDetail: Codable, Sendable, Hashable, Identifiable {
     public let object: EventObject
     public let recentEvents: [Event]
     public let relatedObjects: [Related]
-    public let tags: [String]
+    public let tags: [EventTag]
     public let aiSummary: String?
+    public let location: EventDetail.Location?
 
     public var id: String { object.id }
 
@@ -30,20 +31,23 @@ public struct ObjectDetail: Codable, Sendable, Hashable, Identifiable {
         case recentEvents = "recent_events"
         case relatedObjects = "related_objects"
         case aiSummary = "summary_ai"
+        case location
     }
 
     public init(
         object: EventObject,
         recentEvents: [Event] = [],
         relatedObjects: [Related] = [],
-        tags: [String] = [],
-        aiSummary: String? = nil
+        tags: [EventTag] = [],
+        aiSummary: String? = nil,
+        location: EventDetail.Location? = nil
     ) {
         self.object = object
         self.recentEvents = recentEvents
         self.relatedObjects = relatedObjects
         self.tags = tags
         self.aiSummary = aiSummary
+        self.location = location ?? object.location
     }
 
     public init(from decoder: Decoder) throws {
@@ -55,7 +59,8 @@ public struct ObjectDetail: Codable, Sendable, Hashable, Identifiable {
             ?? EventObject(from: decoder)
         recentEvents = try container.decodeIfPresent([Event].self, forKey: .recentEvents) ?? []
         relatedObjects = try container.decodeIfPresent([Related].self, forKey: .relatedObjects) ?? []
-        tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
+        tags = try container.decodeIfPresent([EventTag].self, forKey: .tags) ?? []
         aiSummary = try container.decodeIfPresent(String.self, forKey: .aiSummary)
+        location = try container.decodeIfPresent(EventDetail.Location.self, forKey: .location) ?? object.location
     }
 }

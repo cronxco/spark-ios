@@ -28,7 +28,7 @@ struct IntegrationsListView: View {
                         .listRowBackground(Color.clear)
 
                         ForEach(viewModel?.grouped(list) ?? [], id: \.0) { group in
-                            Section(group.0) {
+                            Section {
                                 ForEach(group.1) { integration in
                                     NavigationLink {
                                         IntegrationDetailView(integrationId: integration.id)
@@ -36,6 +36,19 @@ struct IntegrationsListView: View {
                                         IntegrationRow(integration: integration)
                                     }
                                 }
+                                #if DEBUG
+                                ForEach(Array(Set(group.1.map(\.service))).sorted(), id: \.self) { service in
+                                    Button(viewModel?.syncingService == service ? "Syncing all \(service)…" : "Sync all \(service)") {
+                                        Task { await viewModel?.syncAll(service: service) }
+                                    }
+                                    .disabled(
+                                        viewModel?.syncingService != nil
+                                            || group.1.filter { $0.service == service }.allSatisfy { $0.statusValue.lowercased() == "paused" }
+                                    )
+                                }
+                                #endif
+                            } header: {
+                                Text(group.0)
                             }
                         }
                     }
@@ -58,6 +71,11 @@ struct IntegrationsListView: View {
                 viewModel = IntegrationsListViewModel(apiClient: appModel.apiClient)
             }
             await viewModel?.load()
+        }
+        .alert("Integration sync", isPresented: Binding(get: { viewModel?.syncMessage != nil }, set: { if !$0 { viewModel?.clearSyncMessage() } })) {
+            Button("OK", role: .cancel) { viewModel?.clearSyncMessage() }
+        } message: {
+            Text(viewModel?.syncMessage ?? "")
         }
     }
 }

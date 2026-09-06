@@ -10,13 +10,14 @@ enum DetailLoadState<T: Sendable>: Sendable {
 
 @MainActor
 @Observable
-final class EventDetailViewModel {
+final class EventDetailViewModel: ETagDetailMutationHandling {
     let eventId: String
-    private(set) var state: DetailLoadState<EventDetail> = .loading
+    var state: DetailLoadState<EventDetail> = .loading
     private(set) var metricBaselineStatus: MetricBaselineStatus?
-    private(set) var rawPayload: String?
+    var rawPayload: String?
+    var etag: String?
 
-    private let apiClient: APIClient
+    let apiClient: APIClient
 
     init(eventId: String, apiClient: APIClient) {
         self.eventId = eventId
@@ -30,6 +31,7 @@ final class EventDetailViewModel {
             let response = try await apiClient.requestWithRawResponse(EventsEndpoint.detail(id: eventId))
             let detail = response.decoded
             rawPayload = response.utf8Body
+            etag = response.etag
             state = .loaded(detail)
             await loadMetricBaselineStatus(for: detail)
         } catch APIError.notModified {
@@ -53,10 +55,59 @@ final class EventDetailViewModel {
         )
         let updated = response.decoded
         rawPayload = response.utf8Body
+        etag = response.etag ?? etag
         state = .loaded(updated)
         await loadMetricBaselineStatus(for: updated)
     }
 
+    func attachTag(_ request: TagMutationRequest) async throws {
+        guard let etag else { throw TagMutationError.missingETag }
+        let response = try await apiClient.requestWithRawResponse(
+            TagsEndpoint.attach(kind: .events, id: eventId, request: request, etag: etag, response: EventDetail.self)
+        )
+        rawPayload = response.utf8Body
+        self.etag = response.etag ?? etag
+        state = .loaded(response.decoded)
+    }
+
+    func detachTag(_ tag: EventTag) async throws {
+        guard let tagID = tag.tagID else { throw TagMutationError.missingTagID }
+        guard let etag else { throw TagMutationError.missingETag }
+        let response = try await apiClient.requestWithRawResponse(
+            TagsEndpoint.detach(kind: .events, id: eventId, tagID: tagID, etag: etag, response: EventDetail.self)
+        )
+        rawPayload = response.utf8Body
+        self.etag = response.etag ?? etag
+        state = .loaded(response.decoded)
+    }
+
+    func createRelationship(_ request: RelationshipCreateRequest) async throws -> EntityRelationship {
+        guard let etag else { throw TagMutationError.missingETag }
+        let response = try await apiClient.requestWithRawResponse(
+            try EntityMutationsEndpoint.createRelationship(kind: .events, id: eventId, request: request, etag: etag)
+        )
+        self.etag = response.etag ?? etag
+        return response.decoded
+    }
+
+    func deleteRelationship(_ relationshipID: String) async throws {
+        guard let etag else { throw TagMutationError.missingETag }
+        let response = try await apiClient.requestWithRawResponse(
+            EntityMutationsEndpoint.deleteRelationship(id: relationshipID, etag: etag)
+        )
+        self.etag = response.etag ?? etag
+    }
+
+    func update(_ attributes: [String: AnyCodable]) async throws {
+        guard let etag else { throw TagMutationError.missingETag }
+        try await applyMutation(
+            try EntityMutationsEndpoint.update(kind: .events, id: eventId, attributes: attributes, etag: etag, response: EventDetail.self)
+        )
+    }
+
+    func geocode(address: String) async throws { try await applyMutation(try EntityMutationsEndpoint.geocode(kind: .events, id: eventId, address: address, etag: currentETag(), response: EventDetail.self)) }
+    func setLocation(_ location: LocationRequest) async throws { try await applyMutation(try EntityMutationsEndpoint.setLocation(kind: .events, id: eventId, location: location, etag: currentETag(), response: EventDetail.self)) }
+    func clearLocation() async throws { try await applyMutation(EntityMutationsEndpoint.clearLocation(kind: .events, id: eventId, etag: currentETag(), response: EventDetail.self)) }
     private func loadMetricBaselineStatus(for detail: EventDetail) async {
         let identifier = MetricIdentifier.from(event: detail.event)
         guard MetricIdentifier.split(identifier) != nil else { return }
@@ -74,6 +125,18 @@ final class EventDetailViewModel {
         } catch {
             SparkObservability.captureHandled(error)
             metricBaselineStatus = nil
+        }
+    }
+}
+
+enum TagMutationError: LocalizedError {
+    case missingETag
+    case missingTagID
+
+    var errorDescription: String? {
+        switch self {
+        case .missingETag: "Refresh this detail before making changes."
+        case .missingTagID: "This older tag can't be removed until the detail is refreshed."
         }
     }
 }

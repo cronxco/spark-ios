@@ -205,6 +205,9 @@ public actor APIClient {
         var request = URLRequest(url: url)
         request.httpMethod = endpoint.method.rawValue
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        for (field, value) in endpoint.headers {
+            request.setValue(value, forHTTPHeaderField: field)
+        }
         if let body = endpoint.body {
             request.httpBody = body
             request.setValue(endpoint.contentType ?? "application/json", forHTTPHeaderField: "Content-Type")
@@ -587,6 +590,9 @@ public struct EmptyResponse: Codable, Sendable {
 public struct RawAPIResponse<Response: Sendable>: Sendable {
     public let decoded: Response
     public let data: Data
+    public let headers: [String: String]
+
+    public var etag: String? { headers.first { $0.key.caseInsensitiveCompare("ETag") == .orderedSame }?.value }
 
     /// The response `ETag`, when the server sent one.
     ///

@@ -7,6 +7,7 @@ struct ApiTokensView: View {
     @State private var viewModel: ApiTokensViewModel?
     @State private var showCreateSheet = false
     @State private var showCopyBanner = false
+    @State private var tokenPendingRevocation: ApiToken?
 
     var body: some View {
         Group {
@@ -49,6 +50,29 @@ struct ApiTokensView: View {
             }
         }
         .animation(.easeInOut, value: showCopyBanner)
+        .confirmationDialog(
+            "Revoke API token?",
+            isPresented: Binding(
+                get: { tokenPendingRevocation != nil },
+                set: { if !$0 { tokenPendingRevocation = nil } }
+            ),
+            presenting: tokenPendingRevocation
+        ) { token in
+            Button("Revoke", role: .destructive) {
+                Task {
+                    if await viewModel?.revoke(token) == true {
+                        tokenPendingRevocation = nil
+                    }
+                }
+            }
+        } message: { token in
+            Text("\(token.name) will stop working immediately. This cannot be undone.")
+        }
+        .alert("Couldn't revoke token", isPresented: Binding(get: { viewModel?.revokeError != nil }, set: { if !$0 { viewModel?.revokeError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(viewModel?.revokeError ?? "Please try again.")
+        }
         .task {
             if viewModel == nil {
                 viewModel = ApiTokensViewModel(apiClient: appModel.apiClient)
@@ -77,7 +101,7 @@ struct ApiTokensView: View {
                     .listRowBackground(Color.clear)
 
                     ForEach(tokens) { token in
-                        TokenRow(token: token)
+                        TokenRow(token: token) { tokenPendingRevocation = token }
                     }
                 }
             }
@@ -87,6 +111,7 @@ struct ApiTokensView: View {
 
 private struct TokenRow: View {
     let token: ApiToken
+    let onRevoke: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -105,6 +130,16 @@ private struct TokenRow: View {
             }
         }
         .padding(.vertical, 4)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive, action: onRevoke) {
+                Label("Revoke", systemImage: "trash")
+            }
+        }
+        .contextMenu {
+            Button(role: .destructive, action: onRevoke) {
+                Label("Revoke", systemImage: "trash")
+            }
+        }
     }
 }
 
