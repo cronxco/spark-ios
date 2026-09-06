@@ -89,7 +89,9 @@ struct MetricsExploreView: View {
                     }
 
                     if let viewModel, case .loaded = viewModel.loadState, !viewModel.rawFeedEntries.isEmpty {
-                        RawFeedJSONView(entries: viewModel.rawFeedEntries)
+                        #if DEBUG
+                            RawFeedJSONView(entries: viewModel.rawFeedEntries)
+                        #endif
                             .padding(.horizontal, SparkSpacing.lg)
                     }
                 }

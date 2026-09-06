@@ -263,9 +263,16 @@ final class TodayViewModel {
         }
     }
 
+    /// Records a raw response body for the debug inspector.
+    ///
+    /// A no-op in release: the bodies are unfiltered transport payloads, and
+    /// keeping them out of memory entirely is stronger than only declining to
+    /// render them. RawFeedJSONView is likewise debug-only.
     private func upsertRawAPIEntry(title: String, body: String) {
-        rawAPIEntries.removeAll { $0.title == title }
-        rawAPIEntries.append(RawFeedJSONEntry(title: title, body: body))
+        #if DEBUG
+            rawAPIEntries.removeAll { $0.title == title }
+            rawAPIEntries.append(RawFeedJSONEntry(title: title, body: body))
+        #endif
     }
 
     private func persist(_ summary: DaySummary) async throws {

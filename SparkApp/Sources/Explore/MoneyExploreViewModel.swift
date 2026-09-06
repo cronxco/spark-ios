@@ -40,9 +40,11 @@ final class MoneyExploreViewModel {
         do {
             let response = try await apiClient.requestWithRawResponse(MoneyEndpoint.accounts())
             accounts = response.decoded.data
-            rawFeedEntries = [
-                RawFeedJSONEntry(title: "GET /money/accounts", body: response.utf8Body)
-            ]
+            #if DEBUG
+                rawFeedEntries = [
+                    RawFeedJSONEntry(title: "GET /money/accounts", body: response.utf8Body)
+                ]
+            #endif
             loadState = .loaded
             await buildNetWorthHistory()
         } catch where error.isAPICancellation {
@@ -92,10 +94,12 @@ final class MoneyExploreViewModel {
             }
         }
 
-        rawFeedEntries.append(contentsOf: snapAccounts.compactMap { account in
-            guard let rawBody = rawBalances[account.id] else { return nil }
-            return RawFeedJSONEntry(title: "GET /money/accounts/\(account.id)/balances", body: rawBody)
-        })
+        #if DEBUG
+            rawFeedEntries.append(contentsOf: snapAccounts.compactMap { account in
+                guard let rawBody = rawBalances[account.id] else { return nil }
+                return RawFeedJSONEntry(title: "GET /money/accounts/\(account.id)/balances", body: rawBody)
+            })
+        #endif
 
         let cal = Calendar.current
         var dateMap: [Date: [String: Double]] = [:]

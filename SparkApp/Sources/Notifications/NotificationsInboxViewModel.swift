@@ -72,7 +72,8 @@ final class NotificationsInboxViewModel {
                 domain: items[index].domain,
                 isRead: true,
                 receivedAt: items[index].receivedAt,
-                entity: items[index].entity
+                entity: items[index].entity,
+                version: items[index].version
             )
         }
         do {
@@ -93,7 +94,8 @@ final class NotificationsInboxViewModel {
                 domain: items[index].domain,
                 isRead: true,
                 receivedAt: items[index].receivedAt,
-                entity: items[index].entity
+                entity: items[index].entity,
+                version: items[index].version
             )
         }
         do {
@@ -105,12 +107,29 @@ final class NotificationsInboxViewModel {
         }
     }
 
+    /// Deletes one notification.
+    ///
+    /// Deletion is the one inbox action the backend still guards with a
+    /// precondition, satisfied by the `version` the list payload now carries.
+    /// A stale version means someone else changed the row, so the optimistic
+    /// removal is rolled back by re-reading rather than left as a lie.
     func delete(_ id: String) async {
+        let removed = items.first { $0.id == id }
         items.removeAll { $0.id == id }
+
         do {
-            _ = try await apiClient.request(NotificationsEndpoint.delete(id: id))
+            _ = try await apiClient.request(
+                NotificationsEndpoint.delete(id: id, version: removed?.version)
+            )
             await removeCached(id: id)
+        } catch let error as APIError where error.isPreconditionFailure {
+            logger.notice("delete precondition failed for \(id); refreshing inbox")
+            await refresh()
         } catch {
+            if let removed {
+                items.append(removed)
+                items.sort { $0.receivedAt > $1.receivedAt }
+            }
             SparkObservability.captureHandled(error)
             logger.error("delete failed: \(String(describing: error))")
         }

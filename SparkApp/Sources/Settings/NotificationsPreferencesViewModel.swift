@@ -18,6 +18,12 @@ final class NotificationsPreferencesViewModel {
     private let apiClient: APIClient
     private var debounceTask: Task<Void, Never>?
 
+    /// Strong user version from the last read.
+    ///
+    /// `PATCH /settings/notifications` is guarded by `if-match:user` and answers
+    /// `428` without it — which is why every save from a shipped client failed.
+    private var version: String?
+
     init(apiClient: APIClient) {
         self.apiClient = apiClient
     }
@@ -25,8 +31,11 @@ final class NotificationsPreferencesViewModel {
     func load() async {
         state = .loading
         do {
-            let prefs = try await apiClient.request(NotificationsPreferencesEndpoint.get())
-            state = .loaded(prefs)
+            let response = try await apiClient.requestWithRawResponse(
+                NotificationsPreferencesEndpoint.get()
+            )
+            version = response.etag
+            state = .loaded(response.decoded)
         } catch APIError.notModified {
             return
         } catch {
@@ -49,16 +58,35 @@ final class NotificationsPreferencesViewModel {
         }
     }
 
-    private func save(_ prefs: NotificationPreferences) async {
+    private func save(_ prefs: NotificationPreferences, isRetry: Bool = false) async {
         saveStatus = .saving
         do {
-            _ = try await apiClient.request(NotificationsPreferencesEndpoint.update(prefs))
+            _ = try await apiClient.request(
+                NotificationsPreferencesEndpoint.update(prefs, version: version)
+            )
             saveStatus = .saved
             try? await Task.sleep(for: .seconds(2))
             if case .saved = saveStatus { saveStatus = .idle }
+        } catch let error as APIError where error.isPreconditionFailure && !isRetry {
+            // Our version is stale or absent. Re-read to pick up the current
+            // one and apply the edit once against what is actually there —
+            // bounded to a single retry so a persistent mismatch surfaces
+            // rather than looping.
+            await refreshVersion()
+            await save(prefs, isRetry: true)
         } catch {
             SparkObservability.captureHandled(error)
             saveStatus = .error((error as? LocalizedError)?.errorDescription ?? String(describing: error))
         }
+    }
+
+    /// Re-reads the resource purely to refresh the stored version, leaving the
+    /// user's in-flight edit in `state` untouched.
+    private func refreshVersion() async {
+        guard let response = try? await apiClient.requestWithRawResponse(
+            NotificationsPreferencesEndpoint.get()
+        ) else { return }
+
+        version = response.etag
     }
 }

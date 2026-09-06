@@ -140,13 +140,69 @@ final class SparkAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
-        if let urlString = userInfo["spark.url"] as? String,
-           let url = URL(string: urlString) {
-            Task { @MainActor in
-                UIApplication.shared.open(url)
-            }
+        let actionIdentifier = response.actionIdentifier
+
+        // The server nests its envelope under a single `spark` dictionary
+        // (ApnsChannel::applySparkEnvelope). This previously read a flat
+        // `userInfo["spark.url"]`, a key the server has never emitted, so
+        // tapping any notification did nothing.
+        //
+        // Values are lifted out here rather than passed along as a dictionary:
+        // [String: Any] is not Sendable and cannot cross into the MainActor.
+        let envelope = userInfo["spark"] as? [String: Any]
+        let deepLink = envelope?["deep_link"] as? String
+        let entityType = envelope?["entity_type"] as? String
+        let entityId = envelope?["entity_id"] as? String
+
+        Task { @MainActor in
+            Self.handleNotificationAction(
+                actionIdentifier: actionIdentifier,
+                deepLink: deepLink,
+                entityType: entityType,
+                entityId: entityId
+            )
         }
+
         completionHandler()
+    }
+
+    /// Routes a notification tap or action button.
+    ///
+    /// `response.actionIdentifier` was never inspected, so every action button
+    /// was inert even once its category bound. Navigation goes through
+    /// `AppModel.pendingRoute` rather than `UIApplication.open`, which would
+    /// bounce out to universal-link handling instead of routing in-process.
+    @MainActor
+    static func handleNotificationAction(
+        actionIdentifier: String,
+        deepLink: String?,
+        entityType: String?,
+        entityId: String?
+    ) {
+        switch actionIdentifier {
+        case "SNOOZE", UNNotificationDismissActionIdentifier:
+            return
+        default:
+            break
+        }
+
+        // REAUTH sends the user to the integration regardless of the
+        // notification's own deep link, since fixing auth is the point.
+        if actionIdentifier == "REAUTH", entityType == "integration", let entityId {
+            AppModel.shared.pendingRoute = .integration(service: entityId)
+            return
+        }
+
+        if let deepLink, let route = AppModel.route(from: deepLink) {
+            AppModel.shared.pendingRoute = route
+            return
+        }
+
+        // No deep link: fall back to the entity reference the envelope carries.
+        if let entityType, let entityId,
+           let route = AppModel.route(from: "\(entityType):\(entityId)") {
+            AppModel.shared.pendingRoute = route
+        }
     }
 
     // MARK: - Background tasks

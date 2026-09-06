@@ -7,8 +7,23 @@ public enum NotificationsPreferencesEndpoint {
     }
 
     /// PATCH /settings/notifications
-    public static func update(_ prefs: NotificationPreferences) -> Endpoint<EmptyResponse> {
+    ///
+    /// Guarded by `if-match:user`: the backend answers `428` without a
+    /// precondition and `412` with a stale one. Pass the `ETag` from `get()`,
+    /// which returns the strong user version this compares against.
+    ///
+    /// This is a genuine last-write-wins surface, so unlike marking
+    /// notifications read it keeps its precondition deliberately.
+    public static func update(
+        _ prefs: NotificationPreferences,
+        version: String?
+    ) -> Endpoint<EmptyResponse> {
         let body = try? JSONEncoder().encode(prefs)
-        return Endpoint(method: .patch, path: "/settings/notifications", body: body, contentType: "application/json")
+        return Endpoint(
+            method: .patch,
+            path: "/settings/notifications",
+            body: body,
+            contentType: "application/json"
+        ).withIfMatch(version)
     }
 }

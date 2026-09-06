@@ -50,9 +50,11 @@ final class HealthExploreViewModel {
                 HealthEndpoint.dashboard(date: "today", range: selectedRange)
             )
             dashboard = response.decoded
-            rawFeedEntries = [
-                RawFeedJSONEntry(title: "GET /health/dashboard", body: response.utf8Body)
-            ]
+            #if DEBUG
+                rawFeedEntries = [
+                    RawFeedJSONEntry(title: "GET /health/dashboard", body: response.utf8Body)
+                ]
+            #endif
             loadState = .loaded
         } catch where error.isAPICancellation {
             loadState = dashboard == nil ? .idle : .loaded

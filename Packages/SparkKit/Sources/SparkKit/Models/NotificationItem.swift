@@ -25,8 +25,14 @@ public struct NotificationItem: Codable, Sendable, Hashable, Identifiable {
     public let receivedAt: Date
     public let entity: EntityRef?
 
+    /// Strong resource version, for `If-Match` on delete.
+    ///
+    /// Optional so a client stays decodable against a server that predates the
+    /// field; a nil version simply means delete cannot be attempted.
+    public let version: String?
+
     enum CodingKeys: String, CodingKey {
-        case id, title, body, domain, entity
+        case id, title, body, domain, entity, version
         case isRead = "is_read"
         case receivedAt = "received_at"
     }
@@ -38,7 +44,8 @@ public struct NotificationItem: Codable, Sendable, Hashable, Identifiable {
         domain: String? = nil,
         isRead: Bool = false,
         receivedAt: Date = .init(),
-        entity: EntityRef? = nil
+        entity: EntityRef? = nil,
+        version: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -47,5 +54,6 @@ public struct NotificationItem: Codable, Sendable, Hashable, Identifiable {
         self.isRead = isRead
         self.receivedAt = receivedAt
         self.entity = entity
+        self.version = version
     }
 }

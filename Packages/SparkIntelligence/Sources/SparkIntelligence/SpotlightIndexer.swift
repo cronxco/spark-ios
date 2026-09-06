@@ -72,6 +72,17 @@ public enum SpotlightIndexer {
 
     // MARK: - Purge
 
+    /// Removes everything Spark contributed to the system index.
+    ///
+    /// Called synchronously on sign-out. `purgeStaleItems` also clears the
+    /// index when it finds no token, but it only runs from a BGProcessingTask —
+    /// so until iOS chose to schedule that, the departing user's events,
+    /// blocks, places and metrics stayed searchable from Spotlight.
+    @MainActor
+    public static func purgeAll() async {
+        try? await CSSearchableIndex.default().deleteAllSearchableItems()
+    }
+
     @MainActor
     public static func purgeStaleItems(container: ModelContainer) async {
         guard let cutoff = Calendar.current.date(byAdding: .day, value: -ttlDays, to: .now) else { return }

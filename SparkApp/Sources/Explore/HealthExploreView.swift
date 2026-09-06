@@ -115,7 +115,9 @@ struct HealthExploreView: View {
             }
 
             if let vm = viewModel, !vm.rawFeedEntries.isEmpty {
-                RawFeedJSONView(entries: vm.rawFeedEntries)
+                #if DEBUG
+                    RawFeedJSONView(entries: vm.rawFeedEntries)
+                #endif
                     .padding(.horizontal, SparkSpacing.lg)
             }
         }

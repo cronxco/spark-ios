@@ -31,6 +31,35 @@ public enum SparkDataStore {
         )
     }
 
+    /// Deletes every cached record from the shared store.
+    ///
+    /// Sign-out has to leave nothing of the departing user behind: the store
+    /// lives in the App Group, so anything left here is visible to the next
+    /// account and to every extension. An equivalent wipe previously existed
+    /// only inside `#if DEBUG` in DebugView and was never called on sign-out.
+    ///
+    /// Every model in `SparkSchemaV3` must appear below; a model added to the
+    /// schema and forgotten here survives logout.
+    @MainActor
+    public static func purgeAll(in container: ModelContainer) throws {
+        let context = container.mainContext
+
+        try context.delete(model: CachedEvent.self)
+        try context.delete(model: CachedObject.self)
+        try context.delete(model: CachedBlock.self)
+        try context.delete(model: CachedIntegration.self)
+        try context.delete(model: CachedPlace.self)
+        try context.delete(model: CachedMetric.self)
+        try context.delete(model: CachedAnomaly.self)
+        try context.delete(model: CachedDaySummary.self)
+        try context.delete(model: CachedNotification.self)
+        try context.delete(model: CachedCheckIn.self)
+        try context.delete(model: CachedMoneyAccount.self)
+        try context.delete(model: SyncCursor.self)
+
+        try context.save()
+    }
+
     /// In-memory container for tests and previews.
     public static func makeInMemoryContainer() throws -> ModelContainer {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)

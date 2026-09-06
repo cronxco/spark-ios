@@ -1,4 +1,4 @@
-# iOS P0 containment — validated findings and proposed changes
+# iOS P0 containment — validated findings and the changes made
 
 ## Context
 
@@ -6,10 +6,16 @@ The Outline page **Spark — Product Domains** (`docs.cronx.co/doc/spark-product
 product audit completed 1 September 2026. Its first phase is eight security/privacy packages, PSEC-01 … PSEC-08.
 Four of them (PSEC-04 … PSEC-07) land wholly or partly on iOS.
 
-All four have been re-validated against current code. **All four are still present.** The server-side halves are
-implemented in `cronxco/spark` on `claude/spark-product-priorities-b49ppr`; the client-side changes below are
-proposals only, because they could not be compiled or tested in the environment this validation ran in. Each is
-written against exact files and lines so it can be picked up directly in Xcode.
+All four were re-validated against current code and **all four were present**. The server-side halves are
+implemented in `cronxco/spark` on `claude/spark-product-priorities-b49ppr`; the client-side changes are now
+implemented here.
+
+> **Not compiled.** This work was done in an environment with no Swift toolchain — and an iOS app cannot be built
+> on Linux regardless — so nothing below has been through a compiler, a simulator or a device. The SparkKit tests
+> in `ConditionalWriteTests.swift` are the runnable part and still need `swift test`. Treat this as a reviewed
+> patch awaiting its first build, not as verified work. Expect strict-concurrency diagnostics first: `signOut`
+> now touches `UNUserNotificationCenter`, `UIApplication` and ActivityKit, and
+> `scheduleBackgroundImageUpload` became `async`.
 
 Read alongside `docs/Architecture/P0_CONTAINMENT_VALIDATION.md` in the `spark` repo, which covers all eight
 packages.
@@ -27,8 +33,9 @@ byte-identical on both branches.
 It matters in exactly one place, noted under PSEC-07: the revert removed `headers` from `Endpoint`, so on `main`
 `APIClient` has no mechanism to send `If-Match` at all. The feature branch has that plumbing.
 
-CI is green on both (`ios.yml` runs #29 and #32). One coverage gap is directly relevant: **`SparkShare` is not in
-the `SparkApp` test scheme, so CI never builds it** — which is why PSEC-06's defects survive a green pipeline.
+CI is green on both (`ios.yml` runs #29 and #32). One coverage gap was directly relevant: **`SparkShare` was in no
+built scheme, so CI never compiled it** — which is why PSEC-06's runtime-only defects survived a green pipeline.
+It is now in the `SparkApp` scheme's build action.
 
 ---
 
@@ -71,18 +78,22 @@ still sign itself out, and deliberately behind no precondition. It revokes the p
 access token presenting the request, and nothing else — other devices and independently created personal access
 tokens are untouched.
 
-### Proposed client change
+### What was done
 
-One idempotent `purge()` coordinator, called by `signOut()`, that:
+`signOut()` is now a two-stage coordinator — `revokeRemoteSession()` then `purgeLocalState()` — where the local
+half always completes even if every remote call fails. It:
 
-1. Lifts the wipe from `DebugView.swift:476-484` out of `#if DEBUG` into `SparkDataStore` and calls it.
-2. Removes the enumerated App Group defaults plus `spark.search.recents` from `UserDefaults.standard`.
-3. Awaits the `SpotlightIndexer` purge synchronously rather than deferring to a background task.
-4. Calls `POST /api/v1/mobile/logout`.
-5. Removes `spark.apnsDeviceId` **only** on a successful revoke — otherwise leaves a non-secret pending marker so
-   the revocation can be retried, rather than destroying the identifier.
-
-Local sign-out must complete even when every remote call fails.
+1. Calls `SparkDataStore.purgeAll`, a new SparkKit entry point covering all twelve `SparkSchemaV3` models. The
+   equivalent wipe previously existed only inside `#if DEBUG` in `DebugView` and was never called on sign-out.
+2. Clears nine enumerated App Group defaults keys plus `spark.search.recents` from `UserDefaults.standard`.
+   `spark.env.name` is deliberately kept — it is a build override, not user data.
+3. Awaits `SpotlightIndexer.purgeAll()` synchronously rather than waiting for a BGProcessingTask.
+4. Ends every Live Activity via `LiveActivityManager.endAll()`, including ones started by a previous launch.
+5. Clears delivered notifications, resets the badge, and calls `unregisterForRemoteNotifications()`.
+6. Calls `POST /api/v1/mobile/logout` (`SessionEndpoint.logout`).
+7. Parks the device id under `spark.pendingDeviceRevocation` when the revoke fails, instead of destroying the only
+   identifier a retry needs.
+8. Clears `pendingRoute` and reloads widget timelines.
 
 ---
 
@@ -104,12 +115,15 @@ What is real is an **always-on production raw-payload surface**, not `#if DEBUG`
    endpoints (`TodayViewModel.swift:112, 157, 186, 257`), and into three Explore screens
    (`MetricsExploreView:92`, `MoneyExploreView:118`, `HealthExploreView:118`).
 
-### Proposed change
+### What was done
 
-Wrap both surfaces in `#if DEBUG` — the toolbar button and sheet in `SparkAppViewSystem.swift`, and the
-`RawFeedJSONView` call sites — and stop populating `rawPayload` / `rawAPIEntries` in release builds so the payloads
-are never held in memory at all. `DebugView.swift:1` is the in-repo precedent. Add a CI grep so it cannot be
-reintroduced.
+Both surfaces are wrapped in `#if DEBUG` — the toolbar button and sheet in `SparkAppViewSystem.swift`, and the
+`RawFeedJSONView` call sites. More importantly, so is every write that *populates* them
+(`TodayViewModel.upsertRawAPIEntry` and the four Explore view-model assignments), so a release build never holds
+the payloads in memory at all rather than merely declining to render them. `RawFeedJSONEntry` stays outside the
+guard because view models still reference the type. `DebugView.swift:1` is the in-repo precedent.
+
+Still outstanding: a CI grep to stop this being reintroduced.
 
 The web side is clean; the equivalent Blade instances are labelled, collapsed admin affordances rather than
 unrecognised-type fallbacks. One malformed Blade block found while checking has been fixed server-side.
@@ -146,15 +160,17 @@ and the shape matches** (`routes/mobile.php:201-203`) but is unreachable for the
 not exist** — `notes` appears nowhere in `routes/mobile.php` or `routes/api.php` — so text sharing 404s, though at
 least it fails loudly.
 
-### Proposed change
+### What was done
 
-1. **Delete `syncAccessToken()` and use the `KeychainTokenStore()` path already present in the same file** (line 8,
-   used correctly by `APIClient` at lines 71 and 141). One deletion removes all three bugs; the working path is
-   already there.
-2. **Move the success toast and `complete()` after the response**, with a real failure state otherwise.
-3. **Route text shares to the working `/bookmarks` endpoint** rather than the nonexistent `/notes` — smaller than
-   adding a server route, and `/bookmarks` is already the registered capture capability.
-4. **Add `SparkShare` to a CI-built scheme.**
+1. **`syncAccessToken()` deleted** in favour of the `KeychainTokenStore()` already in the same file and already
+   used correctly by `APIClient`. One deletion removes all three bugs.
+2. **`scheduleBackgroundImageUpload` became `async` and returns whether it actually scheduled.** The toast and
+   `complete()` now follow the result, and a file that could not be queued is removed rather than left in the
+   shared container pretending to be pending work. The telemetry event moved after `resume()`.
+3. **Text shares that are wholly a URL become bookmarks**; anything else is declined with "Sharing text isn't
+   supported yet." rather than posting to the nonexistent `/notes` and failing. A single-match `NSDataDetector`
+   check means a sentence mentioning a URL is not silently turned into a bookmark.
+4. **`SparkShare` added to the `SparkApp` scheme's build action** (`Project.swift`), so CI compiles it.
 
 ---
 
@@ -198,34 +214,39 @@ five, but only `integration_failed` corresponds to a real notification class —
 toggles gate nothing, and the eleven real types cannot be gated at all. **Reconciling this needs a product
 decision** about which categories the product actually has.
 
-### Proposed client changes
+### What was done, client-side
 
-1. **Send `If-Match` on `DELETE /notifications/{id}`**, using the `version` now present on each list item. On
-   `main` this first requires re-adding `headers` to `Endpoint` and applying it in `APIClient` — the plumbing the
-   revert removed and the feature branch still has. **This is the one place the branch split matters.**
-2. **Send `If-Match` on `PATCH /settings/notifications`**, echoing the ETag from `GET /settings/notifications`.
-3. **Handle 412 and 428** — currently neither status appears anywhere in the client.
-4. **Fix deep-link routing.** The client reads a flat `userInfo["spark.url"]` (`SparkApp.swift:138-152`); the
-   server nests everything under `userInfo["spark"]["deep_link"]`. Note that **no notification currently sets a
-   deep link at all** — `sparkDeepLink` and its siblings are read via `?? nil` on classes that never declare them,
-   so the server has nothing to send. Fixing the client key alone changes nothing; the notifications need to
-   populate the envelope first. Route through the in-app `pendingRoute` rather than
-   `UIApplication.shared.open`, which bounces out to universal-link handling.
-5. **Inspect `response.actionIdentifier`** — it is never read, so action buttons would be inert even once
-   categories bind.
-6. **Restore the `.get`-only guard on `If-None-Match`** (`APIClient.swift:188`). The revert reintroduced attaching
-   it to PATCH/POST/DELETE.
+1. **`Endpoint.headers` and `withIfMatch()` re-added**, and applied in `APIClient` — the plumbing the revert
+   removed. `RawAPIResponse.etag` was also restored, since the preferences flow needs to read the ETag back.
+2. **`DELETE /notifications/{id}` sends `If-Match`**, using the `version` the list payload now carries.
+   `NotificationsInboxViewModel.delete` refreshes on a precondition failure and rolls its optimistic removal back
+   on any other error. The two optimistic rebuilds in that view model were also dropping `version`, which would
+   have broken a subsequent delete.
+3. **`PATCH /settings/notifications` sends `If-Match`**, with `NotificationsPreferencesViewModel` holding the ETag
+   from the read and retrying exactly once after a stale-version refresh.
+4. **`APIError.isPreconditionRequired` / `isPreconditionFailed` / `isPreconditionFailure`** added, with plain-English
+   descriptions for 428 and 412.
+5. **Deep-link routing fixed** — reads `userInfo["spark"]["deep_link"]` and routes via `AppModel.pendingRoute`.
+   The `kind:id` parser inside `AppModel.consumePendingIntentRoute` was extracted to a shared
+   `AppModel.route(from:)` so the AppIntent hand-off and notification taps use one vocabulary.
+6. **`response.actionIdentifier` is now inspected**: `REAUTH` routes to the integration, `SNOOZE` and dismiss are
+   no-ops, everything else follows the deep link or the entity reference.
+7. **`If-None-Match` restricted to GET** — the revert had reintroduced attaching it to PATCH/POST/DELETE.
+
+> **Item 5 changes nothing observable yet.** No notification currently sets a deep link: `sparkDeepLink` and its
+> siblings are read via `?? nil` on classes that never declare them, so the server has nothing to send. The client
+> is now correct and the entity-reference fallback does work, but populating the envelope is outstanding backend
+> work.
 
 ---
 
 ## Verification
 
-None of the above can be verified in the environment this validation ran in — there is no Swift toolchain. Each
-change needs:
+None of this has been compiled. It needs:
 
 ```bash
 tuist generate
-cd Packages/SparkKit && swift test --parallel
+cd Packages/SparkKit && swift test --parallel   # incl. ConditionalWriteTests
 xcodebuild -workspace Spark.xcworkspace -scheme SparkApp \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=27.0' test
 ```

@@ -115,7 +115,9 @@ struct MoneyExploreView: View {
                     .padding(.horizontal, SparkSpacing.lg)
 
                 if !vm.rawFeedEntries.isEmpty {
-                    RawFeedJSONView(entries: vm.rawFeedEntries)
+                    #if DEBUG
+                        RawFeedJSONView(entries: vm.rawFeedEntries)
+                    #endif
                         .padding(.horizontal, SparkSpacing.lg)
                 }
             }

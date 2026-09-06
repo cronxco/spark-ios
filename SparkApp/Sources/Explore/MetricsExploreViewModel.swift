@@ -42,9 +42,11 @@ final class MetricsExploreViewModel {
         do {
             let response = try await apiClient.requestWithRawResponse(MetricsEndpoint.list())
             self.metrics = response.decoded.filter { $0.eventCount > 0 }
-            rawFeedEntries = [
-                RawFeedJSONEntry(title: "GET /metrics", body: response.utf8Body)
-            ]
+            #if DEBUG
+                rawFeedEntries = [
+                    RawFeedJSONEntry(title: "GET /metrics", body: response.utf8Body)
+                ]
+            #endif
             metadataState = .loaded(MetricsMetadataSummary(metrics: self.metrics))
         } catch where error.isAPICancellation {
             loadState = .idle
@@ -60,7 +62,9 @@ final class MetricsExploreViewModel {
 
         let details = await fetchDetails(identifiers: metrics.map(\.identifier))
         snapshots = details.snapshots
-        rawFeedEntries.append(contentsOf: details.rawEntries)
+        #if DEBUG
+            rawFeedEntries.append(contentsOf: details.rawEntries)
+        #endif
         loadState = .loaded
     }
 

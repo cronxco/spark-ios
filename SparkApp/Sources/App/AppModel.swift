@@ -2,9 +2,11 @@ import Foundation
 import Observation
 import Sentry
 import SparkHealth
+import SparkIntelligence
 import SparkKit
 import SparkSync
 import SwiftData
+import UserNotifications
 import WidgetKit
 
 enum SessionState: Equatable {
@@ -142,6 +144,29 @@ final class AppModel {
         await reverb.disconnect()
     }
 
+    /// Parse a `kind:id` route string into an `AppRoute`.
+    ///
+    /// Shared by the AppIntent hand-off and by notification taps so there is
+    /// one vocabulary rather than two parsers that drift. Returns nil for
+    /// kinds that are not navigation (`action`, `search`).
+    static func route(from raw: String) -> AppRoute? {
+        let parts = raw.split(separator: ":", maxSplits: 1).map(String.init)
+        guard let kind = parts.first else { return nil }
+
+        switch kind {
+        case "today": return .today(date: nil)
+        case "event": return parts.count > 1 ? .event(id: parts[1]) : nil
+        case "object": return parts.count > 1 ? .object(id: parts[1]) : nil
+        case "block": return parts.count > 1 ? .block(id: parts[1]) : nil
+        case "metric": return parts.count > 1 ? .metric(identifier: parts[1]) : nil
+        case "place": return parts.count > 1 ? .place(id: parts[1]) : nil
+        case "anomaly": return parts.count > 1 ? .anomaly(id: parts[1]) : nil
+        case "integration": return parts.count > 1 ? .integration(service: parts[1]) : nil
+        case "account": return parts.count > 1 ? .account(id: parts[1]) : nil
+        default: return nil
+        }
+    }
+
     /// Read a route written by an AppIntent (from the extension process) and
     /// navigate to it. Consumed once to prevent stale navigation on re-launch.
     private func consumePendingIntentRoute() {
@@ -150,12 +175,13 @@ final class AppModel {
         defaults?.removeObject(forKey: "spark.pendingRoute")
         let parts = raw.split(separator: ":", maxSplits: 1).map(String.init)
         guard let kind = parts.first else { return }
+
+        if let route = Self.route(from: raw) {
+            pendingRoute = route
+            return
+        }
+
         switch kind {
-        case "today":   pendingRoute = .today(date: nil)
-        case "event":   if let id = parts.last { pendingRoute = .event(id: id) }
-        case "metric":  if let id = parts.last { pendingRoute = .metric(identifier: id) }
-        case "place":   if let id = parts.last { pendingRoute = .place(id: id) }
-        case "anomaly": if let id = parts.last { pendingRoute = .anomaly(id: id) }
         case "search":  break   // SearchView picks up the query separately
         case "action":
             if parts.last == "startSleep" {
@@ -252,17 +278,123 @@ final class AppModel {
         }
     }
 
+    /// App Group defaults that belong to the signed-in user.
+    ///
+    /// `spark.env.name` is deliberately absent: it is a build/environment
+    /// override, not user data, and clearing it would silently move the next
+    /// sign-in back to production.
+    private static let userScopedDefaultsKeys = [
+        "spark.userId",
+        "spark.profile.name",
+        "spark.apnsToken",
+        "spark.apnsDeviceId",
+        "onboarding.completed",
+        "onboarding.lastStep",
+        "health.upload.enabled",
+        "spark.background.mode",
+        "spark.checkin.legacyCleared.v1",
+    ]
+
+    /// Set while a server-side revocation is owed.
+    ///
+    /// Holds only an opaque device id — never a credential — so it is safe to
+    /// persist across launches until the revocation succeeds.
+    static let pendingDeviceRevocationKey = "spark.pendingDeviceRevocation"
+
+    /// Ends the session and removes every trace of the departing user.
+    ///
+    /// One idempotent coordinator rather than a sequence spread across views:
+    /// sign-out previously revoked the device registration and cleared the
+    /// token pair and ETags, but left SwiftData, the App Group defaults, the
+    /// Core Spotlight index, delivered notifications and the APNs registration
+    /// intact — all of which the next account could see. `spark.profile.name`
+    /// was even re-read at init, so the previous user's display name came back.
+    ///
+    /// Local sign-out always completes. Remote calls are best-effort and, when
+    /// they fail, leave a non-secret marker so the revocation can be retried
+    /// rather than being lost.
     func signOut() async {
+        await revokeRemoteSession()
+        await purgeLocalState()
+
+        session = .loggedOut
+    }
+
+    /// Best-effort server-side teardown.
+    private func revokeRemoteSession() async {
+        // Order matters: the device row is revoked while the access token is
+        // still valid, and the session is revoked last.
         if let deviceId = UserDefaults.sparkAppGroup.string(forKey: "spark.apnsDeviceId") {
-            _ = try? await apiClient.request(DevicesEndpoint.revoke(id: deviceId))
-            UserDefaults.sparkAppGroup.removeObject(forKey: "spark.apnsDeviceId")
+            do {
+                _ = try await apiClient.request(DevicesEndpoint.revoke(id: deviceId))
+                UserDefaults.sparkAppGroup.removeObject(forKey: Self.pendingDeviceRevocationKey)
+            } catch {
+                // Offline sign-out used to discard the device id on the next
+                // line regardless, destroying the only identifier a retry
+                // needs. Keep it under a separate key so the purge below can
+                // still clear `spark.apnsDeviceId`.
+                UserDefaults.sparkAppGroup.set(deviceId, forKey: Self.pendingDeviceRevocationKey)
+            }
         }
+
+        _ = try? await apiClient.request(SessionEndpoint.logout())
+    }
+
+    /// Removes all locally held user state. Idempotent.
+    private func purgeLocalState() async {
         await authService.signOut()
         await etagCache.clearAll()
         profile = nil
-        UserDefaults.sparkAppGroup.removeObject(forKey: "spark.userId")
+        pendingRoute = nil
+
+        do {
+            try SparkDataStore.purgeAll(in: container)
+        } catch {
+            SentrySDK.capture(error: error)
+        }
+
+        for key in Self.userScopedDefaultsKeys {
+            UserDefaults.sparkAppGroup.removeObject(forKey: key)
+        }
+
+        // Recent searches live in standard defaults rather than the App Group.
+        UserDefaults.standard.removeObject(forKey: "spark.search.recents")
+
+        await SpotlightIndexer.purgeAll()
+        await endAllLiveActivities()
         await reverbDisconnect()
-        session = .loggedOut
+
+        clearDeliveredNotifications()
+        unregisterForRemoteNotifications()
+
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+
+    private func endAllLiveActivities() async {
+        await LiveActivityManager.shared.endAll()
+    }
+
+    /// Clears notifications already sitting in Notification Center.
+    ///
+    /// Delivered notifications survive sign-out and can carry the departing
+    /// user's content in their title and body.
+    private func clearDeliveredNotifications() {
+        #if canImport(UIKit)
+            let center = UNUserNotificationCenter.current()
+            center.removeAllDeliveredNotifications()
+            center.removeAllPendingNotificationRequests()
+            center.setBadgeCount(0)
+        #endif
+    }
+
+    /// Stops APNs delivery to this install.
+    ///
+    /// Without this the device keeps its APNs registration after sign-out, so
+    /// pushes intended for the previous user can still arrive.
+    private func unregisterForRemoteNotifications() {
+        #if canImport(UIKit)
+            UIApplication.shared.unregisterForRemoteNotifications()
+        #endif
     }
 }
 

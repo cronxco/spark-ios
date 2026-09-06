@@ -143,6 +143,13 @@ struct SparkSheetScaffold<Content: View>: View {
     }
 }
 
+/// Renders an unfiltered HTTP response body.
+///
+/// Debug-only. The body can contain notes, financial detail, precise
+/// locations and backend error text, so it must never reach a release build —
+/// it was previously reachable from a toolbar item on every detail screen,
+/// complete with a Copy JSON button.
+#if DEBUG
 struct SparkRawPayloadView: View {
     let text: String
     @State private var didCopy = false
@@ -173,6 +180,7 @@ struct SparkRawPayloadView: View {
         }
     }
 }
+#endif
 
 struct SparkOnboardingScaffold<Content: View, Actions: View>: View {
     let icon: String
@@ -430,12 +438,17 @@ struct SparkSubViewToolbarModifier: ViewModifier {
                             Label("Reprocess", systemImage: "wand.and.sparkles")
                         }
                         .disabled(reprocess == nil)
-                        Button {
-                            showRawSheet = true
-                        } label: {
-                            Label("Raw", systemImage: "curlybraces")
-                        }
-                        .disabled(rawPayload == nil)
+                        #if DEBUG
+                            // Raw transport payloads are a developer diagnostic,
+                            // not product UI. In a release build the whole
+                            // affordance is absent — see SparkRawPayloadView.
+                            Button {
+                                showRawSheet = true
+                            } label: {
+                                Label("Raw", systemImage: "curlybraces")
+                            }
+                            .disabled(rawPayload == nil)
+                        #endif
                     } label: {
                         Image(systemName: "ellipsis.circle")
                             .symbolRenderingMode(.monochrome)
@@ -447,11 +460,13 @@ struct SparkSubViewToolbarModifier: ViewModifier {
             .sheet(isPresented: $showShareSheet) {
                 SparkShareSheet(items: shareItems)
             }
-            .sheet(isPresented: $showRawSheet) {
-                SparkSheetScaffold(rawTitle) {
-                    SparkRawPayloadView(text: rawPayload ?? "{}")
+            #if DEBUG
+                .sheet(isPresented: $showRawSheet) {
+                    SparkSheetScaffold(rawTitle) {
+                        SparkRawPayloadView(text: rawPayload ?? "{}")
+                    }
                 }
-            }
+            #endif
             .sheet(isPresented: $showFeedbackSheet) {
                 if let feedbackContext {
                     SparkUserFeedbackSheet(
