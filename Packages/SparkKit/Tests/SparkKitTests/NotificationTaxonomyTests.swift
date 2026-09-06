@@ -49,9 +49,11 @@ struct NotificationCategoryTests {
     func everyCategoryHasCopy() {
         let names = NotificationPreferences.Category.allCases.map(\.displayName)
         let subtitles = NotificationPreferences.Category.allCases.map(\.subtitle)
+        let namesAreNonEmpty = names.allSatisfy { !$0.isEmpty }
+        let subtitlesAreNonEmpty = subtitles.allSatisfy { !$0.isEmpty }
 
-        #expect(!names.contains(where: \.isEmpty))
-        #expect(!subtitles.contains(where: \.isEmpty))
+        #expect(namesAreNonEmpty)
+        #expect(subtitlesAreNonEmpty)
         #expect(Set(names).count == names.count)
         #expect(Set(subtitles).count == subtitles.count)
     }
