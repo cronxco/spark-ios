@@ -409,7 +409,10 @@ let sparkIntelligenceTests: Target = .target(
 let sparkAppScheme: Scheme = .scheme(
     name: "SparkApp",
     shared: true,
-    buildAction: .buildAction(targets: ["SparkApp"]),
+    // SparkShare is built explicitly: it is not a dependency of the SparkApp
+    // target, so CI never compiled it — which is how three runtime-only
+    // Keychain defects in the share extension survived a green pipeline.
+    buildAction: .buildAction(targets: ["SparkApp", "SparkShare"]),
     testAction: .targets(
         ["SparkAppTests", "SparkIntelligenceTests"],
         configuration: .debug,

@@ -111,6 +111,47 @@ final class LiveActivityManager {
         dailyActivity = nil
     }
 
+    // MARK: - Sign-out
+
+    /// Ends every Live Activity Spark owns and cancels its token observers.
+    ///
+    /// Live Activities outlive the app process and render on the Lock Screen,
+    /// so one left running after sign-out shows the departing user's sleep or
+    /// activity data to whoever holds the device.
+    func endAll() async {
+        if let activity = sleepActivity {
+            await activity.end(
+                .init(state: activity.content.state, staleDate: nil),
+                dismissalPolicy: .immediate
+            )
+            cancelTokenTask(for: activity.id)
+            sleepActivity = nil
+        }
+
+        if let activity = dailyActivity {
+            await activity.end(
+                .init(state: activity.content.state, staleDate: nil),
+                dismissalPolicy: .immediate
+            )
+            cancelTokenTask(for: activity.id)
+            dailyActivity = nil
+        }
+
+        // Activities started by a previous launch are not held in memory, so
+        // sweep whatever ActivityKit still reports as running.
+        for activity in Activity<SleepActivityAttributes>.activities {
+            await activity.end(nil, dismissalPolicy: .immediate)
+        }
+        for activity in Activity<DailyActivityAttributes>.activities {
+            await activity.end(nil, dismissalPolicy: .immediate)
+        }
+
+        for task in tokenTasks.values {
+            task.cancel()
+        }
+        tokenTasks.removeAll()
+    }
+
     // MARK: - Push token observation
 
     private func observePushTokens<A: ActivityAttributes>(

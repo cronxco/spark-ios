@@ -11,6 +11,31 @@ public enum APIError: Error, Sendable {
     case noData
 }
 
+public extension APIError {
+    /// The server demanded an `If-Match` the request did not carry (428).
+    ///
+    /// Recover by reading the resource to obtain its current version, then
+    /// retrying with it.
+    var isPreconditionRequired: Bool {
+        if case .httpStatus(428, _, _) = self { return true }
+        return false
+    }
+
+    /// The `If-Match` sent no longer matches the server's version (412).
+    ///
+    /// Someone else changed the resource; re-read before retrying so the write
+    /// is made against what is actually there.
+    var isPreconditionFailed: Bool {
+        if case .httpStatus(412, _, _) = self { return true }
+        return false
+    }
+
+    /// Either conditional-write failure.
+    var isPreconditionFailure: Bool {
+        isPreconditionRequired || isPreconditionFailed
+    }
+}
+
 extension APIError: LocalizedError {
     public var errorDescription: String? {
         switch self {
@@ -22,6 +47,10 @@ extension APIError: LocalizedError {
             return "Your session has expired. Please sign in again."
         case .notModified:
             return "The requested data has not changed."
+        case .httpStatus(428, _, _):
+            return "Spark needs to refresh this before saving. Please try again."
+        case .httpStatus(412, _, _):
+            return "This changed somewhere else. Refresh and try again."
         case .httpStatus(let status, let data, let url):
             return Self.httpStatusDescription(status: status, data: data, url: url)
         case .decoding(let error):
@@ -192,8 +221,17 @@ public actor APIClient {
         if let accessToken {
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         }
+        // If-None-Match is a cache revalidation header and belongs on reads
+        // only. Attaching it to a PATCH/POST/DELETE asks the server to treat a
+        // mutation as conditional on a cache entry, which is not what the
+        // conditional-write contract means.
         if endpoint.method == .get, let etag = await etagCache.etag(for: url) {
             request.setValue(etag, forHTTPHeaderField: "If-None-Match")
+        }
+
+        // Endpoint-supplied headers last so an explicit If-Match wins.
+        for (field, value) in endpoint.headers {
+            request.setValue(value, forHTTPHeaderField: field)
         }
 
         let (data, response): (Data, URLResponse)
@@ -321,7 +359,7 @@ public actor APIClient {
                 metrics: metricsCollector.snapshot,
                 outcome: .success
             )
-            return RawAPIResponse(decoded: empty, data: data, headers: http.stringHeaderFields)
+            return RawAPIResponse(decoded: empty, data: data, etag: http.value(forHTTPHeaderField: "ETag"))
         }
 
         do {
@@ -341,7 +379,7 @@ public actor APIClient {
                 outcome: .success,
                 decodeDurationMillis: Date().timeIntervalSince(decodeStartedAt) * 1_000
             )
-            return RawAPIResponse(decoded: decoded, data: data, headers: http.stringHeaderFields)
+            return RawAPIResponse(decoded: decoded, data: data, etag: http.value(forHTTPHeaderField: "ETag"))
         } catch {
             let safeBody = APITelemetryRedactor.body(data, contentType: http.value(forHTTPHeaderField: "Content-Type"))
             let bodyString = safeBody.flatMap { String(data: $0, encoding: .utf8) } ?? "<redacted>"
@@ -557,9 +595,19 @@ public struct EmptyResponse: Codable, Sendable {
 public struct RawAPIResponse<Response: Sendable>: Sendable {
     public let decoded: Response
     public let data: Data
-    public let headers: [String: String]
 
-    public var etag: String? { headers.first { $0.key.caseInsensitiveCompare("ETag") == .orderedSame }?.value }
+    /// The response `ETag`, when the server sent one.
+    ///
+    /// Needed to satisfy `If-Match` on the conditional writes the backend
+    /// guards — notably `PATCH /settings/notifications`, which compares against
+    /// the strong user version returned by its own read.
+    public let etag: String?
+
+    public init(decoded: Response, data: Data, etag: String? = nil) {
+        self.decoded = decoded
+        self.data = data
+        self.etag = etag
+    }
 
     public var utf8Body: String {
         String(data: data, encoding: .utf8) ?? "<binary response: \(data.count) bytes>"

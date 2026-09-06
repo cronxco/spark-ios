@@ -11,17 +11,24 @@ public enum NotificationsEndpoint {
     }
 
     /// POST /notifications/{id}/read
+    ///
+    /// Idempotent, so the server requires no precondition.
     public static func markRead(id: String) -> Endpoint<EmptyResponse> {
         Endpoint(method: .post, path: "/notifications/\(id)/read")
     }
 
     /// POST /notifications/read-all
+    ///
+    /// Idempotent, so the server requires no precondition.
     public static func markAllRead() -> Endpoint<EmptyResponse> {
         Endpoint(method: .post, path: "/notifications/read-all")
     }
 
     /// DELETE /notifications/{id}
-    public static func delete(id: String) -> Endpoint<EmptyResponse> {
-        Endpoint(method: .delete, path: "/notifications/\(id)")
+    ///
+    /// Destructive, so the server requires `If-Match` and answers `428`
+    /// without one. Pass the `version` from the item in `GET /notifications`.
+    public static func delete(id: String, version: String?) -> Endpoint<EmptyResponse> {
+        Endpoint(method: .delete, path: "/notifications/\(id)").withIfMatch(version)
     }
 }

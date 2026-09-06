@@ -140,13 +140,67 @@ final class SparkAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
-        if let urlString = userInfo["spark.url"] as? String,
-           let url = URL(string: urlString) {
-            Task { @MainActor in
-                UIApplication.shared.open(url)
-            }
+        let actionIdentifier = response.actionIdentifier
+
+        // The server nests its envelope under a single `spark` dictionary
+        // (ApnsChannel::applySparkEnvelope). This previously read a flat
+        // `userInfo["spark.url"]`, a key the server has never emitted, so
+        // tapping any notification did nothing.
+        //
+        // Values are lifted out here rather than passed along as a dictionary:
+        // [String: Any] is not Sendable and cannot cross into the MainActor.
+        let envelope = userInfo["spark"] as? [String: Any]
+        let deepLink = envelope?["deep_link"] as? String
+        let entityType = envelope?["entity_type"] as? String
+        let entityId = envelope?["entity_id"] as? String
+
+        Task { @MainActor in
+            Self.handleNotificationAction(
+                actionIdentifier: actionIdentifier,
+                deepLink: deepLink,
+                entityType: entityType,
+                entityId: entityId
+            )
         }
+
         completionHandler()
+    }
+
+    /// Routes a notification tap or action button.
+    ///
+    /// `response.actionIdentifier` was never inspected, so every action button
+    /// was inert even once its category bound. Navigation goes through
+    /// `AppModel.pendingRoute` rather than `UIApplication.open`, which would
+    /// bounce out to universal-link handling instead of routing in-process.
+    @MainActor
+    static func handleNotificationAction(
+        actionIdentifier: String,
+        deepLink: String?,
+        entityType: String?,
+        entityId: String?
+    ) {
+        // An explicit dismiss is a decision, not a request to navigate.
+        if actionIdentifier == UNNotificationDismissActionIdentifier {
+            return
+        }
+
+        // REAUTH sends the user to the integration regardless of the
+        // notification's own deep link, since fixing auth is the point.
+        if actionIdentifier == "REAUTH", entityType == "integration", let entityId {
+            AppModel.shared.pendingRoute = .integration(service: entityId)
+            return
+        }
+
+        if let deepLink, let route = AppModel.route(from: deepLink) {
+            AppModel.shared.pendingRoute = route
+            return
+        }
+
+        // No deep link: fall back to the entity reference the envelope carries.
+        if let entityType, let entityId,
+           let route = AppModel.route(from: "\(entityType):\(entityId)") {
+            AppModel.shared.pendingRoute = route
+        }
     }
 
     // MARK: - Background tasks
@@ -172,12 +226,14 @@ final class SparkAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
 
     // MARK: - Notification categories
 
+    /// Registers the categories the server actually sends.
+    ///
+    /// These identifiers must match `NotificationCatalogue::apnsCategoryIdentifiers()`
+    /// on the backend exactly — matching is case-sensitive, and a category the
+    /// client has not registered leaves every action button inert. The previous
+    /// five (ANOMALY, DIGEST, NEW_BOOKMARK, CALENDAR_EVENT and INTEGRATION_FAILED)
+    /// were aspirational: only INTEGRATION_FAILED had a server-side producer.
     private func registerNotificationCategories() {
-        let acknowledge = UNNotificationAction(
-            identifier: "ACKNOWLEDGE",
-            title: "Acknowledge",
-            options: .destructive
-        )
         let view = UNNotificationAction(
             identifier: "VIEW",
             title: "View",
@@ -188,40 +244,28 @@ final class SparkAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
             title: "Reconnect",
             options: .foreground
         )
-        let snooze = UNNotificationAction(
-            identifier: "SNOOZE",
-            title: "Snooze",
-            options: []
-        )
 
         UNUserNotificationCenter.current().setNotificationCategories([
+            // Needs the user to do something: re-authorize an integration, or
+            // refresh a saved website login that is about to expire.
             UNNotificationCategory(
-                identifier: "ANOMALY",
-                actions: [acknowledge, view],
+                identifier: NotificationPreferences.PushCategory.integrationAttention.rawValue,
+                actions: [reauth, view],
                 intentIdentifiers: [],
                 options: .customDismissAction
             ),
+            // Informational outcomes — sync finished, sync failed, a tracked
+            // page changed, a historical import completed or failed.
             UNNotificationCategory(
-                identifier: "DIGEST",
+                identifier: NotificationPreferences.PushCategory.integrationStatus.rawValue,
                 actions: [view],
                 intentIdentifiers: [],
                 options: []
             ),
+            // Account-level: data export ready, maintenance, test pushes.
             UNNotificationCategory(
-                identifier: "INTEGRATION_FAILED",
-                actions: [reauth],
-                intentIdentifiers: [],
-                options: []
-            ),
-            UNNotificationCategory(
-                identifier: "NEW_BOOKMARK",
+                identifier: NotificationPreferences.PushCategory.system.rawValue,
                 actions: [view],
-                intentIdentifiers: [],
-                options: []
-            ),
-            UNNotificationCategory(
-                identifier: "CALENDAR_EVENT",
-                actions: [view, snooze],
                 intentIdentifiers: [],
                 options: []
             ),

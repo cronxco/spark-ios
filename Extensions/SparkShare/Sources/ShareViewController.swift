@@ -45,8 +45,13 @@ final class ShareViewController: UIViewController {
                 }
             } else {
                 _ = provider.loadFileRepresentation(forTypeIdentifier: UTType.image.identifier) { [weak self] fileURL, _ in
+                    // The provider owns `fileURL` and may delete it as soon as
+                    // this completion returns. Copy it while the lease is
+                    // still valid, then only send our durable URL across the
+                    // actor boundary.
+                    let copiedURL = fileURL.flatMap { Self.copySharedImage(from: $0) }
                     Task { @MainActor [weak self] in
-                        if let fileURL { self?.shareImage(at: fileURL) }
+                        if let copiedURL { self?.shareImage(at: copiedURL) }
                         else { self?.complete() }
                     }
                 }
@@ -89,9 +94,16 @@ final class ShareViewController: UIViewController {
     // MARK: - Image sharing
 
     private func shareImage(at fileURL: URL) {
-        scheduleBackgroundImageUpload(fileURL: fileURL)
-        showToast("Photo saved to Spark.")
-        complete()
+        Task {
+            let scheduled = await scheduleBackgroundImageUpload(fileURL: fileURL)
+            if !scheduled {
+                try? FileManager.default.removeItem(at: fileURL)
+            }
+            await MainActor.run {
+                self.showToast(scheduled ? "Photo upload queued." : "Couldn't save photo.")
+            }
+            complete()
+        }
     }
 
     private func shareImageData(_ data: Data) {
@@ -101,15 +113,57 @@ final class ShareViewController: UIViewController {
             ?? FileManager.default.temporaryDirectory
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let dest = dir.appendingPathComponent("\(UUID().uuidString).jpg")
-        if (try? data.write(to: dest)) != nil {
-            scheduleBackgroundImageUpload(fileURL: dest)
+
+        guard (try? data.write(to: dest)) != nil else {
+            showToast("Couldn't save photo.")
+            complete()
+            return
         }
-        showToast("Photo saved to Spark.")
-        complete()
+
+        Task {
+            let scheduled = await scheduleBackgroundImageUpload(fileURL: dest)
+            if !scheduled {
+                // Nothing will collect an orphaned file, so don't leave it in
+                // the shared container pretending to be queued work.
+                try? FileManager.default.removeItem(at: dest)
+            }
+            await MainActor.run {
+                self.showToast(scheduled ? "Photo upload queued." : "Couldn't save photo.")
+            }
+            complete()
+        }
     }
 
-    private func scheduleBackgroundImageUpload(fileURL: URL) {
-        guard let token = syncAccessToken() else { return }
+    /// Copies a provider-owned image into storage that survives its callback.
+    private static func copySharedImage(from source: URL) -> URL? {
+        let directory = FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: "group.co.cronx.sparkapp")?
+            .appendingPathComponent("ShareUploads", isDirectory: true)
+            ?? FileManager.default.temporaryDirectory
+
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let pathExtension = source.pathExtension.isEmpty ? "jpg" : source.pathExtension
+            let destination = directory
+                .appendingPathComponent(UUID().uuidString)
+                .appendingPathExtension(pathExtension)
+            try FileManager.default.copyItem(at: source, to: destination)
+            return destination
+        } catch {
+            return nil
+        }
+    }
+
+    /// Hands the file to a background upload task.
+    ///
+    /// Returns whether the upload was actually scheduled. The caller must not
+    /// claim success before this resolves: the previous implementation showed
+    /// "Photo saved to Spark." and dismissed the sheet before this ran, and
+    /// because the token read always failed it returned early every time — so
+    /// the user was told the photo was saved while nothing had been queued.
+    @discardableResult
+    private func scheduleBackgroundImageUpload(fileURL: URL) async -> Bool {
+        guard let token = await tokenStore.accessToken() else { return false }
         let uploadURL = APIEnvironment.current().baseURL.appendingPathComponent("check-ins/media")
         var request = URLRequest(url: uploadURL)
         request.httpMethod = "POST"
@@ -118,59 +172,71 @@ final class ShareViewController: UIViewController {
         let config = URLSessionConfiguration.background(withIdentifier: "co.cronx.sparkapp.share.upload")
         config.sharedContainerIdentifier = "group.co.cronx.sparkapp"
         let fileSize = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-        Task {
-            await APITelemetry.shared.capture(
-                APITelemetryEvent(
-                    operation: "http.client.background_upload.schedule",
-                    method: request.httpMethod ?? "POST",
-                    url: APITelemetryRedactor.url(uploadURL),
-                    endpointPath: "/check-ins/media",
-                    requiresAuth: true,
-                    requestHeaders: APITelemetryRedactor.headers(request.allHTTPHeaderFields ?? [:]),
-                    responseSizeBytes: fileSize,
-                    durationMillis: 0,
-                    outcome: .success
-                )
-            )
-        }
+
         URLSession(configuration: config).uploadTask(with: request, fromFile: fileURL).resume()
+
+        await APITelemetry.shared.capture(
+            APITelemetryEvent(
+                operation: "http.client.background_upload.schedule",
+                method: request.httpMethod ?? "POST",
+                url: APITelemetryRedactor.url(uploadURL),
+                endpointPath: "/check-ins/media",
+                requiresAuth: true,
+                requestHeaders: APITelemetryRedactor.headers(request.allHTTPHeaderFields ?? [:]),
+                responseSizeBytes: fileSize,
+                durationMillis: 0,
+                outcome: .success
+            )
+        )
+
+        return true
     }
 
     // MARK: - Text sharing (note)
 
+    /// Shared plain text.
+    ///
+    /// Text that is really a URL is captured as a bookmark. Anything else has
+    /// no capture endpoint on the mobile surface — this used to POST to
+    /// `/notes`, which does not exist and returned 404 every time — so it is
+    /// declined honestly rather than silently dropped.
     private func shareText(_ text: String) {
-        Task {
-            do {
-                let client = APIClient(tokenStore: tokenStore, etagCache: ETagCache())
-                let body = try? JSONEncoder().encode(["content": text, "type": "note"])
-                let endpoint = Endpoint<EmptyShareResponse>(
-                    method: .post, path: "/notes",
-                    body: body, contentType: "application/json"
-                )
-                _ = try await client.request(endpoint)
-                await MainActor.run { self.showToast("Note saved to Spark.") }
-            } catch {
-                await MainActor.run { self.showToast("Couldn't save note.") }
-            }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let url = Self.firstURL(in: trimmed) else {
+            showToast("Sharing text isn't supported yet.")
             complete()
+            return
         }
+
+        shareURL(url)
+    }
+
+    /// The URL a shared string represents, if it is one.
+    ///
+    /// Share sheets routinely hand over a URL as plain text, so this recovers
+    /// the common case rather than declining it.
+    private static func firstURL(in text: String) -> URL? {
+        guard !text.isEmpty,
+              let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+        else { return nil }
+
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        let matches = detector.matches(in: text, range: range)
+
+        // Only treat it as a link when the whole string is one, so a sentence
+        // that happens to mention a URL is not silently turned into a bookmark.
+        guard matches.count == 1,
+              let match = matches.first,
+              match.range == range,
+              let url = match.url,
+              url.scheme?.hasPrefix("http") == true
+        else { return nil }
+
+        return url
     }
 
     // MARK: - Helpers
-
-    private func syncAccessToken() -> String? {
-        let query: [CFString: Any] = [
-            kSecClass: kSecClassGenericPassword,
-            kSecAttrService: "co.cronx.sparkapp.accessToken",
-            kSecAttrAccessGroup: "$(AppIdentifierPrefix)co.cronx.sparkapp",
-            kSecReturnData: true,
-            kSecMatchLimit: kSecMatchLimitOne,
-        ]
-        var result: AnyObject?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
-              let data = result as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
-    }
 
     private func showToast(_ message: String) {
         let label = UILabel()

@@ -2,6 +2,13 @@ import SparkUI
 import SwiftUI
 import UIKit
 
+/// Renders unfiltered HTTP response bodies inline in the product UI.
+///
+/// Debug-only. These are whole transport payloads — a day's events, money
+/// accounts, health samples, Flint content — and were previously rendered on
+/// Today and three Explore screens in release builds. `RawFeedJSONEntry`
+/// stays outside the guard because view models still reference the type.
+#if DEBUG
 struct RawFeedJSONView: View {
     let title: String
     let entries: [RawFeedJSONEntry]
@@ -105,6 +112,8 @@ struct RawFeedJSONView: View {
         }
     }
 }
+
+#endif
 
 struct RawFeedJSONEntry: Identifiable, Sendable {
     let title: String

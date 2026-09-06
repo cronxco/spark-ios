@@ -31,6 +31,10 @@ final class NotificationsInboxViewModel {
     var hasMore: Bool { nextCursor != nil }
 
     func refresh() async {
+        _ = await refreshReturningSuccess()
+    }
+
+    private func refreshReturningSuccess() async -> Bool {
         state = .loading
         do {
             let page = try await apiClient.request(NotificationsEndpoint.list())
@@ -38,12 +42,15 @@ final class NotificationsInboxViewModel {
             nextCursor = page.nextCursor
             await persist(page.data, replaceAll: true)
             state = .loaded
+            return true
         } catch APIError.notModified {
             state = .loaded
+            return true
         } catch {
             SparkObservability.captureHandled(error)
             logger.error("Notifications fetch failed: \(String(describing: error))")
             state = .error("Couldn't load notifications.")
+            return false
         }
     }
 
@@ -72,7 +79,8 @@ final class NotificationsInboxViewModel {
                 domain: items[index].domain,
                 isRead: true,
                 receivedAt: items[index].receivedAt,
-                entity: items[index].entity
+                entity: items[index].entity,
+                version: items[index].version
             )
         }
         do {
@@ -93,7 +101,8 @@ final class NotificationsInboxViewModel {
                 domain: items[index].domain,
                 isRead: true,
                 receivedAt: items[index].receivedAt,
-                entity: items[index].entity
+                entity: items[index].entity,
+                version: items[index].version
             )
         }
         do {
@@ -105,12 +114,32 @@ final class NotificationsInboxViewModel {
         }
     }
 
+    /// Deletes one notification.
+    ///
+    /// Deletion is the one inbox action the backend still guards with a
+    /// precondition, satisfied by the `version` the list payload now carries.
+    /// A stale version means someone else changed the row, so the optimistic
+    /// removal is rolled back by re-reading rather than left as a lie.
     func delete(_ id: String) async {
+        let removed = items.first { $0.id == id }
         items.removeAll { $0.id == id }
+
         do {
-            _ = try await apiClient.request(NotificationsEndpoint.delete(id: id))
+            _ = try await apiClient.request(
+                NotificationsEndpoint.delete(id: id, version: removed?.version)
+            )
             await removeCached(id: id)
+        } catch let error as APIError where error.isPreconditionFailure {
+            logger.notice("delete precondition failed for \(id); refreshing inbox")
+            if !(await refreshReturningSuccess()), let removed {
+                items.append(removed)
+                items.sort { $0.receivedAt > $1.receivedAt }
+            }
         } catch {
+            if let removed {
+                items.append(removed)
+                items.sort { $0.receivedAt > $1.receivedAt }
+            }
             SparkObservability.captureHandled(error)
             logger.error("delete failed: \(String(describing: error))")
         }

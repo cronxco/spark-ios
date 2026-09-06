@@ -55,9 +55,11 @@ struct TodayView: View {
                         loadingOrEmptyState
                     }
 
-                    if let vm = viewModel, !vm.rawAPIEntries.isEmpty {
-                        RawFeedJSONView(title: "Raw API response", entries: vm.rawAPIEntries)
-                    }
+                    #if DEBUG
+                        if let vm = viewModel, !vm.rawAPIEntries.isEmpty {
+                            RawFeedJSONView(title: "Raw API response", entries: vm.rawAPIEntries)
+                        }
+                    #endif
                 }
                 .padding(.horizontal, SparkSpacing.lg)
                 .padding(.top, SparkSpacing.xl + 72)
