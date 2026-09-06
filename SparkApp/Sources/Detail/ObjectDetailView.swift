@@ -4,12 +4,13 @@ import SwiftUI
 
 @MainActor
 @Observable
-final class ObjectDetailViewModel {
+final class ObjectDetailViewModel: ETagDetailMutationHandling {
     let objectId: String
-    private(set) var state: DetailLoadState<ObjectDetail> = .loading
-    private(set) var rawPayload: String?
+    var state: DetailLoadState<ObjectDetail> = .loading
+    var rawPayload: String?
+    var etag: String?
 
-    private let apiClient: APIClient
+    let apiClient: APIClient
 
     init(objectId: String, apiClient: APIClient) {
         self.objectId = objectId
@@ -21,6 +22,7 @@ final class ObjectDetailViewModel {
         do {
             let response = try await apiClient.requestWithRawResponse(ObjectsEndpoint.detail(id: objectId))
             rawPayload = response.utf8Body
+            etag = response.etag
             state = .loaded(response.decoded)
         } catch APIError.notModified {
             return
@@ -30,12 +32,67 @@ final class ObjectDetailViewModel {
             state = .error(msg)
         }
     }
+
+    func attachTag(_ request: TagMutationRequest) async throws {
+        guard let etag else { throw TagMutationError.missingETag }
+        let response = try await apiClient.requestWithRawResponse(
+            TagsEndpoint.attach(kind: .objects, id: objectId, request: request, etag: etag, response: ObjectDetail.self)
+        )
+        rawPayload = response.utf8Body
+        self.etag = response.etag ?? etag
+        state = .loaded(response.decoded)
+    }
+
+    func detachTag(_ tag: EventTag) async throws {
+        guard let tagID = tag.tagID else { throw TagMutationError.missingTagID }
+        guard let etag else { throw TagMutationError.missingETag }
+        let response = try await apiClient.requestWithRawResponse(
+            TagsEndpoint.detach(kind: .objects, id: objectId, tagID: tagID, etag: etag, response: ObjectDetail.self)
+        )
+        rawPayload = response.utf8Body
+        self.etag = response.etag ?? etag
+        state = .loaded(response.decoded)
+    }
+
+    func createRelationship(_ request: RelationshipCreateRequest) async throws -> EntityRelationship {
+        guard let etag else { throw TagMutationError.missingETag }
+        let response = try await apiClient.requestWithRawResponse(
+            try EntityMutationsEndpoint.createRelationship(kind: .objects, id: objectId, request: request, etag: etag)
+        )
+        self.etag = response.etag ?? etag
+        return response.decoded
+    }
+
+    func deleteRelationship(_ relationshipID: String) async throws {
+        guard let etag else { throw TagMutationError.missingETag }
+        let response = try await apiClient.requestWithRawResponse(
+            EntityMutationsEndpoint.deleteRelationship(id: relationshipID, etag: etag)
+        )
+        self.etag = response.etag ?? etag
+    }
+
+    func update(_ attributes: [String: AnyCodable]) async throws {
+        guard let etag else { throw TagMutationError.missingETag }
+        try await applyMutation(
+            try EntityMutationsEndpoint.update(kind: .objects, id: objectId, attributes: attributes, etag: etag, response: ObjectDetail.self)
+        )
+    }
+
+    func geocode(address: String) async throws { try await applyMutation(try EntityMutationsEndpoint.geocode(kind: .objects, id: objectId, address: address, etag: currentETag(), response: ObjectDetail.self)) }
+    func setLocation(_ location: LocationRequest) async throws { try await applyMutation(try EntityMutationsEndpoint.setLocation(kind: .objects, id: objectId, location: location, etag: currentETag(), response: ObjectDetail.self)) }
+    func clearLocation() async throws { try await applyMutation(EntityMutationsEndpoint.clearLocation(kind: .objects, id: objectId, etag: currentETag(), response: ObjectDetail.self)) }
+
 }
 
 struct ObjectDetailView: View {
     let objectId: String
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: ObjectDetailViewModel?
+    @State private var showTagPicker = false
+    @State private var tagPendingRemoval: EventTag?
+    @State private var tagMutationError: String?
+    @State private var showEditor = false
+    @State private var showLocationEditor = false
 
     var body: some View {
         ScrollView {
@@ -69,11 +126,35 @@ struct ObjectDetailView: View {
             feedbackContext: objectFeedbackContext,
             refresh: { await viewModel?.load() }
         )
+        .toolbar { ToolbarItemGroup(placement: .topBarTrailing) { Button("Edit") { showEditor = true }.disabled(!isLoaded); Button { showLocationEditor = true } label: { Image(systemName: "mappin.and.ellipse") }.accessibilityLabel("Edit location").disabled(!isLoaded) } }
         .task(id: objectId) {
             if viewModel == nil {
                 viewModel = ObjectDetailViewModel(objectId: objectId, apiClient: appModel.apiClient)
             }
             await viewModel?.load()
+        }
+        .sheet(isPresented: $showTagPicker) {
+            TagPickerSheet { request in
+                try await viewModel?.attachTag(request)
+            }
+        }
+        .sheet(isPresented: $showEditor) { if case .loaded(let detail) = viewModel?.state { EntityEditorSheet(title: "Object", initial: ["title": detail.object.title, "type": detail.object.type, "concept": detail.object.concept, "url": detail.object.url ?? ""]) { try await viewModel?.update($0) } } }
+        .sheet(isPresented: $showLocationEditor) { LocationEditorSheet(hasLocation: { if case .loaded(let detail) = viewModel?.state { return detail.location != nil }; return false }(), geocode: { try await viewModel?.geocode(address: $0) }, coordinates: { try await viewModel?.setLocation($0) }, clear: { try await viewModel?.clearLocation() }) }
+        .confirmationDialog(
+            "Remove tag?",
+            isPresented: Binding(get: { tagPendingRemoval != nil }, set: { if !$0 { tagPendingRemoval = nil } })
+        ) {
+            Button("Remove tag", role: .destructive) {
+                guard let tag = tagPendingRemoval else { return }
+                Task { await detach(tag) }
+            }
+        } message: {
+            Text("This removes the tag from this object.")
+        }
+        .alert("Couldn't update tags", isPresented: Binding(get: { tagMutationError != nil }, set: { if !$0 { tagMutationError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(tagMutationError ?? "Please try again.")
         }
     }
 
@@ -85,6 +166,11 @@ struct ObjectDetailView: View {
             return [url]
         }
         return ["Spark Object: \(detail.object.title)"]
+    }
+
+    private var isLoaded: Bool {
+        if case .loaded = viewModel?.state { return true }
+        return false
     }
 
     private var objectRawPayload: String? {
@@ -113,12 +199,21 @@ struct ObjectDetailView: View {
             SparkDetailInsightCard(label: "Insight", text: summary)
         }
 
-        if !detail.tags.isEmpty {
-            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                SectionLabel("Tags")
-                TagChipRow(detail.tags)
+        tagSection(for: detail)
+
+        RelationshipsSection(
+            kind: .objects,
+            entityID: detail.id,
+            apiClient: appModel.apiClient,
+            create: { request in
+                guard let viewModel else { throw TagMutationError.missingETag }
+                return try await viewModel.createRelationship(request)
+            },
+            delete: { relationshipID in
+                guard let viewModel else { throw TagMutationError.missingETag }
+                try await viewModel.deleteRelationship(relationshipID)
             }
-        }
+        )
 
         if !detail.relatedObjects.isEmpty {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
@@ -142,6 +237,37 @@ struct ObjectDetailView: View {
                 }
             }
         }
+    }
+
+    private func tagSection(for detail: ObjectDetail) -> some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+            SectionLabel("Tags")
+            FlowLayout(spacing: SparkSpacing.xs + 2) {
+                ForEach(detail.tags) { tag in
+                    NavigationLink(value: DetailRoute.tag(id: tag.tagID, name: tag.name, type: tag.type)) {
+                        TagChip(tag)
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        Button(role: .destructive) { tagPendingRemoval = tag } label: {
+                            Label("Remove tag", systemImage: "trash")
+                        }
+                    }
+                }
+                Button { showTagPicker = true } label: { TagChip("+", isGhost: true) }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Add tag")
+            }
+        }
+    }
+
+    private func detach(_ tag: EventTag) async {
+        do {
+            try await viewModel?.detachTag(tag)
+        } catch {
+            tagMutationError = (error as? LocalizedError)?.errorDescription ?? "Please try again."
+        }
+        tagPendingRemoval = nil
     }
 
     private func heroSection(for detail: ObjectDetail) -> some View {

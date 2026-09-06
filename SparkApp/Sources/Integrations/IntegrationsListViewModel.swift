@@ -13,6 +13,8 @@ final class IntegrationsListViewModel {
     }
 
     private(set) var state: LoadState = .loading
+    private(set) var syncingService: String?
+    private(set) var syncMessage: String?
 
     private let apiClient: APIClient
     private let logger = Logger(subsystem: "co.cronx.sparkapp", category: "Integrations")
@@ -22,11 +24,13 @@ final class IntegrationsListViewModel {
     }
 
     func load() async {
+        let previousState = state
         state = .loading
         do {
             let response = try await apiClient.request(IntegrationsEndpoint.list())
             state = .loaded(response.data)
         } catch APIError.notModified {
+            state = previousState
             return
         } catch {
             SparkObservability.captureHandled(error)
@@ -35,6 +39,21 @@ final class IntegrationsListViewModel {
             state = .error(msg)
         }
     }
+
+    func syncAll(service: String) async {
+        syncingService = service
+        defer { syncingService = nil }
+        do {
+            let result = try await apiClient.request(IntegrationsEndpoint.syncService(service))
+            syncMessage = "\(result.totalJobsDispatched) \(result.totalJobsDispatched == 1 ? "job" : "jobs") dispatched for \(result.service)."
+            await load()
+        } catch {
+            let detail = (error as? LocalizedError)?.errorDescription ?? "Couldn't start the sync."
+            syncMessage = detail
+        }
+    }
+
+    func clearSyncMessage() { syncMessage = nil }
 
     /// Group rows by domain bucket inferred from service slug. Lets the
     /// list view render `Form` sections per domain.

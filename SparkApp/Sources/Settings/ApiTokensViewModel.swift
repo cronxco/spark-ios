@@ -11,6 +11,7 @@ final class ApiTokensViewModel {
     var createdToken: CreatedApiToken?
     var isCreating: Bool = false
     var createError: String?
+    var revokeError: String?
 
     private let apiClient: APIClient
 
@@ -19,11 +20,13 @@ final class ApiTokensViewModel {
     }
 
     func load() async {
+        let previousState = state
         state = .loading
         do {
             let tokens = try await apiClient.request(ApiTokensEndpoint.list())
             state = .loaded(tokens)
         } catch APIError.notModified {
+            state = previousState
             return
         } catch {
             SparkObservability.captureHandled(error)
@@ -48,6 +51,19 @@ final class ApiTokensViewModel {
         } catch {
             SparkObservability.captureHandled(error)
             createError = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+        }
+    }
+
+    func revoke(_ token: ApiToken) async -> Bool {
+        revokeError = nil
+        do {
+            _ = try await apiClient.request(ApiTokensEndpoint.revoke(id: token.id))
+            await load()
+            return true
+        } catch {
+            SparkObservability.captureHandled(error)
+            revokeError = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+            return false
         }
     }
 }

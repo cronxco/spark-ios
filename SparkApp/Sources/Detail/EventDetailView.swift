@@ -8,6 +8,11 @@ struct EventDetailView: View {
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: EventDetailViewModel?
     @State private var showNoteEditor = false
+    @State private var showTagPicker = false
+    @State private var tagPendingRemoval: EventTag?
+    @State private var tagMutationError: String?
+    @State private var showEditor = false
+    @State private var showLocationEditor = false
 
     private func aggregatedReferences(for detail: EventDetail) -> [EntityReference] {
         var seen = Set<String>()
@@ -61,11 +66,35 @@ struct EventDetailView: View {
             feedbackContext: eventFeedbackContext,
             refresh: { await viewModel?.retry() }
         )
+        .toolbar { ToolbarItemGroup(placement: .topBarTrailing) { Button("Edit") { showEditor = true }.disabled(!isLoaded); Button { showLocationEditor = true } label: { Image(systemName: "mappin.and.ellipse") }.accessibilityLabel("Edit location").disabled(!isLoaded) } }
         .task(id: eventId) {
             if viewModel == nil {
                 viewModel = EventDetailViewModel(eventId: eventId, apiClient: appModel.apiClient)
             }
             await viewModel?.load()
+        }
+        .sheet(isPresented: $showTagPicker) {
+            TagPickerSheet { request in
+                try await viewModel?.attachTag(request)
+            }
+        }
+        .sheet(isPresented: $showEditor) { if case .loaded(let detail) = viewModel?.state { EntityEditorSheet(title: "Event", initial: ["action": detail.event.action, "value": detail.event.value ?? "", "value_multiplier": "", "value_unit": detail.event.unit ?? "", "time": detail.event.time?.ISO8601Format() ?? ""]) { try await viewModel?.update($0) } } }
+        .sheet(isPresented: $showLocationEditor) { LocationEditorSheet(hasLocation: { if case .loaded(let detail) = viewModel?.state { return detail.location != nil }; return false }(), geocode: { try await viewModel?.geocode(address: $0) }, coordinates: { try await viewModel?.setLocation($0) }, clear: { try await viewModel?.clearLocation() }) }
+        .confirmationDialog(
+            "Remove tag?",
+            isPresented: Binding(get: { tagPendingRemoval != nil }, set: { if !$0 { tagPendingRemoval = nil } })
+        ) {
+            Button("Remove tag", role: .destructive) {
+                guard let tag = tagPendingRemoval else { return }
+                Task { await detach(tag) }
+            }
+        } message: {
+            Text("This removes the tag from this event.")
+        }
+        .alert("Couldn't update tags", isPresented: Binding(get: { tagMutationError != nil }, set: { if !$0 { tagMutationError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(tagMutationError ?? "Please try again.")
         }
     }
 
@@ -77,6 +106,11 @@ struct EventDetailView: View {
                 ?? "\(detail.event.action.replacingOccurrences(of: "_", with: " ").capitalized)"
         }
         return "Event"
+    }
+
+    private var isLoaded: Bool {
+        if case .loaded = viewModel?.state { return true }
+        return false
     }
 
     private var onscreenSubtitle: String? {
@@ -94,27 +128,7 @@ struct EventDetailView: View {
             aiCalloutCard(summary)
         }
 
-        if !detail.tags.isEmpty {
-            FlowLayout(spacing: SparkSpacing.xs + 2) {
-                ForEach(detail.tags) { tag in
-                    let route = DetailRoute.tag(name: tag.name, type: tag.type)
-                    NavigationLink(value: route) {
-                        TagChip(tag)
-                    }
-                    .buttonStyle(.plain)
-                    .contextMenu {
-                        Button {
-                            appModel.pendingRoute = .tag(name: tag.name, type: tag.type)
-                        } label: {
-                            Label("Open Tag", systemImage: "tag")
-                        }
-                    } preview: {
-                        TagPreviewCard(tag: tag)
-                            .environment(appModel)
-                    }
-                }
-            }
-        }
+        tagSection(for: detail)
 
         metricBaselineStatusRow()
 
@@ -123,6 +137,20 @@ struct EventDetailView: View {
         }
 
         linkedObjectsSection(for: detail)
+
+        RelationshipsSection(
+            kind: .events,
+            entityID: detail.id,
+            apiClient: appModel.apiClient,
+            create: { request in
+                guard let viewModel else { throw TagMutationError.missingETag }
+                return try await viewModel.createRelationship(request)
+            },
+            delete: { relationshipID in
+                guard let viewModel else { throw TagMutationError.missingETag }
+                try await viewModel.deleteRelationship(relationshipID)
+            }
+        )
 
         referencesSection(for: detail)
 
@@ -135,6 +163,38 @@ struct EventDetailView: View {
         }
 
         noteSection(for: detail)
+    }
+
+    private func tagSection(for detail: EventDetail) -> some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+            SparkDetailSectionHeader("Tags")
+            FlowLayout(spacing: SparkSpacing.xs + 2) {
+                ForEach(detail.tags) { tag in
+                    let route = DetailRoute.tag(id: tag.tagID, name: tag.name, type: tag.type)
+                    NavigationLink(value: route) { TagChip(tag) }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button(role: .destructive) { tagPendingRemoval = tag } label: {
+                                Label("Remove tag", systemImage: "trash")
+                            }
+                        } preview: {
+                            TagPreviewCard(tag: tag).environment(appModel)
+                        }
+                }
+                Button { showTagPicker = true } label: { TagChip("+", isGhost: true) }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Add tag")
+            }
+        }
+    }
+
+    private func detach(_ tag: EventTag) async {
+        do {
+            try await viewModel?.detachTag(tag)
+        } catch {
+            tagMutationError = (error as? LocalizedError)?.errorDescription ?? "Please try again."
+        }
+        tagPendingRemoval = nil
     }
 
     // MARK: - Cinematic hero

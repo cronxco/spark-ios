@@ -51,8 +51,8 @@ struct DayPagerView: View {
                             IntegrationDetailView(integrationId: service)
                         case .account(let id):
                             AccountDetailView(accountId: id)
-                        case .tag(let name, let type):
-                            TagDetailView(tagName: name, tagType: type)
+                        case .tag(let id, let name, let type):
+                            TagDetailView(tagID: id, tagName: name, tagType: type)
                         }
                     }
             }
@@ -122,7 +122,11 @@ enum DetailRoute: Hashable {
     case anomaly(id: String)
     case integration(service: String)
     case account(id: String)
-    case tag(name: String, type: String?)
+    case tag(id: String?, name: String, type: String?)
+
+    static func tag(name: String, type: String?) -> Self {
+        .tag(id: nil, name: name, type: type)
+    }
 }
 
 private struct DayKey: Identifiable, Hashable {
