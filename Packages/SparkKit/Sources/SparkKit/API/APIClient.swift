@@ -153,7 +153,7 @@ public actor APIClient {
         leeway: TimeInterval = 30,
         forceRefresh: Bool = false
     ) async throws -> String? {
-        guard let tokens = await tokenStore.tokens() else { return nil }
+        guard let tokens = try await tokenStore.checkedTokens() else { return nil }
         guard forceRefresh || tokens.expiresAt <= Date().addingTimeInterval(leeway) else {
             return tokens.accessToken
         }
@@ -186,6 +186,9 @@ public actor APIClient {
         let accessToken = endpoint.requiresAuth
             ? try await accessTokenRefreshingIfNeeded()
             : nil
+        guard !endpoint.requiresAuth || accessToken?.isEmpty == false else {
+            throw APIError.unauthorized
+        }
         if let accessToken {
             request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         }
@@ -299,7 +302,8 @@ public actor APIClient {
         }
 
         #if DEBUG
-        let bodyPreview = String(data: data, encoding: .utf8) ?? "<binary>"
+        let safeBody = APITelemetryRedactor.body(data, contentType: http.value(forHTTPHeaderField: "Content-Type"))
+        let bodyPreview = safeBody.flatMap { String(data: $0, encoding: .utf8) } ?? "<redacted>"
         logger.info("[\(endpoint.path, privacy: .public)] HTTP \(http.statusCode, privacy: .public) — \(bodyPreview, privacy: .public)")
         #endif
 
@@ -339,7 +343,8 @@ public actor APIClient {
             )
             return RawAPIResponse(decoded: decoded, data: data, headers: http.stringHeaderFields)
         } catch {
-            let bodyString = String(data: data, encoding: .utf8) ?? "<binary>"
+            let safeBody = APITelemetryRedactor.body(data, contentType: http.value(forHTTPHeaderField: "Content-Type"))
+            let bodyString = safeBody.flatMap { String(data: $0, encoding: .utf8) } ?? "<redacted>"
             logger.error("Decoding failed for \(endpoint.path, privacy: .public): \(error.localizedDescription, privacy: .public) — body: \(bodyString, privacy: .public)")
             await captureTelemetry(
                 operation: "http.client",
@@ -393,7 +398,7 @@ public actor APIClient {
                     refreshToken: tokens.refreshToken,
                     expiresIn: tokens.expiresIn
                 )
-                await tokenStore.store(
+                try await tokenStore.store(
                     access: authTokens.accessToken,
                     refresh: authTokens.refreshToken,
                     expiresIn: authTokens.expiresIn

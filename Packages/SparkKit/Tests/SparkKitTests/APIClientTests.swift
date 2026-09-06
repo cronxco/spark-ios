@@ -46,7 +46,7 @@ struct APIClientTests {
     @Test("200 decodes response body + records ETag + sends Bearer")
     func happyPath() async throws {
         let (client, tokenStore) = makeClient()
-        await tokenStore.store(access: "a", refresh: "r", expiresIn: 3600)
+        try await tokenStore.store(access: "a", refresh: "r", expiresIn: 3600)
 
         await StubURLProtocol.set { _ in
             let payload = """
@@ -72,7 +72,8 @@ struct APIClientTests {
 
     @Test("304 is surfaced as APIError.notModified")
     func notModified() async throws {
-        let (client, _) = makeClient()
+        let (client, tokenStore) = makeClient()
+        try await tokenStore.store(access: "a", refresh: "r", expiresIn: 3600)
         await StubURLProtocol.set { _ in (Data(), 304, [:]) }
         await #expect(throws: APIError.self) {
             _ = try await client.request(BriefingEndpoint.today())
@@ -109,7 +110,7 @@ struct APIClientTests {
     @Test("401 with refresh token refreshes and retries once")
     func refreshThenRetry() async throws {
         let (client, tokenStore) = makeClient()
-        await tokenStore.store(access: "old", refresh: "r-1", expiresIn: 60)
+        try await tokenStore.store(access: "old", refresh: "r-1", expiresIn: 60)
 
         actor Counter { var count = 0; func bump() -> Int { count += 1; return count } }
         let counter = Counter()
@@ -143,7 +144,7 @@ struct APIClientTests {
     @Test("expired access token refreshes before protected request")
     func expiredTokenRefreshesBeforeProtectedRequest() async throws {
         let (client, tokenStore) = makeClient()
-        await tokenStore.store(access: "old", refresh: "r-1", expiresIn: -1)
+        try await tokenStore.store(access: "old", refresh: "r-1", expiresIn: -1)
 
         await StubURLProtocol.set { request in
             if request.url?.path.hasSuffix("/oauth/refresh") == true {
@@ -179,7 +180,7 @@ struct APIClientTests {
     @Test("concurrent 401s share one refresh request")
     func concurrentUnauthorizedRequestsShareRefresh() async throws {
         let (client, tokenStore) = makeClient()
-        await tokenStore.store(access: "old", refresh: "r-1", expiresIn: 60)
+        try await tokenStore.store(access: "old", refresh: "r-1", expiresIn: 60)
 
         actor Stats {
             private(set) var refreshCount = 0
@@ -244,7 +245,7 @@ struct APIClientTests {
     @Test("concurrent 401s across clients share one refresh request")
     func concurrentUnauthorizedRequestsAcrossClientsShareRefresh() async throws {
         let tokenStore = makeStore()
-        await tokenStore.store(access: "old", refresh: "r-1", expiresIn: 60)
+        try await tokenStore.store(access: "old", refresh: "r-1", expiresIn: 60)
         let (clientA, _) = makeClient(tokenStore: tokenStore)
         let (clientB, _) = makeClient(tokenStore: tokenStore)
 
@@ -305,9 +306,9 @@ struct APIClientTests {
     }
 
     @Test("failed refresh clears stored tokens")
-    func failedRefreshClearsTokens() async {
+    func failedRefreshClearsTokens() async throws {
         let (client, tokenStore) = makeClient()
-        await tokenStore.store(access: "old", refresh: "r-1", expiresIn: 60)
+        try await tokenStore.store(access: "old", refresh: "r-1", expiresIn: 60)
 
         await StubURLProtocol.set { request in
             if request.url?.path.hasSuffix("/oauth/refresh") == true {
@@ -329,13 +330,17 @@ struct APIClientTests {
     }
 
     @Test("stale failed refresh does not clear newer stored tokens")
-    func staleFailedRefreshDoesNotClearNewerStoredTokens() async {
+    func staleFailedRefreshDoesNotClearNewerStoredTokens() async throws {
         let (client, tokenStore) = makeClient()
-        await tokenStore.store(access: "old", refresh: "r-1", expiresIn: 60)
+        try await tokenStore.store(access: "old", refresh: "r-1", expiresIn: 60)
 
         await StubURLProtocol.set { request in
             if request.url?.path.hasSuffix("/oauth/refresh") == true {
-                await tokenStore.store(access: "new", refresh: "r-2", expiresIn: 3600)
+                do {
+                    try await tokenStore.store(access: "new", refresh: "r-2", expiresIn: 3600)
+                } catch {
+                    Issue.record(error)
+                }
                 return (
                     Data(#"{"error":"invalid_grant","error_description":"Refresh token already used."}"#.utf8),
                     401,
@@ -353,19 +358,20 @@ struct APIClientTests {
         #expect(await tokenStore.refreshToken() == "r-2")
     }
 
-    @Test("401 without refresh token surfaces .unauthorized")
+    @Test("missing credentials fail locally without sending a request")
     func unauthorizedWithoutRefresh() async {
         let (client, _) = makeClient()
         await StubURLProtocol.set { _ in (Data(), 401, [:]) }
         await #expect(throws: APIError.self) {
             _ = try await client.request(BriefingEndpoint.today())
         }
+        #expect(await StubURLProtocol.recorded().isEmpty)
     }
 
     @Test("500 surfaces .httpStatus with status + body")
-    func httpError() async {
+    func httpError() async throws {
         let (client, tokenStore) = makeClient()
-        await tokenStore.store(access: "a", refresh: "r", expiresIn: 60)
+        try await tokenStore.store(access: "a", refresh: "r", expiresIn: 60)
         await StubURLProtocol.set { _ in (Data("oops".utf8), 500, [:]) }
         await #expect(throws: APIError.self) {
             _ = try await client.request(BriefingEndpoint.today())
@@ -453,7 +459,7 @@ struct APIClientTests {
         let telemetry = APITelemetry()
         await telemetry.setSink(sink)
         let (client, tokenStore) = makeClient(telemetry: telemetry)
-        await tokenStore.store(access: "bearer-secret", refresh: "refresh-secret", expiresIn: 60)
+        try await tokenStore.store(access: "bearer-secret", refresh: "refresh-secret", expiresIn: 60)
 
         let requestBody = """
         {"content":"hello","refresh_token":"refresh-secret","nested":{"api_key":"key-secret"}}
@@ -498,7 +504,8 @@ struct APIClientTests {
         let sink = TestTelemetrySink()
         let telemetry = APITelemetry()
         await telemetry.setSink(sink)
-        let (client, _) = makeClient(telemetry: telemetry)
+        let (client, tokenStore) = makeClient(telemetry: telemetry)
+        try await tokenStore.store(access: "a", refresh: "r", expiresIn: 3600)
 
         await StubURLProtocol.set { _ in
             (Data(#"{"message":"broken"}"#.utf8), 500, ["Content-Type": "application/json"])
@@ -521,7 +528,8 @@ struct APIClientTests {
         let telemetry = APITelemetry()
         await telemetry.setSink(sink)
         let session = makeSession(protocolClasses: [CancelledURLProtocol.self])
-        let (client, _) = makeClient(telemetry: telemetry, session: session)
+        let (client, tokenStore) = makeClient(telemetry: telemetry, session: session)
+        try await tokenStore.store(access: "a", refresh: "r", expiresIn: 3600)
 
         await #expect(throws: APIError.self) {
             _ = try await client.request(BriefingEndpoint.today())

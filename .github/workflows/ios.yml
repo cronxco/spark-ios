@@ -56,8 +56,8 @@ jobs:
             -scheme SparkApp \
             -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=27.0' \
             -configuration Debug \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGN_IDENTITY=- \
             -skipPackagePluginValidation \
             -skipMacroValidation \
             test \

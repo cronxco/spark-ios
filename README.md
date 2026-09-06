@@ -44,17 +44,26 @@ Erase the keys to restore production.
 # Tests — SparkKit SPM layer
 cd Packages/SparkKit && swift test
 
-# Tests — full app (requires iOS 26 simulator)
+# Tests — full app (requires iOS 27 simulator)
 xcodebuild \
     -workspace Spark.xcworkspace \
     -scheme SparkApp \
-    -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.4.1' \
+    -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=27.0' \
     -skipPackagePluginValidation \
     -skipMacroValidation \
     test
 ```
 
-In Xcode: select the `SparkApp` scheme + an iOS 26 simulator + ⌘R.
+In Xcode: select the `SparkApp` scheme + an iOS 27 simulator + ⌘R.
+
+Keep code signing enabled for simulator builds too. `CODE_SIGNING_ALLOWED=NO`
+omits the entitlements needed by Keychain, causing sign-in storage to fail with
+error `-34018`. Simulator builds can use ad-hoc signing (`CODE_SIGN_IDENTITY=-`);
+they do not need a device provisioning profile. Check the generated
+`Spark.app-Simulated.xcent` for `application-identifier` and
+`keychain-access-groups`, and run `AuthenticationStorageTests` in the simulator
+to verify real Keychain access. Simulator entitlements are embedded separately;
+`codesign -d --entitlements -` alone may show an empty dictionary.
 
 ## Layout
 

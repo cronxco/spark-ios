@@ -1,6 +1,22 @@
 import Foundation
 import Security
 
+public enum TokenStorageError: Error, Sendable, LocalizedError {
+    case keychain(operation: String, status: OSStatus)
+    case invalidData
+
+    public var errorDescription: String? {
+        switch self {
+        case .keychain(_, let status) where status == errSecMissingEntitlement:
+            return "Spark cannot access secure sign-in storage. This build is missing its Keychain entitlements. Please install a correctly signed build."
+        case .keychain(let operation, let status):
+            return "Spark could not \(operation) your secure sign-in details (Keychain error \(status)). Please unlock your device and try again."
+        case .invalidData:
+            return "Your saved sign-in details could not be read. Please sign in again."
+        }
+    }
+}
+
 public struct AuthTokens: Sendable, Hashable, Codable {
     public let accessToken: String
     public let refreshToken: String
@@ -27,7 +43,6 @@ public actor KeychainTokenStore {
     private let service: String
     private let account: String
     private let accessGroup: String?
-    private var cachedTokens: AuthTokens?
 
     public init(
         service: String = "co.cronx.sparkapp.oauth",
@@ -46,32 +61,35 @@ public actor KeychainTokenStore {
     public func hasRefreshToken() -> Bool { tokens()?.refreshToken.isEmpty == false }
 
     public func tokens() -> AuthTokens? {
-        guard let data = read() else {
-            cachedTokens = nil
-            return nil
+        try? checkedTokens()
+    }
+
+    /// Distinguishes an absent session from inaccessible secure storage.
+    public func checkedTokens() throws -> AuthTokens? {
+        guard let data = try read() else { return nil }
+        guard let decoded = try? JSONDecoder().decode(AuthTokens.self, from: data) else {
+            throw TokenStorageError.invalidData
         }
-        let decoded = try? JSONDecoder().decode(AuthTokens.self, from: data)
-        cachedTokens = decoded
         return decoded
     }
 
     // MARK: - Write
 
-    public func store(access: String, refresh: String, expiresIn: Int) {
+    public func store(access: String, refresh: String, expiresIn: Int) throws {
         let tokens = AuthTokens(
             accessToken: access,
             refreshToken: refresh,
             issuedAt: Date(),
             expiresIn: expiresIn
         )
-        guard let data = try? JSONEncoder().encode(tokens) else { return }
-        write(data)
-        cachedTokens = tokens
+        let data = try JSONEncoder().encode(tokens)
+        try write(data)
+        // Do not report a successful sign-in until storage is readable too.
+        guard try checkedTokens() == tokens else { throw TokenStorageError.invalidData }
     }
 
     public func clear() {
         delete()
-        cachedTokens = nil
     }
 
     // MARK: - Keychain plumbing
@@ -88,29 +106,36 @@ public actor KeychainTokenStore {
         return query
     }
 
-    private func read() -> Data? {
+    private func read() throws -> Data? {
         var query = baseQuery()
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
 
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
-        guard status == errSecSuccess else { return nil }
-        return item as? Data
+        if status == errSecItemNotFound { return nil }
+        guard status == errSecSuccess else {
+            throw TokenStorageError.keychain(operation: "read", status: status)
+        }
+        guard let data = item as? Data else { throw TokenStorageError.invalidData }
+        return data
     }
 
-    private func write(_ data: Data) {
+    private func write(_ data: Data) throws {
         let query = baseQuery()
         let attributes: [String: Any] = [
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
 
-        let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
-        if updateStatus == errSecItemNotFound {
+        var status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound {
             var addQuery = query
             addQuery.merge(attributes) { _, new in new }
-            SecItemAdd(addQuery as CFDictionary, nil)
+            status = SecItemAdd(addQuery as CFDictionary, nil)
+        }
+        guard status == errSecSuccess else {
+            throw TokenStorageError.keychain(operation: "save", status: status)
         }
     }
 
