@@ -25,7 +25,7 @@ struct SignOutAndPreferencesTests {
         }
 
         let tokenStore = makeTokenStore()
-        await tokenStore.store(access: "departing-user", refresh: "refresh", expiresIn: 3_600)
+        try await tokenStore.store(access: "departing-user", refresh: "refresh", expiresIn: 3_600)
         let model = AppModel(
             container: try SparkDataStore.makeInMemoryContainer(),
             environment: environment,
@@ -113,7 +113,7 @@ struct SignOutAndPreferencesTests {
     @Test("PATCH adopts its response ETag for the next notification preference update")
     func preferencePatchAdvancesVersion() async throws {
         let tokenStore = makeTokenStore()
-        await tokenStore.store(access: "token", refresh: "refresh", expiresIn: 3_600)
+        try await tokenStore.store(access: "token", refresh: "refresh", expiresIn: 3_600)
         let client = APIClient(
             environment: environment,
             session: makeSession(),
@@ -151,7 +151,7 @@ struct SignOutAndPreferencesTests {
     @Test("a failed conflict refresh restores the optimistically deleted notification")
     func failedConflictRefreshRestoresNotification() async throws {
         let tokenStore = makeTokenStore()
-        await tokenStore.store(access: "token", refresh: "refresh", expiresIn: 3_600)
+        try await tokenStore.store(access: "token", refresh: "refresh", expiresIn: 3_600)
         let client = APIClient(
             environment: environment,
             session: makeSession(),

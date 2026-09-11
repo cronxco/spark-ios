@@ -5,7 +5,8 @@ import SwiftUI
 /// Full-screen Instagram-style stories container for the Up to Speed flow.
 /// Uses TabView page-style swiping for navigation — horizontal swipe moves between
 /// screens, vertical scroll works within each screen, swipe-down from any screen
-/// dismisses the whole flow.
+/// dismisses the whole flow. Screens are grouped into chapters shown in the
+/// progress bar.
 struct UpToSpeedView: View {
     @Binding var isPresented: Bool
     @Environment(AppModel.self) private var appModel
@@ -73,7 +74,10 @@ struct UpToSpeedView: View {
         })
         .task {
             if viewModel == nil {
-                viewModel = UpToSpeedViewModel(apiClient: appModel.apiClient)
+                viewModel = UpToSpeedViewModel(
+                    apiClient: appModel.apiClient,
+                    profileName: appModel.profile?.name
+                )
             }
             await viewModel?.load()
             await refreshLoop()
@@ -95,8 +99,6 @@ struct UpToSpeedView: View {
                 screenRenderer(screen, index: index, vm: vm)
                     .tag(index)
             }
-            caughtUpStoryScreen(vm: vm)
-                .tag(vm.screens.count)
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .ignoresSafeArea()
@@ -111,40 +113,31 @@ struct UpToSpeedView: View {
         }
     }
 
-    @ViewBuilder
-    private func caughtUpStoryScreen(vm: UpToSpeedViewModel) -> some View {
-        VStack(spacing: SparkSpacing.lg) {
-            Spacer()
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 64))
-                .foregroundStyle(Color.sparkSuccess)
-
-            Text("You're all caught up!")
-                .font(SparkTypography.heroSmall)
-                .foregroundStyle(.primary)
-
-            Text("Nothing more to review right now.")
-                .font(SparkTypography.body)
-                .foregroundStyle(.secondary)
-
-            PillButton("Done") { dismissFlow(vm: vm) }
-                .padding(.top, SparkSpacing.sm)
-            Spacer()
-        }
-        .padding(SparkSpacing.xxl)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
     // MARK: - Controls overlay
 
     private func controlsOverlay(vm: UpToSpeedViewModel) -> some View {
         VStack(spacing: SparkSpacing.sm) {
             HStack(alignment: .center, spacing: SparkSpacing.sm) {
-                StoryProgressBar(total: vm.screens.count + 1, currentIndex: vm.currentIndex)
-                    .padding(.horizontal, SparkSpacing.md)
-                    .frame(height: 44)
-                    .frame(maxWidth: .infinity)
-                    .sparkGlass(.capsule)
+                VStack(spacing: SparkSpacing.xs) {
+                    StoryProgressBar(chapters: progressChapters(vm: vm), currentIndex: vm.currentIndex)
+                    HStack {
+                        if let chapter = vm.currentChapter {
+                            Text(chapter.shortLabel.uppercased())
+                                .font(SparkTypography.caption)
+                                .tracking(1.4)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Text(vm.chapterCounter)
+                            .font(SparkTypography.caption)
+                            .foregroundStyle(.tertiary)
+                            .monospacedDigit()
+                    }
+                }
+                .padding(.horizontal, SparkSpacing.md)
+                .padding(.vertical, SparkSpacing.sm)
+                .frame(maxWidth: .infinity)
+                .sparkGlass(.capsule)
 
                 Button {
                     dismissFlow(vm: vm)
@@ -182,6 +175,10 @@ struct UpToSpeedView: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+    }
+
+    private func progressChapters(vm: UpToSpeedViewModel) -> [StoryProgressBar.ChapterSpec] {
+        vm.chapters.map { .init(label: $0.shortLabel, segments: max($0.cardCount, 1)) }
     }
 
     private var dismissDragGesture: some Gesture {
@@ -227,6 +224,8 @@ struct UpToSpeedView: View {
     @ViewBuilder
     private func screenRenderer(_ screen: UpToSpeedScreen, index: Int, vm: UpToSpeedViewModel) -> some View {
         switch screen {
+        case .opener:
+            FlintOpenerScreen(viewModel: vm)
         case .flintHeader(let item, let firstSection):
             FlintHeaderPage(item: item, firstSection: firstSection)
         case .flintParagraph(let item, let text, _):
@@ -239,8 +238,18 @@ struct UpToSpeedView: View {
             CheckInScreen(item: item, viewModel: vm)
         case .anomaly(let item):
             AnomalyScreen(item: item, viewModel: vm)
+        case .newsStory(let item, let section, let sectionIndex, let total):
+            NewsStoryScreen(
+                item: item,
+                section: section,
+                index: sectionIndex,
+                total: total,
+                onReachedBottom: { vm.markScrolledToBottom(at: index) }
+            )
         case .newsSummary(let item):
             NewsSummaryScreen(item: item, viewModel: vm, onReachedBottom: { vm.markScrolledToBottom(at: index) })
+        case .wrap:
+            WrapScreen(viewModel: vm, onDone: { dismissFlow(vm: vm) })
         }
     }
 
@@ -249,10 +258,10 @@ struct UpToSpeedView: View {
     private var loadingView: some View {
         VStack(spacing: SparkSpacing.md) {
             ProgressView()
-                .tint(.white)
+                .tint(Color.sparkAccent)
             Text("Getting you up to speed…")
                 .font(SparkTypography.body)
-                .foregroundStyle(Color.white.opacity(0.7))
+                .foregroundStyle(.secondary)
         }
     }
 

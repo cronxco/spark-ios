@@ -97,7 +97,10 @@ struct TodayView: View {
         }
         .task {
             if upToSpeedViewModel == nil {
-                upToSpeedViewModel = UpToSpeedViewModel(apiClient: appModel.apiClient)
+                upToSpeedViewModel = UpToSpeedViewModel(
+                    apiClient: appModel.apiClient,
+                    profileName: appModel.profile?.name
+                )
             }
             await upToSpeedViewModel?.load()
         }
