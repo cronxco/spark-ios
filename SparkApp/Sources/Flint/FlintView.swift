@@ -10,7 +10,7 @@ struct FlintView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            digestScrollView
+            tabScrollView
             .sparkMainNavigationTitle("Flint")
             .sparkAppBackground()
             .sparkMainAppToolbar()
@@ -23,13 +23,10 @@ struct FlintView: View {
                 return .systemAction
             })
             .onAppear {
-                registerPeriodAccessory()
+                registerTabAccessory()
             }
-            .onChange(of: viewModel?.selectedPeriod) { _, _ in
-                registerPeriodAccessory()
-            }
-            .onChange(of: viewModel?.availablePeriodSelections.map(\.id) ?? []) { _, _ in
-                registerPeriodAccessory()
+            .onChange(of: viewModel?.selectedTab) { _, _ in
+                registerTabAccessory()
             }
             .onDisappear {
                 tabAccessoryCoordinator?.clear(owner: .flint)
@@ -40,11 +37,11 @@ struct FlintView: View {
                 viewModel = FlintViewModel(apiClient: appModel.apiClient)
             }
             await viewModel?.load()
-            registerPeriodAccessory()
+            registerTabAccessory()
         }
     }
 
-    private var digestScrollView: some View {
+    private var tabScrollView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: SparkSpacing.lg) {
                 if let viewModel {
@@ -58,58 +55,161 @@ struct FlintView: View {
             .padding(.bottom, SparkSpacing.xxl * 2)
         }
         .scrollDismissesKeyboard(.interactively)
-        .refreshable { await viewModel?.refresh() }
+        .refreshable { await refresh() }
     }
 
-    private func registerPeriodAccessory() {
+    private func refresh() async {
+        guard let viewModel else { return }
+        switch viewModel.selectedTab {
+        case .today, .questions: await viewModel.refresh()
+        case .threads: await viewModel.loadTopics()
+        case .archive: await viewModel.selectArchiveDate(viewModel.archiveDate)
+        }
+    }
+
+    private func registerTabAccessory() {
         guard let viewModel else { return }
 
         tabAccessoryCoordinator?.set(TabAccessory(
             owner: .flint,
-            title: "Digest period",
-            items: viewModel.availablePeriodSelections.map {
-                TabAccessoryItem(id: $0.id, title: $0.title)
-            },
-            selectedID: viewModel.selectedPeriod.id,
+            title: "Flint section",
+            items: FlintViewModel.FlintTab.allCases.map { TabAccessoryItem(id: $0.id, title: $0.title) },
+            selectedID: viewModel.selectedTab.id,
             select: { id in
-                guard let period = FlintViewModel.PeriodSelection(rawValue: id) else { return }
-                Task { await viewModel.selectPeriod(period) }
+                guard let tab = FlintViewModel.FlintTab(rawValue: id) else { return }
+                viewModel.selectedTab = tab
+                if tab == .threads {
+                    Task { await viewModel.loadTopicsIfNeeded() }
+                }
             }
         ))
     }
 
     @ViewBuilder
     private func content(for viewModel: FlintViewModel) -> some View {
+        switch viewModel.selectedTab {
+        case .today:
+            todayContent(viewModel)
+        case .questions:
+            questionsContent(viewModel)
+        case .threads:
+            threadsContent(viewModel)
+        case .archive:
+            archiveContent(viewModel)
+        }
+    }
+
+    // MARK: - Today
+
+    @ViewBuilder
+    private func todayContent(_ viewModel: FlintViewModel) -> some View {
         switch viewModel.state {
         case .idle, .loading:
             loadingContent
         case .loaded:
-            VStack(alignment: .leading, spacing: SparkSpacing.xl) {
-                if let digest = viewModel.digests.first {
-                    FlintDigestHeader(digest: digest)
-                }
-
-                ForEach(viewModel.digests) { digest in
-                    FlintDigestSection(digest: digest, viewModel: viewModel, onOpen: push)
-                }
-            }
+            FlintDigestTimeline(digests: viewModel.digests, viewModel: viewModel, onOpen: push)
         case .empty(let message):
-            EmptyState(
-                systemImage: "sparkles",
-                title: "No digest yet",
-                message: message
-            )
+            EmptyState(systemImage: "sparkles", title: "No digest yet", message: message)
         case .error(let message):
-            VStack(spacing: SparkSpacing.md) {
-                EmptyState(
-                    systemImage: "wifi.exclamationmark",
-                    title: "Couldn't load Flint",
-                    message: message
-                )
-                PillButton("Retry", systemImage: "arrow.clockwise", tint: .sparkAccent) {
-                    Task { await viewModel.refresh() }
+            errorContent(message) { Task { await viewModel.refresh() } }
+        }
+    }
+
+    // MARK: - Questions
+
+    @ViewBuilder
+    private func questionsContent(_ viewModel: FlintViewModel) -> some View {
+        if viewModel.openQuestions.isEmpty {
+            EmptyState(
+                systemImage: "checkmark.circle",
+                title: "No open questions",
+                message: "Flint will ask here when there's something worth clarifying."
+            )
+        } else {
+            VStack(alignment: .leading, spacing: SparkSpacing.lg) {
+                ForEach(viewModel.openQuestions) { question in
+                    VStack(alignment: .leading, spacing: SparkSpacing.xs) {
+                        Text(questionContext(question.digest))
+                            .font(SparkTypography.caption)
+                            .foregroundStyle(.secondary)
+                        FlintBlockRow(block: question.block, viewModel: viewModel, onOpen: push)
+                    }
                 }
             }
+        }
+    }
+
+    private func questionContext(_ digest: FlintDigest) -> String {
+        [digest.period?.displayName, digest.createdAt?.formatted(date: .omitted, time: .shortened)]
+            .compactMap { $0 }
+            .joined(separator: " · ")
+    }
+
+    // MARK: - Threads
+
+    @ViewBuilder
+    private func threadsContent(_ viewModel: FlintViewModel) -> some View {
+        switch viewModel.topicsState {
+        case .idle, .loading:
+            loadingContent
+        case .loaded:
+            VStack(spacing: 0) {
+                ForEach(Array(viewModel.topics.enumerated()), id: \.element.id) { index, topic in
+                    FlintTopicRow(topic: topic)
+                    if index < viewModel.topics.count - 1 {
+                        Divider().opacity(0.15)
+                    }
+                }
+            }
+            .padding(.vertical, SparkSpacing.xs)
+            .sparkGlass(.roundedRect(SparkRadii.lg))
+        case .empty(let message):
+            EmptyState(systemImage: "point.3.connected.trianglepath.dotted", title: "No running threads", message: message)
+        case .error(let message):
+            errorContent(message) { Task { await viewModel.loadTopics() } }
+        }
+    }
+
+    // MARK: - Archive
+
+    @ViewBuilder
+    private func archiveContent(_ viewModel: FlintViewModel) -> some View {
+        @Bindable var viewModel = viewModel
+
+        VStack(alignment: .leading, spacing: SparkSpacing.lg) {
+            DatePicker(
+                "Date",
+                selection: Binding(
+                    get: { viewModel.archiveDate },
+                    set: { newDate in Task { await viewModel.selectArchiveDate(newDate) } }
+                ),
+                in: ...Date.now,
+                displayedComponents: .date
+            )
+            .datePickerStyle(.compact)
+            .labelsHidden()
+
+            switch viewModel.archiveState {
+            case .idle:
+                Color.clear.frame(height: 1).task { await viewModel.selectArchiveDate(viewModel.archiveDate) }
+            case .loading:
+                loadingContent
+            case .loaded:
+                FlintDigestTimeline(digests: viewModel.archiveDigests, viewModel: viewModel, onOpen: push)
+            case .empty(let message):
+                EmptyState(systemImage: "calendar", title: "Nothing that day", message: message)
+            case .error(let message):
+                errorContent(message) { Task { await viewModel.selectArchiveDate(viewModel.archiveDate) } }
+            }
+        }
+    }
+
+    // MARK: - Shared
+
+    private func errorContent(_ message: String, retry: @escaping () -> Void) -> some View {
+        VStack(spacing: SparkSpacing.md) {
+            EmptyState(systemImage: "wifi.exclamationmark", title: "Couldn't load Flint", message: message)
+            PillButton("Retry", systemImage: "arrow.clockwise", tint: .sparkAccent, action: retry)
         }
     }
 
@@ -130,11 +230,157 @@ struct FlintView: View {
                     .frame(height: 18)
                     .frame(maxWidth: 280)
             }
-            .accessibilityLabel("Loading Flint digest")
+            .accessibilityLabel("Loading Flint")
+        }
+    }
+}
+
+// MARK: - Today / Archive timeline
+
+/// Digests for one day, newest first, as a tappable timeline — a time marker,
+/// title, and a one-line lede; tapping expands the full digest in place.
+private struct FlintDigestTimeline: View {
+    let digests: [FlintDigest]
+    let viewModel: FlintViewModel
+    let onOpen: (DetailRoute) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.lg) {
+            ForEach(digests) { digest in
+                FlintTimelineEntry(digest: digest, viewModel: viewModel, onOpen: onOpen)
+            }
+        }
+    }
+}
+
+private struct FlintTimelineEntry: View {
+    let digest: FlintDigest
+    let viewModel: FlintViewModel
+    let onOpen: (DetailRoute) -> Void
+
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.md) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+            } label: {
+                header
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                FlintDigestSection(digest: digest, viewModel: viewModel, onOpen: onOpen)
+                    .padding(.leading, 56)
+            }
         }
     }
 
+    private var header: some View {
+        HStack(alignment: .top, spacing: SparkSpacing.md) {
+            Text(timeText)
+                .font(SparkTypography.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+                .frame(width: 44, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: SparkSpacing.xs) {
+                Text(digest.displayTitle)
+                    .font(SparkTypography.bodyStrong)
+                    .foregroundStyle(.primary)
+
+                if let lede {
+                    Text(lede)
+                        .font(SparkTypography.longFormBodySmall)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                if let count = digest.unansweredQuestionCount, count > 0 {
+                    Text(count == 1 ? "1 question open" : "\(count) questions open")
+                        .font(SparkTypography.caption)
+                        .foregroundStyle(Color.sparkWarning)
+                }
+            }
+
+            Spacer(minLength: SparkSpacing.sm)
+
+            Image(systemName: "chevron.down")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                .padding(.top, 2)
+        }
+        .contentShape(Rectangle())
+    }
+
+    private var timeText: String {
+        digest.createdAt?.formatted(date: .omitted, time: .shortened) ?? ""
+    }
+
+    private var lede: String? {
+        guard let summary = digest.summary else { return nil }
+        let firstLine = summary
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .first { !$0.isEmpty && !$0.hasPrefix("#") }
+        return firstLine
+    }
 }
+
+// MARK: - Threads row
+
+private struct FlintTopicRow: View {
+    let topic: FlintTopic
+
+    var body: some View {
+        HStack(spacing: SparkSpacing.md) {
+            Circle()
+                .fill(topic.status?.isActive == true ? Color.sparkAccent : Color.secondary.opacity(0.35))
+                .frame(width: 7, height: 7)
+
+            Text(topic.title)
+                .font(SparkTypography.body)
+                .foregroundStyle(topic.status?.isActive == true ? .primary : .secondary)
+                .lineLimit(2)
+
+            Spacer(minLength: SparkSpacing.sm)
+
+            Text(meta)
+                .font(SparkTypography.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, SparkSpacing.lg)
+        .padding(.vertical, SparkSpacing.md)
+    }
+
+    private var meta: String {
+        let statusText = topic.status.map(\.rawValue.capitalized) ?? ""
+        guard let touched = topic.lastTouchedAt else { return statusText }
+        let days = Calendar.current.dateComponents([.day], from: touched, to: .now).day ?? 0
+        let age = days <= 0 ? "today" : "\(days)d"
+        return statusText.isEmpty ? age : "\(statusText) · \(age)"
+    }
+}
+
+private extension FlintDigest {
+    var displayTitle: String {
+        guard let period else { return title }
+
+        let generatedPrefix = "\(period.displayName) Digest"
+        guard title.hasPrefix(generatedPrefix) else { return title }
+
+        let suffix = title.dropFirst(generatedPrefix.count)
+        let separators = [" — ", " – ", " - "]
+        if separators.contains(where: { suffix.hasPrefix($0) }) {
+            return generatedPrefix
+        }
+
+        return title
+    }
+}
+
+// MARK: - Digest section (shared by the timeline's expanded state)
 
 private struct FlintDigestSection: View {
     let digest: FlintDigest
@@ -265,59 +511,6 @@ private struct FlintDigestCheckInPrompt: View {
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()
-}
-
-private struct FlintDigestHeader: View {
-    let digest: FlintDigest
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-            Text(digest.displayTitle)
-                .font(SparkTypography.heroXL)
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityAddTraits(.isHeader)
-
-            HStack(spacing: SparkSpacing.sm) {
-                Label(createdAtText, systemImage: "clock")
-                if let count = digest.unansweredQuestionCount, count > 0 {
-                    Text("\(count) unanswered")
-                        .foregroundStyle(Color.sparkWarning)
-                }
-            }
-            .font(SparkTypography.caption)
-            .foregroundStyle(.secondary)
-        }
-    }
-
-    private var createdAtText: String {
-        guard let createdAt = digest.createdAt else { return digest.date }
-        return createdAt.formatted(
-            Date.FormatStyle()
-                .weekday(.abbreviated)
-                .day()
-                .month(.abbreviated)
-                .hour()
-                .minute()
-        )
-    }
-}
-
-private extension FlintDigest {
-    var displayTitle: String {
-        guard let period else { return title }
-
-        let generatedPrefix = "\(period.displayName) Digest"
-        guard title.hasPrefix(generatedPrefix) else { return title }
-
-        let suffix = title.dropFirst(generatedPrefix.count)
-        let separators = [" — ", " – ", " - "]
-        if separators.contains(where: { suffix.hasPrefix($0) }) {
-            return generatedPrefix
-        }
-
-        return title
-    }
 }
 
 private struct FlintBlockRow: View {
@@ -466,4 +659,3 @@ private struct FlintBlockRow: View {
         return trimmed.isEmpty ? nil : trimmed.capitalized
     }
 }
-

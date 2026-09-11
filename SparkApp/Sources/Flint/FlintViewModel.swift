@@ -14,50 +14,45 @@ final class FlintViewModel {
         case error(String)
     }
 
-    enum PeriodSelection: String, Identifiable {
-        case latest
-        case morning
-        case afternoon
-        case evening
+    enum FlintTab: String, Identifiable, CaseIterable {
+        case today
+        case questions
+        case threads
+        case archive
 
         var id: String { rawValue }
 
         var title: String {
             switch self {
-            case .latest: "Latest"
-            case .morning: "Morning"
-            case .afternoon: "Afternoon"
-            case .evening: "Evening"
-            }
-        }
-
-        var apiPeriod: FlintDigestPeriod? {
-            switch self {
-            case .morning: .morning
-            case .afternoon: .afternoon
-            case .evening: .evening
-            case .latest: nil
-            }
-        }
-
-        init?(period: FlintDigestPeriod) {
-            switch period {
-            case .morning:
-                self = .morning
-            case .afternoon:
-                self = .afternoon
-            case .evening:
-                self = .evening
+            case .today: "Today"
+            case .questions: "Questions"
+            case .threads: "Threads"
+            case .archive: "Archive"
             }
         }
     }
 
+    /// One open question, with the digest it came from so an answer can be
+    /// routed back and a time/period label shown.
+    struct OpenQuestion: Identifiable {
+        let digest: FlintDigest
+        let block: FlintDigestBlock
+        var id: String { block.id }
+    }
+
     private(set) var state: LoadState = .idle
+    /// Every digest created today, newest first.
     private(set) var digests: [FlintDigest] = []
-    private(set) var availablePeriodSelections: [PeriodSelection] = [.latest]
     private(set) var answeringBlockIDs: Set<String> = []
     private(set) var answerErrorByBlockID: [String: String] = [:]
-    var selectedPeriod: PeriodSelection = .latest
+    var selectedTab: FlintTab = .today
+
+    private(set) var topicsState: LoadState = .idle
+    private(set) var topics: [FlintTopic] = []
+
+    var archiveDate: Date = .now
+    private(set) var archiveState: LoadState = .idle
+    private(set) var archiveDigests: [FlintDigest] = []
 
     private let date: Date
     private let apiClient: APIClient
@@ -68,11 +63,15 @@ final class FlintViewModel {
         self.apiClient = apiClient
     }
 
-    var unansweredQuestionCount: Int {
-        digests.reduce(0) { total, digest in
-            total + digest.blocks.filter { $0.isQuestion && !$0.answered }.count
+    var openQuestions: [OpenQuestion] {
+        digests.flatMap { digest in
+            digest.blocks
+                .filter { $0.isQuestion && !$0.answered }
+                .map { OpenQuestion(digest: digest, block: $0) }
         }
     }
+
+    var unansweredQuestionCount: Int { openQuestions.count }
 
     func load() async {
         guard state == .idle else { return }
@@ -80,40 +79,77 @@ final class FlintViewModel {
     }
 
     func refresh() async {
+        guard state != .loading else { return }
         state = .loading
         answerErrorByBlockID.removeAll()
 
         do {
-            let loaded = try await fetchDigests()
-            applyLoadedDigests(loaded)
+            digests = Self.sortedNewestFirst(try await fetchDigests(date: date).map(Self.orderedDigest))
+            state = digests.isEmpty ? .empty(emptyMessage) : .loaded
         } catch APIError.notModified {
             state = digests.isEmpty ? .empty(emptyMessage) : .loaded
         } catch where error.isAPICancellation {
-            if digests.isEmpty {
-                state = .idle
-            }
+            if digests.isEmpty { state = .idle }
         } catch where error.isNotFound {
             digests = []
-            availablePeriodSelections = [.latest]
-            selectedPeriod = .latest
             state = .empty(emptyMessage)
         } catch {
             SparkObservability.captureHandled(error)
             logger.error("Flint digest load failed: \(String(describing: error))")
-            if digests.isEmpty {
-                state = .error(userFacingError(error))
-            } else {
-                state = .loaded
-            }
+            state = digests.isEmpty ? .error(userFacingError(error)) : .loaded
+        }
+
+        await loadTopicsIfNeeded()
+    }
+
+    // MARK: - Threads
+
+    func loadTopicsIfNeeded() async {
+        guard topicsState == .idle else { return }
+        await loadTopics()
+    }
+
+    func loadTopics() async {
+        topicsState = .loading
+        do {
+            let response = try await apiClient.request(FlintTopicsEndpoint.list())
+            topics = response.data.sorted { ($0.lastTouchedAt ?? .distantPast) > ($1.lastTouchedAt ?? .distantPast) }
+            topicsState = topics.isEmpty ? .empty("No threads yet.") : .loaded
+        } catch where error.isAPICancellation {
+        } catch {
+            SparkObservability.captureHandled(error)
+            logger.error("Flint topics load failed: \(String(describing: error))")
+            topicsState = .error(userFacingError(error))
         }
     }
 
-    func selectPeriod(_ period: PeriodSelection) async {
-        guard selectedPeriod != period else { return }
-        guard availablePeriodSelections.contains(period) else { return }
-        selectedPeriod = period
-        await refresh()
+    // MARK: - Archive
+
+    /// Picking a new date while a previous fetch is still in flight can let
+    /// the two resume out of order — guard every mutation after the `await`
+    /// on `date` still being the one currently selected, so a slow response
+    /// for an old pick can't clobber a faster one for a newer pick.
+    func selectArchiveDate(_ date: Date) async {
+        archiveDate = date
+        archiveState = .loading
+        do {
+            let loaded = try await fetchDigests(date: date).map(Self.orderedDigest)
+            guard date == archiveDate else { return }
+            archiveDigests = Self.sortedNewestFirst(loaded)
+            archiveState = archiveDigests.isEmpty ? .empty(emptyMessage(for: date)) : .loaded
+        } catch where error.isAPICancellation {
+        } catch where error.isNotFound {
+            guard date == archiveDate else { return }
+            archiveDigests = []
+            archiveState = .empty(emptyMessage(for: date))
+        } catch {
+            guard date == archiveDate else { return }
+            SparkObservability.captureHandled(error)
+            archiveState = .error(userFacingError(error))
+        }
     }
+
+    // MARK: - Answering
 
     func answerQuestion(block: FlintDigestBlock, answer: String, note: String? = nil) async {
         let trimmedAnswer = answer.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -146,31 +182,18 @@ final class FlintViewModel {
         }
     }
 
-    private func fetchDigests() async throws -> [FlintDigest] {
+    // MARK: - Private
+
+    private func fetchDigests(date: Date) async throws -> [FlintDigest] {
         let dateKey = Self.isoKey(for: date)
         let response = try await apiClient.request(FlintEndpoint.digests(date: dateKey, all: true))
         return response.digests
     }
 
-    private func applyLoadedDigests(_ loaded: [FlintDigest]) {
-        let ordered = loaded.map(Self.orderedDigest)
-        availablePeriodSelections = Self.availableSelections(for: ordered)
+    private var emptyMessage: String { emptyMessage(for: date) }
 
-        if !availablePeriodSelections.contains(selectedPeriod) {
-            selectedPeriod = .latest
-        }
-
-        digests = Self.visibleDigests(from: ordered, selectedPeriod: selectedPeriod)
-        state = digests.isEmpty ? .empty(emptyMessage) : .loaded
-    }
-
-    private var emptyMessage: String {
-        switch selectedPeriod {
-        case .latest:
-            "No Flint digest has been created for today yet."
-        case .morning, .afternoon, .evening:
-            "No \(selectedPeriod.title.lowercased()) digest has been created for today yet."
-        }
+    private func emptyMessage(for date: Date) -> String {
+        "No Flint digest has been created for \(date.formatted(date: .abbreviated, time: .omitted)) yet."
     }
 
     private func userFacingError(_ error: Error) -> String {
@@ -194,41 +217,13 @@ final class FlintViewModel {
         return formatter.string(from: date)
     }
 
-    private static func availableSelections(for digests: [FlintDigest]) -> [PeriodSelection] {
-        let availablePeriods = Set(digests.compactMap(\.period))
-        let periodSelections = FlintDigestPeriod.allCases.compactMap { period -> PeriodSelection? in
-            guard availablePeriods.contains(period) else { return nil }
-            return PeriodSelection(period: period)
-        }
-
-        return [.latest] + periodSelections
-    }
-
-    private static func visibleDigests(
-        from digests: [FlintDigest],
-        selectedPeriod: PeriodSelection
-    ) -> [FlintDigest] {
-        switch selectedPeriod {
-        case .latest:
-            guard let latest = latestDigest(from: digests) else { return [] }
-            return [latest]
-        case .morning, .afternoon, .evening:
-            guard let period = selectedPeriod.apiPeriod else { return [] }
-            return digests.filter { $0.period == period }
-        }
-    }
-
-    private static func latestDigest(from digests: [FlintDigest]) -> FlintDigest? {
-        digests.max { lhs, rhs in
+    private static func sortedNewestFirst(_ digests: [FlintDigest]) -> [FlintDigest] {
+        digests.sorted { lhs, rhs in
             switch (lhs.createdAt, rhs.createdAt) {
-            case let (lhsDate?, rhsDate?):
-                return lhsDate < rhsDate
-            case (nil, _?):
-                return true
-            case (_?, nil):
-                return false
-            case (nil, nil):
-                return false
+            case let (lhsDate?, rhsDate?): lhsDate > rhsDate
+            case (nil, _?): false
+            case (_?, nil): true
+            case (nil, nil): false
             }
         }
     }
