@@ -215,8 +215,10 @@ struct AnomalyScreen: View {
     // MARK: - Data
 
     private func formatted(_ value: Double?) -> String {
-        guard let value else { return "—" }
-        return value.rounded() == value ? String(Int(value)) : String(format: "%.1f", value)
+        // Int(value) traps for out-of-range or non-finite doubles (a
+        // mis-scaled/corrupted backend value shouldn't crash this screen).
+        guard let value, value.isFinite else { return "—" }
+        return value.rounded() == value ? String(format: "%.0f", value) : String(format: "%.1f", value)
     }
 
     private func loadMetric() async {

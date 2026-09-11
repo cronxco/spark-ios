@@ -89,7 +89,9 @@ final class FlintViewModel {
         } catch APIError.notModified {
             state = digests.isEmpty ? .empty(emptyMessage) : .loaded
         } catch where error.isAPICancellation {
-            if digests.isEmpty { state = .idle }
+            // Restore whatever state existing data implies — leaving this at
+            // .loading would permanently wedge refresh()'s reentrancy guard.
+            state = digests.isEmpty ? .idle : .loaded
         } catch where error.isNotFound {
             digests = []
             state = .empty(emptyMessage)
@@ -116,6 +118,7 @@ final class FlintViewModel {
             topics = response.data.sorted { ($0.lastTouchedAt ?? .distantPast) > ($1.lastTouchedAt ?? .distantPast) }
             topicsState = topics.isEmpty ? .empty("No threads yet.") : .loaded
         } catch where error.isAPICancellation {
+            topicsState = topics.isEmpty ? .idle : .loaded
         } catch {
             SparkObservability.captureHandled(error)
             logger.error("Flint topics load failed: \(String(describing: error))")
@@ -138,6 +141,8 @@ final class FlintViewModel {
             archiveDigests = Self.sortedNewestFirst(loaded)
             archiveState = archiveDigests.isEmpty ? .empty(emptyMessage(for: date)) : .loaded
         } catch where error.isAPICancellation {
+            guard date == archiveDate else { return }
+            archiveState = archiveDigests.isEmpty ? .idle : .loaded
         } catch where error.isNotFound {
             guard date == archiveDate else { return }
             archiveDigests = []

@@ -45,6 +45,8 @@ public struct StoryProgressBar: View {
                         segment(for: globalIndex(chapterIndex: chapterIndex, segmentInChapter: segmentInChapter))
                     }
                 }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(chapter.label)
             }
         }
         .frame(height: 3)

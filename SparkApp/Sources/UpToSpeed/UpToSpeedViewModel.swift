@@ -126,15 +126,17 @@ final class UpToSpeedViewModel {
     func markRead(at index: Int) {
         guard let screen = screens[safe: index] else { return }
         switch screen {
-        case .opener, .wrap, .checkIn, .anomaly, .dayContext:
-            // opener/wrap are derived; check-in and anomaly mark via their own signals;
-            // dayContext rides along on a digest that's always separately represented
-            // by at least one other screen (its header, or folded into news/wrap).
-            break
-        case .flintHeader, .flintParagraph, .flintInsight, .flintQuestion:
+        case .opener, .wrap, .checkIn, .anomaly:
+            break // opener/wrap are derived; check-in and anomaly mark via their own signals
+        case .flintHeader, .flintParagraph, .flintInsight, .flintQuestion, .dayContext:
+            // A day-context screen isn't always adjacent to the rest of its
+            // digest's screens (it's appended once, after every digest chapter),
+            // so "last page" has to scan forward rather than compare index+1 —
+            // otherwise a digest whose day-context screen trails its own
+            // content never gets marked read at all, or gets marked read
+            // before that screen is shown, depending on queue order.
             guard let itemID = screen.item?.id else { return }
-            let isLastPageForItem = screens[safe: index + 1]?.item?.id != itemID
-            if isLastPageForItem && digestCanBeMarkedRead(itemID: itemID) {
+            if Self.isLastScreen(forItemID: itemID, at: index, in: screens), digestCanBeMarkedRead(itemID: itemID) {
                 enqueueMarkRead(itemID: itemID, type: .flintDigest)
             }
         case .newsStory:
@@ -145,7 +147,11 @@ final class UpToSpeedViewModel {
                 }
                 return false
             }()
-            if !nextIsSameStory {
+            // Only the digest's own screens are ever adjacent here (news
+            // stories for one item are always built contiguously), but the
+            // final story must still have been scrolled to its end before
+            // the whole digest counts as read.
+            if !nextIsSameStory, scrolledToBottomIndices.contains(index) {
                 enqueueMarkRead(itemID: itemID, type: .flintDigest)
             }
         case .newsSummary(let item):
@@ -154,8 +160,22 @@ final class UpToSpeedViewModel {
         }
     }
 
-    /// Called when the wrap screen appears — folds the reading-list digest(s)
-    /// into "caught up" and flushes any pending read state on this leg.
+    /// Whether no later screen in `screens` shares `itemID` with the one at
+    /// `index` — i.e. whether this is genuinely the last time that item's
+    /// content appears in the queue. Screens for one item aren't always
+    /// contiguous (a day-context screen is appended once, separately from
+    /// the digest chapter it belongs to), so this scans forward rather than
+    /// only comparing against `index + 1`.
+    nonisolated static func isLastScreen(forItemID itemID: String, at index: Int, in screens: [UpToSpeedScreen]) -> Bool {
+        guard index + 1 < screens.count else { return true }
+        return !screens[(index + 1)...].contains { $0.item?.id == itemID }
+    }
+
+    /// Called when the wrap screen appears — marks read the (at most one)
+    /// reading-list digest whose content became `readingItem`, which the wrap
+    /// screen itself displays. Safe to call unconditionally, including via a
+    /// direct chapter jump: `foldedDigestIDs` only ever names a digest whose
+    /// content is shown on this very screen, never one the jump skipped past.
     func markReachedWrap() {
         for id in foldedDigestIDs {
             enqueueMarkRead(itemID: id, type: .flintDigest)
@@ -264,10 +284,15 @@ final class UpToSpeedViewModel {
                 dayContextCandidate = (item, context)
             }
 
-            if isReadingListDigest(title: title, digest: full) {
-                if let summary = full?.summary ?? digestSummary(item), readingItem == nil {
-                    readingItem = UpToSpeedParsing.readingItem(from: summary)
-                }
+            // Fold a reading-list digest's content into the wrap screen's
+            // readingItem — but only the first one whose summary actually
+            // parses. A duplicate reading-list digest, or one whose summary
+            // doesn't parse, falls through to normal digest expansion below
+            // instead of being silently folded as "read" with nothing shown.
+            if isReadingListDigest(title: title, digest: full), readingItem == nil,
+               let summary = full?.summary ?? digestSummary(item),
+               let parsed = UpToSpeedParsing.readingItem(from: summary) {
+                readingItem = parsed
                 foldedDigestIDs.append(item.id)
                 continue
             }
@@ -275,14 +300,17 @@ final class UpToSpeedViewModel {
             if isNewsRoundupDigest(title: title, digest: full) {
                 let summary = full?.summary ?? digestSummary(item) ?? ""
                 let sections = UpToSpeedParsing.newsRoundupSections(from: summary)
-                for section in sections {
-                    newsScreens.append((
-                        .newsStory(item, section: section, index: section.id, total: sections.count),
-                        .news
-                    ))
+                if !sections.isEmpty {
+                    for section in sections {
+                        newsScreens.append((
+                            .newsStory(item, section: section, index: section.id, total: sections.count),
+                            .news
+                        ))
+                    }
+                    continue
                 }
-                if sections.isEmpty { foldedDigestIDs.append(item.id) }
-                continue
+                // No parseable "## " sections — fall through to normal digest
+                // expansion rather than folding it as "read" with nothing shown.
             }
 
             // Primary digest — prose + insights + questions
@@ -313,13 +341,12 @@ final class UpToSpeedViewModel {
             }
         }
 
-        let hasSubstance = built.contains { pair in
-            switch pair.key {
-            case .anomaly, .digest, .day, .news: true
-            case .wrap: wrapChapterHasContent
-            case .intro: false
-            }
-        }
+        // Not `built.contains { ... .wrap: wrapChapterHasContent }` — a solo
+        // folded reading-list digest leaves `built` with zero .wrap-keyed
+        // entries (no incomplete check-in), so `.contains` over an empty
+        // match set would wrongly report no substance even though
+        // wrapChapterHasContent is true.
+        let hasSubstance = !built.isEmpty || wrapChapterHasContent
 
         guard hasSubstance else {
             screens = []

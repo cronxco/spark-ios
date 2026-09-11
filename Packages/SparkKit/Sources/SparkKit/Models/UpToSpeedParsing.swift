@@ -100,8 +100,15 @@ public enum UpToSpeedParsing {
     private static func strippingWhatsNewPrefix(_ text: String) -> String {
         guard let range = text.range(of: "new since yesterday", options: .caseInsensitive) else { return text }
         let tail = text[range.upperBound...]
-        let cleaned = tail.drop { $0 == " " || $0 == "i" || $0 == "s" || $0 == ":" || $0 == "-" || $0 == "—" }
-        let result = String(cleaned).trimmingCharacters(in: .whitespacesAndNewlines)
+        // Remove only a complete "is" plus separators — not every leading run of
+        // i/s characters, which previously ate into the following word (e.g.
+        // "is slowing" → "lowing").
+        let cleaned = String(tail).replacingOccurrences(
+            of: #"^\s*(?:is\b\s*)?[:\-—]?\s*"#,
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        let result = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !result.isEmpty else { return text }
         return result.prefix(1).uppercased() + result.dropFirst()
     }
@@ -152,7 +159,7 @@ public enum UpToSpeedParsing {
 
         var readingTime: String?
         if let match = trimmed.range(
-            of: #"(about )?\d+[\s-]?(minutes?|mins?|min read)"#,
+            of: #"(about )?\d+[\s-]?(min read|minutes?|mins?)"#,
             options: .regularExpression
         ) {
             let raw = String(trimmed[match])
@@ -166,7 +173,7 @@ public enum UpToSpeedParsing {
             let tail = trimmed[dash.upperBound...]
             let afterTime = tail
                 .replacingOccurrences(
-                    of: #"^(about )?\d+[\s-]?(minutes?|mins?|min read)\.?\s*"#,
+                    of: #"^(about )?\d+[\s-]?(min read|minutes?|mins?)\.?\s*"#,
                     with: "",
                     options: .regularExpression
                 )

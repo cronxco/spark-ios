@@ -409,7 +409,11 @@ private struct FlintDigestSection: View {
     }
 
     private var insightBlocks: [FlintDigestBlock] {
-        digest.blocks.filter { !$0.isQuestion && $0.blockType != "flint_editorial_note" }
+        // flint_day_context has no content/icon here — it renders as its own
+        // screen in Up to Speed's DayContextScreen, not a generic insight row.
+        digest.blocks.filter {
+            !$0.isQuestion && $0.blockType != "flint_editorial_note" && $0.blockType != "flint_day_context"
+        }
     }
 
     private var questionBlocks: [FlintDigestBlock] {

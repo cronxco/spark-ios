@@ -47,10 +47,24 @@ struct UpToSpeedParsingTests {
 
         #expect(sections[1].whatsNew?.contains("1,900-plus-flight event") == true)
         #expect(sections[1].whatsNew?.lowercased().contains("new since yesterday") == false)
+        // Regression: the prefix strip used to remove every leading i/s
+        // character rather than the complete word "is", truncating the start
+        // of the sentence (e.g. dropping into "...that the disruption...").
+        #expect(sections[1].whatsNew?.hasPrefix("That the disruption is no longer described") == true)
         #expect(sections[1].watching?.hasPrefix("Watch for NATS") == true)
 
         // The body should not repeat the watching sentence.
         #expect(sections[1].body.contains("Watch for NATS") == false)
+    }
+
+    @Test("strips only the complete 'is' prefix, not a run of i/s characters")
+    func stripsWhatsNewPrefixExactly() {
+        // "is slowing" used to lose its first four characters ("is s") to a
+        // drop-while over individual i/s/space/separator characters.
+        let sections = UpToSpeedParsing.newsRoundupSections(
+            from: "## Heading\n\nNew since yesterday is slowing global trade further."
+        )
+        #expect(sections[0].whatsNew == "Slowing global trade further.")
     }
 
     @Test("**bold** markers are not treated as italic sources")
@@ -74,6 +88,16 @@ struct UpToSpeedParsingTests {
     @Test("reading item is nil for empty input")
     func readingItemNilForEmpty() {
         #expect(UpToSpeedParsing.readingItem(from: "   ") == nil)
+    }
+
+    @Test("matches the longer 'min read' form before the shorter 'min' alternative")
+    func parsesReadingItemWithMinReadFormat() {
+        // "mins?" used to match "min" first, leaving "read." as the start of the blurb.
+        let summary = "**[A Long Read]"
+            + "(https://example.com/article)** — 12 min read. Worth the time."
+        let item = UpToSpeedParsing.readingItem(from: summary)
+        #expect(item?.readingTime == "12 min")
+        #expect(item?.blurb == "Worth the time.")
     }
 
     @Test("opener paragraphs skip the greeting and ALL-CAPS headings")
