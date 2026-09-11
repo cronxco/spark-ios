@@ -177,8 +177,11 @@ final class UpToSpeedViewModel {
         guard consumed.contains(index) else { return nil }
 
         switch screen {
-        case .opener, .wrap, .checkIn, .anomaly:
-            // opener/wrap are derived; check-in and anomaly mark via their own signals
+        case .opener, .wrap, .recap, .checkIn, .anomaly:
+            // opener/wrap/recap are derived; check-in and anomaly mark via
+            // their own signals. The recap in particular must never mark
+            // anything: everything on it is already read, and reading it again
+            // is not what puts it back.
             return nil
 
         case .flintHeader, .flintParagraph, .flintInsight, .flintQuestion, .dayContext:
