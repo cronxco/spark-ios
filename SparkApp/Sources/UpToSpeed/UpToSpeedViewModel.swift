@@ -26,7 +26,9 @@ final class UpToSpeedViewModel {
 
     private var allItems: [UpToSpeedItem] = []
     private var snapshotCount: Int = 0
-    private var pendingReadRefs: [UpToSpeedReadRef] = []
+    /// Reads queued for the next flush. Readable so tests can assert on what a
+    /// signal did or didn't mark, which is the whole subject of this type.
+    private(set) var pendingReadRefs: [UpToSpeedReadRef] = []
     private var isFlushing = false
     private var activeFlushTask: Task<Bool, Never>?
     /// Screens the reader has genuinely finished — reached the end of and
@@ -284,14 +286,22 @@ final class UpToSpeedViewModel {
     }
 
     /// Called by FlintQuestionPage after a successful answer submission.
-    /// Marks the digest as caught-up once all its questions are answered.
+    ///
+    /// Answering the last question lifts the `digestsAwaitingAnswers` block but
+    /// is not itself evidence the digest was read — a reader can open the flow,
+    /// swipe straight to the question and answer it without meeting a word of
+    /// the prose. So this re-runs the ordinary read test against the digest's
+    /// final screen rather than marking it directly; the consumption gate still
+    /// has to be satisfied. If the answer lands before the dwell elapses, the
+    /// dwell fires moments later and the test runs again.
     func onQuestionAnswered(blockID: String, itemID: String) {
         answeredQuestionIDs.insert(blockID)
         openQuestions.removeAll { $0.block.id == blockID }
         let allIDs = digestQuestionMap[itemID] ?? []
         guard !allIDs.isEmpty else { return }
         if allIDs.allSatisfy({ answeredQuestionIDs.contains($0) }) {
-            enqueueMarkRead(itemID: itemID, type: .flintDigest)
+            guard let lastIndex = screens.lastIndex(where: { $0.item?.id == itemID }) else { return }
+            evaluateRead(at: lastIndex)
         }
     }
 

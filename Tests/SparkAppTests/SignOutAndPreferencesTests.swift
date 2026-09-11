@@ -8,9 +8,12 @@ import Testing
 @Suite("Account teardown and notification preferences", .serialized)
 @MainActor
 struct SignOutAndPreferencesTests {
+    /// Own host: the stub is process-wide and suites run in parallel.
+    private static let host = "signout.spark.test"
+
     private let environment = APIEnvironment(
-        baseURL: URL(string: "https://test.spark.cronx.co/api/v1/mobile")!,
-        oauthAuthorizeURL: URL(string: "https://test.spark.cronx.co/oauth/authorize")!,
+        baseURL: URL(string: "https://signout.spark.test/api/v1/mobile")!,
+        oauthAuthorizeURL: URL(string: "https://signout.spark.test/oauth/authorize")!,
         name: "test"
     )
 
@@ -35,7 +38,7 @@ struct SignOutAndPreferencesTests {
         )
         model.session = .loggedIn
 
-        await AppStubURLProtocol.set { request in
+        await AppStubURLProtocol.set(host: Self.host) { request in
             if request.url?.path.hasSuffix("/devices/device-1") == true {
                 return (Data(), 503, [:])
             }
@@ -48,7 +51,7 @@ struct SignOutAndPreferencesTests {
         #expect(await tokenStore.accessToken() == "departing-user")
         #expect(defaults.string(forKey: AppModel.pendingDeviceRevocationKey) == "device-1")
 
-        await AppStubURLProtocol.set { _ in (Data(), 204, [:]) }
+        await AppStubURLProtocol.set(host: Self.host) { _ in (Data(), 204, [:]) }
         await model.reverbConnect()
 
         #expect(model.session == .loggedOut)
@@ -122,7 +125,7 @@ struct SignOutAndPreferencesTests {
         )
         let patchCount = PatchCounter()
 
-        await AppStubURLProtocol.set { request in
+        await AppStubURLProtocol.set(host: Self.host) { request in
             if request.httpMethod == "GET" {
                 return (
                     Data(#"{"categories":{},"delivery_mode":"immediate"}"#.utf8),
@@ -142,7 +145,7 @@ struct SignOutAndPreferencesTests {
         viewModel.scheduleUpdate(NotificationPreferences(deliveryMode: .workHours))
         try await waitForPatchCount(2)
 
-        let patches = (await AppStubURLProtocol.recorded()).filter { $0.httpMethod == "PATCH" }
+        let patches = (await AppStubURLProtocol.recorded(host: Self.host)).filter { $0.httpMethod == "PATCH" }
         #expect(patches.count == 2)
         #expect(patches.first?.value(forHTTPHeaderField: "If-Match") == "\"v1\"")
         #expect(patches.last?.value(forHTTPHeaderField: "If-Match") == "\"v2\"")
@@ -160,7 +163,7 @@ struct SignOutAndPreferencesTests {
         )
         let requestCount = RequestCounter()
 
-        await AppStubURLProtocol.set { request in
+        await AppStubURLProtocol.set(host: Self.host) { request in
             let count = await requestCount.increment()
             if count == 1 {
                 let page = #"{"data":[{"id":"notification-1","title":"Private","body":null,"domain":"money","is_read":false,"received_at":"2026-09-06T12:00:00Z","entity":null,"version":"\"v1\""}],"next_cursor":null,"has_more":false}"#
@@ -205,7 +208,7 @@ struct SignOutAndPreferencesTests {
 
     private func waitForPatchCount(_ expected: Int) async throws {
         for _ in 0..<40 {
-            let count = (await AppStubURLProtocol.recorded()).filter { $0.httpMethod == "PATCH" }.count
+            let count = (await AppStubURLProtocol.recorded(host: Self.host)).filter { $0.httpMethod == "PATCH" }.count
             if count >= expected { return }
             try await Task.sleep(for: .milliseconds(50))
         }
@@ -230,60 +233,5 @@ private actor RequestCounter {
     func increment() -> Int {
         count += 1
         return count
-    }
-}
-
-private final class AppStubURLProtocol: URLProtocol, @unchecked Sendable {
-    typealias Handler = @Sendable (URLRequest) async -> (Data, Int, [String: String])
-
-    private static let storage = Storage()
-
-    static func set(_ handler: @escaping Handler) async {
-        await storage.set(handler)
-    }
-
-    static func recorded() async -> [URLRequest] {
-        await storage.recorded()
-    }
-
-    override class func canInit(with _: URLRequest) -> Bool { true }
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-
-    override func startLoading() {
-        let request = self.request
-        let client = self.client
-        Task {
-            await Self.storage.record(request)
-            guard let handler = await Self.storage.handler() else {
-                client?.urlProtocol(self, didFailWithError: URLError(.cannotConnectToHost))
-                return
-            }
-            let (data, status, headers) = await handler(request)
-            let response = HTTPURLResponse(
-                url: request.url ?? URL(string: "about:blank")!,
-                statusCode: status,
-                httpVersion: "HTTP/1.1",
-                headerFields: headers
-            )!
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: data)
-            client?.urlProtocolDidFinishLoading(self)
-        }
-    }
-
-    override func stopLoading() {}
-
-    private actor Storage {
-        private var current: Handler?
-        private var requests: [URLRequest] = []
-
-        func set(_ handler: @escaping Handler) {
-            current = handler
-            requests.removeAll()
-        }
-
-        func handler() -> Handler? { current }
-        func record(_ request: URLRequest) { requests.append(request) }
-        func recorded() -> [URLRequest] { requests }
     }
 }

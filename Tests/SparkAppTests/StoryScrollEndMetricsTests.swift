@@ -1,4 +1,5 @@
 import Testing
+
 @testable import SparkUI
 
 @Suite("Story card end-of-content detection")
