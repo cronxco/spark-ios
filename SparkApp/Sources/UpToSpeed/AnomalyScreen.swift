@@ -149,8 +149,10 @@ struct AnomalyScreen: View {
         if anomaly.isOrdinal {
             guard let current = anomaly.currentValue, let baseline = anomaly.baselineValue else { return nil }
             let steps = abs(current - baseline)
+            guard steps.isFinite else { return nil }
             guard steps >= 0.5 else { return "off baseline" }
-            return steps < 1.5 ? "a band off" : "\(Int(steps.rounded())) bands off"
+            // String(format:) rather than Int(), which traps out of range.
+            return steps < 1.5 ? "a band off" : String(format: "%.0f bands off", steps)
         }
 
         if let pct = anomaly.percentChange {

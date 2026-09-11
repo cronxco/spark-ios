@@ -17,12 +17,16 @@ public struct UpToSpeedFlintDigestSummary: Codable, Sendable {
     public let date: String
     public let period: FlintDigestPeriod?
     public let title: String?
+    /// What sort of digest this is. Resolved server-side; the client used to
+    /// guess by looking for "news" or "roundup" in the title, which made
+    /// presentation depend on how a digest happened to be named.
+    public let kind: FlintDigestKind
     public let summary: String?
     public let blockCount: Int
     public let unansweredQuestionCount: Int
 
     enum CodingKeys: String, CodingKey {
-        case date, period, title, summary
+        case date, period, title, kind, summary
         case blockCount = "block_count"
         case unansweredQuestionCount = "unanswered_question_count"
     }
@@ -31,6 +35,7 @@ public struct UpToSpeedFlintDigestSummary: Codable, Sendable {
         date: String,
         period: FlintDigestPeriod? = nil,
         title: String? = nil,
+        kind: FlintDigestKind = .briefing,
         summary: String? = nil,
         blockCount: Int,
         unansweredQuestionCount: Int
@@ -38,10 +43,34 @@ public struct UpToSpeedFlintDigestSummary: Codable, Sendable {
         self.date = date
         self.period = period
         self.title = title
+        self.kind = kind
         self.summary = summary
         self.blockCount = blockCount
         self.unansweredQuestionCount = unansweredQuestionCount
     }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        date = try c.decode(String.self, forKey: .date)
+        period = try c.decodeIfPresent(FlintDigestPeriod.self, forKey: .period)
+        title = try c.decodeIfPresent(String.self, forKey: .title)
+        // Older responses carry no kind; a plain briefing is the safe reading,
+        // and the client still falls back to inspecting the content.
+        kind = try c.decodeIfPresent(FlintDigestKind.self, forKey: .kind) ?? .briefing
+        summary = try c.decodeIfPresent(String.self, forKey: .summary)
+        blockCount = try c.decodeIfPresent(Int.self, forKey: .blockCount) ?? 0
+        unansweredQuestionCount = try c.decodeIfPresent(Int.self, forKey: .unansweredQuestionCount) ?? 0
+    }
+}
+
+/// The role a Flint digest plays in the catch-up flow.
+public enum FlintDigestKind: String, Codable, Sendable {
+    /// The daily brief — prose, insights and questions.
+    case briefing
+    /// A set of news stories, rendered one story per card.
+    case newsRoundup = "news_roundup"
+    /// Saved-to-read material, folded into the wrap card.
+    case readingList = "reading_list"
 }
 
 /// Lightweight check-in status payload from the Up to Speed feed.

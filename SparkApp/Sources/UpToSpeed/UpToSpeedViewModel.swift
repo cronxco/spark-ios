@@ -386,7 +386,7 @@ final class UpToSpeedViewModel {
             // parses. A duplicate reading-list digest, or one whose summary
             // doesn't parse, falls through to normal digest expansion below
             // instead of being silently folded as "read" with nothing shown.
-            if isReadingListDigest(title: title, digest: full), readingItem == nil,
+            if isReadingListDigest(item: item, title: title, digest: full), readingItem == nil,
                let summary = full?.summary ?? digestSummary(item),
                let parsed = UpToSpeedParsing.readingItem(from: summary) {
                 readingItem = parsed
@@ -394,7 +394,7 @@ final class UpToSpeedViewModel {
                 continue
             }
 
-            if isNewsRoundupDigest(title: title, digest: full) {
+            if isNewsRoundupDigest(item: item, title: title, digest: full) {
                 let summary = full?.summary ?? digestSummary(item) ?? ""
                 let sections = UpToSpeedParsing.newsRoundupSections(from: summary)
                 if !sections.isEmpty {
@@ -557,7 +557,17 @@ final class UpToSpeedViewModel {
         return .distantPast
     }
 
-    private func isNewsRoundupDigest(title: String, digest: FlintDigest?) -> Bool {
+    /// The server resolves this now. The title and block heuristics remain as
+    /// a fallback for responses that predate the `kind` field — presentation
+    /// should not depend on how a digest happened to be named.
+    private func declaredKind(_ item: UpToSpeedItem) -> FlintDigestKind? {
+        guard case .flintDigest(let summary) = item.payload else { return nil }
+        return summary.kind == .briefing ? nil : summary.kind
+    }
+
+    private func isNewsRoundupDigest(item: UpToSpeedItem, title: String, digest: FlintDigest?) -> Bool {
+        if let kind = declaredKind(item) { return kind == .newsRoundup }
+
         let lowered = title.lowercased()
         if lowered.contains("news") || lowered.contains("roundup") { return true }
         guard let digest else { return false }
@@ -565,7 +575,9 @@ final class UpToSpeedViewModel {
         return !contentBlocks.isEmpty && contentBlocks.allSatisfy { $0.blockType == "flint_news" }
     }
 
-    private func isReadingListDigest(title: String, digest: FlintDigest?) -> Bool {
+    private func isReadingListDigest(item: UpToSpeedItem, title: String, digest: FlintDigest?) -> Bool {
+        if let kind = declaredKind(item) { return kind == .readingList }
+
         let lowered = title.lowercased()
         if lowered.contains("reading list") || lowered.contains("saved to read") { return true }
         return lowered.contains("reading") && (digest?.blocks.isEmpty ?? true)

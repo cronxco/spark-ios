@@ -225,6 +225,52 @@ struct UpToSpeedDecodingTests {
     }
 }
 
+@Suite("Flint digest summary payload")
+struct FlintDigestSummaryDecodingTests {
+    private func summary(_ json: String) throws -> UpToSpeedFlintDigestSummary {
+        try JSONDecoder().decode(UpToSpeedFlintDigestSummary.self, from: Data(json.utf8))
+    }
+
+    @Test("decodes the declared kind")
+    func decodesKind() throws {
+        let roundup = try summary("""
+        {"date": "2026-09-11", "title": "News roundup — Friday", "kind": "news_roundup",
+         "block_count": 4, "unanswered_question_count": 0}
+        """)
+        #expect(roundup.kind == .newsRoundup)
+
+        let reading = try summary("""
+        {"date": "2026-09-11", "title": "Saved to read", "kind": "reading_list",
+         "block_count": 0, "unanswered_question_count": 0}
+        """)
+        #expect(reading.kind == .readingList)
+    }
+
+    /// Responses predating the field must still decode, and a plain briefing is
+    /// the safe reading — the client falls back to inspecting the content.
+    @Test("an absent kind reads as a briefing")
+    func absentKindIsBriefing() throws {
+        let digest = try summary("""
+        {"date": "2026-09-11", "title": "Morning Digest", "block_count": 2,
+         "unanswered_question_count": 1}
+        """)
+
+        #expect(digest.kind == .briefing)
+        #expect(digest.blockCount == 2)
+        #expect(digest.unansweredQuestionCount == 1)
+    }
+
+    @Test("an unrecognised kind fails rather than being guessed at")
+    func unknownKindFails() {
+        #expect(throws: (any Error).self) {
+            try summary("""
+            {"date": "2026-09-11", "kind": "something_new", "block_count": 0,
+             "unanswered_question_count": 0}
+            """)
+        }
+    }
+}
+
 @Suite("Anomaly payload")
 struct AnomalyPayloadDecodingTests {
     private func anomaly(_ json: String) throws -> Anomaly {

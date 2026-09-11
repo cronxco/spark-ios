@@ -129,8 +129,11 @@ public struct Anomaly: Codable, Sendable, Hashable, Identifiable {
     }
 
     private static func plain(_ value: Double) -> String {
-        value == value.rounded()
-            ? String(Int(value))
+        // Int(value) traps on non-finite or out-of-range doubles, and these
+        // come straight off the wire.
+        guard value.isFinite else { return "—" }
+        return value == value.rounded()
+            ? String(format: "%.0f", value)
             : String(format: "%.1f", value)
     }
 }

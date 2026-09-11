@@ -67,12 +67,23 @@ public struct MetricDeltaCard: View {
         .accessibilityValue([value, unit, delta].compactMap { $0 }.joined(separator: ", "))
     }
 
+    /// `.reassuring` now carries a surface of its own: it backs anomalies whose
+    /// movement is welcome — a balance up, a resting heart rate down — which
+    /// previously had to borrow the flagged rose and read as a warning.
     private var tint: Color? {
-        emphasis == .flagged ? Color.sparkWarning.opacity(0.12) : nil
+        switch emphasis {
+        case .flagged: Color.sparkWarning.opacity(0.12)
+        case .reassuring: Color.sparkSuccess.opacity(0.12)
+        case .neutral: nil
+        }
     }
 
     private var valueColor: Color {
-        emphasis == .flagged ? Color.sparkWarning : .primary
+        switch emphasis {
+        case .flagged: Color.sparkWarning
+        case .reassuring: Color.sparkSuccess
+        case .neutral: .primary
+        }
     }
 
     private var deltaColor: Color {
