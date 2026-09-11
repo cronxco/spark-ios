@@ -128,14 +128,14 @@ private struct RecapRow: View {
         case .flintDigest(let summary):
             guard let kind = summary.kind else { return "Briefing" }
             switch kind {
-            case .briefing: "Briefing"
-            case .newsRoundup: "News roundup"
-            case .readingList: "Saved to read"
-            @unknown default: "Briefing"
+            case .briefing: return "Briefing"
+            case .newsRoundup: return "News roundup"
+            case .readingList: return "Saved to read"
+            @unknown default: return "Briefing"
             }
-        case .newsSummary(let news): news.source.capitalized
-        case .anomaly: "Unusual"
-        case .checkIn: "Check-in"
+        case .newsSummary(let news): return news.source.capitalized
+        case .anomaly: return "Unusual"
+        case .checkIn: return "Check-in"
         }
     }
 }
