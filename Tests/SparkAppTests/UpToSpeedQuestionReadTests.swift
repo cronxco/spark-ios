@@ -92,7 +92,9 @@ struct UpToSpeedQuestionReadTests {
         return viewModel
     }
 
-    private static let feedJSON = """
+    // nonisolated: the suite is @MainActor, but the stub handler is @Sendable
+    // and runs off the main actor. Immutable and Sendable, so this is safe.
+    private nonisolated static let feedJSON = """
     {"items":[{
       "id":"digest-a",
       "type":"flint_digest",
@@ -108,7 +110,7 @@ struct UpToSpeedQuestionReadTests {
     }]}
     """
 
-    private static let digestJSON = """
+    private nonisolated static let digestJSON = """
     {
       "event_id":"digest-a",
       "date":"2026-09-11",
