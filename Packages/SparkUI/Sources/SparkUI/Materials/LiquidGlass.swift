@@ -36,18 +36,31 @@ private struct SparkGlassModifier: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         if wantsSolidSurface {
-            content
-                .background {
-                    // Tint sits over the opaque fill but still behind the
-                    // content — as an overlay it would cover the card.
-                    shape.insettableShape
-                        .fill(Color.sparkElevated)
-                        .overlay(shape.insettableShape.fill(tint ?? .clear))
-                }
-                .overlay(shape.insettableShape.strokeBorder(Color.primary.opacity(0.25), lineWidth: 1))
+            switch shape {
+            case .capsule:
+                solid(content, in: Capsule())
+            case .roundedRect(let radius):
+                solid(content, in: RoundedRectangle(cornerRadius: radius))
+            case .circle:
+                solid(content, in: Circle())
+            }
         } else {
             content.modifier(GlassSurface(shape: shape, tint: tint))
         }
+    }
+
+    /// Generic over the concrete shape so one geometry backs the fill, the tint
+    /// and the border. Switching at the call site rather than erasing the type
+    /// keeps `strokeBorder` available, which is an `InsettableShape` method.
+    private func solid<S: InsettableShape>(_ content: Content, in shape: S) -> some View {
+        content
+            .background {
+                // Tint sits over the opaque fill but still behind the content —
+                // as an overlay it would cover the card.
+                shape.fill(Color.sparkElevated)
+                    .overlay(shape.fill(tint ?? .clear))
+            }
+            .overlay(shape.strokeBorder(Color.primary.opacity(0.25), lineWidth: 1))
     }
 }
 
@@ -67,19 +80,14 @@ private struct GlassSurface: ViewModifier {
                 content.glassEffect(.regular.tint(tint ?? .clear), in: .circle)
             }
         } else {
-            content.background(.ultraThinMaterial, in: shape.insettableShape)
-        }
-    }
-}
-
-extension SparkGlassShape {
-    /// The shape as an `AnyInsettableShape`, so the same geometry can back a
-    /// fill, a stroked border and a material.
-    var insettableShape: AnyInsettableShape {
-        switch self {
-        case .capsule: AnyInsettableShape(Capsule())
-        case .roundedRect(let radius): AnyInsettableShape(RoundedRectangle(cornerRadius: radius))
-        case .circle: AnyInsettableShape(Circle())
+            switch shape {
+            case .capsule:
+                content.background(.ultraThinMaterial, in: Capsule())
+            case .roundedRect(let radius):
+                content.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: radius))
+            case .circle:
+                content.background(.ultraThinMaterial, in: Circle())
+            }
         }
     }
 }
