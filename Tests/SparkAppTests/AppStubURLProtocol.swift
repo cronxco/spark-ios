@@ -26,17 +26,31 @@ final class AppStubURLProtocol: URLProtocol, @unchecked Sendable {
     override class func canInit(with _: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
+    /// The in-flight load, so `stopLoading()` can cancel it.
+    ///
+    /// `startLoading()` answers asynchronously (the handler is async), so a
+    /// cancelled request — a timeout, or `URLSession` tearing the task down —
+    /// would otherwise still deliver a response to a client that has moved on.
+    /// URLSession calls `startLoading`/`stopLoading` on its own loading thread,
+    /// hence the lock rather than bare mutable state on an `@unchecked Sendable`.
+    private let lock = NSLock()
+    private var loadTask: Task<Void, Never>?
+
     override func startLoading() {
         let request = self.request
         let client = self.client
-        Task {
+        let task = Task { [weak self] in
+            guard let self else { return }
             let host = request.url?.host ?? ""
             await Self.storage.record(request, host: host)
+            guard !Task.isCancelled else { return }
             guard let handler = await Self.storage.handler(host: host) else {
+                guard !Task.isCancelled else { return }
                 client?.urlProtocol(self, didFailWithError: URLError(.cannotConnectToHost))
                 return
             }
             let (data, status, headers) = await handler(request)
+            guard !Task.isCancelled else { return }
             let response = HTTPURLResponse(
                 url: request.url ?? URL(string: "about:blank")!,
                 statusCode: status,
@@ -47,9 +61,17 @@ final class AppStubURLProtocol: URLProtocol, @unchecked Sendable {
             client?.urlProtocol(self, didLoad: data)
             client?.urlProtocolDidFinishLoading(self)
         }
+        lock.withLock { loadTask = task }
     }
 
-    override func stopLoading() {}
+    override func stopLoading() {
+        let task = lock.withLock {
+            let task = loadTask
+            loadTask = nil
+            return task
+        }
+        task?.cancel()
+    }
 
     private actor Storage {
         private var handlers: [String: Handler] = [:]
