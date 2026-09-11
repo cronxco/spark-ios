@@ -85,9 +85,16 @@ struct UpToSpeedQuestionReadTests {
         let viewModel = UpToSpeedViewModel(apiClient: client)
         await viewModel.load()
 
-        // Guard the fixture itself: if the queue never built, both assertions
-        // above would pass vacuously.
+        // Guard the fixture itself. Both tests turn on the digest's question
+        // actually being known, which only happens if the detail fetch decoded
+        // — `preloadDigests` swallows failures with `try?`, so a broken fixture
+        // would otherwise look like "no questions outstanding" and quietly
+        // invert what these tests assert.
         #expect(viewModel.screens.contains { $0.item?.id == "digest-a" })
+        #expect(
+            viewModel.openQuestions.contains { $0.block.id == "block-question" },
+            "digest detail did not load: the question fixture never reached the view model"
+        )
 
         return viewModel
     }

@@ -219,9 +219,24 @@ final class UpToSpeedViewModel {
     /// Digests that still have at least one unanswered question, and so are not
     /// finished no matter how much of their prose has been read.
     private var digestsAwaitingAnswers: Set<String> {
-        Set(digestQuestionMap.compactMap { itemID, questionIDs in
+        var awaiting = Set(digestQuestionMap.compactMap { itemID, questionIDs in
             questionIDs.allSatisfy { answeredQuestionIDs.contains($0) } ? nil : itemID
         })
+
+        // `preloadDigests` fetches detail with `try?`, so a failed request
+        // leaves no question ids for that digest at all — and without this the
+        // map's silence would read as "nothing outstanding" and the digest
+        // would be marked caught up after its prose, with the feed itself
+        // saying a question is still waiting. Trust the feed's count whenever
+        // the detail never arrived; once it has, the map is the better answer
+        // because it tracks answers given in this session.
+        for item in allItems where digestQuestionMap[item.id] == nil {
+            if case .flintDigest(let summary) = item.payload, summary.unansweredQuestionCount > 0 {
+                awaiting.insert(item.id)
+            }
+        }
+
+        return awaiting
     }
 
     /// Whether no later screen in `screens` shares `itemID` with the one at
