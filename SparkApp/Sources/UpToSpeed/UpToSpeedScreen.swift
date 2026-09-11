@@ -12,6 +12,7 @@ enum UpToSpeedScreen: Identifiable {
     case flintQuestion(UpToSpeedItem, FlintDigestBlock)
     case checkIn(UpToSpeedItem)
     case anomaly(UpToSpeedItem)
+    case dayContext(UpToSpeedItem, FlintDayContext, yesterday: String?)
     case newsStory(UpToSpeedItem, section: NewsRoundupSection, index: Int, total: Int)
     case newsSummary(UpToSpeedItem)
     case wrap
@@ -25,6 +26,7 @@ enum UpToSpeedScreen: Identifiable {
         case .flintQuestion(let item, let block): "\(item.id)-\(block.id)"
         case .checkIn(let item): item.id
         case .anomaly(let item): item.id
+        case .dayContext(let item, _, _): "\(item.id)-day"
         case .newsStory(let item, _, let index, _): "\(item.id)-news\(index)"
         case .newsSummary(let item): item.id
         case .wrap: "wrap"
@@ -41,6 +43,7 @@ enum UpToSpeedScreen: Identifiable {
         case .flintQuestion(let item, _): item
         case .checkIn(let item): item
         case .anomaly(let item): item
+        case .dayContext(let item, _, _): item
         case .newsStory(let item, _, _, _): item
         case .newsSummary(let item): item
         }

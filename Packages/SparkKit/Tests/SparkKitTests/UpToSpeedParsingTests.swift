@@ -94,4 +94,37 @@ struct UpToSpeedParsingTests {
         #expect(paragraphs[0].hasPrefix("Readiness dropped hard"))
         #expect(paragraphs[1].hasPrefix("Yesterday was a solid"))
     }
+
+    @Test("pulls a one-sentence yesterday recap from WHAT YOU'VE BEEN UP TO")
+    func yesterdayRecap() {
+        let summary = """
+        Good Thursday morning.
+
+        DRIVING THE DAY
+
+        Readiness dropped hard overnight — 54, down 31% on baseline.
+
+        WHAT YOU'VE BEEN UP TO —
+
+        Yesterday was a solid, uneventful office day — the RSA breakfast with Daniel went to plan. Sleep was rough.
+
+        COMING UP —
+
+        Friday brings the start of Daniel's birthday weekend.
+        """
+        let recap = UpToSpeedParsing.yesterdayRecap(from: summary)
+        #expect(recap == "Yesterday was a solid, uneventful office day — the RSA breakfast with Daniel went to plan")
+    }
+
+    @Test("yesterday recap is nil when the summary has no such section")
+    func yesterdayRecapNilWhenAbsent() {
+        let summary = """
+        Good Thursday evening.
+
+        THURSDAY CHEAT SHEET
+
+        Quiet day, nothing notable.
+        """
+        #expect(UpToSpeedParsing.yesterdayRecap(from: summary) == nil)
+    }
 }

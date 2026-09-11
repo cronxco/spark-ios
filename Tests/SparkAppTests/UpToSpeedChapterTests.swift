@@ -13,6 +13,7 @@ struct UpToSpeedChapterTests {
             .anomaly,
             .digest(title: "Morning Digest"),
             .digest(title: "Morning Digest"),
+            .day,
             .news, .news, .news,
             .wrap, .wrap,
         ]
@@ -23,12 +24,16 @@ struct UpToSpeedChapterTests {
             .intro,
             .anomaly,
             .digest(title: "Morning Digest"),
+            .day,
             .news,
             .wrap,
         ])
-        #expect(chapters.map(\.cardCount) == [1, 1, 2, 3, 2])
-        #expect(chapters[3].range == 4..<7)
-        #expect(chapters[4].range == 7..<9)
+        #expect(chapters.map(\.cardCount) == [1, 1, 2, 1, 3, 2])
+        #expect(chapters[3].range == 4..<5)
+        #expect(chapters[4].range == 5..<8)
+        #expect(chapters[5].range == 8..<10)
+        #expect(chapters[3].title == "Your day")
+        #expect(chapters[3].shortLabel == "Day")
     }
 
     @Test func distinctDigestTitlesStayInSeparateChapters() {
@@ -47,9 +52,10 @@ struct UpToSpeedChapterTests {
     }
 
     @Test func chapterAccentsMatchTheirKind() {
-        let chapters = UpToSpeedChapter.chapters(for: [.anomaly, .news, .wrap])
+        let chapters = UpToSpeedChapter.chapters(for: [.anomaly, .day, .news, .wrap])
         #expect(chapters[0].accent == .sparkWarning)
-        #expect(chapters[1].accent == .sparkOcean)
-        #expect(chapters[2].accent == .sparkSuccess)
+        #expect(chapters[1].accent == .sparkAccent)
+        #expect(chapters[2].accent == .sparkOcean)
+        #expect(chapters[3].accent == .sparkSuccess)
     }
 }

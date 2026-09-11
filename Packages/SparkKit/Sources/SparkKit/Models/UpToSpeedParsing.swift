@@ -220,4 +220,29 @@ public enum UpToSpeedParsing {
         }
         return text
     }
+
+    // MARK: - Yesterday recap
+
+    /// A one-sentence recap of yesterday, pulled from the digest summary's
+    /// "WHAT YOU'VE BEEN UP TO" section (the morning digest's retrospective
+    /// paragraph) — the Day screen's "yesterday" mini-card. `nil` when the
+    /// summary carries no such section (afternoon/evening digests, or a
+    /// morning digest that omitted it as a quiet-day simplification).
+    public static func yesterdayRecap(from summary: String) -> String? {
+        let chunks = summary
+            .components(separatedBy: "\n\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        guard let headingIndex = chunks.firstIndex(where: isYesterdayHeading) else { return nil }
+        let bodyIndex = chunks.index(after: headingIndex)
+        guard chunks.indices.contains(bodyIndex) else { return nil }
+
+        let sentence = firstSentence(of: chunks[bodyIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return sentence.isEmpty ? nil : sentence
+    }
+
+    private static func isYesterdayHeading(_ chunk: String) -> Bool {
+        chunk.range(of: "WHAT YOU'VE BEEN UP TO", options: .caseInsensitive) != nil
+    }
 }

@@ -8,6 +8,7 @@ struct UpToSpeedChapter: Identifiable {
         case intro
         case anomaly
         case digest(title: String)
+        case day
         case news
         case wrap
 
@@ -16,6 +17,7 @@ struct UpToSpeedChapter: Identifiable {
             case .intro: "Start"
             case .anomaly: "Your body"
             case .digest: "Briefing"
+            case .day: "Day"
             case .news: "News"
             case .wrap: "Wrap"
             }
@@ -26,6 +28,7 @@ struct UpToSpeedChapter: Identifiable {
             case .intro: .sparkAccent
             case .anomaly: .sparkWarning
             case .digest: .sparkAccent
+            case .day: .sparkAccent
             case .news: .sparkOcean
             case .wrap: .sparkSuccess
             }
@@ -71,6 +74,7 @@ struct UpToSpeedChapter: Identifiable {
         case .intro: "Where you are"
         case .anomaly: "Your readiness dip"
         case .digest(let title): title
+        case .day: "Your day"
         case .news: "News roundup"
         case .wrap: "Before you go"
         }

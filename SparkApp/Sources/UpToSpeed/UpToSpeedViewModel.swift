@@ -126,8 +126,11 @@ final class UpToSpeedViewModel {
     func markRead(at index: Int) {
         guard let screen = screens[safe: index] else { return }
         switch screen {
-        case .opener, .wrap, .checkIn, .anomaly:
-            break // opener/wrap are derived; check-in and anomaly mark via their own signals
+        case .opener, .wrap, .checkIn, .anomaly, .dayContext:
+            // opener/wrap are derived; check-in and anomaly mark via their own signals;
+            // dayContext rides along on a digest that's always separately represented
+            // by at least one other screen (its header, or folded into news/wrap).
+            break
         case .flintHeader, .flintParagraph, .flintInsight, .flintQuestion:
             guard let itemID = screen.item?.id else { return }
             let isLastPageForItem = screens[safe: index + 1]?.item?.id != itemID
@@ -248,10 +251,18 @@ final class UpToSpeedViewModel {
 
         var primaryDigestSummary: String?
         var newsScreens: [(screen: UpToSpeedScreen, key: UpToSpeedChapter.Kind)] = []
+        // digestItems is sorted oldest → newest, so the last match here is the
+        // most-recently-created day-context block across all of today's digests.
+        var dayContextCandidate: (item: UpToSpeedItem, context: FlintDayContext)?
 
         for item in digestItems {
             let full = digests[item.id]
             let title = digestTitle(item: item, digest: full)
+
+            if let block = full?.blocks.first(where: { $0.blockType == "flint_day_context" }),
+               let context = block.dayContext {
+                dayContextCandidate = (item, context)
+            }
 
             if isReadingListDigest(title: title, digest: full) {
                 if let summary = full?.summary ?? digestSummary(item), readingItem == nil {
@@ -283,7 +294,11 @@ final class UpToSpeedViewModel {
             }
         }
 
-        // 3 — news (roundup sections, then per-article summaries)
+        // 3 — day context (if any digest carried one), then news
+        if let candidate = dayContextCandidate {
+            let yesterday = primaryDigestSummary.flatMap(UpToSpeedParsing.yesterdayRecap(from:))
+            built.append((.dayContext(candidate.item, candidate.context, yesterday: yesterday), .day))
+        }
         built.append(contentsOf: newsScreens)
         for item in unread where item.type == .newsSummary {
             built.append((.newsSummary(item), .news))
@@ -300,7 +315,7 @@ final class UpToSpeedViewModel {
 
         let hasSubstance = built.contains { pair in
             switch pair.key {
-            case .anomaly, .digest, .news: true
+            case .anomaly, .digest, .day, .news: true
             case .wrap: wrapChapterHasContent
             case .intro: false
             }
@@ -346,7 +361,9 @@ final class UpToSpeedViewModel {
         }
 
         if let digest {
-            let insights = digest.blocks.filter { !$0.isQuestion && $0.blockType != "flint_editorial_note" }
+            let insights = digest.blocks.filter {
+                !$0.isQuestion && $0.blockType != "flint_editorial_note" && $0.blockType != "flint_day_context"
+            }
             let questions = digest.blocks.filter { $0.isQuestion }
             for block in insights { pages.append(.flintInsight(item, block)) }
             for block in questions { pages.append(.flintQuestion(item, block)) }

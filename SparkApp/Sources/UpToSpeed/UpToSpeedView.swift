@@ -238,6 +238,8 @@ struct UpToSpeedView: View {
             CheckInScreen(item: item, viewModel: vm)
         case .anomaly(let item):
             AnomalyScreen(item: item, viewModel: vm)
+        case .dayContext(_, let context, let yesterday):
+            DayContextScreen(dayContext: context, yesterday: yesterday)
         case .newsStory(let item, let section, let sectionIndex, let total):
             NewsStoryScreen(
                 item: item,
