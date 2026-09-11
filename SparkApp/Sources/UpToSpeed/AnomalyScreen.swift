@@ -7,6 +7,7 @@ import SwiftUI
 struct AnomalyScreen: View {
     let item: UpToSpeedItem
     let viewModel: UpToSpeedViewModel
+    var isActive: Bool = true
 
     @Environment(AppModel.self) private var appModel
     @State private var metricDetail: MetricDetail?

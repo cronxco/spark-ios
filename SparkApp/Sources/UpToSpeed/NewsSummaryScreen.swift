@@ -8,6 +8,7 @@ import SwiftUI
 struct NewsSummaryScreen: View {
     let item: UpToSpeedItem
     let viewModel: UpToSpeedViewModel
+    var isActive: Bool = true
     let onReachedBottom: (() -> Void)?
 
     @Environment(AppModel.self) private var appModel
@@ -19,7 +20,11 @@ struct NewsSummaryScreen: View {
     }
 
     var body: some View {
-        StoryScreenScaffold(label: news.map { $0.source.uppercased() }, onReachedBottom: onReachedBottom) {
+        StoryScreenScaffold(
+            label: news.map { $0.source.uppercased() },
+            isActive: isActive,
+            onReachedBottom: onReachedBottom
+        ) {
             if let news {
                 VStack(alignment: .leading, spacing: SparkSpacing.lg) {
                     Text(news.title)

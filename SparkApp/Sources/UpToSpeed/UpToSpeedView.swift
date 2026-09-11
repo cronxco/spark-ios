@@ -95,8 +95,8 @@ struct UpToSpeedView: View {
         @Bindable var vm = vm
 
         TabView(selection: $vm.currentIndex) {
-            ForEach(Array(vm.screens.enumerated()), id: \.offset) { index, screen in
-                screenRenderer(screen, index: index, vm: vm)
+            ForEach(Array(vm.screens.enumerated()), id: \.element.id) { index, screen in
+                screenRenderer(screen, index: index, isActive: index == vm.currentIndex, vm: vm)
                     .tag(index)
             }
         }
@@ -222,36 +222,52 @@ struct UpToSpeedView: View {
     // MARK: - Screen registry
 
     @ViewBuilder
-    private func screenRenderer(_ screen: UpToSpeedScreen, index: Int, vm: UpToSpeedViewModel) -> some View {
+    private func screenRenderer(
+        _ screen: UpToSpeedScreen,
+        index: Int,
+        isActive: Bool,
+        vm: UpToSpeedViewModel
+    ) -> some View {
+        // `isActive` matters because TabView(.page) builds the next page before
+        // the swipe lands. Without it an off-screen card reaches the end of its
+        // content and would be marked read before the reader ever sees it.
+        let consumed: () -> Void = { vm.markScreenConsumed(at: index) }
+
         switch screen {
         case .opener:
             FlintOpenerScreen(viewModel: vm)
         case .flintHeader(let item, let firstSection):
-            FlintHeaderPage(item: item, firstSection: firstSection)
+            FlintHeaderPage(item: item, firstSection: firstSection, isActive: isActive, onReachedBottom: consumed)
         case .flintParagraph(let item, let text, _):
-            FlintParagraphPage(item: item, text: text)
+            FlintParagraphPage(item: item, text: text, isActive: isActive, onReachedBottom: consumed)
         case .flintInsight(_, let block):
-            FlintInsightPage(block: block)
+            FlintInsightPage(block: block, isActive: isActive, onReachedBottom: consumed)
         case .flintQuestion(let item, let block):
-            FlintQuestionPage(item: item, block: block, viewModel: vm)
+            FlintQuestionPage(item: item, block: block, viewModel: vm, isActive: isActive, onReachedBottom: consumed)
         case .checkIn(let item):
             CheckInScreen(item: item, viewModel: vm)
         case .anomaly(let item):
-            AnomalyScreen(item: item, viewModel: vm)
+            AnomalyScreen(item: item, viewModel: vm, isActive: isActive)
         case .dayContext(_, let context, let yesterday):
-            DayContextScreen(dayContext: context, yesterday: yesterday)
+            DayContextScreen(
+                dayContext: context,
+                yesterday: yesterday,
+                isActive: isActive,
+                onReachedBottom: consumed
+            )
         case .newsStory(let item, let section, let sectionIndex, let total):
             NewsStoryScreen(
                 item: item,
                 section: section,
                 index: sectionIndex,
                 total: total,
-                onReachedBottom: { vm.markScrolledToBottom(at: index) }
+                isActive: isActive,
+                onReachedBottom: consumed
             )
         case .newsSummary(let item):
-            NewsSummaryScreen(item: item, viewModel: vm, onReachedBottom: { vm.markScrolledToBottom(at: index) })
+            NewsSummaryScreen(item: item, viewModel: vm, isActive: isActive, onReachedBottom: consumed)
         case .wrap:
-            WrapScreen(viewModel: vm, onDone: { dismissFlow(vm: vm) })
+            WrapScreen(viewModel: vm, onDone: { dismissFlow(vm: vm) }, isActive: isActive)
         }
     }
 

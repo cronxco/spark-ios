@@ -9,6 +9,8 @@ import SwiftUI
 struct FlintHeaderPage: View {
     let item: UpToSpeedItem
     let firstSection: String?
+    var isActive: Bool = true
+    var onReachedBottom: (() -> Void)?
 
     private var summary: UpToSpeedFlintDigestSummary? {
         if case .flintDigest(let s) = item.payload { return s }
@@ -16,7 +18,11 @@ struct FlintHeaderPage: View {
     }
 
     var body: some View {
-        StoryScreenScaffold(label: summary?.period.map { "\($0.displayName) Digest" }) {
+        StoryScreenScaffold(
+            label: summary?.period.map { "\($0.displayName) Digest" },
+            isActive: isActive,
+            onReachedBottom: onReachedBottom
+        ) {
             VStack(alignment: .leading, spacing: SparkSpacing.lg) {
                 if let summary {
                     if let title = summary.title {
@@ -59,6 +65,8 @@ struct FlintHeaderPage: View {
 struct FlintParagraphPage: View {
     let item: UpToSpeedItem
     let text: String
+    var isActive: Bool = true
+    var onReachedBottom: (() -> Void)?
 
     private var summary: UpToSpeedFlintDigestSummary? {
         if case .flintDigest(let s) = item.payload { return s }
@@ -66,7 +74,11 @@ struct FlintParagraphPage: View {
     }
 
     var body: some View {
-        StoryScreenScaffold(label: summary?.period.map { "\($0.displayName) Digest" }) {
+        StoryScreenScaffold(
+            label: summary?.period.map { "\($0.displayName) Digest" },
+            isActive: isActive,
+            onReachedBottom: onReachedBottom
+        ) {
             SparkLongFormContentView(
                 text: text,
                 tint: .sparkAccent
@@ -80,9 +92,11 @@ struct FlintParagraphPage: View {
 /// One insight (non-question) block from a flint digest.
 struct FlintInsightPage: View {
     let block: FlintDigestBlock
+    var isActive: Bool = true
+    var onReachedBottom: (() -> Void)?
 
     var body: some View {
-        StoryScreenScaffold(label: "Insight") {
+        StoryScreenScaffold(label: "Insight", isActive: isActive, onReachedBottom: onReachedBottom) {
             GlassCard(tint: Color.sparkAccent.opacity(0.1)) {
                 VStack(alignment: .leading, spacing: SparkSpacing.md) {
                     Text(block.title)
@@ -111,6 +125,8 @@ struct FlintQuestionPage: View {
     let item: UpToSpeedItem
     let block: FlintDigestBlock
     let viewModel: UpToSpeedViewModel
+    var isActive: Bool = true
+    var onReachedBottom: (() -> Void)?
 
     @Environment(AppModel.self) private var appModel
     @State private var isSubmitting = false
@@ -119,7 +135,12 @@ struct FlintQuestionPage: View {
     @State private var submittedNote: String?
 
     var body: some View {
-        StoryScreenScaffold(label: labelText, flintByline: .init("Flint is asking")) {
+        StoryScreenScaffold(
+            label: labelText,
+            flintByline: .init("Flint is asking"),
+            isActive: isActive,
+            onReachedBottom: onReachedBottom
+        ) {
             VStack(alignment: .leading, spacing: SparkSpacing.lg) {
                 Text(block.question ?? block.title)
                     .font(SparkTypography.heroSmall)

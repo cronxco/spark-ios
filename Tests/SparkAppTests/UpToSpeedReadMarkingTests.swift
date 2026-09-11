@@ -39,6 +39,101 @@ struct UpToSpeedReadMarkingTests {
         #expect(UpToSpeedViewModel.isLastScreen(forItemID: "digest-solo", at: 0, in: screens) == true)
     }
 
+    // The shipped bug: the scaffold's bottom sentinel fired on first render,
+    // so every card reported "scrolled to the bottom" and one forward swipe
+    // marked it caught up. Nothing may be marked read unless the reader has
+    // actually finished the card.
+    @Test func unconsumedScreensAreNeverMarkedRead() {
+        let item = newsSummary(id: "news-a")
+        let screens: [UpToSpeedScreen] = [.newsSummary(item)]
+
+        #expect(target(at: 0, in: screens, consumed: []) == nil)
+    }
+
+    @Test func consumedNewsSummaryIsMarkedRead() {
+        let item = newsSummary(id: "news-a")
+        let screens: [UpToSpeedScreen] = [.newsSummary(item)]
+
+        let ref = target(at: 0, in: screens, consumed: [0])
+        #expect(ref?.id == "news-a")
+        #expect(ref?.type == UpToSpeedItemType.newsSummary.rawValue)
+    }
+
+    // Consuming one page of a multi-page digest isn't finishing the digest.
+    @Test func consumingAnEarlyDigestPageDoesNotMarkTheDigestRead() {
+        let item = digest(id: "digest-a")
+        let screens: [UpToSpeedScreen] = [
+            .flintHeader(item, firstSection: "opening"),
+            .flintParagraph(item, text: "body", index: 0),
+        ]
+
+        #expect(target(at: 0, in: screens, consumed: [0]) == nil)
+    }
+
+    @Test func consumingTheLastDigestPageMarksTheDigestRead() {
+        let item = digest(id: "digest-a")
+        let screens: [UpToSpeedScreen] = [
+            .flintHeader(item, firstSection: "opening"),
+            .flintParagraph(item, text: "body", index: 0),
+        ]
+
+        let ref = target(at: 1, in: screens, consumed: [0, 1])
+        #expect(ref?.id == "digest-a")
+        #expect(ref?.type == UpToSpeedItemType.flintDigest.rawValue)
+    }
+
+    // A digest with a question Flint is still waiting on isn't finished, even
+    // if every page of its prose has been read.
+    @Test func digestWithUnansweredQuestionsIsNotMarkedRead() {
+        let item = digest(id: "digest-a")
+        let screens: [UpToSpeedScreen] = [.flintParagraph(item, text: "body", index: 0)]
+
+        #expect(target(at: 0, in: screens, consumed: [0], awaiting: ["digest-a"]) == nil)
+        #expect(target(at: 0, in: screens, consumed: [0], awaiting: ["digest-b"])?.id == "digest-a")
+    }
+
+    // Check-ins and anomalies have their own completion signals — submitting
+    // the check-in, acknowledging the anomaly — so reading the card is not it.
+    @Test func checkInAndAnomalyScreensAreNeverMarkedReadByReading() {
+        let checkInItem = newsSummary(id: "check-in")
+        let anomalyItem = newsSummary(id: "anomaly")
+        let screens: [UpToSpeedScreen] = [.checkIn(checkInItem), .anomaly(anomalyItem)]
+
+        #expect(target(at: 0, in: screens, consumed: [0, 1]) == nil)
+        #expect(target(at: 1, in: screens, consumed: [0, 1]) == nil)
+    }
+
+    private func target(
+        at index: Int,
+        in screens: [UpToSpeedScreen],
+        consumed: Set<Int>,
+        awaiting: Set<String> = []
+    ) -> UpToSpeedReadRef? {
+        UpToSpeedViewModel.readTarget(
+            at: index,
+            in: screens,
+            consumed: consumed,
+            digestsAwaitingAnswers: awaiting
+        )
+    }
+
+    private func newsSummary(id: String) -> UpToSpeedItem {
+        UpToSpeedItem(
+            id: id,
+            type: .newsSummary,
+            caughtUpAt: nil,
+            payload: .newsSummary(NewsSummary(
+                title: "A story",
+                source: "newsletter",
+                url: nil,
+                time: nil,
+                tldr: nil,
+                summary: nil,
+                keyTakeaways: nil
+            ))
+        )
+    }
+
     private func digest(id: String) -> UpToSpeedItem {
         UpToSpeedItem(
             id: id,

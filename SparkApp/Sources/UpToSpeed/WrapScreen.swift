@@ -7,11 +7,15 @@ import SwiftUI
 struct WrapScreen: View {
     let viewModel: UpToSpeedViewModel
     let onDone: () -> Void
+    var isActive: Bool = true
 
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        StoryScreenScaffold {
+        StoryScreenScaffold(
+            isActive: isActive,
+            onReachedBottom: { viewModel.markReachedWrap() }
+        ) {
             VStack(alignment: .leading, spacing: SparkSpacing.xl) {
                 Text(headline)
                     .font(SparkTypography.hero)
@@ -30,7 +34,6 @@ struct WrapScreen: View {
                     .frame(maxWidth: .infinity)
             }
         }
-        .onAppear { viewModel.markReachedWrap() }
     }
 
     private var headline: String {
