@@ -39,8 +39,7 @@ final class AppStubURLProtocol: URLProtocol, @unchecked Sendable {
     override func startLoading() {
         let request = self.request
         let client = self.client
-        let task = Task { [weak self] in
-            guard let self else { return }
+        let task = Task {
             let host = request.url?.host ?? ""
             await Self.storage.record(request, host: host)
             guard !Task.isCancelled else { return }
