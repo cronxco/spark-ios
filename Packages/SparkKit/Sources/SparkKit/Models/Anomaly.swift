@@ -60,7 +60,8 @@ public struct Anomaly: Codable, Sendable, Hashable, Identifiable {
         domain = try c.decodeIfPresent(String.self, forKey: .domain)
         service = try c.decodeIfPresent(String.self, forKey: .service)
         unit = try c.decodeIfPresent(String.self, forKey: .unit)
-        valence = try c.decodeIfPresent(AnomalyValence.self, forKey: .valence) ?? .neutral
+        let rawValence = try c.decodeIfPresent(String.self, forKey: .valence)
+        valence = rawValence.flatMap(AnomalyValence.init(rawValue:)) ?? .neutral
         isOrdinal = try c.decodeIfPresent(Bool.self, forKey: .isOrdinal) ?? false
         currentDisplay = try c.decodeIfPresent(String.self, forKey: .currentDisplay)
         baselineDisplay = try c.decodeIfPresent(String.self, forKey: .baselineDisplay)

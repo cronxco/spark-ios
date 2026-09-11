@@ -125,7 +125,14 @@ private struct RecapRow: View {
 
     private var kindLabel: String {
         switch item.payload {
-        case .flintDigest: "Briefing"
+        case .flintDigest(let summary):
+            guard let kind = summary.kind else { return "Briefing" }
+            switch kind {
+            case .briefing: "Briefing"
+            case .newsRoundup: "News roundup"
+            case .readingList: "Saved to read"
+            @unknown default: "Briefing"
+            }
         case .newsSummary(let news): news.source.capitalized
         case .anomaly: "Unusual"
         case .checkIn: "Check-in"

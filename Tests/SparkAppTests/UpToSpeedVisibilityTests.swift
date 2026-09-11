@@ -95,8 +95,8 @@ struct UpToSpeedVisibilityTests {
     // -------------------------------------------------------------------------
 
     @Test func recapCollectsEverythingAlreadyDealtWith() throws {
-        let earlier = Date(timeIntervalSince1970: 1_000)
-        let later = Date(timeIntervalSince1970: 2_000)
+        let earlier = timestamp(hour: 7)
+        let later = timestamp(hour: 8)
 
         let recap = visibility(hour: 9).caughtUpItems(from: [
             digest(id: "digest-read", date: "2026-05-24", period: .morning, caughtUpAt: earlier),
@@ -107,6 +107,20 @@ struct UpToSpeedVisibilityTests {
 
         // Newest first, so the most recent mistake is easiest to undo.
         #expect(recap.map(\.id) == ["anomaly-dismissed", "digest-read"])
+    }
+
+    @Test func recapExcludesItemsSeenBeforeToday() throws {
+        let recap = visibility(hour: 9).caughtUpItems(from: [
+            digest(
+                id: "digest-old",
+                date: "1970-01-01",
+                period: .morning,
+                caughtUpAt: Date(timeIntervalSince1970: 2_000)
+            ),
+            anomaly(id: "anomaly-today", acknowledgedAt: timestamp(hour: 8)),
+        ])
+
+        #expect(recap.map(\.id) == ["anomaly-today"])
     }
 
     @Test func recapIsEmptyWhenNothingHasBeenSeen() throws {
@@ -160,6 +174,18 @@ struct UpToSpeedVisibilityTests {
             now: components.date!,
             calendar: calendar
         )
+    }
+
+    private func timestamp(hour: Int, minute: Int = 0) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar.date(from: DateComponents(
+            year: 2026,
+            month: 5,
+            day: 24,
+            hour: hour,
+            minute: minute
+        ))!
     }
 
     private func checkIn(

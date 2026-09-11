@@ -82,6 +82,16 @@ struct UpToSpeedReadMarkingTests {
         #expect(ref?.type == UpToSpeedItemType.flintDigest.rawValue)
     }
 
+    @Test func consumingOnlyTheLastDigestPageDoesNotMarkTheDigestRead() {
+        let item = digest(id: "digest-a")
+        let screens: [UpToSpeedScreen] = [
+            .flintHeader(item, firstSection: "opening"),
+            .flintParagraph(item, text: "body", index: 0),
+        ]
+
+        #expect(target(at: 1, in: screens, consumed: [1]) == nil)
+    }
+
     // A digest with a question Flint is still waiting on isn't finished, even
     // if every page of its prose has been read.
     @Test func digestWithUnansweredQuestionsIsNotMarkedRead() {

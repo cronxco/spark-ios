@@ -244,18 +244,24 @@ struct FlintDigestSummaryDecodingTests {
          "block_count": 0, "unanswered_question_count": 0}
         """)
         #expect(reading.kind == .readingList)
+
+        let briefing = try summary("""
+        {"date": "2026-09-11", "title": "News from your day", "kind": "briefing",
+         "block_count": 2, "unanswered_question_count": 0}
+        """)
+        #expect(briefing.kind == .briefing)
     }
 
-    /// Responses predating the field must still decode, and a plain briefing is
-    /// the safe reading — the client falls back to inspecting the content.
-    @Test("an absent kind reads as a briefing")
-    func absentKindIsBriefing() throws {
+    /// Responses predating the field must still decode, while preserving the
+    /// absence that tells the client its legacy heuristics are allowed.
+    @Test("an absent kind remains absent")
+    func absentKindRemainsAbsent() throws {
         let digest = try summary("""
         {"date": "2026-09-11", "title": "Morning Digest", "block_count": 2,
          "unanswered_question_count": 1}
         """)
 
-        #expect(digest.kind == .briefing)
+        #expect(digest.kind == nil)
         #expect(digest.blockCount == 2)
         #expect(digest.unansweredQuestionCount == 1)
     }
@@ -377,5 +383,23 @@ struct AnomalyPayloadDecodingTests {
         """)
 
         #expect(a.acknowledgedAt != nil)
+    }
+
+    @Test("an unknown string valence safely falls back to neutral")
+    func unknownValenceIsNeutral() throws {
+        let a = try anomaly("""
+        {"metric": "oura.had_sleep_score.percent", "valence": "mixed"}
+        """)
+
+        #expect(a.valence == .neutral)
+    }
+
+    @Test("a non-string valence still fails decoding")
+    func nonStringValenceFails() {
+        #expect(throws: (any Error).self) {
+            try anomaly("""
+            {"metric": "oura.had_sleep_score.percent", "valence": 1}
+            """)
+        }
     }
 }

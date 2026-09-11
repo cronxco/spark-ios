@@ -181,6 +181,20 @@ struct UpToSpeedParsingTests {
     func greetingSectionIsDropped() {
         #expect(UpToSpeedParsing.sectionIsShownInOpener("Good Friday morning.", openerParagraphs: []))
         #expect(UpToSpeedParsing.sectionIsShownInOpener("Good Monday evening.", openerParagraphs: []))
+        #expect(UpToSpeedParsing.sectionIsShownInOpener("Happy Friday!", openerParagraphs: []))
+        #expect(UpToSpeedParsing.sectionIsShownInOpener("Happy Friday afternoon.", openerParagraphs: []))
+    }
+
+    @Test("substantive prose beginning with a positive word is kept")
+    func positiveOpeningProseIsKept() {
+        #expect(!UpToSpeedParsing.sectionIsShownInOpener(
+            "Good news: inflation is falling.",
+            openerParagraphs: []
+        ))
+        #expect(!UpToSpeedParsing.sectionIsShownInOpener(
+            "Happy customers renewed their subscriptions.",
+            openerParagraphs: []
+        ))
     }
 
     @Test("a heading with no body is treated as already shown")
@@ -195,6 +209,22 @@ struct UpToSpeedParsingTests {
         #expect(UpToSpeedParsing.sectionIsShownInOpener(
             section,
             openerParagraphs: ["Today isn't the office day the calendar still claims."]
+        ))
+    }
+
+    @Test("a section containing both opener paragraphs is recognised")
+    func joinedOpenerParagraphsAreDetected() {
+        let first = "Readiness dropped hard overnight."
+        let second = "Your afternoon is clear for focused work."
+        let section = "DRIVING THE DAY\n\n\(first)\n\n\(second)"
+
+        #expect(UpToSpeedParsing.sectionIsShownInOpener(
+            section,
+            openerParagraphs: [first, second]
+        ))
+        #expect(!UpToSpeedParsing.sectionIsShownInOpener(
+            section,
+            openerParagraphs: [second, first]
         ))
     }
 

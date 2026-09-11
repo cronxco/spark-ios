@@ -20,7 +20,10 @@ public struct UpToSpeedFlintDigestSummary: Codable, Sendable {
     /// What sort of digest this is. Resolved server-side; the client used to
     /// guess by looking for "news" or "roundup" in the title, which made
     /// presentation depend on how a digest happened to be named.
-    public let kind: FlintDigestKind
+    /// `nil` only for legacy payloads that predate the `kind` field. Keeping
+    /// absence distinct from an explicit briefing lets callers use heuristics
+    /// only for those older responses.
+    public let kind: FlintDigestKind?
     public let summary: String?
     public let blockCount: Int
     public let unansweredQuestionCount: Int
@@ -35,7 +38,7 @@ public struct UpToSpeedFlintDigestSummary: Codable, Sendable {
         date: String,
         period: FlintDigestPeriod? = nil,
         title: String? = nil,
-        kind: FlintDigestKind = .briefing,
+        kind: FlintDigestKind? = nil,
         summary: String? = nil,
         blockCount: Int,
         unansweredQuestionCount: Int
@@ -54,9 +57,7 @@ public struct UpToSpeedFlintDigestSummary: Codable, Sendable {
         date = try c.decode(String.self, forKey: .date)
         period = try c.decodeIfPresent(FlintDigestPeriod.self, forKey: .period)
         title = try c.decodeIfPresent(String.self, forKey: .title)
-        // Older responses carry no kind; a plain briefing is the safe reading,
-        // and the client still falls back to inspecting the content.
-        kind = try c.decodeIfPresent(FlintDigestKind.self, forKey: .kind) ?? .briefing
+        kind = try c.decodeIfPresent(FlintDigestKind.self, forKey: .kind)
         summary = try c.decodeIfPresent(String.self, forKey: .summary)
         blockCount = try c.decodeIfPresent(Int.self, forKey: .blockCount) ?? 0
         unansweredQuestionCount = try c.decodeIfPresent(Int.self, forKey: .unansweredQuestionCount) ?? 0

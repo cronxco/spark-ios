@@ -28,6 +28,7 @@ final class UpToSpeedViewModel {
     private var snapshotCount: Int = 0
     private var pendingReadRefs: [UpToSpeedReadRef] = []
     private var isFlushing = false
+    private var activeFlushTask: Task<Bool, Never>?
     /// Screens the reader has genuinely finished — reached the end of and
     /// stayed there for the dwell. See `StoryScreenScaffold`.
     private(set) var consumedIndices: Set<Int> = []
@@ -193,6 +194,7 @@ final class UpToSpeedViewModel {
             // before that screen is shown, depending on queue order.
             guard let itemID = screen.item?.id else { return nil }
             guard isLastScreen(forItemID: itemID, at: index, in: screens) else { return nil }
+            guard allScreensAreConsumed(forItemID: itemID, in: screens, consumed: consumed) else { return nil }
             guard !digestsAwaitingAnswers.contains(itemID) else { return nil }
             return UpToSpeedReadRef(type: .flintDigest, id: itemID)
 
@@ -204,6 +206,7 @@ final class UpToSpeedViewModel {
             if case .newsStory(let next, _, _, _)? = screens[safe: index + 1], next.id == itemID {
                 return nil
             }
+            guard allScreensAreConsumed(forItemID: itemID, in: screens, consumed: consumed) else { return nil }
             return UpToSpeedReadRef(type: .flintDigest, id: itemID)
 
         case .newsSummary(let item):
@@ -228,6 +231,16 @@ final class UpToSpeedViewModel {
     nonisolated static func isLastScreen(forItemID itemID: String, at index: Int, in screens: [UpToSpeedScreen]) -> Bool {
         guard index + 1 < screens.count else { return true }
         return !screens[(index + 1)...].contains { $0.item?.id == itemID }
+    }
+
+    private nonisolated static func allScreensAreConsumed(
+        forItemID itemID: String,
+        in screens: [UpToSpeedScreen],
+        consumed: Set<Int>
+    ) -> Bool {
+        screens.indices
+            .filter { screens[$0].item?.id == itemID }
+            .allSatisfy { consumed.contains($0) }
     }
 
     /// Called when the wrap screen appears — marks read the (at most one)
@@ -294,17 +307,31 @@ final class UpToSpeedViewModel {
     /// silently dropping the reader's progress. The endpoint is idempotent, so
     /// re-sending a ref that did land is harmless.
     func flushAndWait() async {
-        guard !pendingReadRefs.isEmpty, !isFlushing else { return }
-        let refs = pendingReadRefs
-        isFlushing = true
-        defer { isFlushing = false }
-
-        do {
-            _ = try await apiClient.request(UpToSpeedEndpoint.markRead(refs))
-            pendingReadRefs.removeAll { ref in refs.contains { $0.id == ref.id } }
-        } catch {
-            // Keep the refs queued for the next flush.
+        if isFlushing, let activeFlushTask {
+            _ = await activeFlushTask.value
+            return
         }
+        guard !pendingReadRefs.isEmpty else { return }
+
+        let refs = pendingReadRefs
+        let client = apiClient
+        let task = Task {
+            do {
+                _ = try await client.request(UpToSpeedEndpoint.markRead(refs))
+                return true
+            } catch {
+                return false
+            }
+        }
+
+        isFlushing = true
+        activeFlushTask = task
+        let succeeded = await task.value
+        if succeeded {
+            pendingReadRefs.removeAll { ref in refs.contains { $0.id == ref.id } }
+        }
+        activeFlushTask = nil
+        isFlushing = false
     }
 
     // MARK: - Unread count
@@ -444,12 +471,12 @@ final class UpToSpeedViewModel {
             }
         }
 
-        // Not `built.contains { ... .wrap: wrapChapterHasContent }` — a solo
-        // folded reading-list digest leaves `built` with zero .wrap-keyed
-        // entries (no incomplete check-in), so `.contains` over an empty
-        // match set would wrongly report no substance even though
-        // wrapChapterHasContent is true.
-        let hasSubstance = !built.isEmpty || wrapChapterHasContent
+        // Compute recap before the empty-queue guard: today's already-seen
+        // items can be the only content available. Also, a solo folded
+        // reading-list digest leaves `built` with no .wrap-keyed entries, so
+        // wrap content must count as substance independently.
+        recapItems = caughtUpItems(from: items)
+        let hasSubstance = !built.isEmpty || wrapChapterHasContent || !recapItems.isEmpty
 
         guard hasSubstance else {
             screens = []
@@ -458,8 +485,6 @@ final class UpToSpeedViewModel {
             newItemsAvailable = 0
             return
         }
-
-        recapItems = caughtUpItems(from: items)
 
         built.insert((.opener, .intro), at: 0)
         built.append((.wrap, .wrap))
@@ -565,7 +590,7 @@ final class UpToSpeedViewModel {
     /// should not depend on how a digest happened to be named.
     private func declaredKind(_ item: UpToSpeedItem) -> FlintDigestKind? {
         guard case .flintDigest(let summary) = item.payload else { return nil }
-        return summary.kind == .briefing ? nil : summary.kind
+        return summary.kind
     }
 
     private func isNewsRoundupDigest(item: UpToSpeedItem, title: String, digest: FlintDigest?) -> Bool {
@@ -697,7 +722,8 @@ struct UpToSpeedVisibility {
 
     private func isRecapCandidate(_ item: UpToSpeedItem) -> Bool {
         if case .checkIn = item.payload { return false }
-        return seenAt(item) != nil
+        guard let seen = seenAt(item) else { return false }
+        return calendar.isDate(seen, inSameDayAs: now)
     }
 
     private func isCheckInPeriodAvailable(_ period: CheckInPeriod) -> Bool {

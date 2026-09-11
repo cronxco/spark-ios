@@ -224,7 +224,12 @@ public enum UpToSpeedParsing {
         if isBareGreeting(body) { return true }
 
         let normalised = normalisedForComparison(body)
-        return openerParagraphs.contains { normalisedForComparison($0) == normalised }
+        if openerParagraphs.contains(where: { normalisedForComparison($0) == normalised }) {
+            return true
+        }
+
+        let joinedOpener = normalisedForComparison(openerParagraphs.joined(separator: "\n\n"))
+        return !joinedOpener.isEmpty && joinedOpener == normalised
     }
 
     /// A section with its ALL-CAPS heading lines removed, leaving the prose.
@@ -252,7 +257,10 @@ public enum UpToSpeedParsing {
     }
 
     private static func isBareGreeting(_ chunk: String) -> Bool {
-        chunk.count < 60 && chunk.range(of: #"^(good|happy)\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+        let weekday = #"(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)"#
+        let timeOfDay = #"(?:morning|afternoon|evening)"#
+        let pattern = #"^(?:good|happy) (?:(?:\#(weekday))(?: \#(timeOfDay))?|\#(timeOfDay)|weekend)[.!?]?$"#
+        return chunk.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
     }
 
     private static func firstSentence(of text: String) -> String {

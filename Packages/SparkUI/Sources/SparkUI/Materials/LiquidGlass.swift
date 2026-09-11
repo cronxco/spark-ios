@@ -82,11 +82,17 @@ private struct GlassSurface: ViewModifier {
         } else {
             switch shape {
             case .capsule:
-                content.background(.ultraThinMaterial, in: Capsule())
+                content
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .background(tint ?? .clear, in: Capsule())
             case .roundedRect(let radius):
-                content.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: radius))
+                content
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: radius))
+                    .background(tint ?? .clear, in: RoundedRectangle(cornerRadius: radius))
             case .circle:
-                content.background(.ultraThinMaterial, in: Circle())
+                content
+                    .background(.ultraThinMaterial, in: Circle())
+                    .background(tint ?? .clear, in: Circle())
             }
         }
     }
