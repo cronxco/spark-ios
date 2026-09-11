@@ -209,6 +209,40 @@ public enum UpToSpeedParsing {
         return paragraphs
     }
 
+    /// Whether a digest section has already been shown on the opener card.
+    ///
+    /// The opener leads with the digest's first body paragraphs, and the
+    /// briefing chapter then rendered those same paragraphs again — so the
+    /// reader met identical prose twice within a few swipes. A bare greeting
+    /// counts as shown too: the opener carries it as the headline, which
+    /// otherwise left the briefing's first card holding nothing but
+    /// "Good Friday morning."
+    public static func sectionIsShownInOpener(_ section: String, openerParagraphs: [String]) -> Bool {
+        let body = sectionBody(section)
+
+        if body.isEmpty { return true }
+        if isBareGreeting(body) { return true }
+
+        let normalised = normalisedForComparison(body)
+        return openerParagraphs.contains { normalisedForComparison($0) == normalised }
+    }
+
+    /// A section with its ALL-CAPS heading lines removed, leaving the prose.
+    private static func sectionBody(_ section: String) -> String {
+        section
+            .components(separatedBy: "\n\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && !isSectionHeading($0) }
+            .joined(separator: "\n\n")
+    }
+
+    private static func normalisedForComparison(_ text: String) -> String {
+        text.lowercased()
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+
     private static func isSectionHeading(_ chunk: String) -> Bool {
         guard chunk.count < 80 else { return false }
         if chunk.hasPrefix("## ") { return true }

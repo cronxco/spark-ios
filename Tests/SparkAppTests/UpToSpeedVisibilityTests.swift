@@ -73,6 +73,76 @@ struct UpToSpeedVisibilityTests {
         #expect(visible.map(\.id) == ["digest-unread"])
     }
 
+    // -------------------------------------------------------------------------
+    // Dismissed anomalies
+    // -------------------------------------------------------------------------
+
+    /// The feed is asked for dismissed anomalies so the recap can offer them
+    /// back. They arrive with caughtUpAt null — acknowledgement is tracked
+    /// separately — so without an explicit check they would reappear in the
+    /// flow the instant they were dismissed.
+    @Test func dismissedAnomaliesDoNotReturnToTheFlow() throws {
+        let visible = visibility(hour: 9).visibleUnreadItems(from: [
+            anomaly(id: "anomaly-live"),
+            anomaly(id: "anomaly-dismissed", acknowledgedAt: .now),
+        ])
+
+        #expect(visible.map(\.id) == ["anomaly-live"])
+    }
+
+    // -------------------------------------------------------------------------
+    // Recap
+    // -------------------------------------------------------------------------
+
+    @Test func recapCollectsEverythingAlreadyDealtWith() throws {
+        let earlier = Date(timeIntervalSince1970: 1_000)
+        let later = Date(timeIntervalSince1970: 2_000)
+
+        let recap = visibility(hour: 9).caughtUpItems(from: [
+            digest(id: "digest-read", date: "2026-05-24", period: .morning, caughtUpAt: earlier),
+            digest(id: "digest-unread", date: "2026-05-24", period: .evening),
+            anomaly(id: "anomaly-dismissed", acknowledgedAt: later),
+            anomaly(id: "anomaly-live"),
+        ])
+
+        // Newest first, so the most recent mistake is easiest to undo.
+        #expect(recap.map(\.id) == ["anomaly-dismissed", "digest-read"])
+    }
+
+    @Test func recapIsEmptyWhenNothingHasBeenSeen() throws {
+        let recap = visibility(hour: 9).caughtUpItems(from: [
+            digest(id: "digest-unread", date: "2026-05-24", period: .morning),
+            news(),
+        ])
+
+        #expect(recap.isEmpty)
+    }
+
+    /// A submitted check-in is something that happened, not something that can
+    /// be un-seen — and the feed has no way to reopen one.
+    @Test func recapExcludesCheckIns() throws {
+        let recap = visibility(hour: 13).caughtUpItems(from: [
+            checkIn(.morning, completed: true, caughtUpAt: .now),
+        ])
+
+        #expect(recap.isEmpty)
+    }
+
+    private func anomaly(id: String, acknowledgedAt: Date? = nil, caughtUpAt: Date? = nil) -> UpToSpeedItem {
+        UpToSpeedItem(
+            id: id,
+            type: .anomaly,
+            caughtUpAt: caughtUpAt,
+            payload: .anomaly(Anomaly(
+                id: id,
+                metric: "oura.had_readiness_score.percent",
+                displayName: "Readiness Score",
+                domain: "health",
+                acknowledgedAt: acknowledgedAt
+            ))
+        )
+    }
+
     private func visibility(hour: Int) -> UpToSpeedVisibility {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!

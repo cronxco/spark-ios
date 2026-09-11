@@ -185,6 +185,10 @@ public struct UpToSpeedMarkReadResponse: Decodable, Sendable {
     public let marked: Int
 }
 
+public struct UpToSpeedUnmarkResponse: Decodable, Sendable {
+    public let unmarked: Int
+}
+
 // MARK: - Anomaly acknowledge
 
 public struct AnomalyAcknowledgeRequest: Encodable, Sendable {

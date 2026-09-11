@@ -33,10 +33,16 @@ struct FlintHeaderPage: View {
 
                     HStack(spacing: SparkSpacing.sm) {
                         if summary.blockCount > 0 {
-                            countPill("\(summary.blockCount) blocks", systemImage: "text.alignleft")
+                            countPill(
+                                "^[\(summary.blockCount) block](inflect: true)",
+                                systemImage: "text.alignleft"
+                            )
                         }
                         if summary.unansweredQuestionCount > 0 {
-                            countPill("\(summary.unansweredQuestionCount) questions", systemImage: "questionmark.circle")
+                            countPill(
+                                "^[\(summary.unansweredQuestionCount) question](inflect: true)",
+                                systemImage: "questionmark.circle"
+                            )
                         }
                     }
                 }
@@ -49,7 +55,9 @@ struct FlintHeaderPage: View {
         }
     }
 
-    private func countPill(_ label: String, systemImage: String) -> some View {
+    /// Takes a LocalizedStringKey so `^[1 question](inflect: true)` is applied —
+    /// the count pills previously read "1 questions".
+    private func countPill(_ label: LocalizedStringKey, systemImage: String) -> some View {
         Label(label, systemImage: systemImage)
             .font(SparkTypography.bodySmall)
             .foregroundStyle(.secondary)

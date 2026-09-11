@@ -42,8 +42,10 @@ public struct MetricDeltaCard: View {
 
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(value)
-                    .font(SparkFonts.display(size: 32, weight: .bold))
+                    .font(SparkFonts.display(.title, weight: .bold))
                     .foregroundStyle(valueColor)
+                    .minimumScaleFactor(0.8)
+                    .lineLimit(2)
                 if let unit {
                     Text(unit)
                         .font(SparkTypography.bodySmall)
@@ -61,7 +63,8 @@ public struct MetricDeltaCard: View {
         .padding(SparkSpacing.lg)
         .sparkGlass(.roundedRect(SparkRadii.lg), tint: tint)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel([label, value, unit, delta].compactMap { $0 }.joined(separator: " "))
+        .accessibilityLabel(label)
+        .accessibilityValue([value, unit, delta].compactMap { $0 }.joined(separator: ", "))
     }
 
     private var tint: Color? {

@@ -151,4 +151,57 @@ struct UpToSpeedParsingTests {
         """
         #expect(UpToSpeedParsing.yesterdayRecap(from: summary) == nil)
     }
+
+    // MARK: - Opener overlap
+
+    /// The opener card leads with the digest's first paragraphs and the
+    /// briefing chapter then rendered them again, so the reader met the same
+    /// prose twice within a few swipes.
+    @Test("a section the opener already carries is recognised")
+    func sectionShownInOpenerIsDetected() {
+        let paragraph = "Today isn't the office day the calendar still claims — you and Dan are both on annual leave."
+        let section = "DRIVING THE DAY\n\n\(paragraph)"
+
+        #expect(UpToSpeedParsing.sectionIsShownInOpener(section, openerParagraphs: [paragraph]))
+    }
+
+    @Test("a section the opener does not carry is kept")
+    func unseenSectionIsKept() {
+        let section = "COMING UP —\n\nSaturday turns drier in Newquay."
+
+        #expect(!UpToSpeedParsing.sectionIsShownInOpener(
+            section,
+            openerParagraphs: ["Today isn't the office day the calendar still claims."]
+        ))
+    }
+
+    /// The opener shows the greeting as its headline. Leaving it in the digest
+    /// too gave the briefing a whole card holding only "Good Friday morning."
+    @Test("a bare greeting section is treated as already shown")
+    func greetingSectionIsDropped() {
+        #expect(UpToSpeedParsing.sectionIsShownInOpener("Good Friday morning.", openerParagraphs: []))
+        #expect(UpToSpeedParsing.sectionIsShownInOpener("Good Monday evening.", openerParagraphs: []))
+    }
+
+    @Test("a heading with no body is treated as already shown")
+    func headingOnlySectionIsDropped() {
+        #expect(UpToSpeedParsing.sectionIsShownInOpener("DRIVING THE DAY", openerParagraphs: []))
+    }
+
+    @Test("matching ignores incidental whitespace differences")
+    func matchIgnoresWhitespace() {
+        let section = "DRIVING THE DAY\n\nToday isn't  the office day\nthe calendar still claims."
+
+        #expect(UpToSpeedParsing.sectionIsShownInOpener(
+            section,
+            openerParagraphs: ["Today isn't the office day the calendar still claims."]
+        ))
+    }
+
+    @Test("an empty opener keeps every real section")
+    func emptyOpenerKeepsProse() {
+        let section = "DRIVING THE DAY\n\nToday isn't the office day the calendar still claims."
+
+        #expect(!UpToSpeedParsing.sectionIsShownInOpener(section, openerParagraphs: []))
+    }
 }

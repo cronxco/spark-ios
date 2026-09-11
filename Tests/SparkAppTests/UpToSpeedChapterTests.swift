@@ -10,7 +10,7 @@ struct UpToSpeedChapterTests {
     @Test func groupsConsecutiveScreensBySharedKind() {
         let keys: [UpToSpeedChapter.Kind] = [
             .intro,
-            .anomaly,
+            .anomaly(domain: "health"),
             .digest(title: "Morning Digest"),
             .digest(title: "Morning Digest"),
             .day,
@@ -22,7 +22,7 @@ struct UpToSpeedChapterTests {
 
         #expect(chapters.map(\.kind) == [
             .intro,
-            .anomaly,
+            .anomaly(domain: "health"),
             .digest(title: "Morning Digest"),
             .day,
             .news,
@@ -52,10 +52,73 @@ struct UpToSpeedChapterTests {
     }
 
     @Test func chapterAccentsMatchTheirKind() {
-        let chapters = UpToSpeedChapter.chapters(for: [.anomaly, .day, .news, .wrap])
+        let chapters = UpToSpeedChapter.chapters(for: [
+            .anomaly(domain: nil), .day, .news, .wrap,
+        ])
         #expect(chapters[0].accent == .sparkWarning)
         #expect(chapters[1].accent == .sparkAccent)
         #expect(chapters[2].accent == .sparkOcean)
         #expect(chapters[3].accent == .sparkSuccess)
+    }
+
+    // -------------------------------------------------------------------------
+    // Anomaly domains
+    // -------------------------------------------------------------------------
+
+    /// Every anomaly used to land in a chapter headed "Your body" — so a
+    /// GoCardless balance opened the health chapter, under the title "Your
+    /// readiness dip".
+    @Test func anomalyChaptersAreNamedForTheirDomain() {
+        let chapters = UpToSpeedChapter.chapters(for: [
+            .anomaly(domain: "health"),
+            .anomaly(domain: "money"),
+        ])
+
+        #expect(chapters.count == 2)
+        #expect(chapters[0].shortLabel == "Your body")
+        #expect(chapters[1].shortLabel == "Your money")
+        #expect(chapters[0].title == "Your body")
+        #expect(chapters[1].title == "Your money")
+    }
+
+    @Test func anomaliesOfOneDomainShareAChapter() {
+        let chapters = UpToSpeedChapter.chapters(for: [
+            .anomaly(domain: "health"),
+            .anomaly(domain: "health"),
+            .anomaly(domain: "money"),
+        ])
+
+        #expect(chapters.count == 2)
+        #expect(chapters.map(\.cardCount) == [2, 1])
+    }
+
+    @Test func anomaliesWithNoDomainReadAsUnusual() {
+        let chapters = UpToSpeedChapter.chapters(for: [.anomaly(domain: nil)])
+
+        #expect(chapters[0].shortLabel == "Unusual")
+        #expect(chapters[0].title == "Unusual")
+    }
+
+    @Test func anomalyAccentsFollowTheirDomain() {
+        let chapters = UpToSpeedChapter.chapters(for: [
+            .anomaly(domain: "health"),
+            .anomaly(domain: "money"),
+        ])
+
+        #expect(chapters[0].accent == .domainHealth)
+        #expect(chapters[1].accent == .domainMoney)
+    }
+
+    // -------------------------------------------------------------------------
+    // Recap
+    // -------------------------------------------------------------------------
+
+    @Test func recapIsItsOwnQuietChapter() {
+        let chapters = UpToSpeedChapter.chapters(for: [.wrap, .recap])
+
+        #expect(chapters.count == 2)
+        #expect(chapters[1].shortLabel == "Earlier")
+        #expect(chapters[1].title == "Already seen today")
+        #expect(chapters[1].accent == .secondary)
     }
 }

@@ -8,6 +8,7 @@ struct WrapScreen: View {
     let viewModel: UpToSpeedViewModel
     let onDone: () -> Void
     var isActive: Bool = true
+    var onShowRecap: (() -> Void)?
 
     @Environment(\.openURL) private var openURL
 
@@ -32,8 +33,30 @@ struct WrapScreen: View {
 
                 PillButton("Done for now") { onDone() }
                     .frame(maxWidth: .infinity)
+
+                if let onShowRecap, !viewModel.recapItems.isEmpty {
+                    recapLink(count: viewModel.recapItems.count, action: onShowRecap)
+                }
             }
         }
+    }
+
+    /// A quiet way back to anything already dealt with today. Deliberately
+    /// secondary to "Done for now" — the recap is a safety net, not a
+    /// destination.
+    private func recapLink(count: Int, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: SparkSpacing.xs) {
+                Text(count == 1 ? "Earlier today · 1 item" : "Earlier today · \(count) items")
+                    .font(SparkTypography.bodySmall)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Review and restore anything you have already seen today")
     }
 
     private var headline: String {

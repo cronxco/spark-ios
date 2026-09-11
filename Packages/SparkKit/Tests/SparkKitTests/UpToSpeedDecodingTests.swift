@@ -135,6 +135,12 @@ struct UpToSpeedDecodingTests {
             #expect(a.displayName == "Sleep Score")
             #expect(a.currentValue == 62.0)
             #expect(a.streakDays == 3)
+            // Absent fields must land on the safe defaults: an undeclared
+            // metric is neutral, not alarming, and not ordinal.
+            #expect(a.valence == .neutral)
+            #expect(a.isOrdinal == false)
+            #expect(a.domain == nil)
+            #expect(a.acknowledgedAt == nil)
         } else {
             Issue.record("Expected anomaly payload")
         }
@@ -216,5 +222,114 @@ struct UpToSpeedDecodingTests {
         } else {
             Issue.record("Expected flintDigest payload")
         }
+    }
+}
+
+@Suite("Anomaly payload")
+struct AnomalyPayloadDecodingTests {
+    private func anomaly(_ json: String) throws -> Anomaly {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(Anomaly.self, from: Data(json.utf8))
+    }
+
+    /// Everything the client needs to file and phrase an anomaly correctly —
+    /// none of which the payload carried before.
+    @Test("decodes domain, valence, ordinality and preformatted values")
+    func decodesPresentationFields() throws {
+        let a = try anomaly("""
+        {
+          "metric": "gocardless.had_balance.GBP",
+          "display_name": "Balance Update",
+          "domain": "money",
+          "service": "gocardless",
+          "unit": "GBP",
+          "type": "anomaly_high",
+          "direction": "up",
+          "valence": "good",
+          "is_ordinal": false,
+          "current_value": 2082.23,
+          "baseline_value": 241.68,
+          "current_display": "£2,082.23",
+          "baseline_display": "£241.68",
+          "deviation": 3.76,
+          "streak_days": 14,
+          "detected_at": "2026-09-11T00:00:00Z",
+          "acknowledged_at": null
+        }
+        """)
+
+        #expect(a.domain == "money")
+        #expect(a.valence == .good)
+        #expect(a.isOrdinal == false)
+        #expect(a.currentText == "£2,082.23")
+        #expect(a.baselineText == "£241.68")
+    }
+
+    /// A banded score has no meaningful percentage change: "Adequate" is not
+    /// 37% below "Solid".
+    @Test("an ordinal metric reports its band and no percentage")
+    func ordinalMetricHasNoPercentage() throws {
+        let a = try anomaly("""
+        {
+          "metric": "oura.had_resilience_score.resilience_level",
+          "display_name": "Resilience Level",
+          "domain": "health",
+          "valence": "bad",
+          "is_ordinal": true,
+          "current_value": 2,
+          "baseline_value": 3.2,
+          "current_display": "Adequate",
+          "baseline_display": "Solid",
+          "detected_at": "2026-09-11T00:00:00Z"
+        }
+        """)
+
+        #expect(a.isOrdinal)
+        #expect(a.currentText == "Adequate")
+        #expect(a.percentChange == nil)
+    }
+
+    @Test("a continuous metric reports a percentage change")
+    func continuousMetricHasPercentage() throws {
+        let a = try anomaly("""
+        {
+          "metric": "oura.had_readiness_score.percent",
+          "is_ordinal": false,
+          "current_value": 50,
+          "baseline_value": 100,
+          "detected_at": "2026-09-11T00:00:00Z"
+        }
+        """)
+
+        #expect(a.percentChange == -50)
+    }
+
+    @Test("falls back to the raw value when the server sent no display string")
+    func fallsBackToRawValue() throws {
+        let a = try anomaly("""
+        {
+          "metric": "oura.had_readiness_score.percent",
+          "current_value": 78,
+          "baseline_value": 85.5,
+          "detected_at": "2026-09-11T00:00:00Z"
+        }
+        """)
+
+        #expect(a.currentText == "78")
+        #expect(a.baselineText == "85.5")
+    }
+
+    @Test("decodes the acknowledgement that marks an anomaly dismissed")
+    func decodesAcknowledgement() throws {
+        let a = try anomaly("""
+        {
+          "metric": "oura.had_sleep_score.percent",
+          "detected_at": "2026-09-11T00:00:00Z",
+          "acknowledged_at": "2026-09-11T09:30:00Z"
+        }
+        """)
+
+        #expect(a.acknowledgedAt != nil)
     }
 }

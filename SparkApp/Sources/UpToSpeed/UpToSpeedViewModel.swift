@@ -19,6 +19,10 @@ final class UpToSpeedViewModel {
     private(set) var openerParagraphs: [String] = []
     private(set) var readingItem: UpToSpeedParsing.ReadingItem?
     private(set) var openQuestions: [OpenQuestion] = []
+    /// Items already caught up on today, newest first. Offered after the wrap
+    /// so something dismissed by accident can be found and restored.
+    private(set) var recapItems: [UpToSpeedItem] = []
+    private(set) var unmarkingIDs: Set<String> = []
 
     private var allItems: [UpToSpeedItem] = []
     private var snapshotCount: Int = 0
@@ -73,7 +77,7 @@ final class UpToSpeedViewModel {
         loadGeneration &+= 1
         if surfaceErrors { error = nil }
         do {
-            let response = try await apiClient.request(UpToSpeedEndpoint.feed())
+            let response = try await apiClient.request(UpToSpeedEndpoint.feed(includeAcknowledged: true))
             let items = response.items
             let digests = await preloadDigests(for: visibleUnreadItems(from: items))
             allItems = items
@@ -95,7 +99,7 @@ final class UpToSpeedViewModel {
         guard !isLoading else { return }
         let generation = loadGeneration
         do {
-            let response = try await apiClient.request(UpToSpeedEndpoint.feed())
+            let response = try await apiClient.request(UpToSpeedEndpoint.feed(includeAcknowledged: true))
             // A load that started while we were suspended owns `allItems` now.
             guard generation == loadGeneration, !isLoading else { return }
             let freshUnread = visibleUnreadItems(from: response.items).count
@@ -239,6 +243,30 @@ final class UpToSpeedViewModel {
         enqueueMarkRead(itemID: itemID, type: .anomaly)
     }
 
+    /// Return a recap item to the unread queue.
+    ///
+    /// Flushes first: a pending mark for the same item would otherwise land
+    /// after the unmark and quietly re-hide it.
+    func unmark(_ item: UpToSpeedItem) async {
+        guard !unmarkingIDs.contains(item.id) else { return }
+        unmarkingIDs.insert(item.id)
+        defer { unmarkingIDs.remove(item.id) }
+
+        pendingReadRefs.removeAll { $0.id == item.id }
+        await flushAndWait()
+
+        let ref = UpToSpeedReadRef(type: item.type, id: item.id)
+        guard (try? await apiClient.request(UpToSpeedEndpoint.unmark([ref]))) != nil else { return }
+
+        await reloadQueue()
+    }
+
+    /// The domain of an anomaly item, when the payload carries one.
+    nonisolated static func anomalyDomain(_ item: UpToSpeedItem) -> String? {
+        guard case .anomaly(let anomaly) = item.payload else { return nil }
+        return anomaly.domain
+    }
+
     /// Called by FlintQuestionPage after a successful answer submission.
     /// Marks the digest as caught-up once all its questions are answered.
     func onQuestionAnswered(blockID: String, itemID: String) {
@@ -322,9 +350,15 @@ final class UpToSpeedViewModel {
 
         var built: [(screen: UpToSpeedScreen, key: UpToSpeedChapter.Kind)] = []
 
-        // 1 — anomalies
-        for item in unread where item.type == .anomaly {
-            built.append((.anomaly(item), .anomaly))
+        // 1 — anomalies, grouped by domain. The chapter grouping collapses
+        // consecutive equal keys, so same-domain anomalies have to be adjacent
+        // for "Your body" and "Your money" to come out as separate chapters.
+        let anomalies = unread
+            .filter { $0.type == .anomaly }
+            .sorted { (Self.anomalyDomain($0) ?? "~") < (Self.anomalyDomain($1) ?? "~") }
+
+        for item in anomalies {
+            built.append((.anomaly(item), .anomaly(domain: Self.anomalyDomain(item))))
         }
 
         // 2 — digests, oldest first, split by role
@@ -379,8 +413,11 @@ final class UpToSpeedViewModel {
             // Primary digest — prose + insights + questions
             if primaryDigestSummary == nil {
                 primaryDigestSummary = full?.summary ?? digestSummary(item)
+                openerParagraphs = primaryDigestSummary.map {
+                    UpToSpeedParsing.openerParagraphs(from: $0)
+                } ?? []
             }
-            for screen in expandFlintItem(item: item, digest: full) {
+            for screen in expandFlintItem(item: item, digest: full, shownInOpener: openerParagraphs) {
                 built.append((screen, .digest(title: title)))
             }
         }
@@ -419,16 +456,21 @@ final class UpToSpeedViewModel {
             return
         }
 
+        recapItems = caughtUpItems(from: items)
+
         built.insert((.opener, .intro), at: 0)
         built.append((.wrap, .wrap))
+
+        // The recap is an appendix, not part of the catch-up proper: it sits
+        // past the wrap so swiping on reaches it, and the wrap offers a way in.
+        if !recapItems.isEmpty {
+            built.append((.recap, .recap))
+        }
 
         screens = built.map(\.screen)
         chapters = UpToSpeedChapter.chapters(for: built.map(\.key))
 
         openerGreeting = makeGreeting()
-        if let summary = primaryDigestSummary {
-            openerParagraphs = UpToSpeedParsing.openerParagraphs(from: summary)
-        }
 
         if resetIndex {
             currentIndex = 0
@@ -442,8 +484,21 @@ final class UpToSpeedViewModel {
         UpToSpeedVisibility(now: .now, calendar: .current).visibleUnreadItems(from: items)
     }
 
-    private func expandFlintItem(item: UpToSpeedItem, digest: FlintDigest?) -> [UpToSpeedScreen] {
+    private func caughtUpItems(from items: [UpToSpeedItem]) -> [UpToSpeedItem] {
+        UpToSpeedVisibility(now: .now, calendar: .current).caughtUpItems(from: items)
+    }
+
+    private func expandFlintItem(
+        item: UpToSpeedItem,
+        digest: FlintDigest?,
+        shownInOpener: [String] = []
+    ) -> [UpToSpeedScreen] {
+        // Drop what the opener already carries. Without this the briefing
+        // repeated the opener's paragraphs verbatim, and its first card held
+        // only the greeting — a full screen for two words.
         let sections = parseSections(digestSummary(item) ?? digest?.summary ?? "")
+            .filter { !UpToSpeedParsing.sectionIsShownInOpener($0, openerParagraphs: shownInOpener) }
+
         var pages: [UpToSpeedScreen] = [.flintHeader(item, firstSection: sections.first)]
 
         for (i, section) in sections.dropFirst().enumerated() {
@@ -588,10 +643,46 @@ struct UpToSpeedVisibility {
         items.filter(isVisibleUnreadCandidate)
     }
 
+    /// Everything already dealt with today, newest first — the recap.
+    ///
+    /// Check-ins are excluded: a submitted check-in is a thing that happened,
+    /// not something that can be un-seen, and the feed has no way to reopen one.
+    func caughtUpItems(from items: [UpToSpeedItem]) -> [UpToSpeedItem] {
+        items
+            .filter(isRecapCandidate)
+            .sorted { lhs, rhs in
+                (seenAt(lhs) ?? .distantPast) > (seenAt(rhs) ?? .distantPast)
+            }
+    }
+
+    /// When the reader last dealt with an item, however they dealt with it.
+    func seenAt(_ item: UpToSpeedItem) -> Date? {
+        if case .anomaly(let anomaly) = item.payload, let acknowledged = anomaly.acknowledgedAt {
+            return max(acknowledged, item.caughtUpAt ?? acknowledged)
+        }
+        return item.caughtUpAt
+    }
+
     private func isVisibleUnreadCandidate(_ item: UpToSpeedItem) -> Bool {
         guard item.caughtUpAt == nil else { return false }
-        guard case .checkIn(let summary) = item.payload else { return true }
-        return !summary.completed && isCheckInPeriodAvailable(summary.period)
+
+        switch item.payload {
+        case .checkIn(let summary):
+            return !summary.completed && isCheckInPeriodAvailable(summary.period)
+        case .anomaly(let anomaly):
+            // The feed is asked for dismissed anomalies so the recap can offer
+            // them back, so they arrive here too — with caughtUpAt null,
+            // because acknowledgement is tracked separately. Without this they
+            // would reappear in the flow the moment they were dismissed.
+            return anomaly.acknowledgedAt == nil
+        default:
+            return true
+        }
+    }
+
+    private func isRecapCandidate(_ item: UpToSpeedItem) -> Bool {
+        if case .checkIn = item.payload { return false }
+        return seenAt(item) != nil
     }
 
     private func isCheckInPeriodAvailable(_ period: CheckInPeriod) -> Bool {

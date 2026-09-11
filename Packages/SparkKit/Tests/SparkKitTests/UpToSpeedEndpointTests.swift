@@ -4,20 +4,43 @@ import Testing
 
 @Suite("UpToSpeed endpoints")
 struct UpToSpeedEndpointTests {
-    @Test("feed endpoint produces GET /up-to-speed with optional date query")
+    @Test("feed endpoint produces a bare GET /up-to-speed by default")
     func feedEndpoint() {
-        let endpoint = UpToSpeedEndpoint.feed(date: "2026-05-23")
+        let endpoint = UpToSpeedEndpoint.feed()
 
         #expect(endpoint.method == .get)
         #expect(endpoint.path == "/up-to-speed")
-        #expect(endpoint.query.contains(URLQueryItem(name: "date", value: "2026-05-23")))
+        #expect(endpoint.query.isEmpty)
     }
 
-    @Test("feed endpoint omits date query when nil")
-    func feedEndpointNoDate() {
-        let endpoint = UpToSpeedEndpoint.feed()
+    @Test("feed endpoint asks for dismissed anomalies when building the recap")
+    func feedEndpointIncludeAcknowledged() {
+        let endpoint = UpToSpeedEndpoint.feed(includeAcknowledged: true)
 
-        #expect(endpoint.query.isEmpty)
+        #expect(endpoint.query.contains(URLQueryItem(name: "include_acknowledged", value: "1")))
+    }
+
+    @Test("feed endpoint passes a news cap through")
+    func feedEndpointNewsLimit() {
+        let endpoint = UpToSpeedEndpoint.feed(newsLimit: 5)
+
+        #expect(endpoint.query.contains(URLQueryItem(name: "news_limit", value: "5")))
+    }
+
+    @Test("unmark posts the same items wrapper as markRead")
+    func unmarkEndpoint() throws {
+        let endpoint = UpToSpeedEndpoint.unmark([UpToSpeedReadRef(type: .newsSummary, id: "uuid-9")])
+
+        #expect(endpoint.method == .post)
+        #expect(endpoint.path == "/up-to-speed/unmark")
+
+        let body = try #require(endpoint.body)
+        let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let items = try #require(json["items"] as? [[String: Any]])
+
+        #expect(items.count == 1)
+        #expect(items[0]["type"] as? String == "news_summary")
+        #expect(items[0]["id"] as? String == "uuid-9")
     }
 
     @Test("markRead encodes items wrapper with type and id")
