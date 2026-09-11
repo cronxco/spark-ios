@@ -2,8 +2,8 @@ import SparkKit
 import SparkUI
 import SwiftUI
 
-/// Renders an anomaly Up to Speed item with a metric trend chart
-/// and controls to acknowledge or suppress the anomaly.
+/// Renders an anomaly Up to Speed item in Flint's voice — an "unusual" flag, a
+/// glass metric readout, the trend behind it, and chips to act.
 struct AnomalyScreen: View {
     let item: UpToSpeedItem
     let viewModel: UpToSpeedViewModel
@@ -11,8 +11,8 @@ struct AnomalyScreen: View {
     @Environment(AppModel.self) private var appModel
     @State private var metricDetail: MetricDetail?
     @State private var isLoadingMetric = false
+    @State private var showChart = false
     @State private var showSuppressSheet = false
-    @State private var acknowledgeNote: String = ""
     @State private var isAcknowledging = false
     @State private var acknowledged = false
 
@@ -22,22 +22,19 @@ struct AnomalyScreen: View {
     }
 
     var body: some View {
-        ScrollView {
+        StoryScreenScaffold(label: "Something unusual", flintByline: .init()) {
             VStack(alignment: .leading, spacing: SparkSpacing.xl) {
                 header
-                chartSection
-                anomalyDetail
-                if !acknowledged {
-                    actionButtons
-                } else {
+                metricGrid
+                narrative
+                chartDisclosure
+                if acknowledged {
                     acknowledgedBadge
+                } else {
+                    actionChips
                 }
             }
-            .padding(.horizontal, SparkSpacing.lg)
-            .padding(.top, 152)
-            .padding(.bottom, SparkSpacing.xxl)
         }
-        .scrollContentBackground(.hidden)
         .task { await loadMetric() }
         .onChange(of: acknowledged) { _, newValue in
             guard newValue else { return }
@@ -53,120 +50,176 @@ struct AnomalyScreen: View {
         }
     }
 
-    // MARK: - Subviews
+    // MARK: - Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.xs) {
-            Text("Anomaly Detected")
+        VStack(alignment: .leading, spacing: SparkSpacing.md) {
+            Text("Unusual")
                 .font(SparkTypography.caption)
+                .tracking(1.4)
                 .foregroundStyle(Color.sparkWarning)
-                .tracking(1.2)
-                .textCase(.uppercase)
+                .padding(.horizontal, SparkSpacing.sm)
+                .padding(.vertical, 3)
+                .overlay(
+                    Capsule().stroke(Color.sparkWarning.opacity(0.4), lineWidth: 1)
+                )
 
-            Text(anomaly?.displayName ?? anomaly?.metric ?? "Metric Anomaly")
-                .font(SparkTypography.heroSmall)
+            Text(headline)
+                .font(SparkTypography.hero)
                 .foregroundStyle(.primary)
-
-            if let direction = anomaly?.direction {
-                directionPill(direction)
-            }
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private func directionPill(_ direction: String) -> some View {
-        let isUp = direction.lowercased().contains("up") || direction.lowercased() == "high"
-        return HStack(spacing: 4) {
-            Image(systemName: isUp ? "arrow.up" : "arrow.down")
-            Text(direction.capitalized)
+    private var headline: String {
+        let name = anomaly?.displayName ?? anomaly?.metric ?? "A metric"
+        guard let direction = anomaly?.direction?.lowercased() else {
+            return "\(name) is off its usual range."
         }
-        .font(SparkTypography.bodySmall)
-        .foregroundStyle(Color.sparkWarning)
-        .padding(.horizontal, SparkSpacing.md)
-        .padding(.vertical, SparkSpacing.xs)
-        .background(Capsule().fill(Color.sparkWarning.opacity(0.2)))
+        if direction.contains("down") || direction == "low" {
+            return "\(name) dropped hard, and it isn't the obvious story."
+        }
+        if direction.contains("up") || direction == "high" {
+            return "\(name) spiked above its usual range."
+        }
+        return "\(name) is off its usual range."
     }
 
-    @ViewBuilder
-    private var chartSection: some View {
-        if let detail = metricDetail {
-            MetricTrendChart(
-                series: detail.series,
-                baseline: detail.baseline,
-                anomalies: detail.anomalies,
-                valueForAnomaly: { _ in anomaly?.currentValue }
-            )
-            .frame(height: 140)
-        } else if isLoadingMetric {
-            LoadingShimmer()
-                .frame(height: 140)
-                .cornerRadius(SparkRadii.md)
-        }
-    }
+    // MARK: - Metric grid
 
-    @ViewBuilder
-    private var anomalyDetail: some View {
-        if let anomaly {
-            GlassCard {
-                VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                    if let current = anomaly.currentValue, let baseline = anomaly.baselineValue {
-                        detailRow(label: "Current", value: String(format: "%.1f", current))
-                        detailRow(label: "Baseline", value: String(format: "%.1f", baseline))
-                    }
-                    if let deviation = anomaly.deviation {
-                        detailRow(label: "Deviation", value: String(format: "%+.1f", deviation))
-                    }
-                    if let streak = anomaly.streakDays, streak > 1 {
-                        detailRow(label: "Streak", value: "\(streak) days")
-                    }
+    private var metricGrid: some View {
+        LazyVGrid(
+            columns: [GridItem(.flexible(), spacing: SparkSpacing.md), GridItem(.flexible(), spacing: SparkSpacing.md)],
+            spacing: SparkSpacing.md
+        ) {
+            if let anomaly {
+                MetricDeltaCard(
+                    label: "Now",
+                    value: formatted(anomaly.currentValue),
+                    delta: deviationText,
+                    emphasis: .flagged
+                )
+                MetricDeltaCard(
+                    label: "Baseline",
+                    value: formatted(anomaly.baselineValue),
+                    delta: "typical",
+                    emphasis: .neutral
+                )
+                if let streak = anomaly.streakDays, streak > 1 {
+                    MetricDeltaCard(
+                        label: "Run",
+                        value: "\(streak)",
+                        unit: "days",
+                        delta: "in a row",
+                        emphasis: .neutral
+                    )
                 }
             }
         }
     }
 
-    private func detailRow(label: String, value: String) -> some View {
-        HStack {
-            Text(label)
-                .font(SparkTypography.bodySmall)
-                .foregroundStyle(.secondary)
-            Spacer()
-            Text(value)
-                .font(SparkTypography.monoSmall)
+    private var deviationText: String? {
+        guard let anomaly, let current = anomaly.currentValue, let baseline = anomaly.baselineValue, baseline != 0 else {
+            if let dev = anomaly?.deviation { return String(format: "%+.1f", dev) }
+            return nil
+        }
+        let pct = (current - baseline) / abs(baseline) * 100
+        return String(format: "%+.0f%%", pct)
+    }
+
+    // MARK: - Narrative
+
+    @ViewBuilder
+    private var narrative: some View {
+        if let streak = anomaly?.streakDays, streak > 1 {
+            Text("I've seen this \(streak) days running, so I'm raising it rather than folding it into a tidier story.")
+                .font(SparkTypography.longFormBody)
                 .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            Text("This is far enough off your baseline that I didn't want it to pass without a mention.")
+                .font(SparkTypography.longFormBody)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private var actionButtons: some View {
-        VStack(spacing: SparkSpacing.md) {
-            PillButton("Acknowledge", systemImage: "checkmark") {
-                Task { await acknowledge(note: acknowledgeNote) }
+    // MARK: - Chart
+
+    @ViewBuilder
+    private var chartDisclosure: some View {
+        if let detail = metricDetail {
+            DisclosureGroup(isExpanded: $showChart) {
+                MetricTrendChart(
+                    series: detail.series,
+                    baseline: detail.baseline,
+                    anomalies: detail.anomalies,
+                    valueForAnomaly: { _ in anomaly?.currentValue }
+                )
+                .frame(height: 140)
+                .padding(.top, SparkSpacing.sm)
+            } label: {
+                Text("See the week")
+                    .font(SparkTypography.bodySmall)
+                    .foregroundStyle(Color.spark700)
             }
+        } else if isLoadingMetric {
+            LoadingShimmer()
+                .frame(height: 44)
+                .cornerRadius(SparkRadii.md)
+        }
+    }
+
+    // MARK: - Actions
+
+    private var actionChips: some View {
+        HStack(spacing: SparkSpacing.sm) {
+            Button {
+                Task { await acknowledge() }
+            } label: {
+                chipLabel("Not worth flagging")
+            }
+            .buttonStyle(.plain)
             .disabled(isAcknowledging)
 
-            Button("Suppress for a while") {
+            Button {
                 showSuppressSheet = true
+            } label: {
+                chipLabel("Mute for a while")
             }
-            .font(SparkTypography.bodySmall)
-            .foregroundStyle(.secondary)
             .buttonStyle(.plain)
         }
     }
 
-    private var acknowledgedBadge: some View {
-        HStack(spacing: SparkSpacing.sm) {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(Color.sparkSuccess)
-            Text("Acknowledged")
-                .font(SparkTypography.bodySmall)
-                .foregroundStyle(Color.sparkSuccess)
-        }
-        .padding(SparkSpacing.md)
-        .background(
-            RoundedRectangle(cornerRadius: SparkRadii.sm)
-                .fill(Color.sparkSuccess.opacity(0.1))
-        )
+    private func chipLabel(_ text: String) -> some View {
+        Text(text)
+            .font(SparkTypography.captionStrong)
+            .foregroundStyle(.primary)
+            .padding(.horizontal, SparkSpacing.md)
+            .padding(.vertical, SparkSpacing.sm)
+            .sparkGlass(.capsule)
     }
 
-    // MARK: - Actions
+    private var acknowledgedBadge: some View {
+        Label("Noted — I'll ease off on this one", systemImage: "checkmark.circle.fill")
+            .font(SparkTypography.bodySmall)
+            .foregroundStyle(Color.sparkSuccess)
+            .padding(SparkSpacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: SparkRadii.md)
+                    .fill(Color.sparkSuccess.opacity(0.1))
+            )
+    }
+
+    // MARK: - Data
+
+    private func formatted(_ value: Double?) -> String {
+        // Int(value) traps for out-of-range or non-finite doubles (a
+        // mis-scaled/corrupted backend value shouldn't crash this screen).
+        guard let value, value.isFinite else { return "—" }
+        return value.rounded() == value ? String(format: "%.0f", value) : String(format: "%.1f", value)
+    }
 
     private func loadMetric() async {
         guard let metric = anomaly?.metric, metricDetail == nil else { return }
@@ -177,11 +230,11 @@ struct AnomalyScreen: View {
         isLoadingMetric = false
     }
 
-    private func acknowledge(note: String?) async {
+    private func acknowledge() async {
         isAcknowledging = true
         do {
             _ = try await appModel.apiClient.request(
-                AnomaliesEndpoint.acknowledge(id: item.id, note: note)
+                AnomaliesEndpoint.acknowledge(id: item.id, note: nil)
             )
             acknowledged = true
         } catch {}
@@ -205,7 +258,7 @@ private struct SuppressSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Suppress anomaly alerts until") {
+                Section("Mute anomaly alerts until") {
                     DatePicker("Date", selection: $suppressUntil, displayedComponents: .date)
                 }
                 Section("Note (optional)") {
@@ -213,14 +266,14 @@ private struct SuppressSheet: View {
                         .lineLimit(3...6)
                 }
             }
-            .navigationTitle("Suppress Anomaly")
+            .navigationTitle("Mute Anomaly")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Suppress") {
+                    Button("Mute") {
                         Task { await suppress() }
                     }
                     .disabled(isSaving)

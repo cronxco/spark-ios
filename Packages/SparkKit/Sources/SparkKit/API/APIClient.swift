@@ -132,6 +132,14 @@ public actor APIClient {
     private let encoder: JSONEncoder
     private let logger = Logger(subsystem: "co.cronx.sparkapp", category: "APIClient")
     private static let refreshCoordinator = TokenRefreshCoordinator()
+    private static let dateOnlyFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .iso8601)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
 
     public init(
         environment: APIEnvironment = .current(),
@@ -155,6 +163,7 @@ public actor APIClient {
             let plain = ISO8601DateFormatter()
             plain.formatOptions = [.withInternetDateTime]
             if let d = plain.date(from: string) { return d }
+            if let d = APIClient.dateOnlyFormatter.date(from: string) { return d }
             throw DecodingError.dataCorruptedError(in: container,
                 debugDescription: "Cannot parse date: \(string)")
         }

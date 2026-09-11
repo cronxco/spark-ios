@@ -1,16 +1,24 @@
 import Foundation
 import Observation
 import SparkKit
+import SparkUI
 import SwiftData
 
 @MainActor
 @Observable
 final class UpToSpeedViewModel {
     private(set) var screens: [UpToSpeedScreen] = []
+    private(set) var chapters: [UpToSpeedChapter] = []
     var currentIndex: Int = 0
     private(set) var isLoading = false
     private(set) var error: String?
     private(set) var newItemsAvailable: Int = 0
+
+    // Derived content for the opener + wrap screens.
+    private(set) var openerGreeting: String = ""
+    private(set) var openerParagraphs: [String] = []
+    private(set) var readingItem: UpToSpeedParsing.ReadingItem?
+    private(set) var openQuestions: [OpenQuestion] = []
 
     private var allItems: [UpToSpeedItem] = []
     private var snapshotCount: Int = 0
@@ -21,50 +29,72 @@ final class UpToSpeedViewModel {
     private var digestQuestionMap: [String: [String]] = [:]
     // blockIDs already answered (server-side on load, or in-session)
     private var answeredQuestionIDs: Set<String> = []
+    // digests folded into the wrap screen — marked read when the wrap is reached
+    private var foldedDigestIDs: [String] = []
+    // bumped on each fetchAndBuild so a stale refreshFeed can bail out
+    private var loadGeneration = 0
 
     private let apiClient: APIClient
+    private let profileName: String?
 
-    init(apiClient: APIClient) {
+    struct OpenQuestion: Identifiable {
+        let item: UpToSpeedItem
+        let block: FlintDigestBlock
+        var id: String { block.id }
+    }
+
+    init(apiClient: APIClient, profileName: String? = nil) {
         self.apiClient = apiClient
+        self.profileName = profileName
     }
 
     // MARK: - Load
 
     func load() async {
-        isLoading = true
-        error = nil
-        do {
-            let response = try await apiClient.request(UpToSpeedEndpoint.feed())
-            allItems = response.items
-            let digests = await preloadDigests(for: visibleUnreadItems(from: allItems))
-            buildScreenQueue(digests: digests)
-        } catch is CancellationError {
-        } catch APIError.transport(let underlying)
-            where (underlying as? URLError)?.code == .cancelled {
-        } catch {
-            self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-        }
-        isLoading = false
+        guard !isLoading else { return }
+        await fetchAndBuild(resetIndex: true, surfaceErrors: true)
     }
 
     /// Reloads the queue from scratch — re-fetches, resets to index 0, clears badge.
     func reloadQueue() async {
         guard !isLoading else { return }
+        await fetchAndBuild(resetIndex: true, surfaceErrors: false)
+    }
+
+    /// Fetch the feed, preload its digests, and rebuild the queue. `@MainActor`
+    /// serialises the mutations, but the item set is threaded through as a value
+    /// so an interleaved `refreshFeed` cannot swap it out between the digest
+    /// preload and the queue build.
+    private func fetchAndBuild(resetIndex: Bool, surfaceErrors: Bool) async {
         isLoading = true
+        loadGeneration &+= 1
+        if surfaceErrors { error = nil }
         do {
             let response = try await apiClient.request(UpToSpeedEndpoint.feed())
-            allItems = response.items
-            let digests = await preloadDigests(for: visibleUnreadItems(from: allItems))
-            buildScreenQueue(digests: digests)
-        } catch {}
+            let items = response.items
+            let digests = await preloadDigests(for: visibleUnreadItems(from: items))
+            allItems = items
+            buildScreenQueue(items: items, digests: digests, resetIndex: resetIndex)
+        } catch is CancellationError {
+        } catch APIError.transport(let underlying)
+            where (underlying as? URLError)?.code == .cancelled {
+        } catch {
+            if surfaceErrors {
+                self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
+        }
         isLoading = false
     }
 
-    /// Re-fetches the feed to detect newly arrived items; updates newItemsAvailable badge.
+    /// Re-fetches the feed to detect newly arrived items; updates the
+    /// newItemsAvailable badge without disturbing the current queue.
     func refreshFeed() async {
         guard !isLoading else { return }
+        let generation = loadGeneration
         do {
             let response = try await apiClient.request(UpToSpeedEndpoint.feed())
+            // A load that started while we were suspended owns `allItems` now.
+            guard generation == loadGeneration, !isLoading else { return }
             let freshUnread = visibleUnreadItems(from: response.items).count
             newItemsAvailable = max(0, freshUnread - snapshotCount)
             allItems = response.items
@@ -73,39 +103,82 @@ final class UpToSpeedViewModel {
 
     // MARK: - Navigation
 
-    func advance() {
-        markCurrentRead()
-        if currentIndex < screens.count - 1 {
-            currentIndex += 1
-        }
+    var currentChapterIndex: Int {
+        chapters.firstIndex { $0.range.contains(currentIndex) } ?? max(chapters.count - 1, 0)
     }
 
-    func goBack() {
-        if currentIndex > 0 {
-            currentIndex -= 1
-        }
+    var currentChapter: UpToSpeedChapter? {
+        chapters.first { $0.range.contains(currentIndex) }
     }
 
-    func markCurrentRead() {
-        markRead(at: currentIndex)
+    /// Screen counter for the current chapter, e.g. "2 / 3".
+    var chapterCounter: String {
+        guard let chapter = currentChapter else { return "" }
+        let position = currentIndex - chapter.range.lowerBound + 1
+        return "\(position) / \(chapter.cardCount)"
+    }
+
+    func jump(to index: Int) {
+        guard screens.indices.contains(index) else { return }
+        currentIndex = index
     }
 
     func markRead(at index: Int) {
         guard let screen = screens[safe: index] else { return }
         switch screen {
-        case .flintHeader, .flintParagraph, .flintInsight, .flintQuestion:
-            let itemID = screen.item.id
-            let isLastPageForItem = screens[safe: index + 1]?.item.id != itemID
-            if isLastPageForItem && digestCanBeMarkedRead(itemID: itemID) {
+        case .opener, .wrap, .checkIn, .anomaly:
+            break // opener/wrap are derived; check-in and anomaly mark via their own signals
+        case .flintHeader, .flintParagraph, .flintInsight, .flintQuestion, .dayContext:
+            // A day-context screen isn't always adjacent to the rest of its
+            // digest's screens (it's appended once, after every digest chapter),
+            // so "last page" has to scan forward rather than compare index+1 —
+            // otherwise a digest whose day-context screen trails its own
+            // content never gets marked read at all, or gets marked read
+            // before that screen is shown, depending on queue order.
+            guard let itemID = screen.item?.id else { return }
+            if Self.isLastScreen(forItemID: itemID, at: index, in: screens), digestCanBeMarkedRead(itemID: itemID) {
                 enqueueMarkRead(itemID: itemID, type: .flintDigest)
             }
-        case .checkIn:
-            break // uses CheckInsEndpoint.submit as its read signal
-        case .anomaly:
-            break // marked via markAnomalyRead when user acknowledges
+        case .newsStory:
+            guard let itemID = screen.item?.id else { return }
+            let nextIsSameStory: Bool = {
+                if case .newsStory(let next, _, _, _)? = screens[safe: index + 1] {
+                    return next.id == itemID
+                }
+                return false
+            }()
+            // Only the digest's own screens are ever adjacent here (news
+            // stories for one item are always built contiguously), but the
+            // final story must still have been scrolled to its end before
+            // the whole digest counts as read.
+            if !nextIsSameStory, scrolledToBottomIndices.contains(index) {
+                enqueueMarkRead(itemID: itemID, type: .flintDigest)
+            }
         case .newsSummary(let item):
             guard scrolledToBottomIndices.contains(index) else { return }
             enqueueMarkRead(itemID: item.id, type: .newsSummary)
+        }
+    }
+
+    /// Whether no later screen in `screens` shares `itemID` with the one at
+    /// `index` — i.e. whether this is genuinely the last time that item's
+    /// content appears in the queue. Screens for one item aren't always
+    /// contiguous (a day-context screen is appended once, separately from
+    /// the digest chapter it belongs to), so this scans forward rather than
+    /// only comparing against `index + 1`.
+    nonisolated static func isLastScreen(forItemID itemID: String, at index: Int, in screens: [UpToSpeedScreen]) -> Bool {
+        guard index + 1 < screens.count else { return true }
+        return !screens[(index + 1)...].contains { $0.item?.id == itemID }
+    }
+
+    /// Called when the wrap screen appears — marks read the (at most one)
+    /// reading-list digest whose content became `readingItem`, which the wrap
+    /// screen itself displays. Safe to call unconditionally, including via a
+    /// direct chapter jump: `foldedDigestIDs` only ever names a digest whose
+    /// content is shown on this very screen, never one the jump skipped past.
+    func markReachedWrap() {
+        for id in foldedDigestIDs {
+            enqueueMarkRead(itemID: id, type: .flintDigest)
         }
     }
 
@@ -122,6 +195,7 @@ final class UpToSpeedViewModel {
     /// Marks the digest as caught-up once all its questions are answered.
     func onQuestionAnswered(blockID: String, itemID: String) {
         answeredQuestionIDs.insert(blockID)
+        openQuestions.removeAll { $0.block.id == blockID }
         let allIDs = digestQuestionMap[itemID] ?? []
         guard !allIDs.isEmpty else { return }
         if allIDs.allSatisfy({ answeredQuestionIDs.contains($0) }) {
@@ -167,25 +241,137 @@ final class UpToSpeedViewModel {
         return result
     }
 
-    private func buildScreenQueue(digests: [String: FlintDigest] = [:]) {
+    private func buildScreenQueue(
+        items: [UpToSpeedItem],
+        digests: [String: FlintDigest] = [:],
+        resetIndex: Bool = true
+    ) {
         digestQuestionMap = [:]
         answeredQuestionIDs = []
         scrolledToBottomIndices = []
-        let unread = visibleUnreadItems(from: allItems)
+        foldedDigestIDs = []
+        openQuestions = []
+        readingItem = nil
+        openerParagraphs = []
+
+        let unread = visibleUnreadItems(from: items)
         snapshotCount = unread.count
-        screens = unread.flatMap { item -> [UpToSpeedScreen] in
-            switch item.payload {
-            case .flintDigest(let summary):
-                return expandFlintItem(item: item, summary: summary, digest: digests[item.id])
-            case .checkIn:
-                return [.checkIn(item)]
-            case .anomaly:
-                return [.anomaly(item)]
-            case .newsSummary:
-                return [.newsSummary(item)]
+
+        var built: [(screen: UpToSpeedScreen, key: UpToSpeedChapter.Kind)] = []
+
+        // 1 — anomalies
+        for item in unread where item.type == .anomaly {
+            built.append((.anomaly(item), .anomaly))
+        }
+
+        // 2 — digests, oldest first, split by role
+        let digestItems = unread
+            .filter { $0.type == .flintDigest }
+            .sorted { digestSortDate(for: $0, digests: digests) < digestSortDate(for: $1, digests: digests) }
+
+        var primaryDigestSummary: String?
+        var newsScreens: [(screen: UpToSpeedScreen, key: UpToSpeedChapter.Kind)] = []
+        // digestItems is sorted oldest → newest, so the last match here is the
+        // most-recently-created day-context block across all of today's digests.
+        var dayContextCandidate: (item: UpToSpeedItem, context: FlintDayContext)?
+
+        for item in digestItems {
+            let full = digests[item.id]
+            let title = digestTitle(item: item, digest: full)
+
+            if let block = full?.blocks.first(where: { $0.blockType == "flint_day_context" }),
+               let context = block.dayContext {
+                dayContextCandidate = (item, context)
+            }
+
+            // Fold a reading-list digest's content into the wrap screen's
+            // readingItem — but only the first one whose summary actually
+            // parses. A duplicate reading-list digest, or one whose summary
+            // doesn't parse, falls through to normal digest expansion below
+            // instead of being silently folded as "read" with nothing shown.
+            if isReadingListDigest(title: title, digest: full), readingItem == nil,
+               let summary = full?.summary ?? digestSummary(item),
+               let parsed = UpToSpeedParsing.readingItem(from: summary) {
+                readingItem = parsed
+                foldedDigestIDs.append(item.id)
+                continue
+            }
+
+            if isNewsRoundupDigest(title: title, digest: full) {
+                let summary = full?.summary ?? digestSummary(item) ?? ""
+                let sections = UpToSpeedParsing.newsRoundupSections(from: summary)
+                if !sections.isEmpty {
+                    for section in sections {
+                        newsScreens.append((
+                            .newsStory(item, section: section, index: section.id, total: sections.count),
+                            .news
+                        ))
+                    }
+                    continue
+                }
+                // No parseable "## " sections — fall through to normal digest
+                // expansion rather than folding it as "read" with nothing shown.
+            }
+
+            // Primary digest — prose + insights + questions
+            if primaryDigestSummary == nil {
+                primaryDigestSummary = full?.summary ?? digestSummary(item)
+            }
+            for screen in expandFlintItem(item: item, digest: full) {
+                built.append((screen, .digest(title: title)))
             }
         }
-        currentIndex = 0
+
+        // 3 — day context (if any digest carried one), then news
+        if let candidate = dayContextCandidate {
+            let yesterday = primaryDigestSummary.flatMap(UpToSpeedParsing.yesterdayRecap(from:))
+            built.append((.dayContext(candidate.item, candidate.context, yesterday: yesterday), .day))
+        }
+        built.append(contentsOf: newsScreens)
+        for item in unread where item.type == .newsSummary {
+            built.append((.newsSummary(item), .news))
+        }
+
+        // 4 — check-in (incomplete), then wrap
+        var wrapChapterHasContent = readingItem != nil || !openQuestions.isEmpty
+        for item in unread where item.type == .checkIn {
+            if case .checkIn(let summary) = item.payload, !summary.completed {
+                built.append((.checkIn(item), .wrap))
+                wrapChapterHasContent = true
+            }
+        }
+
+        // Not `built.contains { ... .wrap: wrapChapterHasContent }` — a solo
+        // folded reading-list digest leaves `built` with zero .wrap-keyed
+        // entries (no incomplete check-in), so `.contains` over an empty
+        // match set would wrongly report no substance even though
+        // wrapChapterHasContent is true.
+        let hasSubstance = !built.isEmpty || wrapChapterHasContent
+
+        guard hasSubstance else {
+            screens = []
+            chapters = []
+            currentIndex = 0
+            newItemsAvailable = 0
+            return
+        }
+
+        built.insert((.opener, .intro), at: 0)
+        built.append((.wrap, .wrap))
+
+        screens = built.map(\.screen)
+        chapters = UpToSpeedChapter.chapters(for: built.map(\.key))
+
+        openerGreeting = makeGreeting()
+        if let summary = primaryDigestSummary {
+            openerParagraphs = UpToSpeedParsing.openerParagraphs(from: summary)
+        }
+
+        if resetIndex {
+            currentIndex = 0
+        } else {
+            currentIndex = min(currentIndex, screens.count - 1)
+        }
         newItemsAvailable = 0
     }
 
@@ -193,13 +379,8 @@ final class UpToSpeedViewModel {
         UpToSpeedVisibility(now: .now, calendar: .current).visibleUnreadItems(from: items)
     }
 
-    private func expandFlintItem(
-        item: UpToSpeedItem,
-        summary: UpToSpeedFlintDigestSummary,
-        digest: FlintDigest?
-    ) -> [UpToSpeedScreen] {
-        // Parse summary into sections; first goes on the header card, rest become paragraph pages
-        let sections = parseSections(summary.summary ?? "")
+    private func expandFlintItem(item: UpToSpeedItem, digest: FlintDigest?) -> [UpToSpeedScreen] {
+        let sections = parseSections(digestSummary(item) ?? digest?.summary ?? "")
         var pages: [UpToSpeedScreen] = [.flintHeader(item, firstSection: sections.first)]
 
         for (i, section) in sections.dropFirst().enumerated() {
@@ -207,19 +388,85 @@ final class UpToSpeedViewModel {
         }
 
         if let digest {
-            let insights = digest.blocks.filter { !$0.isQuestion && $0.blockType != "flint_editorial_note" }
+            let insights = digest.blocks.filter {
+                !$0.isQuestion && $0.blockType != "flint_editorial_note" && $0.blockType != "flint_day_context"
+            }
             let questions = digest.blocks.filter { $0.isQuestion }
             for block in insights { pages.append(.flintInsight(item, block)) }
             for block in questions { pages.append(.flintQuestion(item, block)) }
 
-            // Seed answered state from server data
             let questionIDs = questions.map(\.id)
             digestQuestionMap[item.id] = questionIDs
-            for block in questions where block.answered {
-                answeredQuestionIDs.insert(block.id)
+            for block in questions {
+                if block.answered {
+                    answeredQuestionIDs.insert(block.id)
+                } else {
+                    openQuestions.append(OpenQuestion(item: item, block: block))
+                }
             }
         }
         return pages
+    }
+
+    // MARK: - Digest categorisation
+
+    private func digestSummary(_ item: UpToSpeedItem) -> String? {
+        if case .flintDigest(let summary) = item.payload { return summary.summary }
+        return nil
+    }
+
+    private func digestTitle(item: UpToSpeedItem, digest: FlintDigest?) -> String {
+        if let title = digest?.title, !title.isEmpty { return title }
+        if case .flintDigest(let summary) = item.payload, let title = summary.title, !title.isEmpty {
+            return title
+        }
+        return "Digest"
+    }
+
+    private func digestSortDate(for item: UpToSpeedItem, digests: [String: FlintDigest]) -> Date {
+        if let created = digests[item.id]?.createdAt { return created }
+        if case .flintDigest(let summary) = item.payload {
+            let rank: TimeInterval
+            switch summary.period {
+            case .morning: rank = 1
+            case .afternoon: rank = 2
+            case .evening: rank = 3
+            case nil: rank = 0
+            }
+            let day = ISO8601DateFormatter().date(from: "\(summary.date)T00:00:00Z") ?? .distantPast
+            return day.addingTimeInterval(rank * 3600)
+        }
+        return .distantPast
+    }
+
+    private func isNewsRoundupDigest(title: String, digest: FlintDigest?) -> Bool {
+        let lowered = title.lowercased()
+        if lowered.contains("news") || lowered.contains("roundup") { return true }
+        guard let digest else { return false }
+        let contentBlocks = digest.blocks.filter { $0.blockType != "flint_editorial_note" && !$0.isQuestion }
+        return !contentBlocks.isEmpty && contentBlocks.allSatisfy { $0.blockType == "flint_news" }
+    }
+
+    private func isReadingListDigest(title: String, digest: FlintDigest?) -> Bool {
+        let lowered = title.lowercased()
+        if lowered.contains("reading list") || lowered.contains("saved to read") { return true }
+        return lowered.contains("reading") && (digest?.blocks.isEmpty ?? true)
+    }
+
+    private func makeGreeting() -> String {
+        let slot = SparkTimeOfDay.from(date: .now)
+        let weekday = Date.now.formatted(.dateTime.weekday(.wide))
+        let base: String
+        switch slot {
+        case .morning: base = "Good \(weekday) morning"
+        case .afternoon: base = "Good \(weekday) afternoon"
+        case .evening: base = "Good \(weekday) evening"
+        case .night: base = "Still up"
+        }
+        if let name = profileName, !name.isEmpty {
+            return "\(base), \(name)."
+        }
+        return "\(base)."
     }
 
     // MARK: - Section parsing
@@ -272,14 +519,11 @@ struct UpToSpeedVisibility {
     let now: Date
     let calendar: Calendar
 
+    /// Every unread item that should surface in the flow. Unlike the previous
+    /// implementation this keeps *all* unread digests — the chaptered flow
+    /// shows the morning brief, the news roundup and the reading list together.
     func visibleUnreadItems(from items: [UpToSpeedItem]) -> [UpToSpeedItem] {
-        let unread = items.filter(isVisibleUnreadCandidate)
-        guard let mostRecentDigestID = mostRecentDigest(in: unread)?.id else {
-            return unread
-        }
-        return unread.filter { item in
-            item.type != .flintDigest || item.id == mostRecentDigestID
-        }
+        items.filter(isVisibleUnreadCandidate)
     }
 
     private func isVisibleUnreadCandidate(_ item: UpToSpeedItem) -> Bool {
@@ -294,30 +538,6 @@ struct UpToSpeedVisibility {
             return true
         case .afternoon:
             return calendar.component(.hour, from: now) >= Self.afternoonStartHour
-        }
-    }
-
-    private func mostRecentDigest(in items: [UpToSpeedItem]) -> UpToSpeedItem? {
-        items
-            .filter { $0.type == .flintDigest }
-            .max { lhs, rhs in
-                digestSortKey(lhs) < digestSortKey(rhs)
-            }
-    }
-
-    private func digestSortKey(_ item: UpToSpeedItem) -> String {
-        if case .flintDigest(let summary) = item.payload {
-            return "\(summary.date)-\(periodRank(summary.period))"
-        }
-        return ""
-    }
-
-    private func periodRank(_ period: FlintDigestPeriod?) -> Int {
-        switch period {
-        case .morning: 1
-        case .afternoon: 2
-        case .evening: 3
-        case nil: 0
         }
     }
 }

@@ -70,6 +70,37 @@ struct APIClientTests {
         #expect(briefingRequest.value(forHTTPHeaderField: "Authorization") == "Bearer a")
     }
 
+    @Test("decodes a date-only field alongside full ISO8601 timestamps")
+    func decodesDateOnlyField() async throws {
+        let (client, tokenStore) = makeClient()
+        try await tokenStore.store(access: "a", refresh: "r", expiresIn: 3600)
+
+        await StubURLProtocol.set { _ in
+            let payload = """
+            {
+              "data": [
+                {
+                  "id": "08397976-8456-4aef-b52c-93c476fa040e",
+                  "title": "Edinburgh trip with Dan",
+                  "content": null,
+                  "kind": "tactical",
+                  "status": "dormant",
+                  "first_seen_at": "2026-09-02T21:01:18+00:00",
+                  "last_touched_at": "2026-09-02T21:01:18+00:00",
+                  "next_review_at": "2026-10-22",
+                  "origin": "conversation"
+                }
+              ]
+            }
+            """.data(using: .utf8)!
+            return (payload, 200, [:])
+        }
+
+        let response = try await client.request(FlintTopicsEndpoint.list())
+        #expect(response.data.count == 1)
+        #expect(response.data[0].nextReviewAt != nil)
+    }
+
     @Test("304 is surfaced as APIError.notModified")
     func notModified() async throws {
         let (client, tokenStore) = makeClient()

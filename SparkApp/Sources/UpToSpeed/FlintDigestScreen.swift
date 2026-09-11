@@ -119,11 +119,12 @@ struct FlintQuestionPage: View {
     @State private var submittedNote: String?
 
     var body: some View {
-        StoryScreenScaffold(label: labelText) {
+        StoryScreenScaffold(label: labelText, flintByline: .init("Flint is asking")) {
             VStack(alignment: .leading, spacing: SparkSpacing.lg) {
                 Text(block.question ?? block.title)
                     .font(SparkTypography.heroSmall)
                     .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 if let submittedAnswer {
                     answeredView(answer: submittedAnswer, note: submittedNote)
@@ -135,8 +136,21 @@ struct FlintQuestionPage: View {
                         onSubmit: { answer, note in await submitAnswer(answer, note: note) }
                     )
                 }
+
+                if otherOpenQuestionCount > 0 {
+                    Text(otherOpenQuestionCount == 1
+                        ? "One other question is still open — I'll bring it back at the end."
+                        : "\(otherOpenQuestionCount) other questions are still open — I'll bring them back at the end.")
+                        .font(SparkTypography.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
+    }
+
+    private var otherOpenQuestionCount: Int {
+        max(0, viewModel.openQuestions.filter { $0.block.id != block.id }.count)
     }
 
     private var labelText: String {

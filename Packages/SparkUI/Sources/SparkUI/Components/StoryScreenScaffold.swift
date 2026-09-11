@@ -5,11 +5,25 @@ import SwiftUI
 /// When `reserveTopSpace` is true (default), adds 152 pt top padding to clear
 /// the progress-bar + controls overlay at the top of the story container.
 ///
+/// Pass `flintByline` to render Flint's attribution (avatar + name + optional
+/// time) above the content — used wherever Flint "speaks" on a screen.
+///
 /// Pass `onReachedBottom` to be notified when the user scrolls to the end of the
 /// content. A subtle "✓ Read" indicator animates in at the bottom once reached.
 /// For cards whose content fits without scrolling, this fires immediately on appear.
 public struct StoryScreenScaffold<Content: View>: View {
+    public struct Byline: Equatable {
+        public let name: String
+        public let meta: String?
+
+        public init(_ name: String = "Flint", meta: String? = nil) {
+            self.name = name
+            self.meta = meta
+        }
+    }
+
     public let label: String?
+    public let flintByline: Byline?
     public let reserveTopSpace: Bool
     public let onReachedBottom: (() -> Void)?
     private let content: Content
@@ -18,11 +32,13 @@ public struct StoryScreenScaffold<Content: View>: View {
 
     public init(
         label: String? = nil,
+        flintByline: Byline? = nil,
         reserveTopSpace: Bool = true,
         onReachedBottom: (() -> Void)? = nil,
         @ViewBuilder content: () -> Content
     ) {
         self.label = label
+        self.flintByline = flintByline
         self.reserveTopSpace = reserveTopSpace
         self.onReachedBottom = onReachedBottom
         self.content = content()
@@ -37,6 +53,11 @@ public struct StoryScreenScaffold<Content: View>: View {
                         .foregroundStyle(.secondary)
                         .tracking(1.2)
                 }
+
+                if let flintByline {
+                    FlintByline(flintByline.name, meta: flintByline.meta)
+                }
+
                 content
 
                 if onReachedBottom != nil {
@@ -81,10 +102,10 @@ public struct StoryScreenScaffold<Content: View>: View {
 
 #Preview {
     ZStack {
-        Color.black.ignoresSafeArea()
-        StoryScreenScaffold(label: "Morning Digest") {
+        Color.sparkSurface.ignoresSafeArea()
+        StoryScreenScaffold(label: "Morning Digest", flintByline: .init(meta: "07:27")) {
             Text("Content goes here")
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
         }
     }
 }

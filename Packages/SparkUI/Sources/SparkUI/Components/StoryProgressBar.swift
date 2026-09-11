@@ -1,25 +1,67 @@
 import SwiftUI
 
 /// Segmented top progress bar for the Up to Speed stories flow.
-/// One segment per screen in the queue; the current segment fills as the user reads.
+///
+/// Two shapes:
+/// - **Flat** — one segment per screen (`init(total:currentIndex:)`).
+/// - **Chaptered** — segments grouped into named chapters with a wider gap
+///   between groups (`init(chapters:currentIndex:)`). `currentIndex` is the
+///   global 0-based screen index across every chapter.
 public struct StoryProgressBar: View {
-    public let total: Int
-    public let currentIndex: Int
-    public let segmentProgress: Double
+    /// One chapter's worth of segments in the chaptered bar.
+    public struct ChapterSpec: Equatable {
+        public let label: String
+        public let segments: Int
 
+        public init(label: String, segments: Int) {
+            self.label = label
+            self.segments = segments
+        }
+    }
+
+    private let chapters: [ChapterSpec]
+    private let currentIndex: Int
+    private let segmentProgress: Double
+
+    /// Flat bar — `total` evenly-weighted segments.
     public init(total: Int, currentIndex: Int, segmentProgress: Double = 1) {
-        self.total = total
+        self.chapters = [ChapterSpec(label: "", segments: max(total, 0))]
+        self.currentIndex = currentIndex
+        self.segmentProgress = segmentProgress
+    }
+
+    /// Chaptered bar — segments grouped by chapter.
+    public init(chapters: [ChapterSpec], currentIndex: Int, segmentProgress: Double = 1) {
+        self.chapters = chapters
         self.currentIndex = currentIndex
         self.segmentProgress = segmentProgress
     }
 
     public var body: some View {
-        HStack(spacing: 4) {
-            ForEach(0..<total, id: \.self) { index in
-                segment(for: index)
+        HStack(spacing: 10) {
+            ForEach(Array(chapters.enumerated()), id: \.offset) { chapterIndex, chapter in
+                HStack(spacing: 4) {
+                    ForEach(0..<chapter.segments, id: \.self) { segmentInChapter in
+                        segment(for: globalIndex(chapterIndex: chapterIndex, segmentInChapter: segmentInChapter))
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(chapter.label.isEmpty ? "Story progress" : chapter.label)
+                .accessibilityValue(accessibilityValue(for: chapter, chapterIndex: chapterIndex))
             }
         }
         .frame(height: 3)
+    }
+
+    private func globalIndex(chapterIndex: Int, segmentInChapter: Int) -> Int {
+        let preceding = chapters.prefix(chapterIndex).reduce(0) { $0 + $1.segments }
+        return preceding + segmentInChapter
+    }
+
+    private func accessibilityValue(for chapter: ChapterSpec, chapterIndex: Int) -> String {
+        let start = chapters.prefix(chapterIndex).reduce(0) { $0 + $1.segments }
+        let completedSteps = min(max(currentIndex - start + 1, 0), chapter.segments)
+        return "\(completedSteps) of \(chapter.segments)"
     }
 
     @ViewBuilder
@@ -51,17 +93,20 @@ extension Comparable {
 
 #Preview {
     VStack(spacing: 24) {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            StoryProgressBar(total: 5, currentIndex: 2, segmentProgress: 0.4)
-                .padding(.horizontal, 16)
-        }
-        .frame(height: 40)
-        ZStack {
-            Color.white.ignoresSafeArea()
-            StoryProgressBar(total: 5, currentIndex: 2, segmentProgress: 0.4)
-                .padding(.horizontal, 16)
-        }
-        .frame(height: 40)
+        StoryProgressBar(total: 5, currentIndex: 2, segmentProgress: 0.4)
+            .padding(.horizontal, 16)
+        StoryProgressBar(
+            chapters: [
+                .init(label: "You", segments: 1),
+                .init(label: "Ask", segments: 1),
+                .init(label: "Day", segments: 1),
+                .init(label: "News", segments: 3),
+                .init(label: "Wrap", segments: 2)
+            ],
+            currentIndex: 4
+        )
+        .padding(.horizontal, 16)
     }
+    .frame(height: 120)
+    .background(Color.sparkSurface)
 }

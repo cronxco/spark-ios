@@ -51,14 +51,26 @@ struct UpToSpeedVisibilityTests {
         #expect(visible.isEmpty)
     }
 
-    @Test func keepsNonCheckInUnreadItemsAndMostRecentDigestOnly() throws {
+    @Test func keepsEveryUnreadDigest() throws {
+        // The chaptered flow shows the morning brief, the news roundup and the
+        // reading list together — nothing is collapsed to "most recent".
         let visible = visibility(hour: 9).visibleUnreadItems(from: [
+            digest(id: "digest-news", date: "2026-05-24", period: .morning),
             digest(id: "digest-morning", date: "2026-05-24", period: .morning),
-            digest(id: "digest-afternoon", date: "2026-05-24", period: .afternoon),
+            digest(id: "digest-evening", date: "2026-05-24", period: .evening),
             news(),
         ])
 
-        #expect(visible.map(\.id) == ["digest-afternoon", "news-1"])
+        #expect(visible.map(\.id) == ["digest-news", "digest-morning", "digest-evening", "news-1"])
+    }
+
+    @Test func dropsDigestsAlreadyCaughtUp() throws {
+        let visible = visibility(hour: 9).visibleUnreadItems(from: [
+            digest(id: "digest-read", date: "2026-05-24", period: .morning, caughtUpAt: .now),
+            digest(id: "digest-unread", date: "2026-05-24", period: .evening),
+        ])
+
+        #expect(visible.map(\.id) == ["digest-unread"])
     }
 
     private func visibility(hour: Int) -> UpToSpeedVisibility {
@@ -100,12 +112,13 @@ struct UpToSpeedVisibilityTests {
     private func digest(
         id: String,
         date: String,
-        period: FlintDigestPeriod
+        period: FlintDigestPeriod,
+        caughtUpAt: Date? = nil
     ) -> UpToSpeedItem {
         UpToSpeedItem(
             id: id,
             type: .flintDigest,
-            caughtUpAt: nil,
+            caughtUpAt: caughtUpAt,
             payload: .flintDigest(UpToSpeedFlintDigestSummary(
                 date: date,
                 period: period,
