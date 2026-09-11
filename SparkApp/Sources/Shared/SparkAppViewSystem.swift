@@ -342,6 +342,10 @@ struct SparkMainAppToolbarModifier: ViewModifier {
         return allIntegrations.contains { !healthy.contains($0.status) }
     }
 
+    private var hasUnreadAttention: Bool {
+        unreadNotifications.contains { $0.domain == NotificationFeedItem.Stream.attention.rawValue }
+    }
+
     func body(content: Content) -> some View {
         content
             .toolbar {
@@ -381,7 +385,11 @@ struct SparkMainAppToolbarModifier: ViewModifier {
     private var notificationIcon: some View {
         let icon = Image(systemName: "bell")
             .symbolRenderingMode(.monochrome)
-            .foregroundStyle(unreadNotifications.isEmpty ? Color.primary : Color.sparkAccent)
+            .foregroundStyle(
+                unreadNotifications.isEmpty
+                    ? Color.primary
+                    : (hasUnreadAttention ? Color.sparkError : Color.sparkAccent)
+            )
 
         if unreadNotifications.isEmpty {
             icon

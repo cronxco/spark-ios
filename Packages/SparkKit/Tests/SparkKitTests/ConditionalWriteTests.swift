@@ -108,6 +108,8 @@ struct NotificationsEndpointTests {
         // precondition was removed rather than satisfied.
         #expect(NotificationsEndpoint.markRead(id: "abc").headers["If-Match"] == nil)
         #expect(NotificationsEndpoint.markAllRead().headers["If-Match"] == nil)
+        #expect(NotificationsEndpoint.markUnread(id: "abc").headers["If-Match"] == nil)
+        #expect(NotificationsEndpoint.archive(id: "abc").headers["If-Match"] == nil)
     }
 
     @Test("preferences update carries the user version")
@@ -120,6 +122,98 @@ struct NotificationsEndpointTests {
         #expect(endpoint.method == .patch)
         #expect(endpoint.path == "/settings/notifications")
         #expect(endpoint.headers["If-Match"] == "\"user-v3\"")
+    }
+}
+
+@Suite("Notification feed contract")
+struct NotificationFeedContractTests {
+    @Test("decodes mixed notification and activity rows")
+    func decodesMixedFeed() throws {
+        let json = """
+        {
+          "data": [
+            {
+              "contract_version": 1,
+              "id": "notification-id",
+              "kind": "notification",
+              "type": "integration_failed",
+              "stream": "attention",
+              "severity": "error",
+              "state": "active",
+              "title": "Reconnect Monzo",
+              "body": "Spark needs your help to resume updates.",
+              "is_read": false,
+              "occurrence_count": 3,
+              "occurred_at": "2026-09-11T09:30:00Z",
+              "updated_at": "2026-09-11T09:35:00Z",
+              "archived_at": null,
+              "entity": {"kind": "integration", "id": "integration-id"},
+              "destination": "integration:integration-id",
+              "primary_action": {"id": "view", "label": "View"},
+              "progress": null,
+              "has_technical_detail": true,
+              "version": "\\\"v1\\\""
+            },
+            {
+              "contract_version": 1,
+              "id": "activity:12",
+              "kind": "activity",
+              "type": "data_export",
+              "stream": "activity",
+              "severity": "info",
+              "state": "active",
+              "title": "Data Export",
+              "body": "Preparing your export",
+              "is_read": false,
+              "occurrence_count": 1,
+              "occurred_at": "2026-09-11T09:30:00Z",
+              "updated_at": "2026-09-11T09:36:00Z",
+              "archived_at": null,
+              "entity": null,
+              "destination": null,
+              "primary_action": null,
+              "progress": {"current": 40, "total": 100, "step": "preparing"},
+              "has_technical_detail": false,
+              "version": "\\\"v2\\\""
+            }
+          ],
+          "next_cursor": null,
+          "has_more": false,
+          "counts": {
+            "unread": 1,
+            "unresolved_attention": 1,
+            "active_activity": 1,
+            "by_stream": {"updates": 0, "activity": 1, "attention": 1, "system": 0}
+          }
+        }
+        """
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let page = try decoder.decode(NotificationFeedPage.self, from: Data(json.utf8))
+
+        #expect(page.data.count == 2)
+        #expect(page.data[0].stream == .attention)
+        #expect(page.data[0].occurrenceCount == 3)
+        #expect(page.data[1].progress?.current == 40)
+        #expect(page.counts.unresolvedAttention == 1)
+    }
+
+    @Test("builds server-side stream and history filters")
+    func buildsFilterQuery() {
+        let endpoint = NotificationsEndpoint.feed(
+            scope: .history,
+            stream: .attention,
+            search: "monzo",
+            cursor: "next",
+            limit: 10
+        )
+
+        #expect(endpoint.path == "/notifications/feed")
+        #expect(endpoint.query.contains(URLQueryItem(name: "scope", value: "history")))
+        #expect(endpoint.query.contains(URLQueryItem(name: "stream", value: "attention")))
+        #expect(endpoint.query.contains(URLQueryItem(name: "search", value: "monzo")))
+        #expect(endpoint.query.contains(URLQueryItem(name: "cursor", value: "next")))
     }
 }
 

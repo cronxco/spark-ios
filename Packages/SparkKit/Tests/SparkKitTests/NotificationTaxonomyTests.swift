@@ -21,12 +21,14 @@ struct NotificationCategoryTests {
         "integration_failed",
         "integration_authentication_failed",
         "cookie_expiry_warning",
+        "cookie_auto_refreshed",
         "fetch_multiple_failures",
         "fetch_content_changed",
         "migration_completed",
         "migration_failed",
         "data_export_ready",
         "system_maintenance",
+        "daily_digest",
     ]
 
     @Test("every category matches a backend notification type")

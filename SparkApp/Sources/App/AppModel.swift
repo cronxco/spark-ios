@@ -144,6 +144,11 @@ final class AppModel {
         let client = apiClient
         let cont = container
         await reverb.addHandler { event in
+            if ["notification.received", "action_progress.updated"].contains(event.eventName) {
+                Task { @MainActor in
+                    NotificationCenter.default.post(name: .sparkNotificationFeedChanged, object: nil)
+                }
+            }
             let syncEvents: Set<String> = [
                 "event.created", "event.updated", "event.deleted",
                 "anomaly.raised", "notification.received",
@@ -449,6 +454,10 @@ final class AppModel {
             UIApplication.shared.unregisterForRemoteNotifications()
         #endif
     }
+}
+
+extension Notification.Name {
+    static let sparkNotificationFeedChanged = Notification.Name("spark.notificationFeedChanged")
 }
 
 #if canImport(UIKit)

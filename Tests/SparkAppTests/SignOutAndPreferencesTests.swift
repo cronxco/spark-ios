@@ -148,8 +148,8 @@ struct SignOutAndPreferencesTests {
         #expect(patches.last?.value(forHTTPHeaderField: "If-Match") == "\"v2\"")
     }
 
-    @Test("a failed conflict refresh restores the optimistically deleted notification")
-    func failedConflictRefreshRestoresNotification() async throws {
+    @Test("a failed archive restores the optimistically removed notification")
+    func failedArchiveRestoresNotification() async throws {
         let tokenStore = makeTokenStore()
         try await tokenStore.store(access: "token", refresh: "refresh", expiresIn: 3_600)
         let client = APIClient(
@@ -163,10 +163,10 @@ struct SignOutAndPreferencesTests {
         await AppStubURLProtocol.set { request in
             let count = await requestCount.increment()
             if count == 1 {
-                let page = #"{"data":[{"id":"notification-1","title":"Private","body":null,"domain":"money","is_read":false,"received_at":"2026-09-06T12:00:00Z","entity":null,"version":"\"v1\""}],"next_cursor":null,"has_more":false}"#
+                let page = #"{"data":[{"contract_version":1,"id":"notification-1","kind":"notification","type":"daily_digest","stream":"updates","severity":"info","state":"active","title":"Private","body":null,"is_read":false,"occurrence_count":1,"occurred_at":"2026-09-06T12:00:00Z","updated_at":"2026-09-06T12:00:00Z","archived_at":null,"entity":null,"destination":null,"primary_action":null,"progress":null,"has_technical_detail":false,"version":"\"v1\""}],"next_cursor":null,"has_more":false,"counts":{"unread":1,"unresolved_attention":0,"active_activity":0,"by_stream":{"updates":1,"activity":0,"attention":0,"system":0}}}"#
                 return (Data(page.utf8), 200, [:])
             }
-            if request.httpMethod == "DELETE" {
+            if request.httpMethod == "POST" {
                 return (Data(), 412, [:])
             }
             return (Data(), 500, [:])
@@ -177,7 +177,7 @@ struct SignOutAndPreferencesTests {
             container: try SparkDataStore.makeInMemoryContainer()
         )
         await viewModel.refresh()
-        await viewModel.delete("notification-1")
+        await viewModel.archive("notification-1")
 
         #expect(viewModel.items.map(\.id) == ["notification-1"])
     }
