@@ -46,7 +46,8 @@ public struct StoryProgressBar: View {
                     }
                 }
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel(chapter.label)
+                .accessibilityLabel(chapter.label.isEmpty ? "Story progress" : chapter.label)
+                .accessibilityValue(accessibilityValue(for: chapter, chapterIndex: chapterIndex))
             }
         }
         .frame(height: 3)
@@ -55,6 +56,12 @@ public struct StoryProgressBar: View {
     private func globalIndex(chapterIndex: Int, segmentInChapter: Int) -> Int {
         let preceding = chapters.prefix(chapterIndex).reduce(0) { $0 + $1.segments }
         return preceding + segmentInChapter
+    }
+
+    private func accessibilityValue(for chapter: ChapterSpec, chapterIndex: Int) -> String {
+        let start = chapters.prefix(chapterIndex).reduce(0) { $0 + $1.segments }
+        let completedSteps = min(max(currentIndex - start + 1, 0), chapter.segments)
+        return "\(completedSteps) of \(chapter.segments)"
     }
 
     @ViewBuilder
