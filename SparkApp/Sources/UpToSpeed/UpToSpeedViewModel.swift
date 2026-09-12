@@ -86,6 +86,7 @@ final class UpToSpeedViewModel {
     /// preload and the queue build.
     private func fetchAndBuild(resetIndex: Bool, surfaceErrors: Bool) async {
         isLoading = true
+        digestsFailedToLoad = 0
         loadGeneration &+= 1
         if surfaceErrors { error = nil }
         do {
@@ -398,7 +399,7 @@ final class UpToSpeedViewModel {
                     do {
                         return (itemID, try await client.request(FlintEndpoint.digest(id: itemID)))
                     } catch {
-                        log.error("Failed to preload digest \(itemID, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                        log.error("Failed to preload digest \(itemID, privacy: .public): \(error.localizedDescription, privacy: .private)")
                         return (itemID, nil)
                     }
                 }
