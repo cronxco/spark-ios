@@ -340,7 +340,14 @@ private extension KeyedDecodingContainer {
         )
     }
 
+    /// `contains` first: `decodeNil` reads like an existence probe but is not
+    /// one — it reports whether a *present* value is null, and throws
+    /// `keyNotFound` when the key is absent. Without the guard an omitted
+    /// `digest_object_id` failed the whole `FlintDigest` decode, even though
+    /// the property is optional. Every fixture and the server send the key, so
+    /// nothing caught it until a payload left it out.
     func decodeLossyStringIfPresent(forKey key: Key) throws -> String? {
+        guard contains(key) else { return nil }
         if try decodeNil(forKey: key) {
             return nil
         }

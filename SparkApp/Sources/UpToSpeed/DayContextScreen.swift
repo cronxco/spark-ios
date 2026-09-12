@@ -7,9 +7,11 @@ import SwiftUI
 struct DayContextScreen: View {
     let dayContext: FlintDayContext
     let yesterday: String?
+    var isActive: Bool = true
+    var onReachedBottom: (() -> Void)?
 
     var body: some View {
-        StoryScreenScaffold {
+        StoryScreenScaffold(isActive: isActive, onReachedBottom: onReachedBottom) {
             VStack(alignment: .leading, spacing: SparkSpacing.xl) {
                 Text("Your day")
                     .font(SparkTypography.hero)

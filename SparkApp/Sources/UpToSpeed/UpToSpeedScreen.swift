@@ -16,6 +16,9 @@ enum UpToSpeedScreen: Identifiable {
     case newsStory(UpToSpeedItem, section: NewsRoundupSection, index: Int, total: Int)
     case newsSummary(UpToSpeedItem)
     case wrap
+    /// Everything already caught up on today, offered after the wrap so an
+    /// item dismissed by accident can be found again.
+    case recap
 
     var id: String {
         switch self {
@@ -30,13 +33,14 @@ enum UpToSpeedScreen: Identifiable {
         case .newsStory(let item, _, let index, _): "\(item.id)-news\(index)"
         case .newsSummary(let item): item.id
         case .wrap: "wrap"
+        case .recap: "recap"
         }
     }
 
     /// The backing feed item, when the screen has one.
     var item: UpToSpeedItem? {
         switch self {
-        case .opener, .wrap: nil
+        case .opener, .wrap, .recap: nil
         case .flintHeader(let item, _): item
         case .flintParagraph(let item, _, _): item
         case .flintInsight(let item, _): item
