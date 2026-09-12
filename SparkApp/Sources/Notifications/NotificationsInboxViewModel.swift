@@ -14,6 +14,16 @@ final class NotificationsInboxViewModel {
         case error(String)
     }
 
+    private struct FilterKey: Equatable, Sendable {
+        let scope: NotificationsEndpoint.Scope
+        let stream: NotificationFeedItem.Stream?
+        let search: String?
+
+        var usesCache: Bool {
+            scope == .active && stream == nil && search == nil
+        }
+    }
+
     private(set) var state: LoadState = .idle
     private(set) var items: [NotificationFeedItem] = []
     private(set) var counts = NotificationFeedCounts()
@@ -21,9 +31,9 @@ final class NotificationsInboxViewModel {
     private(set) var isLoadingMore = false
     private(set) var isShowingCachedData = false
 
-    private var scope: NotificationsEndpoint.Scope = .active
-    private var stream: NotificationFeedItem.Stream?
-    private var search: String?
+    private var filter = FilterKey(scope: .active, stream: nil, search: nil)
+    private var requestGeneration = 0
+    private var loadMoreGeneration: Int?
 
     private let apiClient: APIClient
     private let container: ModelContainer
@@ -42,37 +52,55 @@ final class NotificationsInboxViewModel {
         stream: NotificationFeedItem.Stream? = nil,
         search: String? = nil
     ) async {
-        self.scope = scope
-        self.stream = stream
-        self.search = search?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let requestedFilter = FilterKey(
+            scope: scope,
+            stream: stream,
+            search: search?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        )
+        let filterChanged = requestedFilter != filter
+        filter = requestedFilter
+        requestGeneration &+= 1
+        let generation = requestGeneration
 
-        if items.isEmpty && scope == .active && stream == nil && self.search == nil {
+        if filterChanged {
+            items = []
+            nextCursor = nil
+            isShowingCachedData = false
+            isLoadingMore = false
+            loadMoreGeneration = nil
+        }
+
+        if items.isEmpty && requestedFilter.usesCache {
             loadCached()
         }
-        _ = await refreshReturningSuccess()
+        _ = await refreshReturningSuccess(filter: requestedFilter, generation: generation)
     }
 
-    private func refreshReturningSuccess() async -> Bool {
+    private func refreshReturningSuccess(filter: FilterKey, generation: Int) async -> Bool {
         if items.isEmpty { state = .loading }
         do {
             let page = try await apiClient.request(NotificationsEndpoint.feed(
-                scope: scope,
-                stream: stream,
-                search: search
+                scope: filter.scope,
+                stream: filter.stream,
+                search: filter.search
             ))
+            guard isCurrent(filter: filter, generation: generation) else { return false }
             items = page.data
             counts = page.counts
             nextCursor = page.nextCursor
             isShowingCachedData = false
-            if scope == .active && stream == nil && search == nil {
+            if filter.usesCache {
                 persist(page.data, replaceAll: true)
             }
             state = .loaded
             return true
         } catch APIError.notModified {
+            guard isCurrent(filter: filter, generation: generation) else { return false }
+            isShowingCachedData = false
             state = .loaded
             return true
         } catch {
+            guard isCurrent(filter: filter, generation: generation) else { return false }
             SparkObservability.captureHandled(error)
             logger.error("Notifications fetch failed: \(String(describing: error))")
             if !items.isEmpty {
@@ -87,22 +115,32 @@ final class NotificationsInboxViewModel {
 
     func loadMore() async {
         guard let cursor = nextCursor, !isLoadingMore else { return }
+        let requestedFilter = filter
+        let generation = requestGeneration
         isLoadingMore = true
-        defer { isLoadingMore = false }
+        loadMoreGeneration = generation
+        defer {
+            if loadMoreGeneration == generation {
+                isLoadingMore = false
+                loadMoreGeneration = nil
+            }
+        }
         do {
             let page = try await apiClient.request(NotificationsEndpoint.feed(
-                scope: scope,
-                stream: stream,
-                search: search,
+                scope: requestedFilter.scope,
+                stream: requestedFilter.stream,
+                search: requestedFilter.search,
                 cursor: cursor
             ))
+            guard isCurrent(filter: requestedFilter, generation: generation) else { return }
             items.append(contentsOf: page.data)
             counts = page.counts
             nextCursor = page.nextCursor
-            if scope == .active && stream == nil && search == nil {
+            if requestedFilter.usesCache {
                 persist(page.data, replaceAll: false)
             }
         } catch {
+            guard isCurrent(filter: requestedFilter, generation: generation) else { return }
             SparkObservability.captureHandled(error)
             logger.error("Notifications load-more failed: \(String(describing: error))")
         }
@@ -118,9 +156,15 @@ final class NotificationsInboxViewModel {
 
     private func setRead(_ id: String, isRead: Bool) async {
         guard let index = items.firstIndex(where: { $0.id == id && $0.kind == .notification }) else { return }
+        let actionFilter = filter
+        let generation = requestGeneration
         let previous = items[index].isRead
+        let previousCounts = counts
         guard previous != isRead else { return }
         items[index].isRead = isRead
+        if actionFilter.scope == .active {
+            updateCounts(unreadDelta: isRead ? -1 : 1)
+        }
 
         do {
             let endpoint = isRead
@@ -128,9 +172,12 @@ final class NotificationsInboxViewModel {
                 : NotificationsEndpoint.markUnread(id: id)
             _ = try await apiClient.request(endpoint)
             updateReadFlag(id: id, isRead: isRead)
+            await refreshCurrentFilter()
         } catch {
-            if let current = items.firstIndex(where: { $0.id == id }) {
+            if isCurrent(filter: actionFilter, generation: generation),
+               let current = items.firstIndex(where: { $0.id == id }) {
                 items[current].isRead = previous
+                counts = previousCounts
             }
             SparkObservability.captureHandled(error)
             logger.error("Updating notification read state failed: \(String(describing: error))")
@@ -138,15 +185,28 @@ final class NotificationsInboxViewModel {
     }
 
     func markAllRead() async {
+        let actionFilter = filter
+        let generation = requestGeneration
         let previous = items
+        let previousCounts = counts
         for index in items.indices where items[index].kind == .notification {
             items[index].isRead = true
         }
+        counts = NotificationFeedCounts(
+            unread: 0,
+            unresolvedAttention: counts.unresolvedAttention,
+            activeActivity: counts.activeActivity,
+            byStream: counts.byStream
+        )
         do {
             _ = try await apiClient.request(NotificationsEndpoint.markAllRead())
             updateAllReadFlag(isRead: true)
+            await refreshCurrentFilter()
         } catch {
-            items = previous
+            if isCurrent(filter: actionFilter, generation: generation) {
+                items = previous
+                counts = previousCounts
+            }
             SparkObservability.captureHandled(error)
             logger.error("markAllRead failed: \(String(describing: error))")
         }
@@ -154,15 +214,59 @@ final class NotificationsInboxViewModel {
 
     func archive(_ id: String) async {
         guard let index = items.firstIndex(where: { $0.id == id && $0.kind == .notification }) else { return }
+        let actionFilter = filter
+        let generation = requestGeneration
+        let previousCounts = counts
         let removed = items.remove(at: index)
+        if actionFilter.scope == .active {
+            updateCounts(
+                unreadDelta: removed.isRead ? 0 : -1,
+                attentionDelta: removed.stream == .attention ? -1 : 0,
+                removedFrom: removed.stream
+            )
+        }
         do {
             _ = try await apiClient.request(NotificationsEndpoint.archive(id: id))
             removeCached(id: id)
+            await refreshCurrentFilter()
         } catch {
-            items.insert(removed, at: min(index, items.endIndex))
+            if isCurrent(filter: actionFilter, generation: generation) {
+                items.insert(removed, at: min(index, items.endIndex))
+                counts = previousCounts
+            }
             SparkObservability.captureHandled(error)
             logger.error("archive failed: \(String(describing: error))")
         }
+    }
+
+    private func refreshCurrentFilter() async {
+        let currentFilter = filter
+        await refresh(
+            scope: currentFilter.scope,
+            stream: currentFilter.stream,
+            search: currentFilter.search
+        )
+    }
+
+    private func isCurrent(filter: FilterKey, generation: Int) -> Bool {
+        self.filter == filter && requestGeneration == generation
+    }
+
+    private func updateCounts(
+        unreadDelta: Int = 0,
+        attentionDelta: Int = 0,
+        removedFrom stream: NotificationFeedItem.Stream? = nil
+    ) {
+        var byStream = counts.byStream
+        if let stream {
+            byStream[stream.rawValue] = max(0, (byStream[stream.rawValue] ?? 0) - 1)
+        }
+        counts = NotificationFeedCounts(
+            unread: max(0, counts.unread + unreadDelta),
+            unresolvedAttention: max(0, counts.unresolvedAttention + attentionDelta),
+            activeActivity: counts.activeActivity,
+            byStream: byStream
+        )
     }
 
     // MARK: - Existing lightweight cache
