@@ -617,34 +617,29 @@ private struct FlintBlockRow: View {
         .sparkGlass(.roundedRect(SparkRadii.md), tint: tint.opacity(0.08))
     }
 
+    /// Only the types the server actually registers. This table had grown a
+    /// dozen entries for blocks Flint has never written — flint_urgent_alert,
+    /// flint_correlation, flint_news_briefing — while the types genuinely in
+    /// use, flint_news and the reading picks, fell through to the default.
     private var icon: String {
         switch block.blockType {
         case "flint_user_question": "questionmark.circle.fill"
         case "flint_editorial_note": "pencil.and.scribble"
-        case "flint_health_insight", "flint_coaching_check_in": "heart.fill"
-        case "flint_money_insight": "sterlingsign.circle.fill"
-        case "flint_media_insight": "play.circle.fill"
-        case "flint_knowledge_insight", "flint_articles_waiting": "book.fill"
-        case "flint_online_insight": "network"
-        case "flint_cross_domain_insight", "flint_correlation": "arrow.left.arrow.right"
-        case "flint_pattern_detected": "chart.line.uptrend.xyaxis"
-        case "flint_prioritized_action": "flag.fill"
-        case "flint_urgent_alert": "bell.badge.fill"
-        case "flint_digest": "doc.text.fill"
-        case "flint_news_briefing": "newspaper.fill"
-        case "flint_coaching_insight": "brain.head.profile"
+        case "flint_health_insight": "heart.fill"
+        case "flint_day_context": "calendar"
+        case "flint_news": "newspaper.fill"
+        case "flint_reading_pick": "book.fill"
+        case "flint_reading_drop": "trash"
         default: "sparkles"
         }
     }
 
     private var tint: Color {
         switch block.blockType {
-        case "flint_user_question", "flint_prioritized_action": .sparkAccent
-        case "flint_urgent_alert": .sparkError
-        case "flint_health_insight", "flint_coaching_check_in", "flint_coaching_insight": .sparkSuccess
-        case "flint_money_insight": .sparkWarning
-        case "flint_media_insight": .sparkInfo
-        case "flint_knowledge_insight", "flint_news_briefing", "flint_articles_waiting": .sparkOcean
+        case "flint_user_question": .sparkAccent
+        case "flint_health_insight": .sparkSuccess
+        case "flint_news", "flint_reading_pick": .sparkOcean
+        case "flint_reading_drop": .sparkTextSecondary
         default: .sparkAccent
         }
     }

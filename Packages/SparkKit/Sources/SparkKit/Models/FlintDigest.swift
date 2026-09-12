@@ -84,11 +84,16 @@ public struct FlintDigestBlock: Codable, Sendable, Hashable, Identifiable {
     public let answered: Bool
     public let references: [EntityReference]?
     public let dayContext: FlintDayContext?
+    /// Link a block points at — reading picks and drops carry one.
+    public let url: String?
+    /// Estimated read time in whole minutes, for a reading pick.
+    public let minutes: Int?
 
     public var isQuestion: Bool { blockType == "flint_user_question" }
 
     enum CodingKeys: String, CodingKey {
         case id, title, time, content, question, topic, priority, answer, answered, references
+        case url, minutes
         case blockType = "block_type"
         case answerOptions = "answer_options"
         case answerNote = "answer_note"
@@ -111,7 +116,9 @@ public struct FlintDigestBlock: Codable, Sendable, Hashable, Identifiable {
         answeredAt: Date? = nil,
         answered: Bool = false,
         references: [EntityReference]? = nil,
-        dayContext: FlintDayContext? = nil
+        dayContext: FlintDayContext? = nil,
+        url: String? = nil,
+        minutes: Int? = nil
     ) {
         self.id = id
         self.blockType = blockType
@@ -128,6 +135,8 @@ public struct FlintDigestBlock: Codable, Sendable, Hashable, Identifiable {
         self.answered = answered
         self.references = references
         self.dayContext = dayContext
+        self.url = url
+        self.minutes = minutes
     }
 
     public init(from decoder: Decoder) throws {
@@ -147,6 +156,8 @@ public struct FlintDigestBlock: Codable, Sendable, Hashable, Identifiable {
         answered = try container.decodeIfPresent(Bool.self, forKey: .answered) ?? (answer != nil)
         references = try container.decodeIfPresent([EntityReference].self, forKey: .references)
         dayContext = try container.decodeIfPresent(FlintDayContext.self, forKey: .dayContext)
+        url = try container.decodeIfPresent(String.self, forKey: .url)
+        minutes = try container.decodeIfPresent(Int.self, forKey: .minutes)
     }
 }
 

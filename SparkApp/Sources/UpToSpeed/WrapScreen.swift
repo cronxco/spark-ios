@@ -23,8 +23,8 @@ struct WrapScreen: View {
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                if let reading = viewModel.readingItem {
-                    readingCard(reading)
+                ForEach(viewModel.readingItems.indices, id: \.self) { index in
+                    readingCard(viewModel.readingItems[index])
                 }
 
                 if !viewModel.openQuestions.isEmpty {

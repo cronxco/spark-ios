@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import OSLog
 import SparkKit
 import SparkUI
 import SwiftData
@@ -17,12 +18,20 @@ final class UpToSpeedViewModel {
     // Derived content for the opener + wrap screens.
     private(set) var openerGreeting: String = ""
     private(set) var openerParagraphs: [String] = []
-    private(set) var readingItem: UpToSpeedParsing.ReadingItem?
+    /// Every pick from today's reading list. Was a single optional, which
+    /// silently dropped the second pick whenever Flint offered two.
+    private(set) var readingItems: [UpToSpeedParsing.ReadingItem] = []
     private(set) var openQuestions: [OpenQuestion] = []
     /// Items already caught up on today, newest first. Offered after the wrap
     /// so something dismissed by accident can be found and restored.
     private(set) var recapItems: [UpToSpeedItem] = []
     private(set) var unmarkingIDs: Set<String> = []
+    /// Digests whose detail fetch failed on the last load. The flow degrades to
+    /// the feed summary for these, so the count exists to say so rather than
+    /// present a half-empty story as the whole day.
+    private(set) var digestsFailedToLoad: Int = 0
+
+    private let logger = Logger(subsystem: "co.cronx.sparkapp", category: "UpToSpeed")
 
     private var allItems: [UpToSpeedItem] = []
     private var snapshotCount: Int = 0
@@ -261,7 +270,7 @@ final class UpToSpeedViewModel {
     }
 
     /// Called when the wrap screen appears — marks read the (at most one)
-    /// reading-list digest whose content became `readingItem`, which the wrap
+    /// reading-list digest whose picks became `readingItems`, which the wrap
     /// screen itself displays. Safe to call unconditionally, including via a
     /// direct chapter jump: `foldedDigestIDs` only ever names a digest whose
     /// content is shown on this very screen, never one the jump skipped past.
@@ -367,23 +376,42 @@ final class UpToSpeedViewModel {
 
     // MARK: - Private
 
+    /// Fetches the full digest behind each feed item.
+    ///
+    /// A failure here is not fatal — the flow still builds from the feed's own
+    /// summary — but it is not nothing either: the digest loses its blocks, so
+    /// its stories, picks, day context and questions all silently disappear and
+    /// the result looks like a thin day rather than a failed fetch. Previously
+    /// `try?` swallowed that entirely. Now it is logged, and the count is kept
+    /// so the flow can say so.
     private func preloadDigests(for items: [UpToSpeedItem]) async -> [String: FlintDigest] {
         let flintItems = items.filter { $0.type == .flintDigest }
         guard !flintItems.isEmpty else { return [:] }
         let client = apiClient
+        let log = logger
         var result: [String: FlintDigest] = [:]
+        var failures = 0
         await withTaskGroup(of: (String, FlintDigest?).self) { group in
             for item in flintItems {
                 let itemID = item.id
                 group.addTask {
-                    let digest = try? await client.request(FlintEndpoint.digest(id: itemID))
-                    return (itemID, digest)
+                    do {
+                        return (itemID, try await client.request(FlintEndpoint.digest(id: itemID)))
+                    } catch {
+                        log.error("Failed to preload digest \(itemID, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                        return (itemID, nil)
+                    }
                 }
             }
             for await (id, digest) in group {
-                if let digest { result[id] = digest }
+                if let digest {
+                    result[id] = digest
+                } else {
+                    failures += 1
+                }
             }
         }
+        digestsFailedToLoad = failures
         return result
     }
 
@@ -397,7 +425,7 @@ final class UpToSpeedViewModel {
         consumedIndices = []
         foldedDigestIDs = []
         openQuestions = []
-        readingItem = nil
+        readingItems = []
         openerParagraphs = []
 
         let unread = visibleUnreadItems(from: items)
@@ -436,22 +464,29 @@ final class UpToSpeedViewModel {
                 dayContextCandidate = (item, context)
             }
 
-            // Fold a reading-list digest's content into the wrap screen's
-            // readingItem — but only the first one whose summary actually
-            // parses. A duplicate reading-list digest, or one whose summary
-            // doesn't parse, falls through to normal digest expansion below
-            // instead of being silently folded as "read" with nothing shown.
-            if isReadingListDigest(item: item, title: title, digest: full), readingItem == nil,
-               let summary = full?.summary ?? digestSummary(item),
-               let parsed = UpToSpeedParsing.readingItem(from: summary) {
-                readingItem = parsed
-                foldedDigestIDs.append(item.id)
-                continue
+            // Fold a reading-list digest's picks into the wrap screen — but only
+            // when there is something to show. A duplicate reading-list digest,
+            // or one that yields no picks, falls through to normal digest
+            // expansion below instead of being silently folded as "read" with
+            // nothing shown.
+            if isReadingListDigest(item: item, title: title, digest: full), readingItems.isEmpty {
+                let picks = UpToSpeedParsing.readingItems(
+                    blocks: full?.blocks ?? [],
+                    summary: full?.summary ?? digestSummary(item) ?? ""
+                )
+                if !picks.isEmpty {
+                    readingItems = picks
+                    foldedDigestIDs.append(item.id)
+                    continue
+                }
             }
 
             if isNewsRoundupDigest(item: item, title: title, digest: full) {
                 let summary = full?.summary ?? digestSummary(item) ?? ""
-                let sections = UpToSpeedParsing.newsRoundupSections(from: summary)
+                let sections = UpToSpeedParsing.newsRoundupSections(
+                    blocks: full?.blocks ?? [],
+                    summary: summary
+                )
                 if !sections.isEmpty {
                     for section in sections {
                         newsScreens.append((
@@ -499,7 +534,7 @@ final class UpToSpeedViewModel {
         }
 
         // 4 — check-in (incomplete), then wrap
-        var wrapChapterHasContent = readingItem != nil || !openQuestions.isEmpty
+        var wrapChapterHasContent = !readingItems.isEmpty || !openQuestions.isEmpty
         for item in unread where item.type == .checkIn {
             if case .checkIn(let summary) = item.payload, !summary.completed {
                 built.append((.checkIn(item), .wrap))
@@ -635,7 +670,11 @@ final class UpToSpeedViewModel {
         let lowered = title.lowercased()
         if lowered.contains("news") || lowered.contains("roundup") { return true }
         guard let digest else { return false }
-        let contentBlocks = digest.blocks.filter { $0.blockType != "flint_editorial_note" && !$0.isQuestion }
+        let contentBlocks = digest.blocks.filter {
+            !$0.isQuestion
+                && $0.blockType != "flint_editorial_note"
+                && $0.blockType != "flint_day_context"
+        }
         return !contentBlocks.isEmpty && contentBlocks.allSatisfy { $0.blockType == "flint_news" }
     }
 
@@ -644,6 +683,7 @@ final class UpToSpeedViewModel {
 
         let lowered = title.lowercased()
         if lowered.contains("reading list") || lowered.contains("saved to read") { return true }
+        if let digest, digest.blocks.contains(where: { $0.blockType == "flint_reading_pick" }) { return true }
         return lowered.contains("reading") && (digest?.blocks.isEmpty ?? true)
     }
 

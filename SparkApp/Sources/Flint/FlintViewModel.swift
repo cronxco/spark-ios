@@ -268,23 +268,15 @@ final class FlintViewModel {
             return 50
         }
 
+        // Registered types only. The previous table ranked a dozen blocks the
+        // backend has never written and left the real ones on the default.
         switch block.blockType {
-        case "flint_urgent_alert", "flint_prioritized_action":
+        case "flint_day_context":
             return 10
-        case "flint_health_insight",
-             "flint_money_insight",
-             "flint_media_insight",
-             "flint_knowledge_insight",
-             "flint_online_insight",
-             "flint_cross_domain_insight",
-             "flint_pattern_detected",
-             "flint_correlation",
-             "flint_coaching_insight":
+        case "flint_insight", "flint_health_insight":
             return 20
-        case "flint_digest", "flint_news_briefing", "flint_articles_waiting":
+        case "flint_news", "flint_reading_pick", "flint_reading_drop":
             return 30
-        case "flint_coaching_check_in":
-            return 40
         default:
             return 30
         }
