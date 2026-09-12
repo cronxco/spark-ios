@@ -34,9 +34,9 @@ final class SentryAPITelemetrySink: APITelemetrySink, @unchecked Sendable {
         let crumb = Breadcrumb(level: level, category: "api")
         crumb.type = "http"
         crumb.message = "\(event.method) \(event.url.path) \(event.statusCode.map(String.init) ?? event.outcome.sentryName)"
-        // Sentry Cocoa 9.11 exposes breadcrumb metadata through this property;
-        // `setData(value:key:)` is only available in newer SDK releases.
-        crumb.data = breadcrumbData(for: event)
+        for (key, value) in breadcrumbData(for: event) {
+            crumb.setData(value: value, key: key)
+        }
         SentrySDK.addBreadcrumb(crumb)
     }
 

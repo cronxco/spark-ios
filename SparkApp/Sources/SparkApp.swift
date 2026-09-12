@@ -342,12 +342,15 @@ enum SparkObservability {
         let crumb = Breadcrumb(level: .info, category: "spotlight")
         crumb.type = "debug"
         crumb.message = "Spotlight diagnostics refreshed"
-        crumb.data = [
+        let data: [String: Any] = [
             "source": source,
             "is_signed_in": snapshot.isSignedIn,
             "can_open_store": snapshot.canOpenStore,
             "total_count": snapshot.totalCount,
         ]
+        for (key, value) in data {
+            crumb.setData(value: value, key: key)
+        }
         SentrySDK.addBreadcrumb(crumb)
     }
 
@@ -355,7 +358,9 @@ enum SparkObservability {
         let crumb = Breadcrumb(level: report.hasFailures ? .error : .info, category: "spotlight")
         crumb.type = "debug"
         crumb.message = "Spotlight index run"
-        crumb.data = spotlightIndexContext(report, source: source)
+        for (key, value) in spotlightIndexContext(report, source: source) {
+            crumb.setData(value: value, key: key)
+        }
         SentrySDK.addBreadcrumb(crumb)
 
         guard report.hasFailures else { return }
