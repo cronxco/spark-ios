@@ -466,13 +466,24 @@ final class UpToSpeedViewModel {
             }
 
             // Primary digest — prose + insights + questions
-            if primaryDigestSummary == nil {
+            let buildsOpener = primaryDigestSummary == nil
+            if buildsOpener {
                 primaryDigestSummary = full?.summary ?? digestSummary(item)
                 openerParagraphs = primaryDigestSummary.map {
                     UpToSpeedParsing.openerParagraphs(from: $0)
                 } ?? []
             }
-            for screen in expandFlintItem(item: item, digest: full, shownInOpener: openerParagraphs) {
+
+            // Only the digest the opener was built from can have had its prose
+            // shown there. The filter compares text, not provenance, so passing
+            // these to a later digest let it lose a section the reader never
+            // met on the opener — two briefings that happen to word something
+            // identically are still two separate things to read.
+            for screen in expandFlintItem(
+                item: item,
+                digest: full,
+                shownInOpener: buildsOpener ? openerParagraphs : []
+            ) {
                 built.append((screen, .digest(title: title)))
             }
         }
