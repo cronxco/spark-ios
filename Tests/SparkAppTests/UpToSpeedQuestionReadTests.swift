@@ -91,9 +91,15 @@ struct UpToSpeedQuestionReadTests {
         // would otherwise look like "no questions outstanding" and quietly
         // invert what these tests assert.
         #expect(viewModel.screens.contains { $0.item?.id == "digest-a" })
+
+        // Name the requests the stub actually saw. Two runs have now failed on
+        // the expectation below without saying whether the digest detail was
+        // even asked for, or under what path — so report it rather than guess.
+        let requested = await AppStubURLProtocol.recorded(host: Self.host)
+            .map { $0.url?.path ?? "<no path>" }
         #expect(
             viewModel.openQuestions.contains { $0.block.id == "block-question" },
-            "digest detail did not load: the question fixture never reached the view model"
+            "digest detail did not load. Paths requested: \(requested)"
         )
 
         return viewModel
