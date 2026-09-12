@@ -7,6 +7,7 @@ import SwiftUI
 struct AnomalyScreen: View {
     let item: UpToSpeedItem
     let viewModel: UpToSpeedViewModel
+    var isActive: Bool = true
 
     @Environment(AppModel.self) private var appModel
     @State private var metricDetail: MetricDetail?
@@ -57,11 +58,11 @@ struct AnomalyScreen: View {
             Text("Unusual")
                 .font(SparkTypography.caption)
                 .tracking(1.4)
-                .foregroundStyle(Color.sparkWarning)
+                .foregroundStyle(valenceTint)
                 .padding(.horizontal, SparkSpacing.sm)
                 .padding(.vertical, 3)
                 .overlay(
-                    Capsule().stroke(Color.sparkWarning.opacity(0.4), lineWidth: 1)
+                    Capsule().stroke(valenceTint.opacity(0.4), lineWidth: 1)
                 )
 
             Text(headline)
@@ -71,16 +72,37 @@ struct AnomalyScreen: View {
         }
     }
 
+    /// Whether the move is welcome, which direction alone cannot say — a
+    /// balance rising is good news, a cardiovascular age rising is not. Before
+    /// this, every rising number was tinted as a warning.
+    private var valenceTint: Color {
+        switch anomaly?.valence ?? .neutral {
+        case .good: .sparkSuccess
+        case .bad: .sparkWarning
+        case .neutral: .secondary
+        }
+    }
+
+    private var valenceEmphasis: MetricDeltaCard.Emphasis {
+        switch anomaly?.valence ?? .neutral {
+        case .good: .reassuring
+        case .bad: .flagged
+        case .neutral: .neutral
+        }
+    }
+
+    /// Plain statement of what moved. The old copy claimed a drop "isn't the
+    /// obvious story", which asserts more than a single reading supports.
     private var headline: String {
         let name = anomaly?.displayName ?? anomaly?.metric ?? "A metric"
         guard let direction = anomaly?.direction?.lowercased() else {
             return "\(name) is off its usual range."
         }
         if direction.contains("down") || direction == "low" {
-            return "\(name) dropped hard, and it isn't the obvious story."
+            return "\(name) is below its usual range."
         }
         if direction.contains("up") || direction == "high" {
-            return "\(name) spiked above its usual range."
+            return "\(name) is above its usual range."
         }
         return "\(name) is off its usual range."
     }
@@ -95,13 +117,13 @@ struct AnomalyScreen: View {
             if let anomaly {
                 MetricDeltaCard(
                     label: "Now",
-                    value: formatted(anomaly.currentValue),
+                    value: anomaly.currentText ?? formatted(anomaly.currentValue),
                     delta: deviationText,
-                    emphasis: .flagged
+                    emphasis: valenceEmphasis
                 )
                 MetricDeltaCard(
                     label: "Baseline",
-                    value: formatted(anomaly.baselineValue),
+                    value: anomaly.baselineText ?? formatted(anomaly.baselineValue),
                     delta: "typical",
                     emphasis: .neutral
                 )
@@ -118,13 +140,26 @@ struct AnomalyScreen: View {
         }
     }
 
+    /// A percentage change against a fractional baseline is meaningless for a
+    /// banded score — "Adequate" is not 37% below "Solid" — so an ordinal
+    /// metric says how far it moved in bands instead.
     private var deviationText: String? {
-        guard let anomaly, let current = anomaly.currentValue, let baseline = anomaly.baselineValue, baseline != 0 else {
-            if let dev = anomaly?.deviation { return String(format: "%+.1f", dev) }
-            return nil
+        guard let anomaly else { return nil }
+
+        if anomaly.isOrdinal {
+            guard let current = anomaly.currentValue, let baseline = anomaly.baselineValue else { return nil }
+            let steps = abs(current - baseline)
+            guard steps.isFinite else { return nil }
+            guard steps >= 0.5 else { return "off baseline" }
+            // String(format:) rather than Int(), which traps out of range.
+            return steps < 1.5 ? "a band off" : String(format: "%.0f bands off", steps)
         }
-        let pct = (current - baseline) / abs(baseline) * 100
-        return String(format: "%+.0f%%", pct)
+
+        if let pct = anomaly.percentChange {
+            return String(format: "%+.0f%%", pct)
+        }
+
+        return anomaly.deviation.map { String(format: "%+.1f", $0) }
     }
 
     // MARK: - Narrative
@@ -132,7 +167,7 @@ struct AnomalyScreen: View {
     @ViewBuilder
     private var narrative: some View {
         if let streak = anomaly?.streakDays, streak > 1 {
-            Text("I've seen this \(streak) days running, so I'm raising it rather than folding it into a tidier story.")
+            Text("That's \(streak) days in a row now, which is longer than I'd put down to noise.")
                 .font(SparkTypography.longFormBody)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)

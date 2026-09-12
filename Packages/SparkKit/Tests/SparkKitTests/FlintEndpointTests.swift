@@ -93,6 +93,47 @@ struct FlintEndpointTests {
         #expect(digest.blocks[1].content == "**Hydrate** early.")
     }
 
+    /// `digest_object_id` is optional on the model, so a payload that omits the
+    /// key entirely must still decode. It did not: the optional-string helper
+    /// led with `decodeNil(forKey:)`, which throws `keyNotFound` for an absent
+    /// key, failing the whole digest. Every other fixture here sends the key —
+    /// with a value or an explicit null — which is why nothing caught it, and
+    /// why the Up to Speed flow silently lost digest detail for any response
+    /// that left it out.
+    @Test("digest decodes when digest_object_id is absent entirely")
+    func decodesDigestWithoutDigestObjectID() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let json = """
+        {
+          "event_id": "digest-a",
+          "date": "2026-05-16",
+          "period": "morning",
+          "title": "Morning Digest",
+          "summary": "Start here.",
+          "block_count": 1,
+          "unanswered_question_count": 1,
+          "blocks": [
+            {
+              "id": "q-1",
+              "block_type": "flint_user_question",
+              "title": "Sleep Check",
+              "question": "Did you sleep well?",
+              "answered": false
+            }
+          ]
+        }
+        """
+
+        let digest = try decoder.decode(FlintDigest.self, from: Data(json.utf8))
+
+        #expect(digest.digestObjectID == nil)
+        #expect(digest.eventID == "digest-a")
+        #expect(digest.blocks.count == 1)
+        #expect(digest.blocks[0].isQuestion)
+        #expect(digest.blocks[0].answered == false)
+    }
+
     @Test("content block decodes entity references with unknown-type fallback")
     func decodesBlockReferences() throws {
         let decoder = JSONDecoder()

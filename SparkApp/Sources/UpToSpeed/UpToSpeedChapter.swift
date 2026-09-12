@@ -6,31 +6,59 @@ import SwiftUI
 struct UpToSpeedChapter: Identifiable {
     enum Kind: Equatable {
         case intro
-        case anomaly
+        /// Carries the metric's domain so a bank balance is not filed under
+        /// "Your body". Anomalies of different domains form separate chapters,
+        /// because the run-length grouping treats unequal keys as a boundary.
+        case anomaly(domain: String?)
         case digest(title: String)
         case day
         case news
         case wrap
+        /// Everything already seen today, offered after the flow proper.
+        case recap
 
         var shortLabel: String {
             switch self {
             case .intro: "Start"
-            case .anomaly: "Your body"
+            case .anomaly(let domain): Self.anomalyLabel(for: domain)
             case .digest: "Briefing"
             case .day: "Day"
             case .news: "News"
             case .wrap: "Wrap"
+            case .recap: "Earlier"
             }
         }
 
         var accent: Color {
             switch self {
             case .intro: .sparkAccent
-            case .anomaly: .sparkWarning
+            case .anomaly(let domain): Self.anomalyAccent(for: domain)
             case .digest: .sparkAccent
             case .day: .sparkAccent
             case .news: .sparkOcean
             case .wrap: .sparkSuccess
+            case .recap: .secondary
+            }
+        }
+
+        private static func anomalyLabel(for domain: String?) -> String {
+            switch domain {
+            case "health": "Your body"
+            case "money": "Your money"
+            case "media": "Your media"
+            case "knowledge": "Your reading"
+            case "online": "Online"
+            default: "Unusual"
+            }
+        }
+
+        private static func anomalyAccent(for domain: String?) -> Color {
+            switch domain {
+            case "health": .domainHealth
+            case "money": .domainMoney
+            case "media": .domainMedia
+            case "knowledge": .domainKnowledge
+            default: .sparkWarning
             }
         }
     }
@@ -43,6 +71,7 @@ struct UpToSpeedChapter: Identifiable {
     let range: Range<Int>
 
     var shortLabel: String { kind.shortLabel }
+
     var accent: Color { kind.accent }
     var cardCount: Int { range.count }
 
@@ -72,11 +101,15 @@ struct UpToSpeedChapter: Identifiable {
     private static func title(for kind: Kind) -> String {
         switch kind {
         case .intro: "Where you are"
-        case .anomaly: "Your readiness dip"
+        // Not "Your readiness dip": the chapter holds whatever was unusual,
+        // which is often neither readiness nor a dip — and, before the domain
+        // was known, was as likely to be a bank balance as a health metric.
+        case .anomaly: kind.shortLabel
         case .digest(let title): title
         case .day: "Your day"
         case .news: "News roundup"
         case .wrap: "Before you go"
+        case .recap: "Already seen today"
         }
     }
 }

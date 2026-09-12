@@ -51,6 +51,11 @@ jobs:
 
       - name: Build + test SparkApp
         run: |
+          # Without pipefail the pipeline reports xcbeautify's status, not
+          # xcodebuild's, so a failed build went green and `|| exit
+          # ${PIPESTATUS[0]}` never ran. GitHub Actions uses `bash -e`, which
+          # does not set pipefail.
+          set -o pipefail
           xcodebuild \
             -workspace Spark.xcworkspace \
             -scheme SparkApp \

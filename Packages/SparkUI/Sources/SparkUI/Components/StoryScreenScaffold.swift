@@ -8,9 +8,17 @@ import SwiftUI
 /// Pass `flintByline` to render Flint's attribution (avatar + name + optional
 /// time) above the content — used wherever Flint "speaks" on a screen.
 ///
-/// Pass `onReachedBottom` to be notified when the user scrolls to the end of the
-/// content. A subtle "✓ Read" indicator animates in at the bottom once reached.
-/// For cards whose content fits without scrolling, this fires immediately on appear.
+/// Pass `onReachedBottom` to be notified once the reader has genuinely finished
+/// the card. That means two things together: the scroll view is at the end of
+/// its content, *and* the card is the page currently on screen, *and* both have
+/// stayed true for `dwellDuration`. A card whose content fits without scrolling
+/// is at the end from first layout, so it still has to be looked at for the
+/// dwell before it counts.
+///
+/// `isActive` is what keeps a `TabView(.page)` from marking cards read before
+/// they are seen: the pager builds the adjacent page ahead of the swipe, so an
+/// off-screen card reaches end-of-content while the reader is still on the
+/// previous one. Only the active page arms the dwell.
 public struct StoryScreenScaffold<Content: View>: View {
     public struct Byline: Equatable {
         public let name: String
@@ -22,24 +30,32 @@ public struct StoryScreenScaffold<Content: View>: View {
         }
     }
 
+    /// How long the reader must sit at the end before the card counts as read.
+    private static var dwellDuration: Duration { .seconds(2) }
+
     public let label: String?
     public let flintByline: Byline?
     public let reserveTopSpace: Bool
+    public let isActive: Bool
     public let onReachedBottom: (() -> Void)?
     private let content: Content
 
+    @State private var isAtEnd = false
     @State private var hasReachedBottom = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(
         label: String? = nil,
         flintByline: Byline? = nil,
         reserveTopSpace: Bool = true,
+        isActive: Bool = true,
         onReachedBottom: (() -> Void)? = nil,
         @ViewBuilder content: () -> Content
     ) {
         self.label = label
         self.flintByline = flintByline
         self.reserveTopSpace = reserveTopSpace
+        self.isActive = isActive
         self.onReachedBottom = onReachedBottom
         self.content = content()
     }
@@ -63,14 +79,6 @@ public struct StoryScreenScaffold<Content: View>: View {
                 if onReachedBottom != nil {
                     readIndicator
                         .padding(.top, SparkSpacing.sm)
-
-                    Color.clear
-                        .frame(height: 1)
-                        .onAppear {
-                            guard !hasReachedBottom else { return }
-                            hasReachedBottom = true
-                            onReachedBottom?()
-                        }
                 }
             }
             .padding(.horizontal, SparkSpacing.lg)
@@ -80,7 +88,31 @@ public struct StoryScreenScaffold<Content: View>: View {
         .scrollDismissesKeyboard(.interactively)
         .scrollContentBackground(.hidden)
         .ignoresSafeArea(.container)
+        .onScrollGeometryChange(for: StoryScrollEndMetrics.self) { geometry in
+            StoryScrollEndMetrics(
+                offsetY: geometry.contentOffset.y,
+                containerHeight: geometry.containerSize.height,
+                contentHeight: geometry.contentSize.height
+            )
+        } action: { _, metrics in
+            isAtEnd = metrics.isAtEnd()
+        }
+        .task(id: dwellKey) {
+            guard onReachedBottom != nil, dwellKey.shouldArm else { return }
+            try? await Task.sleep(for: Self.dwellDuration)
+            guard !Task.isCancelled else { return }
+            hasReachedBottom = true
+            onReachedBottom?()
+        }
     }
+
+    // MARK: - End-of-content detection
+
+    private var dwellKey: StoryDwellKey {
+        StoryDwellKey(isActive: isActive, isAtEnd: isAtEnd, alreadyRead: hasReachedBottom)
+    }
+
+    // MARK: - Read indicator
 
     private var readIndicator: some View {
         HStack(spacing: SparkSpacing.xs) {
@@ -94,9 +126,16 @@ public struct StoryScreenScaffold<Content: View>: View {
         .padding(.vertical, SparkSpacing.xs)
         .background(Capsule().fill(Color.sparkSuccess.opacity(0.15)))
         .opacity(hasReachedBottom ? 1 : 0)
-        .scaleEffect(hasReachedBottom ? 1 : 0.8, anchor: .leading)
-        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: hasReachedBottom)
+        .scaleEffect(reduceMotion ? 1 : (hasReachedBottom ? 1 : 0.8), anchor: .leading)
+        .animation(
+            reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.35, dampingFraction: 0.7),
+            value: hasReachedBottom
+        )
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityHidden(!hasReachedBottom)
+        .accessibilityLabel("Read")
+        .accessibilityAddTraits(.isStaticText)
     }
 }
 

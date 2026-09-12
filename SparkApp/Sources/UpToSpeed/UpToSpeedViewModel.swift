@@ -19,11 +19,21 @@ final class UpToSpeedViewModel {
     private(set) var openerParagraphs: [String] = []
     private(set) var readingItem: UpToSpeedParsing.ReadingItem?
     private(set) var openQuestions: [OpenQuestion] = []
+    /// Items already caught up on today, newest first. Offered after the wrap
+    /// so something dismissed by accident can be found and restored.
+    private(set) var recapItems: [UpToSpeedItem] = []
+    private(set) var unmarkingIDs: Set<String> = []
 
     private var allItems: [UpToSpeedItem] = []
     private var snapshotCount: Int = 0
-    private var pendingReadRefs: [UpToSpeedReadRef] = []
-    private(set) var scrolledToBottomIndices: Set<Int> = []
+    /// Reads queued for the next flush. Readable so tests can assert on what a
+    /// signal did or didn't mark, which is the whole subject of this type.
+    private(set) var pendingReadRefs: [UpToSpeedReadRef] = []
+    private var isFlushing = false
+    private var activeFlushTask: Task<Bool, Never>?
+    /// Screens the reader has genuinely finished — reached the end of and
+    /// stayed there for the dwell. See `StoryScreenScaffold`.
+    private(set) var consumedIndices: Set<Int> = []
 
     // itemID → ordered list of question blockIDs for that digest
     private var digestQuestionMap: [String: [String]] = [:]
@@ -70,7 +80,7 @@ final class UpToSpeedViewModel {
         loadGeneration &+= 1
         if surfaceErrors { error = nil }
         do {
-            let response = try await apiClient.request(UpToSpeedEndpoint.feed())
+            let response = try await apiClient.request(UpToSpeedEndpoint.feed(includeAcknowledged: true))
             let items = response.items
             let digests = await preloadDigests(for: visibleUnreadItems(from: items))
             allItems = items
@@ -92,7 +102,7 @@ final class UpToSpeedViewModel {
         guard !isLoading else { return }
         let generation = loadGeneration
         do {
-            let response = try await apiClient.request(UpToSpeedEndpoint.feed())
+            let response = try await apiClient.request(UpToSpeedEndpoint.feed(includeAcknowledged: true))
             // A load that started while we were suspended owns `allItems` now.
             guard generation == loadGeneration, !isLoading else { return }
             let freshUnread = visibleUnreadItems(from: response.items).count
@@ -123,11 +133,60 @@ final class UpToSpeedViewModel {
         currentIndex = index
     }
 
+    /// Called when the pager moves forward off `index`. Nothing is decided here
+    /// beyond re-running the read test — a card the reader skipped past without
+    /// finishing stays unread.
     func markRead(at index: Int) {
-        guard let screen = screens[safe: index] else { return }
+        evaluateRead(at: index)
+    }
+
+    /// Called by a screen once the reader has reached the end of it and stayed
+    /// there for the dwell. This is the only route by which a screen becomes
+    /// eligible to be marked read.
+    func markScreenConsumed(at index: Int) {
+        guard !consumedIndices.contains(index) else { return }
+        consumedIndices.insert(index)
+        evaluateRead(at: index)
+    }
+
+    /// Decides whether the item behind the screen at `index` is now caught up.
+    /// Runs on both signals — consumption and forward navigation — so the last
+    /// card in the queue can be marked without needing a swipe that has nowhere
+    /// to go, while a card swiped past unfinished is still not marked.
+    private func evaluateRead(at index: Int) {
+        guard let ref = Self.readTarget(
+            at: index,
+            in: screens,
+            consumed: consumedIndices,
+            digestsAwaitingAnswers: digestsAwaitingAnswers
+        ) else { return }
+
+        enqueueMarkRead(ref)
+    }
+
+    /// The item that finishing the screen at `index` marks caught up, if any.
+    ///
+    /// Pure so the rule can be tested directly: reaching the end of a card is a
+    /// precondition for every type that carries content. Without that gate,
+    /// opening the flow and swiping through marks the whole day read without
+    /// any of it having been looked at — which is what the old scaffold did.
+    nonisolated static func readTarget(
+        at index: Int,
+        in screens: [UpToSpeedScreen],
+        consumed: Set<Int>,
+        digestsAwaitingAnswers: Set<String>
+    ) -> UpToSpeedReadRef? {
+        guard let screen = screens[safe: index] else { return nil }
+        guard consumed.contains(index) else { return nil }
+
         switch screen {
-        case .opener, .wrap, .checkIn, .anomaly:
-            break // opener/wrap are derived; check-in and anomaly mark via their own signals
+        case .opener, .wrap, .recap, .checkIn, .anomaly:
+            // opener/wrap/recap are derived; check-in and anomaly mark via
+            // their own signals. The recap in particular must never mark
+            // anything: everything on it is already read, and reading it again
+            // is not what puts it back.
+            return nil
+
         case .flintHeader, .flintParagraph, .flintInsight, .flintQuestion, .dayContext:
             // A day-context screen isn't always adjacent to the rest of its
             // digest's screens (it's appended once, after every digest chapter),
@@ -135,29 +194,49 @@ final class UpToSpeedViewModel {
             // otherwise a digest whose day-context screen trails its own
             // content never gets marked read at all, or gets marked read
             // before that screen is shown, depending on queue order.
-            guard let itemID = screen.item?.id else { return }
-            if Self.isLastScreen(forItemID: itemID, at: index, in: screens), digestCanBeMarkedRead(itemID: itemID) {
-                enqueueMarkRead(itemID: itemID, type: .flintDigest)
-            }
+            guard let itemID = screen.item?.id else { return nil }
+            guard isLastScreen(forItemID: itemID, at: index, in: screens) else { return nil }
+            guard allScreensAreConsumed(forItemID: itemID, in: screens, consumed: consumed) else { return nil }
+            guard !digestsAwaitingAnswers.contains(itemID) else { return nil }
+            return UpToSpeedReadRef(type: .flintDigest, id: itemID)
+
         case .newsStory:
-            guard let itemID = screen.item?.id else { return }
-            let nextIsSameStory: Bool = {
-                if case .newsStory(let next, _, _, _)? = screens[safe: index + 1] {
-                    return next.id == itemID
-                }
-                return false
-            }()
             // Only the digest's own screens are ever adjacent here (news
-            // stories for one item are always built contiguously), but the
-            // final story must still have been scrolled to its end before
-            // the whole digest counts as read.
-            if !nextIsSameStory, scrolledToBottomIndices.contains(index) {
-                enqueueMarkRead(itemID: itemID, type: .flintDigest)
+            // stories for one item are always built contiguously), so the whole
+            // roundup counts as read once its final story does.
+            guard let itemID = screen.item?.id else { return nil }
+            if case .newsStory(let next, _, _, _)? = screens[safe: index + 1], next.id == itemID {
+                return nil
             }
+            guard allScreensAreConsumed(forItemID: itemID, in: screens, consumed: consumed) else { return nil }
+            return UpToSpeedReadRef(type: .flintDigest, id: itemID)
+
         case .newsSummary(let item):
-            guard scrolledToBottomIndices.contains(index) else { return }
-            enqueueMarkRead(itemID: item.id, type: .newsSummary)
+            return UpToSpeedReadRef(type: .newsSummary, id: item.id)
         }
+    }
+
+    /// Digests that still have at least one unanswered question, and so are not
+    /// finished no matter how much of their prose has been read.
+    private var digestsAwaitingAnswers: Set<String> {
+        var awaiting = Set(digestQuestionMap.compactMap { itemID, questionIDs in
+            questionIDs.allSatisfy { answeredQuestionIDs.contains($0) } ? nil : itemID
+        })
+
+        // `preloadDigests` fetches detail with `try?`, so a failed request
+        // leaves no question ids for that digest at all — and without this the
+        // map's silence would read as "nothing outstanding" and the digest
+        // would be marked caught up after its prose, with the feed itself
+        // saying a question is still waiting. Trust the feed's count whenever
+        // the detail never arrived; once it has, the map is the better answer
+        // because it tracks answers given in this session.
+        for item in allItems where digestQuestionMap[item.id] == nil {
+            if case .flintDigest(let summary) = item.payload, summary.unansweredQuestionCount > 0 {
+                awaiting.insert(item.id)
+            }
+        }
+
+        return awaiting
     }
 
     /// Whether no later screen in `screens` shares `itemID` with the one at
@@ -169,6 +248,16 @@ final class UpToSpeedViewModel {
     nonisolated static func isLastScreen(forItemID itemID: String, at index: Int, in screens: [UpToSpeedScreen]) -> Bool {
         guard index + 1 < screens.count else { return true }
         return !screens[(index + 1)...].contains { $0.item?.id == itemID }
+    }
+
+    private nonisolated static func allScreensAreConsumed(
+        forItemID itemID: String,
+        in screens: [UpToSpeedScreen],
+        consumed: Set<Int>
+    ) -> Bool {
+        screens.indices
+            .filter { screens[$0].item?.id == itemID }
+            .allSatisfy { consumed.contains($0) }
     }
 
     /// Called when the wrap screen appears — marks read the (at most one)
@@ -187,30 +276,87 @@ final class UpToSpeedViewModel {
         enqueueMarkRead(itemID: itemID, type: .anomaly)
     }
 
-    func markScrolledToBottom(at index: Int) {
-        scrolledToBottomIndices.insert(index)
+    /// Return a recap item to the unread queue.
+    ///
+    /// Flushes first: a pending mark for the same item would otherwise land
+    /// after the unmark and quietly re-hide it.
+    func unmark(_ item: UpToSpeedItem) async {
+        guard !unmarkingIDs.contains(item.id) else { return }
+        unmarkingIDs.insert(item.id)
+        defer { unmarkingIDs.remove(item.id) }
+
+        pendingReadRefs.removeAll { $0.id == item.id }
+        await flushAndWait()
+
+        let ref = UpToSpeedReadRef(type: item.type, id: item.id)
+        guard (try? await apiClient.request(UpToSpeedEndpoint.unmark([ref]))) != nil else { return }
+
+        await reloadQueue()
+    }
+
+    /// The domain of an anomaly item, when the payload carries one.
+    nonisolated static func anomalyDomain(_ item: UpToSpeedItem) -> String? {
+        guard case .anomaly(let anomaly) = item.payload else { return nil }
+        return anomaly.domain
     }
 
     /// Called by FlintQuestionPage after a successful answer submission.
-    /// Marks the digest as caught-up once all its questions are answered.
+    ///
+    /// Answering the last question lifts the `digestsAwaitingAnswers` block but
+    /// is not itself evidence the digest was read — a reader can open the flow,
+    /// swipe straight to the question and answer it without meeting a word of
+    /// the prose. So this re-runs the ordinary read test against the digest's
+    /// final screen rather than marking it directly; the consumption gate still
+    /// has to be satisfied. If the answer lands before the dwell elapses, the
+    /// dwell fires moments later and the test runs again.
     func onQuestionAnswered(blockID: String, itemID: String) {
         answeredQuestionIDs.insert(blockID)
         openQuestions.removeAll { $0.block.id == blockID }
         let allIDs = digestQuestionMap[itemID] ?? []
         guard !allIDs.isEmpty else { return }
         if allIDs.allSatisfy({ answeredQuestionIDs.contains($0) }) {
-            enqueueMarkRead(itemID: itemID, type: .flintDigest)
+            guard let lastIndex = screens.lastIndex(where: { $0.item?.id == itemID }) else { return }
+            evaluateRead(at: lastIndex)
         }
     }
 
     /// Flush pending markRead refs on dismiss. Call from the stories view on close.
+    /// Fire-and-forget; use `flushAndWait()` where the result matters.
     func flush() {
         guard !pendingReadRefs.isEmpty else { return }
-        let refs = pendingReadRefs
-        Task {
-            try? await apiClient.request(UpToSpeedEndpoint.markRead(refs))
+        Task { await flushAndWait() }
+    }
+
+    /// Posts the pending refs and keeps them if the request fails, so a flush
+    /// that goes out on a dead network is retried on the next one rather than
+    /// silently dropping the reader's progress. The endpoint is idempotent, so
+    /// re-sending a ref that did land is harmless.
+    func flushAndWait() async {
+        if isFlushing, let activeFlushTask {
+            _ = await activeFlushTask.value
+            return
         }
-        pendingReadRefs = []
+        guard !pendingReadRefs.isEmpty else { return }
+
+        let refs = pendingReadRefs
+        let client = apiClient
+        let task = Task {
+            do {
+                _ = try await client.request(UpToSpeedEndpoint.markRead(refs))
+                return true
+            } catch {
+                return false
+            }
+        }
+
+        isFlushing = true
+        activeFlushTask = task
+        let succeeded = await task.value
+        if succeeded {
+            pendingReadRefs.removeAll { ref in refs.contains { $0.id == ref.id } }
+        }
+        activeFlushTask = nil
+        isFlushing = false
     }
 
     // MARK: - Unread count
@@ -248,7 +394,7 @@ final class UpToSpeedViewModel {
     ) {
         digestQuestionMap = [:]
         answeredQuestionIDs = []
-        scrolledToBottomIndices = []
+        consumedIndices = []
         foldedDigestIDs = []
         openQuestions = []
         readingItem = nil
@@ -259,9 +405,15 @@ final class UpToSpeedViewModel {
 
         var built: [(screen: UpToSpeedScreen, key: UpToSpeedChapter.Kind)] = []
 
-        // 1 — anomalies
-        for item in unread where item.type == .anomaly {
-            built.append((.anomaly(item), .anomaly))
+        // 1 — anomalies, grouped by domain. The chapter grouping collapses
+        // consecutive equal keys, so same-domain anomalies have to be adjacent
+        // for "Your body" and "Your money" to come out as separate chapters.
+        let anomalies = unread
+            .filter { $0.type == .anomaly }
+            .sorted { (Self.anomalyDomain($0) ?? "~") < (Self.anomalyDomain($1) ?? "~") }
+
+        for item in anomalies {
+            built.append((.anomaly(item), .anomaly(domain: Self.anomalyDomain(item))))
         }
 
         // 2 — digests, oldest first, split by role
@@ -289,7 +441,7 @@ final class UpToSpeedViewModel {
             // parses. A duplicate reading-list digest, or one whose summary
             // doesn't parse, falls through to normal digest expansion below
             // instead of being silently folded as "read" with nothing shown.
-            if isReadingListDigest(title: title, digest: full), readingItem == nil,
+            if isReadingListDigest(item: item, title: title, digest: full), readingItem == nil,
                let summary = full?.summary ?? digestSummary(item),
                let parsed = UpToSpeedParsing.readingItem(from: summary) {
                 readingItem = parsed
@@ -297,7 +449,7 @@ final class UpToSpeedViewModel {
                 continue
             }
 
-            if isNewsRoundupDigest(title: title, digest: full) {
+            if isNewsRoundupDigest(item: item, title: title, digest: full) {
                 let summary = full?.summary ?? digestSummary(item) ?? ""
                 let sections = UpToSpeedParsing.newsRoundupSections(from: summary)
                 if !sections.isEmpty {
@@ -314,10 +466,24 @@ final class UpToSpeedViewModel {
             }
 
             // Primary digest — prose + insights + questions
-            if primaryDigestSummary == nil {
+            let buildsOpener = primaryDigestSummary == nil
+            if buildsOpener {
                 primaryDigestSummary = full?.summary ?? digestSummary(item)
+                openerParagraphs = primaryDigestSummary.map {
+                    UpToSpeedParsing.openerParagraphs(from: $0)
+                } ?? []
             }
-            for screen in expandFlintItem(item: item, digest: full) {
+
+            // Only the digest the opener was built from can have had its prose
+            // shown there. The filter compares text, not provenance, so passing
+            // these to a later digest let it lose a section the reader never
+            // met on the opener — two briefings that happen to word something
+            // identically are still two separate things to read.
+            for screen in expandFlintItem(
+                item: item,
+                digest: full,
+                shownInOpener: buildsOpener ? openerParagraphs : []
+            ) {
                 built.append((screen, .digest(title: title)))
             }
         }
@@ -341,12 +507,12 @@ final class UpToSpeedViewModel {
             }
         }
 
-        // Not `built.contains { ... .wrap: wrapChapterHasContent }` — a solo
-        // folded reading-list digest leaves `built` with zero .wrap-keyed
-        // entries (no incomplete check-in), so `.contains` over an empty
-        // match set would wrongly report no substance even though
-        // wrapChapterHasContent is true.
-        let hasSubstance = !built.isEmpty || wrapChapterHasContent
+        // Compute recap before the empty-queue guard: today's already-seen
+        // items can be the only content available. Also, a solo folded
+        // reading-list digest leaves `built` with no .wrap-keyed entries, so
+        // wrap content must count as substance independently.
+        recapItems = caughtUpItems(from: items)
+        let hasSubstance = !built.isEmpty || wrapChapterHasContent || !recapItems.isEmpty
 
         guard hasSubstance else {
             screens = []
@@ -359,13 +525,16 @@ final class UpToSpeedViewModel {
         built.insert((.opener, .intro), at: 0)
         built.append((.wrap, .wrap))
 
+        // The recap is an appendix, not part of the catch-up proper: it sits
+        // past the wrap so swiping on reaches it, and the wrap offers a way in.
+        if !recapItems.isEmpty {
+            built.append((.recap, .recap))
+        }
+
         screens = built.map(\.screen)
         chapters = UpToSpeedChapter.chapters(for: built.map(\.key))
 
         openerGreeting = makeGreeting()
-        if let summary = primaryDigestSummary {
-            openerParagraphs = UpToSpeedParsing.openerParagraphs(from: summary)
-        }
 
         if resetIndex {
             currentIndex = 0
@@ -379,8 +548,21 @@ final class UpToSpeedViewModel {
         UpToSpeedVisibility(now: .now, calendar: .current).visibleUnreadItems(from: items)
     }
 
-    private func expandFlintItem(item: UpToSpeedItem, digest: FlintDigest?) -> [UpToSpeedScreen] {
+    private func caughtUpItems(from items: [UpToSpeedItem]) -> [UpToSpeedItem] {
+        UpToSpeedVisibility(now: .now, calendar: .current).caughtUpItems(from: items)
+    }
+
+    private func expandFlintItem(
+        item: UpToSpeedItem,
+        digest: FlintDigest?,
+        shownInOpener: [String] = []
+    ) -> [UpToSpeedScreen] {
+        // Drop what the opener already carries. Without this the briefing
+        // repeated the opener's paragraphs verbatim, and its first card held
+        // only the greeting — a full screen for two words.
         let sections = parseSections(digestSummary(item) ?? digest?.summary ?? "")
+            .filter { !UpToSpeedParsing.sectionIsShownInOpener($0, openerParagraphs: shownInOpener) }
+
         var pages: [UpToSpeedScreen] = [.flintHeader(item, firstSection: sections.first)]
 
         for (i, section) in sections.dropFirst().enumerated() {
@@ -439,7 +621,17 @@ final class UpToSpeedViewModel {
         return .distantPast
     }
 
-    private func isNewsRoundupDigest(title: String, digest: FlintDigest?) -> Bool {
+    /// The server resolves this now. The title and block heuristics remain as
+    /// a fallback for responses that predate the `kind` field — presentation
+    /// should not depend on how a digest happened to be named.
+    private func declaredKind(_ item: UpToSpeedItem) -> FlintDigestKind? {
+        guard case .flintDigest(let summary) = item.payload else { return nil }
+        return summary.kind
+    }
+
+    private func isNewsRoundupDigest(item: UpToSpeedItem, title: String, digest: FlintDigest?) -> Bool {
+        if let kind = declaredKind(item) { return kind == .newsRoundup }
+
         let lowered = title.lowercased()
         if lowered.contains("news") || lowered.contains("roundup") { return true }
         guard let digest else { return false }
@@ -447,7 +639,9 @@ final class UpToSpeedViewModel {
         return !contentBlocks.isEmpty && contentBlocks.allSatisfy { $0.blockType == "flint_news" }
     }
 
-    private func isReadingListDigest(title: String, digest: FlintDigest?) -> Bool {
+    private func isReadingListDigest(item: UpToSpeedItem, title: String, digest: FlintDigest?) -> Bool {
+        if let kind = declaredKind(item) { return kind == .readingList }
+
         let lowered = title.lowercased()
         if lowered.contains("reading list") || lowered.contains("saved to read") { return true }
         return lowered.contains("reading") && (digest?.blocks.isEmpty ?? true)
@@ -503,13 +697,12 @@ final class UpToSpeedViewModel {
     }
 
     private func enqueueMarkRead(itemID: String, type: UpToSpeedItemType) {
-        guard !pendingReadRefs.contains(where: { $0.id == itemID }) else { return }
-        pendingReadRefs.append(UpToSpeedReadRef(type: type, id: itemID))
+        enqueueMarkRead(UpToSpeedReadRef(type: type, id: itemID))
     }
 
-    private func digestCanBeMarkedRead(itemID: String) -> Bool {
-        let questionIDs = digestQuestionMap[itemID] ?? []
-        return questionIDs.isEmpty || questionIDs.allSatisfy { answeredQuestionIDs.contains($0) }
+    private func enqueueMarkRead(_ ref: UpToSpeedReadRef) {
+        guard !pendingReadRefs.contains(where: { $0.id == ref.id }) else { return }
+        pendingReadRefs.append(ref)
     }
 }
 
@@ -526,10 +719,47 @@ struct UpToSpeedVisibility {
         items.filter(isVisibleUnreadCandidate)
     }
 
+    /// Everything already dealt with today, newest first — the recap.
+    ///
+    /// Check-ins are excluded: a submitted check-in is a thing that happened,
+    /// not something that can be un-seen, and the feed has no way to reopen one.
+    func caughtUpItems(from items: [UpToSpeedItem]) -> [UpToSpeedItem] {
+        items
+            .filter(isRecapCandidate)
+            .sorted { lhs, rhs in
+                (seenAt(lhs) ?? .distantPast) > (seenAt(rhs) ?? .distantPast)
+            }
+    }
+
+    /// When the reader last dealt with an item, however they dealt with it.
+    func seenAt(_ item: UpToSpeedItem) -> Date? {
+        if case .anomaly(let anomaly) = item.payload, let acknowledged = anomaly.acknowledgedAt {
+            return max(acknowledged, item.caughtUpAt ?? acknowledged)
+        }
+        return item.caughtUpAt
+    }
+
     private func isVisibleUnreadCandidate(_ item: UpToSpeedItem) -> Bool {
         guard item.caughtUpAt == nil else { return false }
-        guard case .checkIn(let summary) = item.payload else { return true }
-        return !summary.completed && isCheckInPeriodAvailable(summary.period)
+
+        switch item.payload {
+        case .checkIn(let summary):
+            return !summary.completed && isCheckInPeriodAvailable(summary.period)
+        case .anomaly(let anomaly):
+            // The feed is asked for dismissed anomalies so the recap can offer
+            // them back, so they arrive here too — with caughtUpAt null,
+            // because acknowledgement is tracked separately. Without this they
+            // would reappear in the flow the moment they were dismissed.
+            return anomaly.acknowledgedAt == nil
+        default:
+            return true
+        }
+    }
+
+    private func isRecapCandidate(_ item: UpToSpeedItem) -> Bool {
+        if case .checkIn = item.payload { return false }
+        guard let seen = seenAt(item) else { return false }
+        return calendar.isDate(seen, inSameDayAs: now)
     }
 
     private func isCheckInPeriodAvailable(_ period: CheckInPeriod) -> Bool {

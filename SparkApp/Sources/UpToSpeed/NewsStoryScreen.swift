@@ -10,10 +10,11 @@ struct NewsStoryScreen: View {
     let section: NewsRoundupSection
     let index: Int
     let total: Int
+    var isActive: Bool = true
     let onReachedBottom: (() -> Void)?
 
     var body: some View {
-        StoryScreenScaffold(onReachedBottom: onReachedBottom) {
+        StoryScreenScaffold(isActive: isActive, onReachedBottom: onReachedBottom) {
             VStack(alignment: .leading, spacing: SparkSpacing.lg) {
                 spine
 

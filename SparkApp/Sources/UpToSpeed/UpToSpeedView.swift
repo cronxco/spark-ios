@@ -14,6 +14,7 @@ struct UpToSpeedView: View {
     @State private var viewModel: UpToSpeedViewModel?
     @State private var didRequestDismiss = false
     @State private var isKeyboardVisible = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(isPresented: Binding<Bool>, viewModel: UpToSpeedViewModel? = nil) {
         self._isPresented = isPresented
@@ -27,6 +28,11 @@ struct UpToSpeedView: View {
             if let vm = viewModel {
                 if vm.isLoading && vm.screens.isEmpty {
                     loadingView
+                } else if let error = vm.error, vm.screens.isEmpty {
+                    // Without this branch a failed request rendered as "You're
+                    // all caught up!" — the app reporting success for content
+                    // it never received.
+                    failureView(message: error, vm: vm)
                 } else if vm.screens.isEmpty {
                     allCaughtUpView
                 } else {
@@ -37,8 +43,13 @@ struct UpToSpeedView: View {
             }
         }
         .overlay(alignment: .top) {
+            // Close stays available in every state. Gating it on a populated
+            // queue left loading, empty and failed states with no way out
+            // except an undocumented downward drag.
             if let vm = viewModel, !vm.screens.isEmpty {
                 controlsOverlay(vm: vm)
+            } else {
+                closeButtonOverlay
             }
         }
         .simultaneousGesture(dismissDragGesture)
@@ -62,6 +73,7 @@ struct UpToSpeedView: View {
             case .place(let id): appModel.pendingRoute = .place(id: id)
             case .integration(let service): appModel.pendingRoute = .integration(service: service)
             case .tag(let name): appModel.pendingRoute = .tag(name: name, type: nil)
+            case .anomaly(let id): appModel.pendingRoute = .anomaly(id: id)
             default: return .systemAction
             }
             if let viewModel {
@@ -95,13 +107,21 @@ struct UpToSpeedView: View {
         @Bindable var vm = vm
 
         TabView(selection: $vm.currentIndex) {
-            ForEach(Array(vm.screens.enumerated()), id: \.offset) { index, screen in
-                screenRenderer(screen, index: index, vm: vm)
+            ForEach(Array(vm.screens.enumerated()), id: \.element.id) { index, screen in
+                screenRenderer(screen, index: index, isActive: index == vm.currentIndex, vm: vm)
                     .tag(index)
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .ignoresSafeArea()
+        .accessibilityAction(named: "Next card") {
+            guard vm.currentIndex + 1 < vm.screens.count else { return }
+            vm.jump(to: vm.currentIndex + 1)
+        }
+        .accessibilityAction(named: "Previous card") {
+            guard vm.currentIndex > 0 else { return }
+            vm.jump(to: vm.currentIndex - 1)
+        }
         .onChange(of: vm.currentIndex) { old, new in
             if new > old {
                 vm.markRead(at: old)
@@ -139,23 +159,7 @@ struct UpToSpeedView: View {
                 .frame(maxWidth: .infinity)
                 .sparkGlass(.capsule)
 
-                Button {
-                    dismissFlow(vm: vm)
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Circle())
-                        .sparkGlass(.circle)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Close")
-                .highPriorityGesture(
-                    TapGesture().onEnded {
-                        dismissFlow(vm: vm)
-                    }
-                )
+                closeButton { dismissFlow(vm: vm) }
             }
             .padding(.horizontal, SparkSpacing.lg)
             .padding(.top, topSafeArea + SparkSpacing.sm)
@@ -172,7 +176,7 @@ struct UpToSpeedView: View {
                         .sparkGlass(.capsule)
                 }
                 .buttonStyle(.plain)
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
             }
         }
     }
@@ -222,36 +226,59 @@ struct UpToSpeedView: View {
     // MARK: - Screen registry
 
     @ViewBuilder
-    private func screenRenderer(_ screen: UpToSpeedScreen, index: Int, vm: UpToSpeedViewModel) -> some View {
+    private func screenRenderer(
+        _ screen: UpToSpeedScreen,
+        index: Int,
+        isActive: Bool,
+        vm: UpToSpeedViewModel
+    ) -> some View {
+        // `isActive` matters because TabView(.page) builds the next page before
+        // the swipe lands. Without it an off-screen card reaches the end of its
+        // content and would be marked read before the reader ever sees it.
+        let consumed: () -> Void = { vm.markScreenConsumed(at: index) }
+
         switch screen {
         case .opener:
             FlintOpenerScreen(viewModel: vm)
         case .flintHeader(let item, let firstSection):
-            FlintHeaderPage(item: item, firstSection: firstSection)
+            FlintHeaderPage(item: item, firstSection: firstSection, isActive: isActive, onReachedBottom: consumed)
         case .flintParagraph(let item, let text, _):
-            FlintParagraphPage(item: item, text: text)
+            FlintParagraphPage(item: item, text: text, isActive: isActive, onReachedBottom: consumed)
         case .flintInsight(_, let block):
-            FlintInsightPage(block: block)
+            FlintInsightPage(block: block, isActive: isActive, onReachedBottom: consumed)
         case .flintQuestion(let item, let block):
-            FlintQuestionPage(item: item, block: block, viewModel: vm)
+            FlintQuestionPage(item: item, block: block, viewModel: vm, isActive: isActive, onReachedBottom: consumed)
         case .checkIn(let item):
             CheckInScreen(item: item, viewModel: vm)
         case .anomaly(let item):
-            AnomalyScreen(item: item, viewModel: vm)
+            AnomalyScreen(item: item, viewModel: vm, isActive: isActive)
         case .dayContext(_, let context, let yesterday):
-            DayContextScreen(dayContext: context, yesterday: yesterday)
+            DayContextScreen(
+                dayContext: context,
+                yesterday: yesterday,
+                isActive: isActive,
+                onReachedBottom: consumed
+            )
         case .newsStory(let item, let section, let sectionIndex, let total):
             NewsStoryScreen(
                 item: item,
                 section: section,
                 index: sectionIndex,
                 total: total,
-                onReachedBottom: { vm.markScrolledToBottom(at: index) }
+                isActive: isActive,
+                onReachedBottom: consumed
             )
         case .newsSummary(let item):
-            NewsSummaryScreen(item: item, viewModel: vm, onReachedBottom: { vm.markScrolledToBottom(at: index) })
+            NewsSummaryScreen(item: item, viewModel: vm, isActive: isActive, onReachedBottom: consumed)
         case .wrap:
-            WrapScreen(viewModel: vm, onDone: { dismissFlow(vm: vm) })
+            WrapScreen(
+                viewModel: vm,
+                onDone: { dismissFlow(vm: vm) },
+                isActive: isActive,
+                onShowRecap: { vm.jump(to: index + 1) }
+            )
+        case .recap:
+            RecapScreen(viewModel: vm, isActive: isActive)
         }
     }
 
@@ -265,6 +292,62 @@ struct UpToSpeedView: View {
                 .font(SparkTypography.body)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private func failureView(message: String, vm: UpToSpeedViewModel) -> some View {
+        VStack(spacing: SparkSpacing.lg) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 44))
+                .foregroundStyle(Color.sparkWarning)
+
+            Text("Couldn't get your catch-up")
+                .font(SparkTypography.heroSmall)
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.center)
+
+            Text(message)
+                .font(SparkTypography.bodySmall)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            PillButton("Try again") {
+                Task { await vm.load() }
+            }
+        }
+        .padding(SparkSpacing.xxl)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func closeButton(action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
+                .sparkGlass(.circle)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Close")
+        .highPriorityGesture(TapGesture().onEnded(action))
+    }
+
+    /// The close control on its own, for the states that have no progress bar
+    /// to hang it from.
+    private var closeButtonOverlay: some View {
+        HStack {
+            Spacer()
+            closeButton {
+                if let viewModel {
+                    dismissFlow(vm: viewModel)
+                } else {
+                    isPresented = false
+                    dismiss()
+                }
+            }
+        }
+        .padding(.horizontal, SparkSpacing.lg)
+        .padding(.top, topSafeArea + SparkSpacing.sm)
     }
 
     private var allCaughtUpView: some View {

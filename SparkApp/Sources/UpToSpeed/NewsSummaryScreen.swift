@@ -8,10 +8,12 @@ import SwiftUI
 struct NewsSummaryScreen: View {
     let item: UpToSpeedItem
     let viewModel: UpToSpeedViewModel
+    var isActive: Bool = true
     let onReachedBottom: (() -> Void)?
 
     @Environment(AppModel.self) private var appModel
     @State private var showFullArticle = false
+    @State private var showsDetail = false
 
     private var news: NewsSummary? {
         if case .newsSummary(let n) = item.payload { return n }
@@ -19,7 +21,11 @@ struct NewsSummaryScreen: View {
     }
 
     var body: some View {
-        StoryScreenScaffold(label: news.map { $0.source.uppercased() }, onReachedBottom: onReachedBottom) {
+        StoryScreenScaffold(
+            label: news.map { $0.source.uppercased() },
+            isActive: isActive,
+            onReachedBottom: onReachedBottom
+        ) {
             if let news {
                 VStack(alignment: .leading, spacing: SparkSpacing.lg) {
                     Text(news.title)
@@ -40,27 +46,43 @@ struct NewsSummaryScreen: View {
                         }
                     }
 
-                    if let summary = news.summary {
-                        GlassCard(tint: Color.domainKnowledge.opacity(0.06)) {
-                            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                                GlassCardHeader(icon: "doc.text", tint: .domainKnowledge, title: "Summary")
-                                SparkRichContentText(
-                                    text: summary,
-                                    font: SparkTypography.body,
-                                    foregroundStyle: .primary,
-                                    lineSpacing: 5
-                                )
-                            }
-                        }
-                    }
+                    // TL;DR, summary and key points are the same story at three
+                    // lengths. Leading with the TL;DR and folding the rest away
+                    // makes the card a briefing rather than an inbox digest —
+                    // expanded, it said everything three times.
+                    if news.summary != nil || news.keyTakeaways != nil {
+                        DisclosureGroup(isExpanded: $showsDetail) {
+                            VStack(alignment: .leading, spacing: SparkSpacing.lg) {
+                                if let summary = news.summary {
+                                    GlassCard(tint: Color.domainKnowledge.opacity(0.06)) {
+                                        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                                            GlassCardHeader(icon: "doc.text", tint: .domainKnowledge, title: "Summary")
+                                            SparkRichContentText(
+                                                text: summary,
+                                                font: SparkTypography.body,
+                                                foregroundStyle: .primary,
+                                                lineSpacing: 5
+                                            )
+                                        }
+                                    }
+                                }
 
-                    if let keyTakeaways = news.keyTakeaways {
-                        GlassCard(tint: Color.domainKnowledge.opacity(0.06)) {
-                            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                                GlassCardHeader(icon: "list.bullet", tint: .domainKnowledge, title: "Key Points")
-                                keyPointsContent(from: keyTakeaways)
+                                if let keyTakeaways = news.keyTakeaways {
+                                    GlassCard(tint: Color.domainKnowledge.opacity(0.06)) {
+                                        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                                            GlassCardHeader(icon: "list.bullet", tint: .domainKnowledge, title: "Key Points")
+                                            keyPointsContent(from: keyTakeaways)
+                                        }
+                                    }
+                                }
                             }
+                            .padding(.top, SparkSpacing.md)
+                        } label: {
+                            Text(showsDetail ? "Less" : "More detail")
+                                .font(SparkTypography.bodySmall)
+                                .foregroundStyle(Color.domainKnowledge)
                         }
+                        .tint(Color.domainKnowledge)
                     }
 
                     Button {
