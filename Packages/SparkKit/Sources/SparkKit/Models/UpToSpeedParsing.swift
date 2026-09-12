@@ -30,6 +30,42 @@ public struct NewsRoundupSection: Identifiable, Hashable, Sendable {
 public enum UpToSpeedParsing {
     // MARK: - News roundup
 
+    /// The roundup's stories, taken from its `flint_news` blocks where they
+    /// exist and recovered from the summary prose where they do not.
+    ///
+    /// The blocks are what the skill actually wrote: a headline, a standalone
+    /// distillation, and the sources it drew on. Splitting the prose on `## `
+    /// and inferring publications from `*italic*` runs was reconstructing all
+    /// of that from the rendering, and it broke silently whenever the wording
+    /// changed. The parser stays as a fallback for digests written before the
+    /// blocks existed.
+    public static func newsRoundupSections(
+        blocks: [FlintDigestBlock],
+        summary: String
+    ) -> [NewsRoundupSection] {
+        let stories = blocks.filter { $0.blockType == "flint_news" }
+
+        guard !stories.isEmpty else {
+            return newsRoundupSections(from: summary)
+        }
+
+        return stories.enumerated().map { index, block in
+            let body = block.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+            // `whatsNew` and `watching` belong to the long prose section. A
+            // block is already the short version, so claiming to have found
+            // them here would be inventing structure that isn't there.
+            return NewsRoundupSection(
+                id: index,
+                heading: block.title,
+                sources: italicRuns(in: body),
+                whatsNew: nil,
+                watching: nil,
+                body: body
+            )
+        }
+    }
+
     /// Splits a `## `-delimited markdown summary into one section per heading.
     /// Prose before the first heading is ignored.
     public static func newsRoundupSections(from summary: String) -> [NewsRoundupSection] {
@@ -134,6 +170,35 @@ public enum UpToSpeedParsing {
             self.url = url
             self.readingTime = readingTime
             self.blurb = blurb
+        }
+    }
+
+    /// Every pick in a reading-list digest, from its `flint_reading_pick`
+    /// blocks where they exist and from the summary prose where they do not.
+    ///
+    /// Drops are deliberately excluded. In prose a `**Worth dropping:**` line
+    /// is shaped exactly like a pick, so the regex below could offer something
+    /// to delete as something to read; the block type settles it.
+    ///
+    /// Returns every pick rather than the first. The prose parser could only
+    /// ever recover one, so a digest with two picks showed one of them.
+    public static func readingItems(
+        blocks: [FlintDigestBlock],
+        summary: String
+    ) -> [ReadingItem] {
+        let picks = blocks.filter { $0.blockType == "flint_reading_pick" }
+
+        guard !picks.isEmpty else {
+            return readingItem(from: summary).map { [$0] } ?? []
+        }
+
+        return picks.map { block in
+            ReadingItem(
+                title: block.title,
+                url: block.url,
+                readingTime: block.minutes.map { "\($0) min" },
+                blurb: block.content?.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
         }
     }
 
