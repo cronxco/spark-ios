@@ -384,11 +384,6 @@ let sparkAppTests: Target = .target(
     sources: ["Tests/SparkAppTests/**"],
     dependencies: [
         .target(name: "SparkApp"),
-        // Explicit so `@testable import SparkUI` links: SparkUI's own test
-        // target is never run (the scheme lists only the two below, and the
-        // package is iOS/watchOS-only so `swift test` can't reach it either),
-        // so its tests live here instead.
-        .package(product: "SparkUI"),
     ],
     settings: sharedSettings(bundleId: "\(bundleIdBase).tests")
 )
@@ -447,7 +442,7 @@ let project = Project(
         .local(path: "Packages/SparkLocation"),
         .remote(
             url: "https://github.com/getsentry/sentry-cocoa",
-            requirement: .upToNextMajor(from: "9.5.1")
+            requirement: .exact("9.27.0")
         ),
     ],
     settings: .settings(

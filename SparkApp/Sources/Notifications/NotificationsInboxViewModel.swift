@@ -14,10 +14,26 @@ final class NotificationsInboxViewModel {
         case error(String)
     }
 
+    private struct FilterKey: Equatable, Sendable {
+        let scope: NotificationsEndpoint.Scope
+        let stream: NotificationFeedItem.Stream?
+        let search: String?
+
+        var usesCache: Bool {
+            scope == .active && stream == nil && search == nil
+        }
+    }
+
     private(set) var state: LoadState = .idle
-    private(set) var items: [NotificationItem] = []
+    private(set) var items: [NotificationFeedItem] = []
+    private(set) var counts = NotificationFeedCounts()
     private(set) var nextCursor: String?
     private(set) var isLoadingMore = false
+    private(set) var isShowingCachedData = false
+
+    private var filter = FilterKey(scope: .active, stream: nil, search: nil)
+    private var requestGeneration = 0
+    private var loadMoreGeneration: Int?
 
     private let apiClient: APIClient
     private let container: ModelContainer
@@ -29,151 +45,297 @@ final class NotificationsInboxViewModel {
     }
 
     var hasMore: Bool { nextCursor != nil }
+    var hasUnread: Bool { items.contains { $0.kind == .notification && !$0.isRead } }
 
-    func refresh() async {
-        _ = await refreshReturningSuccess()
+    func refresh(
+        scope: NotificationsEndpoint.Scope = .active,
+        stream: NotificationFeedItem.Stream? = nil,
+        search: String? = nil
+    ) async {
+        let requestedFilter = FilterKey(
+            scope: scope,
+            stream: stream,
+            search: search?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        )
+        let filterChanged = requestedFilter != filter
+        filter = requestedFilter
+        requestGeneration &+= 1
+        let generation = requestGeneration
+
+        if filterChanged {
+            items = []
+            nextCursor = nil
+            isShowingCachedData = false
+            isLoadingMore = false
+            loadMoreGeneration = nil
+        }
+
+        if items.isEmpty && requestedFilter.usesCache {
+            loadCached()
+        }
+        _ = await refreshReturningSuccess(filter: requestedFilter, generation: generation)
     }
 
-    private func refreshReturningSuccess() async -> Bool {
-        state = .loading
+    private func refreshReturningSuccess(filter: FilterKey, generation: Int) async -> Bool {
+        if items.isEmpty { state = .loading }
         do {
-            let page = try await apiClient.request(NotificationsEndpoint.list())
+            let page = try await apiClient.request(NotificationsEndpoint.feed(
+                scope: filter.scope,
+                stream: filter.stream,
+                search: filter.search
+            ))
+            guard isCurrent(filter: filter, generation: generation) else { return false }
             items = page.data
+            counts = page.counts
             nextCursor = page.nextCursor
-            await persist(page.data, replaceAll: true)
+            isShowingCachedData = false
+            if filter.usesCache {
+                persist(page.data, replaceAll: true)
+            }
             state = .loaded
             return true
         } catch APIError.notModified {
+            guard isCurrent(filter: filter, generation: generation) else { return false }
+            isShowingCachedData = false
             state = .loaded
             return true
         } catch {
+            guard isCurrent(filter: filter, generation: generation) else { return false }
             SparkObservability.captureHandled(error)
             logger.error("Notifications fetch failed: \(String(describing: error))")
-            state = .error("Couldn't load notifications.")
+            if !items.isEmpty {
+                isShowingCachedData = true
+                state = .loaded
+            } else {
+                state = .error("Spark couldn’t load notifications. Check your connection and try again.")
+            }
             return false
         }
     }
 
     func loadMore() async {
         guard let cursor = nextCursor, !isLoadingMore else { return }
+        let requestedFilter = filter
+        let generation = requestGeneration
         isLoadingMore = true
-        defer { isLoadingMore = false }
+        loadMoreGeneration = generation
+        defer {
+            if loadMoreGeneration == generation {
+                isLoadingMore = false
+                loadMoreGeneration = nil
+            }
+        }
         do {
-            let page = try await apiClient.request(NotificationsEndpoint.list(cursor: cursor))
+            let page = try await apiClient.request(NotificationsEndpoint.feed(
+                scope: requestedFilter.scope,
+                stream: requestedFilter.stream,
+                search: requestedFilter.search,
+                cursor: cursor
+            ))
+            guard isCurrent(filter: requestedFilter, generation: generation) else { return }
             items.append(contentsOf: page.data)
+            counts = page.counts
             nextCursor = page.nextCursor
-            await persist(page.data, replaceAll: false)
+            if requestedFilter.usesCache {
+                persist(page.data, replaceAll: false)
+            }
         } catch {
+            guard isCurrent(filter: requestedFilter, generation: generation) else { return }
             SparkObservability.captureHandled(error)
             logger.error("Notifications load-more failed: \(String(describing: error))")
         }
     }
 
     func markRead(_ id: String) async {
-        // Optimistic update.
-        if let index = items.firstIndex(where: { $0.id == id }), !items[index].isRead {
-            items[index] = NotificationItem(
-                id: items[index].id,
-                title: items[index].title,
-                body: items[index].body,
-                domain: items[index].domain,
-                isRead: true,
-                receivedAt: items[index].receivedAt,
-                entity: items[index].entity,
-                version: items[index].version
-            )
+        await setRead(id, isRead: true)
+    }
+
+    func markUnread(_ id: String) async {
+        await setRead(id, isRead: false)
+    }
+
+    private func setRead(_ id: String, isRead: Bool) async {
+        guard let index = items.firstIndex(where: { $0.id == id && $0.kind == .notification }) else { return }
+        let actionFilter = filter
+        let generation = requestGeneration
+        let previous = items[index].isRead
+        let previousCounts = counts
+        guard previous != isRead else { return }
+        items[index].isRead = isRead
+        if actionFilter.scope == .active {
+            updateCounts(unreadDelta: isRead ? -1 : 1)
         }
+
         do {
-            _ = try await apiClient.request(NotificationsEndpoint.markRead(id: id))
-            await updateReadFlag(id: id, isRead: true)
+            let endpoint = isRead
+                ? NotificationsEndpoint.markRead(id: id)
+                : NotificationsEndpoint.markUnread(id: id)
+            _ = try await apiClient.request(endpoint)
+            updateReadFlag(id: id, isRead: isRead)
+            await refreshCurrentFilter()
         } catch {
+            if isCurrent(filter: actionFilter, generation: generation),
+               let current = items.firstIndex(where: { $0.id == id }) {
+                items[current].isRead = previous
+                counts = previousCounts
+            }
             SparkObservability.captureHandled(error)
-            logger.error("markRead failed: \(String(describing: error))")
+            logger.error("Updating notification read state failed: \(String(describing: error))")
         }
     }
 
     func markAllRead() async {
-        for index in items.indices where !items[index].isRead {
-            items[index] = NotificationItem(
-                id: items[index].id,
-                title: items[index].title,
-                body: items[index].body,
-                domain: items[index].domain,
-                isRead: true,
-                receivedAt: items[index].receivedAt,
-                entity: items[index].entity,
-                version: items[index].version
-            )
+        let actionFilter = filter
+        let generation = requestGeneration
+        let previous = items
+        let previousCounts = counts
+        for index in items.indices where items[index].kind == .notification {
+            items[index].isRead = true
         }
+        counts = NotificationFeedCounts(
+            unread: 0,
+            unresolvedAttention: counts.unresolvedAttention,
+            activeActivity: counts.activeActivity,
+            byStream: counts.byStream
+        )
         do {
             _ = try await apiClient.request(NotificationsEndpoint.markAllRead())
-            await updateAllReadFlag(isRead: true)
+            updateAllReadFlag(isRead: true)
+            await refreshCurrentFilter()
         } catch {
+            if isCurrent(filter: actionFilter, generation: generation) {
+                items = previous
+                counts = previousCounts
+            }
             SparkObservability.captureHandled(error)
             logger.error("markAllRead failed: \(String(describing: error))")
         }
     }
 
-    /// Deletes one notification.
-    ///
-    /// Deletion is the one inbox action the backend still guards with a
-    /// precondition, satisfied by the `version` the list payload now carries.
-    /// A stale version means someone else changed the row, so the optimistic
-    /// removal is rolled back by re-reading rather than left as a lie.
-    func delete(_ id: String) async {
-        let removed = items.first { $0.id == id }
-        items.removeAll { $0.id == id }
-
-        do {
-            _ = try await apiClient.request(
-                NotificationsEndpoint.delete(id: id, version: removed?.version)
+    func archive(_ id: String) async {
+        guard let index = items.firstIndex(where: { $0.id == id && $0.kind == .notification }) else { return }
+        let actionFilter = filter
+        let generation = requestGeneration
+        let previousCounts = counts
+        let removed = items.remove(at: index)
+        if actionFilter.scope == .active {
+            updateCounts(
+                unreadDelta: removed.isRead ? 0 : -1,
+                attentionDelta: removed.stream == .attention ? -1 : 0,
+                removedFrom: removed.stream
             )
-            await removeCached(id: id)
-        } catch let error as APIError where error.isPreconditionFailure {
-            logger.notice("delete precondition failed for \(id); refreshing inbox")
-            if !(await refreshReturningSuccess()), let removed {
-                items.append(removed)
-                items.sort { $0.receivedAt > $1.receivedAt }
-            }
+        }
+        do {
+            _ = try await apiClient.request(NotificationsEndpoint.archive(id: id))
+            removeCached(id: id)
+            await refreshCurrentFilter()
         } catch {
-            if let removed {
-                items.append(removed)
-                items.sort { $0.receivedAt > $1.receivedAt }
+            if isCurrent(filter: actionFilter, generation: generation) {
+                items.insert(removed, at: min(index, items.endIndex))
+                counts = previousCounts
             }
             SparkObservability.captureHandled(error)
-            logger.error("delete failed: \(String(describing: error))")
+            logger.error("archive failed: \(String(describing: error))")
         }
     }
 
-    // MARK: - Persistence
+    private func refreshCurrentFilter() async {
+        let currentFilter = filter
+        await refresh(
+            scope: currentFilter.scope,
+            stream: currentFilter.stream,
+            search: currentFilter.search
+        )
+    }
 
-    private func persist(_ items: [NotificationItem], replaceAll: Bool) async {
-        let context = ModelContext(container)
-        if replaceAll {
-            let descriptor = FetchDescriptor<CachedNotification>()
-            if let existing = try? context.fetch(descriptor) {
-                for item in existing {
-                    context.delete(item)
-                }
-            }
+    private func isCurrent(filter: FilterKey, generation: Int) -> Bool {
+        self.filter == filter && requestGeneration == generation
+    }
+
+    private func updateCounts(
+        unreadDelta: Int = 0,
+        attentionDelta: Int = 0,
+        removedFrom stream: NotificationFeedItem.Stream? = nil
+    ) {
+        var byStream = counts.byStream
+        if let stream {
+            byStream[stream.rawValue] = max(0, (byStream[stream.rawValue] ?? 0) - 1)
         }
-        for item in items {
-            let cached = CachedNotification(
-                id: item.id,
-                title: item.title,
-                body: item.body,
-                domain: item.domain,
-                isRead: item.isRead,
-                receivedAt: item.receivedAt,
-                entityKind: item.entity?.kind.rawValue,
-                entityId: item.entity?.id
+        counts = NotificationFeedCounts(
+            unread: max(0, counts.unread + unreadDelta),
+            unresolvedAttention: max(0, counts.unresolvedAttention + attentionDelta),
+            activeActivity: counts.activeActivity,
+            byStream: byStream
+        )
+    }
+
+    // MARK: - Existing lightweight cache
+
+    private func loadCached() {
+        let context = ModelContext(container)
+        var descriptor = FetchDescriptor<CachedNotification>(sortBy: [SortDescriptor(\.receivedAt, order: .reverse)])
+        descriptor.fetchLimit = 50
+        guard let rows = try? context.fetch(descriptor), !rows.isEmpty else { return }
+
+        items = rows.map { row in
+            NotificationFeedItem(
+                id: row.id,
+                stream: NotificationFeedItem.Stream(rawValue: row.domain ?? "") ?? .updates,
+                title: row.title,
+                body: row.body,
+                isRead: row.isRead,
+                occurredAt: row.receivedAt,
+                entity: entity(from: row)
             )
-            context.insert(cached)
+        }
+        counts = NotificationFeedCounts(unread: rows.count { !$0.isRead })
+        isShowingCachedData = true
+        state = .loaded
+    }
+
+    private func entity(from row: CachedNotification) -> NotificationItem.EntityRef? {
+        guard
+            let rawKind = row.entityKind,
+            let kind = NotificationItem.EntityKind(rawValue: rawKind),
+            let id = row.entityId
+        else { return nil }
+        return .init(kind: kind, id: id)
+    }
+
+    private func persist(_ items: [NotificationFeedItem], replaceAll: Bool) {
+        let context = ModelContext(container)
+        if replaceAll, let existing = try? context.fetch(FetchDescriptor<CachedNotification>()) {
+            for item in existing { context.delete(item) }
+        }
+        for item in items where item.kind == .notification {
+            let itemID = item.id
+            let descriptor = FetchDescriptor<CachedNotification>(predicate: #Predicate { $0.id == itemID })
+            if let existing = (try? context.fetch(descriptor))?.first {
+                existing.title = item.title
+                existing.body = item.body
+                existing.domain = item.stream.rawValue
+                existing.isRead = item.isRead
+                existing.receivedAt = item.occurredAt
+                existing.entityKind = item.entity?.kind.rawValue
+                existing.entityId = item.entity?.id
+                existing.lastSyncedAt = .now
+            } else {
+                context.insert(CachedNotification(
+                    id: item.id,
+                    title: item.title,
+                    body: item.body,
+                    domain: item.stream.rawValue,
+                    isRead: item.isRead,
+                    receivedAt: item.occurredAt,
+                    entityKind: item.entity?.kind.rawValue,
+                    entityId: item.entity?.id
+                ))
+            }
         }
         try? context.save()
     }
 
-    private func updateReadFlag(id: String, isRead: Bool) async {
+    private func updateReadFlag(id: String, isRead: Bool) {
         let context = ModelContext(container)
         let descriptor = FetchDescriptor<CachedNotification>(predicate: #Predicate { $0.id == id })
         if let row = (try? context.fetch(descriptor))?.first {
@@ -182,16 +344,15 @@ final class NotificationsInboxViewModel {
         }
     }
 
-    private func updateAllReadFlag(isRead: Bool) async {
+    private func updateAllReadFlag(isRead: Bool) {
         let context = ModelContext(container)
-        let descriptor = FetchDescriptor<CachedNotification>()
-        if let rows = try? context.fetch(descriptor) {
+        if let rows = try? context.fetch(FetchDescriptor<CachedNotification>()) {
             for row in rows { row.isRead = isRead }
             try? context.save()
         }
     }
 
-    private func removeCached(id: String) async {
+    private func removeCached(id: String) {
         let context = ModelContext(container)
         let descriptor = FetchDescriptor<CachedNotification>(predicate: #Predicate { $0.id == id })
         if let row = (try? context.fetch(descriptor))?.first {
@@ -199,4 +360,8 @@ final class NotificationsInboxViewModel {
             try? context.save()
         }
     }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

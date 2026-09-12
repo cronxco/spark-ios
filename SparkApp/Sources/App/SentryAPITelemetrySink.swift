@@ -34,9 +34,6 @@ final class SentryAPITelemetrySink: APITelemetrySink, @unchecked Sendable {
         let crumb = Breadcrumb(level: level, category: "api")
         crumb.type = "http"
         crumb.message = "\(event.method) \(event.url.path) \(event.statusCode.map(String.init) ?? event.outcome.sentryName)"
-        // The `data` setter is deprecated and becomes read-only in a future
-        // Sentry release; setData(value:key:) is what the rest of this file
-        // already uses.
         for (key, value) in breadcrumbData(for: event) {
             crumb.setData(value: value, key: key)
         }

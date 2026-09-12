@@ -18,12 +18,14 @@ public struct NotificationPreferences: Codable, Sendable {
         case integrationFailed = "integration_failed"
         case integrationAuthenticationFailed = "integration_authentication_failed"
         case cookieExpiryWarning = "cookie_expiry_warning"
+        case cookieAutoRefreshed = "cookie_auto_refreshed"
         case fetchMultipleFailures = "fetch_multiple_failures"
         case fetchContentChanged = "fetch_content_changed"
         case migrationCompleted = "migration_completed"
         case migrationFailed = "migration_failed"
         case dataExportReady = "data_export_ready"
         case systemMaintenance = "system_maintenance"
+        case dailyDigest = "daily_digest"
 
         public var displayName: String {
             switch self {
@@ -31,12 +33,14 @@ public struct NotificationPreferences: Codable, Sendable {
             case .integrationFailed: "Sync Failed"
             case .integrationAuthenticationFailed: "Reconnection Needed"
             case .cookieExpiryWarning: "Saved Login Expiring"
+            case .cookieAutoRefreshed: "Saved Login Refreshed"
             case .fetchMultipleFailures: "Repeated Fetch Failures"
             case .fetchContentChanged: "Tracked Page Changed"
             case .migrationCompleted: "Import Complete"
             case .migrationFailed: "Import Failed"
             case .dataExportReady: "Export Ready"
             case .systemMaintenance: "System Maintenance"
+            case .dailyDigest: "Daily Digest"
             }
         }
 
@@ -46,12 +50,14 @@ public struct NotificationPreferences: Codable, Sendable {
             case .integrationFailed: "When a connected service stops syncing"
             case .integrationAuthenticationFailed: "When a service needs you to sign in again"
             case .cookieExpiryWarning: "When a saved website login is about to expire"
+            case .cookieAutoRefreshed: "When Spark refreshes a saved website login"
             case .fetchMultipleFailures: "When a tracked page keeps failing to load"
             case .fetchContentChanged: "When a tracked page's content changes"
             case .migrationCompleted: "When a historical import finishes"
             case .migrationFailed: "When a historical import fails"
             case .dataExportReady: "When your data export is ready to download"
             case .systemMaintenance: "Planned maintenance and service updates"
+            case .dailyDigest: "When a background Flint digest is ready"
             }
         }
     }
