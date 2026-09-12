@@ -89,19 +89,12 @@ struct UpToSpeedQuestionReadTests {
         // actually being known, which only happens if the detail fetch decoded
         // — `preloadDigests` swallows failures with `try?`, so a broken fixture
         // would otherwise look like "no questions outstanding" and quietly
-        // invert what these tests assert.
+        // invert what these tests assert. That is exactly what happened: the
+        // digest JSON below omits `digest_object_id`, which the decoder used to
+        // reject outright. Kept omitted on purpose — the shape is legitimate,
+        // and SparkKit now has its own regression test for it.
         #expect(viewModel.screens.contains { $0.item?.id == "digest-a" })
-
-        // Name the requests the stub actually saw. Runs have failed on this
-        // precondition without saying whether the digest detail was even asked
-        // for, or under what path. Recorded as an Issue rather than an #expect
-        // comment: the CI log prints an issue's own message, but prints only
-        // the expression of a failed expectation, so a comment never surfaces.
-        if !viewModel.openQuestions.contains(where: { $0.block.id == "block-question" }) {
-            let requested = await AppStubURLProtocol.recorded(host: Self.host)
-                .map { $0.url?.path ?? "<no path>" }
-            Issue.record("digest detail did not load. Paths requested: \(requested)")
-        }
+        #expect(viewModel.openQuestions.contains { $0.block.id == "block-question" })
 
         return viewModel
     }
