@@ -92,15 +92,16 @@ struct UpToSpeedQuestionReadTests {
         // invert what these tests assert.
         #expect(viewModel.screens.contains { $0.item?.id == "digest-a" })
 
-        // Name the requests the stub actually saw. Two runs have now failed on
-        // the expectation below without saying whether the digest detail was
-        // even asked for, or under what path — so report it rather than guess.
-        let requested = await AppStubURLProtocol.recorded(host: Self.host)
-            .map { $0.url?.path ?? "<no path>" }
-        #expect(
-            viewModel.openQuestions.contains { $0.block.id == "block-question" },
-            "digest detail did not load. Paths requested: \(requested)"
-        )
+        // Name the requests the stub actually saw. Runs have failed on this
+        // precondition without saying whether the digest detail was even asked
+        // for, or under what path. Recorded as an Issue rather than an #expect
+        // comment: the CI log prints an issue's own message, but prints only
+        // the expression of a failed expectation, so a comment never surfaces.
+        if !viewModel.openQuestions.contains(where: { $0.block.id == "block-question" }) {
+            let requested = await AppStubURLProtocol.recorded(host: Self.host)
+                .map { $0.url?.path ?? "<no path>" }
+            Issue.record("digest detail did not load. Paths requested: \(requested)")
+        }
 
         return viewModel
     }
