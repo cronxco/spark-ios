@@ -586,8 +586,12 @@ final class UpToSpeedViewModel {
     }
 
     private func expandFlintItem(item: UpToSpeedItem, digest: FlintDigest?) -> [UpToSpeedScreen] {
+        // Detail before feed, matching `primaryDigestSummary` and `digestTitle`.
+        // They are separately decoded fields and can differ, and the detail
+        // fetch is the fuller record — building the cards from one and the
+        // yesterday recap from the other is how they drift apart.
         let sections = UpToSpeedParsing.digestCards(
-            from: digestSummary(item) ?? digest?.summary ?? ""
+            from: digest?.summary ?? digestSummary(item) ?? ""
         )
 
         var pages: [UpToSpeedScreen] = [.flintHeader(item, firstSection: sections.first)]

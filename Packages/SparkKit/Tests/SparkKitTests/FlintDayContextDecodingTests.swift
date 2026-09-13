@@ -131,6 +131,33 @@ struct FlintDayContextDecodingTests {
         #expect(!context.describesToday(now: dayBefore, calendar: calendar))
     }
 
+    /// A bare `yyyy-MM-dd` has no time zone, so it has to be resolved in the
+    /// same calendar it is compared against. Resolving it in the device's zone
+    /// and comparing it in another put the reader on the wrong side of local
+    /// midnight — "Tomorrow" showing as "Today", and a yesterday recap
+    /// appearing beside tomorrow's plans.
+    @Test("the day resolves in the calendar it is compared against")
+    func dayResolvesInTheGivenTimeZone() throws {
+        let context = FlintDayContext(date: "2026-09-13")
+
+        var farWest = Calendar(identifier: .gregorian)
+        farWest.timeZone = try #require(TimeZone(identifier: "Pacific/Midway"))
+        let lateOnTheDay = try #require(
+            farWest.date(from: DateComponents(year: 2026, month: 9, day: 13, hour: 23))
+        )
+        #expect(context.describesToday(now: lateOnTheDay, calendar: farWest))
+
+        var farEast = Calendar(identifier: .gregorian)
+        farEast.timeZone = try #require(TimeZone(identifier: "Pacific/Kiritimati"))
+        let earlyOnTheDay = try #require(
+            farEast.date(from: DateComponents(year: 2026, month: 9, day: 13, hour: 1))
+        )
+        #expect(context.describesToday(now: earlyOnTheDay, calendar: farEast))
+
+        // Same calendar day, different instants — which is the whole point.
+        #expect(context.day(in: farWest) != context.day(in: farEast))
+    }
+
     /// Every digest written before the field existed described the day it was
     /// written on, so silence has to mean today — not "some other day".
     @Test("a context with no date counts as today")
@@ -141,7 +168,7 @@ struct FlintDayContextDecodingTests {
         let context = try JSONDecoder().decode(FlintDayContext.self, from: json)
 
         #expect(context.date == nil)
-        #expect(context.day == nil)
+        #expect(context.day() == nil)
         #expect(context.describesToday(now: .now, calendar: .current))
     }
 
@@ -150,7 +177,26 @@ struct FlintDayContextDecodingTests {
         let json = Data(#"{"date":"not-a-date","calendar":[]}"#.utf8)
         let context = try JSONDecoder().decode(FlintDayContext.self, from: json)
 
-        #expect(context.day == nil)
+        #expect(context.day() == nil)
         #expect(context.describesToday(now: .now, calendar: .current))
+    }
+
+    /// `"weather": {}` decodes to a non-nil value carrying nothing, which the
+    /// opener would otherwise render as an empty tile with a default glyph.
+    @Test("a weather object with no fields set has no content")
+    func emptyWeatherHasNoContent() throws {
+        let empty = try JSONDecoder().decode(
+            FlintDayContext.self,
+            from: Data(#"{"weather":{}}"#.utf8)
+        )
+        #expect(empty.weather != nil)
+        #expect(empty.weather?.hasContent == false)
+
+        let blankStrings = FlintDayContextWeather(location: "", condition: "")
+        #expect(!blankStrings.hasContent)
+
+        #expect(FlintDayContextWeather(condition: "Overcast").hasContent)
+        #expect(FlintDayContextWeather(tempHighC: 20).hasContent)
+        #expect(FlintDayContextWeather(rainProbabilityPct: 0).hasContent)
     }
 }

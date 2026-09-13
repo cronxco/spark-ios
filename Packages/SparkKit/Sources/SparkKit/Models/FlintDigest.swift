@@ -178,15 +178,35 @@ public struct FlintDayContext: Codable, Sendable, Hashable {
     public let birthdays: [FlintDayContextBirthday]
     public let weather: FlintDayContextWeather?
 
-    private static let dayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        // Fixed locale and calendar: the wire format is always Gregorian
-        // yyyy-MM-dd, whatever the device is set to.
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }()
+    /// `yyyy-MM-dd` split into its parts, or nil when the wire value is not
+    /// that shape. Deliberately not a `DateFormatter`: a cached formatter
+    /// carries its own time zone, and resolving a bare calendar day against
+    /// one time zone and then comparing it in another is how "Tomorrow" ends
+    /// up labelled "Today" for a reader whose device sits on the other side
+    /// of midnight from it.
+    private static func dayComponents(from date: String) -> DateComponents? {
+        let parts = date.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count == 3,
+              parts[0].count == 4, parts[1].count == 2, parts[2].count == 2,
+              let year = Int(parts[0]), let month = Int(parts[1]), let day = Int(parts[2])
+        else { return nil }
+
+        return DateComponents(year: year, month: month, day: day)
+    }
+
+    /// The day this context describes, resolved in `calendar`'s time zone so it
+    /// can be compared or displayed in that same calendar. Nil when the digest
+    /// names no day, or names one that does not parse.
+    public func day(in calendar: Calendar = .current) -> Date? {
+        guard let date, let components = Self.dayComponents(from: date) else { return nil }
+
+        // The wire format is always Gregorian, whatever the device is set to;
+        // only the time zone is taken from the caller's calendar.
+        var gregorian = Calendar(identifier: .gregorian)
+        gregorian.timeZone = calendar.timeZone
+
+        return gregorian.date(from: components)
+    }
 
     /// Whether this context describes the day it is being read on. Drives
     /// whether the opener labels the block "Today" or names another day, and
@@ -196,13 +216,8 @@ public struct FlintDayContext: Codable, Sendable, Hashable {
     /// before the field existed described the day it was written on, and a
     /// malformed one should not silently relabel the reader's own day.
     public func describesToday(now: Date, calendar: Calendar) -> Bool {
-        guard let date, let parsed = Self.dayFormatter.date(from: date) else { return true }
+        guard let parsed = day(in: calendar) else { return true }
         return calendar.isDate(parsed, inSameDayAs: now)
-    }
-
-    /// The day this context describes, when it names one that parses.
-    public var day: Date? {
-        date.flatMap(Self.dayFormatter.date(from:))
     }
 
     public init(
@@ -293,6 +308,19 @@ public struct FlintDayContextWeather: Codable, Sendable, Hashable {
         case location, condition
         case tempHighC = "temp_high_c"
         case rainProbabilityPct = "rain_probability_pct"
+    }
+
+    /// Whether there is actually any weather here to show.
+    ///
+    /// Every property is optional, so `"weather": {}` decodes to a non-nil
+    /// value carrying nothing. Treating that as content put an empty tile with
+    /// a default cloud glyph on the opener — and, on an otherwise empty day,
+    /// the whole day section with it.
+    public var hasContent: Bool {
+        location?.isEmpty == false
+            || condition?.isEmpty == false
+            || tempHighC != nil
+            || rainProbabilityPct != nil
     }
 
     public init(location: String? = nil, condition: String? = nil, tempHighC: Double? = nil, rainProbabilityPct: Int? = nil) {

@@ -52,10 +52,15 @@ struct FlintOpenerScreen: View {
     /// A day context block can arrive with everything empty — a quiet day with
     /// no calendar, no birthdays and no weather. Rendering its heading anyway
     /// would put an empty "Today" on the card.
+    ///
+    /// Weather is judged by `hasContent` rather than by nil-ness, and
+    /// `DayContextSection` uses the same test: `"weather": {}` decodes to a
+    /// non-nil value holding nothing, which would otherwise count as a reason
+    /// to render the section.
     private func hasDayContent(_ context: FlintDayContext) -> Bool {
         !context.calendar.isEmpty
             || !context.birthdays.isEmpty
-            || context.weather != nil
+            || context.weather?.hasContent == true
             || viewModel.openerYesterday != nil
     }
 

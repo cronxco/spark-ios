@@ -29,7 +29,7 @@ struct DayContextSection: View {
                 calendarCard
             }
 
-            if let weather = dayContext.weather {
+            if let weather = dayContext.weather, weather.hasContent {
                 weatherRow(weather)
             }
 
@@ -44,8 +44,10 @@ struct DayContextSection: View {
     /// "Today", "Tomorrow", or the weekday for anything further out. A digest
     /// that names no day is describing the day it was written on.
     private var dayLabel: String {
-        guard let day = dayContext.day else { return "Today" }
         let calendar = Calendar.current
+        // Resolved in the same calendar it is compared against, so a bare
+        // yyyy-MM-dd cannot land on the wrong side of local midnight.
+        guard let day = dayContext.day(in: calendar) else { return "Today" }
 
         if calendar.isDate(day, inSameDayAs: now) { return "Today" }
         if let tomorrow = calendar.date(byAdding: .day, value: 1, to: now),

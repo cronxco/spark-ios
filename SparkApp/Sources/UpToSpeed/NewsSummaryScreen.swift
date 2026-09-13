@@ -140,7 +140,12 @@ struct NewsSummaryScreen: View {
         }
         .tint(Color.domainKnowledge)
         .task(id: showsFullArticle) {
-            guard showsFullArticle, articleBody == nil, articleError == nil else { return }
+            guard showsFullArticle, articleBody == nil else { return }
+            // Clear a previous failure rather than guarding on it: collapsing
+            // the disclosure cancels this task, and a cancellation recorded as
+            // an error would lock the article shut for as long as the page
+            // keeps its state.
+            articleError = nil
             await loadArticle()
         }
     }
@@ -154,7 +159,16 @@ struct NewsSummaryScreen: View {
             let objectID = detail.target?.id ?? detail.event.target?.id
             var objectDetail: ObjectDetail?
             if let objectID {
-                objectDetail = try? await appModel.apiClient.request(ObjectsEndpoint.detail(id: objectID))
+                do {
+                    objectDetail = try await appModel.apiClient.request(ObjectsEndpoint.detail(id: objectID))
+                } catch where error.isAPICancellation {
+                    throw error
+                } catch {
+                    // The object is a fallback source for the body; the event's
+                    // own content block usually carries it. Losing it is not
+                    // worth failing the whole disclosure over.
+                    objectDetail = nil
+                }
             }
 
             if let body = Self.articleBodyContent(detail, objectDetail: objectDetail) {
@@ -162,6 +176,9 @@ struct NewsSummaryScreen: View {
             } else {
                 articleError = "No full article text was returned for this item."
             }
+        } catch where error.isAPICancellation {
+            // The reader collapsed the disclosure or swiped away. Not a
+            // failure, and recording it as one would block the next attempt.
         } catch {
             articleError = (error as? LocalizedError)?.errorDescription
                 ?? "Could not load the full article."
