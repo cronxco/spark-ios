@@ -100,25 +100,6 @@ struct UpToSpeedParsingTests {
         #expect(item?.blurb == "Worth the time.")
     }
 
-    @Test("opener paragraphs skip the greeting and ALL-CAPS headings")
-    func openerParagraphs() {
-        let summary = """
-        Good Thursday morning.
-
-        DRIVING THE DAY
-
-        Readiness dropped hard overnight — 54, down 31% on baseline.
-
-        WHAT YOU'VE BEEN UP TO
-
-        Yesterday was a solid, uneventful office day.
-        """
-        let paragraphs = UpToSpeedParsing.openerParagraphs(from: summary, limit: 2)
-        #expect(paragraphs.count == 2)
-        #expect(paragraphs[0].hasPrefix("Readiness dropped hard"))
-        #expect(paragraphs[1].hasPrefix("Yesterday was a solid"))
-    }
-
     @Test("pulls a one-sentence yesterday recap from WHAT YOU'VE BEEN UP TO")
     func yesterdayRecap() {
         let summary = """
@@ -152,86 +133,126 @@ struct UpToSpeedParsingTests {
         #expect(UpToSpeedParsing.yesterdayRecap(from: summary) == nil)
     }
 
-    // MARK: - Opener overlap
+    // MARK: - Digest cards
 
-    /// The opener card leads with the digest's first paragraphs and the
-    /// briefing chapter then rendered them again, so the reader met the same
-    /// prose twice within a few swipes.
-    @Test("a section the opener already carries is recognised")
-    func sectionShownInOpenerIsDetected() {
-        let paragraph = "Today isn't the office day the calendar still claims — you and Dan are both on annual leave."
-        let section = "DRIVING THE DAY\n\n\(paragraph)"
+    /// The 12 September evening digest, verbatim. Its six cheat-sheet lines are
+    /// one `\n\n` chunk, which is exactly why the whole digest used to land on
+    /// the opener and leave the briefing chapter with an empty card.
+    private static let eveningSummary = """
+    Good Saturday evening.
 
-        #expect(UpToSpeedParsing.sectionIsShownInOpener(section, openerParagraphs: [paragraph]))
+    SATURDAY CHEAT SHEET
+
+    — Day two of the Newquay weekend stayed low-key: a long coastal walk was the extent of it.
+    — Sleep was strong at 90 (+10% on baseline). Resilience read Adequate for a third day running.
+    — This morning's open question about the wedding marker resolved itself before it needed asking again.
+    — The bigger news: tomorrow isn't a trip home. You're moving on to Penryn by train.
+    — Quiet spending: the daily savings-pot transfer and a £6 Patreon renewal, £11.10 in total.
+    — Also worth a note: John of John got finished today, five stars on Goodreads.
+
+    TOMORROW'S WORLD —
+
+    Sunday stays overcast across Cornwall — high around 20-22°C in both Newquay and Penryn.
+    """
+
+    @Test("the evening cheat sheet becomes three cards, not one wall of text")
+    func eveningDigestSplitsIntoCards() {
+        let cards = UpToSpeedParsing.digestCards(from: Self.eveningSummary)
+
+        #expect(cards.count == 3)
+        // Greeting dropped — the opener says it in its own voice.
+        #expect(!cards.contains { $0.contains("Good Saturday evening") })
+        // Heading rides the first card only.
+        #expect(cards[0].hasPrefix("SATURDAY CHEAT SHEET"))
+        #expect(!cards[1].contains("SATURDAY CHEAT SHEET"))
+        // Six bullets at a maximum of four come out evenly, not 4+2.
+        #expect(cards[0].components(separatedBy: "— ").count - 1 == 3)
+        #expect(cards[1].components(separatedBy: "— ").count - 1 == 3)
+        #expect(cards[2].hasPrefix("TOMORROW'S WORLD"))
     }
 
-    @Test("a section the opener does not carry is kept")
-    func unseenSectionIsKept() {
-        let section = "COMING UP —\n\nSaturday turns drier in Newquay."
+    @Test("prose sections are never split, however long")
+    func proseDigestKeepsItsSections() {
+        let summary = """
+        Good Saturday morning.
 
-        #expect(!UpToSpeedParsing.sectionIsShownInOpener(
-            section,
-            openerParagraphs: ["Today isn't the office day the calendar still claims."]
-        ))
+        DRIVING THE DAY
+
+        Day two of the Newquay birthday weekend, and the weather's cooperating.
+
+        Recovery is a genuine mixed picture. Sleep was strong — 90, +10% on baseline.
+
+        WHAT YOU'VE BEEN UP TO —
+
+        Friday's Newquay travel went as planned.
+
+        COMING UP —
+
+        Sunday turns wetter in Newquay.
+        """
+        let cards = UpToSpeedParsing.digestCards(from: summary)
+
+        #expect(cards.count == 4)
+        #expect(cards[0].hasPrefix("DRIVING THE DAY"))
+        #expect(cards[1].hasPrefix("Recovery is a genuine mixed picture"))
+        #expect(cards[2].hasPrefix("WHAT YOU'VE BEEN UP TO"))
+        #expect(cards[3].hasPrefix("COMING UP"))
     }
 
-    /// The opener shows the greeting as its headline. Leaving it in the digest
-    /// too gave the briefing a whole card holding only "Good Friday morning."
-    @Test("a bare greeting section is treated as already shown")
-    func greetingSectionIsDropped() {
-        #expect(UpToSpeedParsing.sectionIsShownInOpener("Good Friday morning.", openerParagraphs: []))
-        #expect(UpToSpeedParsing.sectionIsShownInOpener("Good Monday evening.", openerParagraphs: []))
-        #expect(UpToSpeedParsing.sectionIsShownInOpener("Happy Friday!", openerParagraphs: []))
-        #expect(UpToSpeedParsing.sectionIsShownInOpener("Happy Friday afternoon.", openerParagraphs: []))
+    @Test("a list at the limit stays on one card")
+    func shortListIsNotSplit() {
+        let summary = """
+        CHEAT SHEET
+
+        — One.
+        — Two.
+        — Three.
+        — Four.
+        """
+        let cards = UpToSpeedParsing.digestCards(from: summary)
+
+        #expect(cards.count == 1)
+        #expect(cards[0].hasPrefix("CHEAT SHEET"))
     }
 
-    @Test("substantive prose beginning with a positive word is kept")
-    func positiveOpeningProseIsKept() {
-        #expect(!UpToSpeedParsing.sectionIsShownInOpener(
-            "Good news: inflation is falling.",
-            openerParagraphs: []
-        ))
-        #expect(!UpToSpeedParsing.sectionIsShownInOpener(
-            "Happy customers renewed their subscriptions.",
-            openerParagraphs: []
-        ))
+    @Test("nine bullets split three ways rather than 4+4+1")
+    func longListSplitsEvenly() {
+        let bullets = (1...9).map { "— Item \($0)." }.joined(separator: "\n")
+        let cards = UpToSpeedParsing.digestCards(from: "CHEAT SHEET\n\n" + bullets)
+
+        #expect(cards.count == 3)
+        for card in cards {
+            #expect(card.components(separatedBy: "— ").count - 1 == 3)
+        }
     }
 
-    @Test("a heading with no body is treated as already shown")
+    @Test("a summary with no headings still yields its paragraphs")
+    func headinglessSummaryYieldsParagraphs() {
+        let cards = UpToSpeedParsing.digestCards(from: "First paragraph.\n\nSecond paragraph.")
+
+        #expect(cards == ["First paragraph.", "Second paragraph."])
+    }
+
+    @Test("an empty summary yields nothing")
+    func emptySummaryYieldsNoCards() {
+        #expect(UpToSpeedParsing.digestCards(from: "").isEmpty)
+        #expect(UpToSpeedParsing.digestCards(from: "   \n\n  ").isEmpty)
+    }
+
+    /// The opener greets the reader itself, so a digest that opens with nothing
+    /// but "Good Friday morning." would otherwise get a whole card for it.
+    @Test("bare greetings are recognised, real prose is not")
+    func bareGreetingDetection() {
+        #expect(UpToSpeedParsing.isBareGreeting("Good Friday morning."))
+        #expect(UpToSpeedParsing.isBareGreeting("Good Monday evening."))
+        #expect(UpToSpeedParsing.isBareGreeting("Happy Friday!"))
+        #expect(UpToSpeedParsing.isBareGreeting("Happy Friday afternoon."))
+        #expect(!UpToSpeedParsing.isBareGreeting("Good news: inflation is falling."))
+        #expect(!UpToSpeedParsing.isBareGreeting("Happy customers renewed their subscriptions."))
+    }
+
+    @Test("a heading with no body of its own is dropped")
     func headingOnlySectionIsDropped() {
-        #expect(UpToSpeedParsing.sectionIsShownInOpener("DRIVING THE DAY", openerParagraphs: []))
-    }
-
-    @Test("matching ignores incidental whitespace differences")
-    func matchIgnoresWhitespace() {
-        let section = "DRIVING THE DAY\n\nToday isn't  the office day\nthe calendar still claims."
-
-        #expect(UpToSpeedParsing.sectionIsShownInOpener(
-            section,
-            openerParagraphs: ["Today isn't the office day the calendar still claims."]
-        ))
-    }
-
-    @Test("a section containing both opener paragraphs is recognised")
-    func joinedOpenerParagraphsAreDetected() {
-        let first = "Readiness dropped hard overnight."
-        let second = "Your afternoon is clear for focused work."
-        let section = "DRIVING THE DAY\n\n\(first)\n\n\(second)"
-
-        #expect(UpToSpeedParsing.sectionIsShownInOpener(
-            section,
-            openerParagraphs: [first, second]
-        ))
-        #expect(!UpToSpeedParsing.sectionIsShownInOpener(
-            section,
-            openerParagraphs: [second, first]
-        ))
-    }
-
-    @Test("an empty opener keeps every real section")
-    func emptyOpenerKeepsProse() {
-        let section = "DRIVING THE DAY\n\nToday isn't the office day the calendar still claims."
-
-        #expect(!UpToSpeedParsing.sectionIsShownInOpener(section, openerParagraphs: []))
+        #expect(UpToSpeedParsing.digestCards(from: "DRIVING THE DAY").isEmpty)
     }
 }

@@ -2,18 +2,23 @@ import SparkKit
 import SparkUI
 import SwiftUI
 
-/// Renders a news_summary Up to Speed item as stacked glass cards —
-/// TL;DR, paragraph summary, and key points all visible at once.
-/// Card style matches KnowledgeItemDetailView using the domainKnowledge tint.
+/// Renders a news_summary Up to Speed item: headline, then the same story at
+/// increasing length — TL;DR as a standfirst, the key points, the summary, and
+/// the full article behind a disclosure.
+///
+/// The TL;DR used to sit in a tinted bubble with the summary and key points
+/// folded away behind "More detail", and the article opened a modal sheet that
+/// left the flow. Reading a newsletter should be reading, not spelunking.
 struct NewsSummaryScreen: View {
     let item: UpToSpeedItem
-    let viewModel: UpToSpeedViewModel
     var isActive: Bool = true
     let onReachedBottom: (() -> Void)?
 
     @Environment(AppModel.self) private var appModel
-    @State private var showFullArticle = false
-    @State private var showsDetail = false
+    @State private var showsFullArticle = false
+    @State private var articleBody: String?
+    @State private var isLoadingArticle = false
+    @State private var articleError: String?
 
     private var news: NewsSummary? {
         if case .newsSummary(let n) = item.payload { return n }
@@ -31,71 +36,56 @@ struct NewsSummaryScreen: View {
                     Text(news.title)
                         .font(SparkTypography.heroSmall)
                         .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
 
+                    if let meta = metaLine(news) {
+                        Text(meta)
+                            .font(SparkTypography.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    // The standfirst. It arrives wrapped in `**…**`, so markdown
+                    // rendering is what gives it its weight — no card needed.
                     if let tldr = news.tldr {
-                        GlassCard(tint: Color.domainKnowledge.opacity(0.1)) {
-                            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                                GlassCardHeader(icon: "bolt.fill", tint: .domainKnowledge, title: "TL;DR")
-                                SparkRichContentText(
-                                    text: tldr,
-                                    font: SparkTypography.body,
-                                    foregroundStyle: .primary,
-                                    lineSpacing: 5
-                                )
-                            }
+                        SparkRichContentText(
+                            text: tldr,
+                            font: SparkTypography.body,
+                            foregroundStyle: .primary,
+                            lineSpacing: 6
+                        )
+                    }
+
+                    if news.keyTakeaways != nil || news.summary != nil {
+                        Divider().opacity(0.2)
+                    }
+
+                    if let keyTakeaways = news.keyTakeaways {
+                        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                            SectionLabel("Key points")
+                            // The shared long-form renderer already turns `- `
+                            // lines into tinted bullets; the card used to carry
+                            // its own copy of that parsing.
+                            SparkLongFormContentView(
+                                text: keyTakeaways,
+                                tint: .domainKnowledge,
+                                paragraphFont: SparkTypography.body
+                            )
                         }
                     }
 
-                    // TL;DR, summary and key points are the same story at three
-                    // lengths. Leading with the TL;DR and folding the rest away
-                    // makes the card a briefing rather than an inbox digest —
-                    // expanded, it said everything three times.
-                    if news.summary != nil || news.keyTakeaways != nil {
-                        DisclosureGroup(isExpanded: $showsDetail) {
-                            VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-                                if let summary = news.summary {
-                                    GlassCard(tint: Color.domainKnowledge.opacity(0.06)) {
-                                        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                                            GlassCardHeader(icon: "doc.text", tint: .domainKnowledge, title: "Summary")
-                                            SparkRichContentText(
-                                                text: summary,
-                                                font: SparkTypography.body,
-                                                foregroundStyle: .primary,
-                                                lineSpacing: 5
-                                            )
-                                        }
-                                    }
-                                }
-
-                                if let keyTakeaways = news.keyTakeaways {
-                                    GlassCard(tint: Color.domainKnowledge.opacity(0.06)) {
-                                        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                                            GlassCardHeader(icon: "list.bullet", tint: .domainKnowledge, title: "Key Points")
-                                            keyPointsContent(from: keyTakeaways)
-                                        }
-                                    }
-                                }
-                            }
-                            .padding(.top, SparkSpacing.md)
-                        } label: {
-                            Text(showsDetail ? "Less" : "More detail")
-                                .font(SparkTypography.bodySmall)
-                                .foregroundStyle(Color.domainKnowledge)
+                    if let summary = news.summary {
+                        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                            SectionLabel("Summary")
+                            SparkRichContentText(
+                                text: summary,
+                                font: SparkTypography.body,
+                                foregroundStyle: .primary,
+                                lineSpacing: 6
+                            )
                         }
-                        .tint(Color.domainKnowledge)
                     }
 
-                    Button {
-                        showFullArticle = true
-                    } label: {
-                        Label("Read full article", systemImage: "doc.text.magnifyingglass")
-                            .font(SparkTypography.bodyStrong)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, SparkSpacing.md)
-                    }
-                    .sparkGlass(.capsule, tint: Color.domainKnowledge.opacity(0.12))
-                    .foregroundStyle(Color.domainKnowledge)
-                    .buttonStyle(.plain)
+                    fullArticleDisclosure
 
                     if let urlString = news.url, let url = URL(string: urlString) {
                         Link(destination: url) {
@@ -107,206 +97,83 @@ struct NewsSummaryScreen: View {
                 }
             }
         }
-        .sheet(isPresented: $showFullArticle) {
-            if let news {
-                FullArticleSheet(
-                    title: news.title,
-                    url: news.url,
-                    apiClient: appModel.apiClient,
-                    eventID: item.id
-                )
-            }
-        }
     }
 
-    // MARK: - Key points rendering
+    // MARK: - Meta
 
-    @ViewBuilder
-    private func keyPointsContent(from text: String) -> some View {
-        let bullets = parseBullets(from: text)
-        if bullets.isEmpty {
-            SparkRichContentText(
-                text: text,
-                font: SparkTypography.body,
-                foregroundStyle: .primary,
-                lineSpacing: 5
-            )
-        } else {
-            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                ForEach(bullets, id: \.self) { bullet in
-                    HStack(alignment: .top, spacing: SparkSpacing.sm) {
-                        Image(systemName: "checkmark")
-                            .font(.caption2)
-                            .foregroundStyle(Color.domainKnowledge)
-                            .padding(.top, 3)
-                        SparkRichContentText(
-                            text: bullet,
-                            font: SparkTypography.body,
-                            foregroundStyle: .primary,
-                            lineSpacing: 5
-                        )
-                    }
-                }
-            }
-        }
+    /// When it arrived. The publication is already the scaffold's label, so
+    /// repeating it here would just be the same word twice.
+    private func metaLine(_ news: NewsSummary) -> String? {
+        news.time?.formatted(.relative(presentation: .named))
     }
 
-    // MARK: - Bullet parsing (ported from KnowledgeItemDetailView)
+    // MARK: - Full article
 
-    private func parseBullets(from content: String) -> [String] {
-        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        for candidate in arrayCandidates(from: trimmed) {
-            if let decoded = decodeArray(candidate) {
-                return decoded
-            }
-        }
-
-        return trimmed
-            .components(separatedBy: .newlines)
-            .flatMap(splitInlineItems)
-            .map(stripBulletPrefix)
-            .compactMap(nonEmptyTrimmed)
-    }
-
-    private func arrayCandidates(from text: String) -> [String] {
-        var candidates = [text]
-        let unescaped = text
-            .replacingOccurrences(of: #"\""#, with: #"""#)
-            .replacingOccurrences(of: #"\/"#, with: "/")
-        if unescaped != text { candidates.append(unescaped) }
-        for candidate in candidates {
-            if let start = candidate.firstIndex(of: "["),
-               let end = candidate.lastIndex(of: "]"),
-               start < end {
-                let slice = String(candidate[start...end])
-                if !candidates.contains(slice) { candidates.append(slice) }
-            }
-        }
-        return candidates
-    }
-
-    private func decodeArray(_ text: String) -> [String]? {
-        guard text.hasPrefix("["), text.hasSuffix("]"),
-              let data = text.data(using: .utf8),
-              let decoded = try? JSONDecoder().decode([String].self, from: data)
-        else { return nil }
-        let bullets = decoded.map(stripBulletPrefix).compactMap(nonEmptyTrimmed)
-        return bullets.isEmpty ? nil : bullets
-    }
-
-    private func splitInlineItems(_ line: String) -> [String] {
-        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasPrefix("[\""), trimmed.hasSuffix("\"]") else { return [trimmed] }
-        let body = trimmed.dropFirst(2).dropLast(2)
-            .replacingOccurrences(of: #"\/"#, with: "/")
-        return body
-            .components(separatedBy: "\",\"")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-    }
-
-    private func stripBulletPrefix(_ line: String) -> String {
-        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        for prefix in ["- ", "* ", "• "] {
-            if trimmed.hasPrefix(prefix) { return String(trimmed.dropFirst(prefix.count)) }
-        }
-        return trimmed
-    }
-
-    private func nonEmptyTrimmed(_ text: String?) -> String? {
-        guard let t = text?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty else { return nil }
-        return t
-    }
-}
-
-// MARK: - FullArticleSheet
-
-/// Sheet that renders the full article content from the event's blocks.
-struct FullArticleSheet: View {
-    let title: String
-    let url: String?
-    let apiClient: APIClient
-    let eventID: String
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var detail: EventDetail?
-    @State private var objectDetail: ObjectDetail?
-    @State private var isLoading = false
-    @State private var errorMessage: String?
-
-    var body: some View {
-        NavigationStack {
+    /// Inline rather than a sheet, and loaded only once it is opened — the body
+    /// is a second and third request, which is not worth making for a card the
+    /// reader may well swipe straight past.
+    private var fullArticleDisclosure: some View {
+        DisclosureGroup(isExpanded: $showsFullArticle) {
             Group {
-                if isLoading {
-                    ProgressView("Loading article…")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let detail {
-                    eventContent(detail)
-                } else {
-                    ContentUnavailableView(
-                        "Article Unavailable",
-                        systemImage: "doc.text",
-                        description: Text(errorMessage ?? "Could not load the full article.")
-                    )
-                }
-            }
-            .background(SparkResolvedAppBackground().ignoresSafeArea())
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
-                }
-                if let urlString = url, let url = URL(string: urlString) {
-                    ToolbarItem(placement: .primaryAction) {
-                        Link(destination: url) {
-                            Image(systemName: "safari")
-                        }
+                if isLoadingArticle {
+                    HStack(spacing: SparkSpacing.sm) {
+                        ProgressView()
+                        Text("Loading article…")
+                            .font(SparkTypography.bodySmall)
+                            .foregroundStyle(.secondary)
                     }
-                }
-            }
-        }
-        .task { await loadEvent() }
-    }
-
-    private func eventContent(_ detail: EventDetail) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-                if let body = articleBodyContent(detail) {
-                    SparkLongFormContentView(text: body, tint: .domainKnowledge)
+                } else if let articleBody {
+                    SparkLongFormContentView(text: articleBody, tint: .domainKnowledge)
                 } else {
-                    ContentUnavailableView(
-                        "Article Unavailable",
-                        systemImage: "doc.text",
-                        description: Text("No full article text was returned for this item.")
-                    )
+                    Text(articleError ?? "No full article text was returned for this item.")
+                        .font(SparkTypography.bodySmall)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .padding(SparkSpacing.lg)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, SparkSpacing.md)
+        } label: {
+            Text(showsFullArticle ? "Hide full article" : "Full article")
+                .font(SparkTypography.bodySmall)
+                .foregroundStyle(Color.domainKnowledge)
         }
-        .scrollContentBackground(.hidden)
+        .tint(Color.domainKnowledge)
+        .task(id: showsFullArticle) {
+            guard showsFullArticle, articleBody == nil, articleError == nil else { return }
+            await loadArticle()
+        }
     }
 
-    private func loadEvent() async {
-        isLoading = true
-        errorMessage = nil
+    private func loadArticle() async {
+        isLoadingArticle = true
+        defer { isLoadingArticle = false }
+
         do {
-            let eventDetail = try await apiClient.request(EventsEndpoint.detail(id: eventID))
-            detail = eventDetail
-            let objectID = eventDetail.target?.id ?? eventDetail.event.target?.id
+            let detail = try await appModel.apiClient.request(EventsEndpoint.detail(id: item.id))
+            let objectID = detail.target?.id ?? detail.event.target?.id
+            var objectDetail: ObjectDetail?
             if let objectID {
-                objectDetail = try? await apiClient.request(ObjectsEndpoint.detail(id: objectID))
+                objectDetail = try? await appModel.apiClient.request(ObjectsEndpoint.detail(id: objectID))
+            }
+
+            if let body = Self.articleBodyContent(detail, objectDetail: objectDetail) {
+                articleBody = body
             } else {
-                objectDetail = nil
+                articleError = "No full article text was returned for this item."
             }
         } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? "Could not load the full article."
+            articleError = (error as? LocalizedError)?.errorDescription
+                ?? "Could not load the full article."
         }
-        isLoading = false
     }
 
-    private func articleBodyContent(_ detail: EventDetail) -> String? {
+    /// The article text, preferring the event's own content block, then the
+    /// target object, then the event's target. Lifted unchanged from the sheet
+    /// this disclosure replaced.
+    static func articleBodyContent(_ detail: EventDetail, objectDetail: ObjectDetail?) -> String? {
         let service = detail.event.service
+
         if let block = detail.blocks.first(where: { block in
             !isRawBlock(block)
                 && nonEmpty(block.content) != nil
@@ -321,22 +188,18 @@ struct FullArticleSheet: View {
             return text
         }
 
-        if let text = nonEmpty(detail.target?.content) {
-            return text
-        }
-
-        return nil
+        return nonEmpty(detail.target?.content)
     }
 
-    private func isRawBlock(_ block: Block) -> Bool {
+    private static func isRawBlock(_ block: Block) -> Bool {
         block.blockType.localizedCaseInsensitiveContains("raw")
     }
 
-    private func blockType(_ block: Block, matches expected: String) -> Bool {
+    private static func blockType(_ block: Block, matches expected: String) -> Bool {
         block.blockType.caseInsensitiveCompare(expected) == .orderedSame
     }
 
-    private func nonEmpty(_ text: String?) -> String? {
+    private static func nonEmpty(_ text: String?) -> String? {
         guard let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
             return nil
         }

@@ -252,13 +252,6 @@ struct UpToSpeedView: View {
             CheckInScreen(item: item, viewModel: vm)
         case .anomaly(let item):
             AnomalyScreen(item: item, viewModel: vm, isActive: isActive)
-        case .dayContext(_, let context, let yesterday):
-            DayContextScreen(
-                dayContext: context,
-                yesterday: yesterday,
-                isActive: isActive,
-                onReachedBottom: consumed
-            )
         case .newsStory(let item, let section, let sectionIndex, let total):
             NewsStoryScreen(
                 item: item,
@@ -269,7 +262,7 @@ struct UpToSpeedView: View {
                 onReachedBottom: consumed
             )
         case .newsSummary(let item):
-            NewsSummaryScreen(item: item, viewModel: vm, isActive: isActive, onReachedBottom: consumed)
+            NewsSummaryScreen(item: item, isActive: isActive, onReachedBottom: consumed)
         case .wrap:
             WrapScreen(
                 viewModel: vm,

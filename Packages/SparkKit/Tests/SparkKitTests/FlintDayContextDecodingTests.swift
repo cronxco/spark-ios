@@ -112,4 +112,45 @@ struct FlintDayContextDecodingTests {
         }
         return decoder
     }
+
+    @Test("date decodes and drives describesToday")
+    func dateDecodes() throws {
+        let json = Data("""
+        {"date":"2026-09-13","calendar":[],"birthdays":[],"weather":null}
+        """.utf8)
+        let context = try JSONDecoder().decode(FlintDayContext.self, from: json)
+
+        #expect(context.date == "2026-09-13")
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/London") ?? .gmt
+        let onTheDay = try #require(calendar.date(from: DateComponents(year: 2026, month: 9, day: 13, hour: 20)))
+        let dayBefore = try #require(calendar.date(from: DateComponents(year: 2026, month: 9, day: 12, hour: 20)))
+
+        #expect(context.describesToday(now: onTheDay, calendar: calendar))
+        #expect(!context.describesToday(now: dayBefore, calendar: calendar))
+    }
+
+    /// Every digest written before the field existed described the day it was
+    /// written on, so silence has to mean today — not "some other day".
+    @Test("a context with no date counts as today")
+    func absentDateCountsAsToday() throws {
+        let json = Data("""
+        {"calendar":[],"birthdays":[]}
+        """.utf8)
+        let context = try JSONDecoder().decode(FlintDayContext.self, from: json)
+
+        #expect(context.date == nil)
+        #expect(context.day == nil)
+        #expect(context.describesToday(now: .now, calendar: .current))
+    }
+
+    @Test("an unparseable date counts as today rather than relabelling the day")
+    func malformedDateCountsAsToday() throws {
+        let json = Data(#"{"date":"not-a-date","calendar":[]}"#.utf8)
+        let context = try JSONDecoder().decode(FlintDayContext.self, from: json)
+
+        #expect(context.day == nil)
+        #expect(context.describesToday(now: .now, calendar: .current))
+    }
 }

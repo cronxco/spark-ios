@@ -167,15 +167,51 @@ public struct FlintDigestBlock: Codable, Sendable, Hashable, Identifiable {
 /// built by the day-briefing skill from the same grounding it uses for the prose
 /// digest. Powers the Up to Speed flow's "Your day" screen.
 public struct FlintDayContext: Codable, Sendable, Hashable {
+    /// The local day this context describes, `yyyy-MM-dd`.
+    ///
+    /// Morning and afternoon digests describe today; the evening digest
+    /// describes tomorrow, because by then today is over and what the reader
+    /// needs from the opener is what happens next. `nil` on digests written
+    /// before the field existed, which are all describing today.
+    public let date: String?
     public let calendar: [FlintDayContextEvent]
     public let birthdays: [FlintDayContextBirthday]
     public let weather: FlintDayContextWeather?
 
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        // Fixed locale and calendar: the wire format is always Gregorian
+        // yyyy-MM-dd, whatever the device is set to.
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
+    /// Whether this context describes the day it is being read on. Drives
+    /// whether the opener labels the block "Today" or names another day, and
+    /// whether a "yesterday" recap still makes sense beside it.
+    ///
+    /// A missing or unparseable `date` counts as today: every digest written
+    /// before the field existed described the day it was written on, and a
+    /// malformed one should not silently relabel the reader's own day.
+    public func describesToday(now: Date, calendar: Calendar) -> Bool {
+        guard let date, let parsed = Self.dayFormatter.date(from: date) else { return true }
+        return calendar.isDate(parsed, inSameDayAs: now)
+    }
+
+    /// The day this context describes, when it names one that parses.
+    public var day: Date? {
+        date.flatMap(Self.dayFormatter.date(from:))
+    }
+
     public init(
+        date: String? = nil,
         calendar: [FlintDayContextEvent] = [],
         birthdays: [FlintDayContextBirthday] = [],
         weather: FlintDayContextWeather? = nil
     ) {
+        self.date = date
         self.calendar = calendar
         self.birthdays = birthdays
         self.weather = weather
@@ -183,13 +219,14 @@ public struct FlintDayContext: Codable, Sendable, Hashable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        date = try container.decodeIfPresent(String.self, forKey: .date)
         calendar = try container.decodeIfPresent([FlintDayContextEvent].self, forKey: .calendar) ?? []
         birthdays = try container.decodeIfPresent([FlintDayContextBirthday].self, forKey: .birthdays) ?? []
         weather = try container.decodeIfPresent(FlintDayContextWeather.self, forKey: .weather)
     }
 
     enum CodingKeys: String, CodingKey {
-        case calendar, birthdays, weather
+        case date, calendar, birthdays, weather
     }
 }
 

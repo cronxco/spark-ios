@@ -1,3 +1,4 @@
+import SparkKit
 import SwiftUI
 
 #if canImport(UIKit)
@@ -233,14 +234,13 @@ public enum SparkLongFormBlock: Sendable, Hashable {
         return nil
     }
 
+    /// Bullet detection lives in `MarkdownList` so the digest card splitter in
+    /// SparkKit and this renderer cannot disagree about what a bullet is.
     private static func isBulletLine(_ line: String) -> Bool {
-        line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("• ")
+        MarkdownList.isBullet(line)
     }
 
     private static func stripBulletPrefix(_ line: String) -> String {
-        if isBulletLine(line) {
-            return String(line.dropFirst(2))
-        }
-        return line
+        MarkdownList.stripBullet(line)
     }
 }

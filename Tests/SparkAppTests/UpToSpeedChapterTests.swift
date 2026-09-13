@@ -13,7 +13,6 @@ struct UpToSpeedChapterTests {
             .anomaly(domain: "health"),
             .digest(title: "Morning Digest"),
             .digest(title: "Morning Digest"),
-            .day,
             .news, .news, .news,
             .wrap, .wrap,
         ]
@@ -24,16 +23,21 @@ struct UpToSpeedChapterTests {
             .intro,
             .anomaly(domain: "health"),
             .digest(title: "Morning Digest"),
-            .day,
             .news,
             .wrap,
         ])
-        #expect(chapters.map(\.cardCount) == [1, 1, 2, 1, 3, 2])
-        #expect(chapters[3].range == 4..<5)
-        #expect(chapters[4].range == 5..<8)
-        #expect(chapters[5].range == 8..<10)
-        #expect(chapters[3].title == "Your day")
-        #expect(chapters[3].shortLabel == "Day")
+        #expect(chapters.map(\.cardCount) == [1, 1, 2, 3, 2])
+        #expect(chapters[3].range == 4..<7)
+        #expect(chapters[4].range == 7..<9)
+    }
+
+    /// The day is a section of the opener now, not a chapter of its own, so the
+    /// intro is literally the day rather than an abstract orientation.
+    @Test func introChapterIsTheDay() {
+        let chapters = UpToSpeedChapter.chapters(for: [.intro])
+
+        #expect(chapters[0].title == "Your day")
+        #expect(chapters[0].shortLabel == "Start")
     }
 
     @Test func distinctDigestTitlesStayInSeparateChapters() {
@@ -53,7 +57,7 @@ struct UpToSpeedChapterTests {
 
     @Test func chapterAccentsMatchTheirKind() {
         let chapters = UpToSpeedChapter.chapters(for: [
-            .anomaly(domain: nil), .day, .news, .wrap,
+            .anomaly(domain: nil), .intro, .news, .wrap,
         ])
         #expect(chapters[0].accent == .sparkWarning)
         #expect(chapters[1].accent == .sparkAccent)

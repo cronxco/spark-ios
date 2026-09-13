@@ -138,14 +138,37 @@ public struct NewsSummary: Codable, Sendable {
         tldr = try container.decodeIfPresent(String.self, forKey: .tldr)
         summary = try container.decodeIfPresent(String.self, forKey: .summary)
 
-        // key_takeaways may arrive as a JSON array or a pre-formatted string
+        // key_takeaways may arrive as a JSON array, as a string holding a JSON
+        // array, or as pre-formatted bullet lines. The repair lives here rather
+        // than in the view: the card renders it through the shared long-form
+        // renderer, which reasonably expects markdown and not a stringified
+        // array to have leaked this far.
         if let array = try? container.decode([String].self, forKey: .keyTakeaways) {
-            keyTakeaways = array
-                .map { $0.hasPrefix("- ") ? $0 : "- \($0)" }
-                .joined(separator: "\n")
+            keyTakeaways = Self.bulletLines(from: array)
+        } else if let text = try container.decodeIfPresent(String.self, forKey: .keyTakeaways) {
+            keyTakeaways = Self.decodedArray(from: text).map(Self.bulletLines(from:)) ?? text
         } else {
-            keyTakeaways = try container.decodeIfPresent(String.self, forKey: .keyTakeaways)
+            keyTakeaways = nil
         }
+    }
+
+    /// One `- ` line per takeaway, leaving alone any that already carries a
+    /// bullet — the summarisers are inconsistent about writing one.
+    private static func bulletLines(from items: [String]) -> String {
+        items
+            .map { $0.hasPrefix("- ") ? $0 : "- \($0)" }
+            .joined(separator: "\n")
+    }
+
+    /// A JSON array that arrived as a string, or nil when the text is just text.
+    private static func decodedArray(from text: String) -> [String]? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("["), trimmed.hasSuffix("]"),
+              let data = trimmed.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode([String].self, from: data),
+              !decoded.isEmpty
+        else { return nil }
+        return decoded
     }
 }
 

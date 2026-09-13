@@ -11,7 +11,6 @@ struct UpToSpeedChapter: Identifiable {
         /// because the run-length grouping treats unequal keys as a boundary.
         case anomaly(domain: String?)
         case digest(title: String)
-        case day
         case news
         case wrap
         /// Everything already seen today, offered after the flow proper.
@@ -22,7 +21,6 @@ struct UpToSpeedChapter: Identifiable {
             case .intro: "Start"
             case .anomaly(let domain): Self.anomalyLabel(for: domain)
             case .digest: "Briefing"
-            case .day: "Day"
             case .news: "News"
             case .wrap: "Wrap"
             case .recap: "Earlier"
@@ -34,7 +32,6 @@ struct UpToSpeedChapter: Identifiable {
             case .intro: .sparkAccent
             case .anomaly(let domain): Self.anomalyAccent(for: domain)
             case .digest: .sparkAccent
-            case .day: .sparkAccent
             case .news: .sparkOcean
             case .wrap: .sparkSuccess
             case .recap: .secondary
@@ -100,13 +97,14 @@ struct UpToSpeedChapter: Identifiable {
 
     private static func title(for kind: Kind) -> String {
         switch kind {
-        case .intro: "Where you are"
+        // The opener leads with today's calendar and weather now, so it is
+        // literally the day rather than an abstract orientation.
+        case .intro: "Your day"
         // Not "Your readiness dip": the chapter holds whatever was unusual,
         // which is often neither readiness nor a dip — and, before the domain
         // was known, was as likely to be a bank balance as a health metric.
         case .anomaly: kind.shortLabel
         case .digest(let title): title
-        case .day: "Your day"
         case .news: "News roundup"
         case .wrap: "Before you go"
         case .recap: "Already seen today"

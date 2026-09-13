@@ -17,7 +17,14 @@ final class UpToSpeedViewModel {
 
     // Derived content for the opener + wrap screens.
     private(set) var openerGreeting: String = ""
-    private(set) var openerParagraphs: [String] = []
+    /// Calendar, birthdays and weather for the opener. The day used to be a
+    /// chapter of its own, several swipes in, while the opener led with two
+    /// paragraphs lifted off the digest — which left the briefing chapter with
+    /// nothing to say. The day is what the reader actually opens this for.
+    private(set) var openerDayContext: FlintDayContext?
+    /// One line on yesterday, shown only when the day context describes today.
+    /// Beside tomorrow's plans it reads as a non-sequitur.
+    private(set) var openerYesterday: String?
     /// Every pick from today's reading list. Was a single optional, which
     /// silently dropped the second pick whenever Flint offered two.
     private(set) var readingItems: [UpToSpeedParsing.ReadingItem] = []
@@ -197,13 +204,11 @@ final class UpToSpeedViewModel {
             // is not what puts it back.
             return nil
 
-        case .flintHeader, .flintParagraph, .flintInsight, .flintQuestion, .dayContext:
-            // A day-context screen isn't always adjacent to the rest of its
-            // digest's screens (it's appended once, after every digest chapter),
-            // so "last page" has to scan forward rather than compare index+1 —
-            // otherwise a digest whose day-context screen trails its own
-            // content never gets marked read at all, or gets marked read
-            // before that screen is shown, depending on queue order.
+        case .flintHeader, .flintParagraph, .flintInsight, .flintQuestion:
+            // "Last page" scans forward rather than comparing index + 1. A
+            // digest's screens are contiguous today, so the two agree, but the
+            // scan is what makes that an observation rather than a requirement
+            // the next reordering can quietly break.
             guard let itemID = screen.item?.id else { return nil }
             guard isLastScreen(forItemID: itemID, at: index, in: screens) else { return nil }
             guard allScreensAreConsumed(forItemID: itemID, in: screens, consumed: consumed) else { return nil }
@@ -427,7 +432,8 @@ final class UpToSpeedViewModel {
         foldedDigestIDs = []
         openQuestions = []
         readingItems = []
-        openerParagraphs = []
+        openerDayContext = nil
+        openerYesterday = nil
 
         let unread = visibleUnreadItems(from: items)
         snapshotCount = unread.count
@@ -454,7 +460,9 @@ final class UpToSpeedViewModel {
         var newsScreens: [(screen: UpToSpeedScreen, key: UpToSpeedChapter.Kind)] = []
         // digestItems is sorted oldest → newest, so the last match here is the
         // most-recently-created day-context block across all of today's digests.
-        var dayContextCandidate: (item: UpToSpeedItem, context: FlintDayContext)?
+        // In the evening that is the digest describing tomorrow, which is what
+        // the opener should lead with once today is over.
+        var dayContextCandidate: FlintDayContext?
 
         for item in digestItems {
             let full = digests[item.id]
@@ -462,7 +470,7 @@ final class UpToSpeedViewModel {
 
             if let block = full?.blocks.first(where: { $0.blockType == "flint_day_context" }),
                let context = block.dayContext {
-                dayContextCandidate = (item, context)
+                dayContextCandidate = context
             }
 
             // Fold a reading-list digest's picks into the wrap screen — but only
@@ -501,33 +509,22 @@ final class UpToSpeedViewModel {
                 // expansion rather than folding it as "read" with nothing shown.
             }
 
-            // Primary digest — prose + insights + questions
-            let buildsOpener = primaryDigestSummary == nil
-            if buildsOpener {
+            // Primary digest — prose + insights + questions. The opener takes
+            // nothing from it: every paragraph belongs to the briefing chapter,
+            // which is the only place the reader is promised them.
+            if primaryDigestSummary == nil {
                 primaryDigestSummary = full?.summary ?? digestSummary(item)
-                openerParagraphs = primaryDigestSummary.map {
-                    UpToSpeedParsing.openerParagraphs(from: $0)
-                } ?? []
             }
 
-            // Only the digest the opener was built from can have had its prose
-            // shown there. The filter compares text, not provenance, so passing
-            // these to a later digest let it lose a section the reader never
-            // met on the opener — two briefings that happen to word something
-            // identically are still two separate things to read.
-            for screen in expandFlintItem(
-                item: item,
-                digest: full,
-                shownInOpener: buildsOpener ? openerParagraphs : []
-            ) {
+            for screen in expandFlintItem(item: item, digest: full) {
                 built.append((screen, .digest(title: title)))
             }
         }
 
-        // 3 — day context (if any digest carried one), then news
-        if let candidate = dayContextCandidate {
-            let yesterday = primaryDigestSummary.flatMap(UpToSpeedParsing.yesterdayRecap(from:))
-            built.append((.dayContext(candidate.item, candidate.context, yesterday: yesterday), .day))
+        // 3 — day context onto the opener, then news
+        openerDayContext = dayContextCandidate
+        if dayContextCandidate?.describesToday(now: .now, calendar: .current) ?? true {
+            openerYesterday = primaryDigestSummary.flatMap(UpToSpeedParsing.yesterdayRecap(from:))
         }
         built.append(contentsOf: newsScreens)
         for item in unread where item.type == .newsSummary {
@@ -588,16 +585,10 @@ final class UpToSpeedViewModel {
         UpToSpeedVisibility(now: .now, calendar: .current).caughtUpItems(from: items)
     }
 
-    private func expandFlintItem(
-        item: UpToSpeedItem,
-        digest: FlintDigest?,
-        shownInOpener: [String] = []
-    ) -> [UpToSpeedScreen] {
-        // Drop what the opener already carries. Without this the briefing
-        // repeated the opener's paragraphs verbatim, and its first card held
-        // only the greeting — a full screen for two words.
-        let sections = parseSections(digestSummary(item) ?? digest?.summary ?? "")
-            .filter { !UpToSpeedParsing.sectionIsShownInOpener($0, openerParagraphs: shownInOpener) }
+    private func expandFlintItem(item: UpToSpeedItem, digest: FlintDigest?) -> [UpToSpeedScreen] {
+        let sections = UpToSpeedParsing.digestCards(
+            from: digestSummary(item) ?? digest?.summary ?? ""
+        )
 
         var pages: [UpToSpeedScreen] = [.flintHeader(item, firstSection: sections.first)]
 
@@ -702,39 +693,6 @@ final class UpToSpeedViewModel {
             return "\(base), \(name)."
         }
         return "\(base)."
-    }
-
-    // MARK: - Section parsing
-
-    /// Groups double-newline-separated chunks into display sections.
-    /// Heading chunks (all-uppercase, < 80 chars) are merged with the body
-    /// paragraph that follows them so they appear together on one card.
-    private func parseSections(_ text: String) -> [String] {
-        let chunks = text.components(separatedBy: "\n\n")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
-        var sections: [String] = []
-        var pending: [String] = []
-
-        for chunk in chunks {
-            pending.append(chunk)
-            if !isHeading(chunk) {
-                sections.append(pending.joined(separator: "\n\n"))
-                pending = []
-            }
-        }
-        if !pending.isEmpty {
-            sections.append(pending.joined(separator: "\n\n"))
-        }
-        return sections
-    }
-
-    private func isHeading(_ chunk: String) -> Bool {
-        guard chunk.count < 80 else { return false }
-        let letters = chunk.filter { $0.isLetter }
-        guard !letters.isEmpty else { return false }
-        return letters.allSatisfy { $0.isUppercase }
     }
 
     private func enqueueMarkRead(itemID: String, type: UpToSpeedItemType) {
