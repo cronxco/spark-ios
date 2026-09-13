@@ -114,3 +114,32 @@ struct SparkTagPresentationTests {
         #expect(untyped.label == nil)
     }
 }
+
+@Suite("Long-form bullet markers")
+struct SparkLongFormBulletTests {
+    /// Flint writes its cheat sheets with em dashes. The renderer only knew
+    /// `-`, `*` and `•`, so a six-item list arrived as one run-on paragraph.
+    @Test("em-dash and en-dash lines parse as bullets")
+    func dashBulletsAreBullets() {
+        let text = "— First item.\n— Second item.\n— Third item."
+        let blocks = SparkLongFormBlock.parse(text)
+
+        #expect(blocks == [.bullets(["First item.", "Second item.", "Third item."])])
+
+        let enDash = SparkLongFormBlock.parse("– One.\n– Two.")
+        #expect(enDash == [.bullets(["One.", "Two."])])
+    }
+
+    @Test("the established markers still parse as bullets")
+    func classicBulletsStillWork() {
+        #expect(SparkLongFormBlock.parse("- One.\n* Two.\n• Three.")
+            == [.bullets(["One.", "Two.", "Three."])])
+    }
+
+    /// A dash used mid-sentence is punctuation, not a list.
+    @Test("a mid-sentence em dash stays prose")
+    func inlineDashIsNotABullet() {
+        let text = "Sleep was strong at 90 — well above baseline."
+        #expect(SparkLongFormBlock.parse(text) == [.paragraph(text)])
+    }
+}

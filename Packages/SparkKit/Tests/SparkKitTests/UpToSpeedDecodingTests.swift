@@ -403,3 +403,32 @@ struct AnomalyPayloadDecodingTests {
         }
     }
 }
+
+@Suite("News summary key takeaways")
+struct NewsSummaryKeyTakeawaysTests {
+    /// The summarisers are inconsistent: sometimes a real JSON array, sometimes
+    /// that array stringified, sometimes plain bullet lines. The card renders
+    /// through the shared markdown renderer, so the repair belongs in decoding.
+    @Test("key_takeaways decodes from an array, a stringified array, or prose")
+    func keyTakeawaysShapes() throws {
+        func takeaways(_ raw: String) throws -> String? {
+            let json = Data("""
+            {"title":"T","source":"newsletter","key_takeaways":\(raw)}
+            """.utf8)
+            return try JSONDecoder().decode(NewsSummary.self, from: json).keyTakeaways
+        }
+
+        #expect(try takeaways(#"["First","Second"]"#) == "- First\n- Second")
+        #expect(try takeaways(#""[\"First\",\"Second\"]""#) == "- First\n- Second")
+        #expect(try takeaways(#""- Already bulleted\n- Second""#) == "- Already bulleted\n- Second")
+        #expect(try takeaways(#""Just a sentence.""#) == "Just a sentence.")
+    }
+
+    @Test("an existing bullet prefix is not doubled")
+    func keyTakeawaysKeepExistingBullets() throws {
+        let json = Data(#"{"title":"T","source":"n","key_takeaways":["- One","Two"]}"#.utf8)
+        let news = try JSONDecoder().decode(NewsSummary.self, from: json)
+
+        #expect(news.keyTakeaways == "- One\n- Two")
+    }
+}

@@ -6,13 +6,11 @@ import Testing
 
 @Suite("Up to Speed read marking")
 struct UpToSpeedReadMarkingTests {
-    // A day-context screen is appended once, after every digest chapter has
-    // built its screens — so it isn't necessarily adjacent to the rest of
-    // its own item's screens when another digest's screens land in between.
-    // `isLastScreen` has to scan forward rather than compare only against
-    // index + 1, or a digest whose day-context screen trails behind another
-    // digest's content would either get marked read too early (before its
-    // day-context screen is shown) or never get marked read at all.
+    // `isLastScreen` scans forward rather than comparing only against index + 1.
+    // A digest's screens are contiguous now that the day context has moved onto
+    // the opener, so the two agree — but the scan is what keeps that an
+    // observation about today's queue rather than a requirement the next
+    // reordering can quietly break, which is what the day-context screen did.
     @Test func lastScreenScansForwardPastInterveningScreens() {
         let itemA = digest(id: "digest-a")
         let itemB = digest(id: "digest-b")
@@ -21,13 +19,12 @@ struct UpToSpeedReadMarkingTests {
             .flintHeader(itemA, firstSection: "A's opening"),
             .flintParagraph(itemA, text: "A's body", index: 0),
             .flintHeader(itemB, firstSection: "B's opening"),
-            .dayContext(itemA, FlintDayContext(), yesterday: nil),
+            .flintParagraph(itemA, text: "A's trailing body", index: 1),
         ]
 
-        // Index 1 (A's last *contiguous* screen) is not actually the last
-        // A-tagged screen — its day-context screen is still ahead, past B.
+        // Index 1 is not A's last screen — one of its paragraphs is still
+        // ahead, past B.
         #expect(UpToSpeedViewModel.isLastScreen(forItemID: "digest-a", at: 1, in: screens) == false)
-        // Index 3 (the day-context screen itself) is genuinely the last.
         #expect(UpToSpeedViewModel.isLastScreen(forItemID: "digest-a", at: 3, in: screens) == true)
         // B has only one screen, so it's last right away.
         #expect(UpToSpeedViewModel.isLastScreen(forItemID: "digest-b", at: 2, in: screens) == true)

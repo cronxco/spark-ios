@@ -254,63 +254,105 @@ public enum UpToSpeedParsing {
         )
     }
 
-    // MARK: - Opener
+    // MARK: - Digest cards
 
-    /// The first one or two body paragraphs of a digest summary, skipping a
-    /// leading bare greeting line and any ALL-CAPS section headings.
-    public static func openerParagraphs(from summary: String, limit: Int = 2) -> [String] {
-        let chunks = summary
-            .components(separatedBy: "\n\n")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
-        var paragraphs: [String] = []
-        for chunk in chunks {
-            if isSectionHeading(chunk) { continue }
-            if paragraphs.isEmpty, isBareGreeting(chunk) { continue }
-            paragraphs.append(chunk)
-            if paragraphs.count == limit { break }
-        }
-        return paragraphs
-    }
-
-    /// Whether a digest section has already been shown on the opener card.
+    /// A digest summary split into the cards the briefing chapter shows.
     ///
-    /// The opener leads with the digest's first body paragraphs, and the
-    /// briefing chapter then rendered those same paragraphs again — so the
-    /// reader met identical prose twice within a few swipes. A bare greeting
-    /// counts as shown too: the opener carries it as the headline, which
-    /// otherwise left the briefing's first card holding nothing but
-    /// "Good Friday morning."
-    public static func sectionIsShownInOpener(_ section: String, openerParagraphs: [String]) -> Bool {
-        let body = sectionBody(section)
+    /// A heading chunk (ALL-CAPS, or `## `) belongs with the prose that follows
+    /// it, so the two arrive together. A bare greeting is dropped — the opener
+    /// carries its own, and a card holding nothing but "Good Saturday evening."
+    /// is a whole screen for two words.
+    ///
+    /// A section whose body is one bullet list longer than `maxBullets` is split
+    /// into balanced runs, with the heading kept on the first card only. Prose is
+    /// never split: scrolling a paragraph is fine, scrolling a list of unrelated
+    /// facts is how the 12 September cheat sheet became one wall of text.
+    public static func digestCards(from summary: String, maxBullets: Int = 4) -> [String] {
+        sections(in: summary).flatMap { section -> [String] in
+            let body = sectionBody(section)
+            guard !body.isEmpty, !isBareGreeting(body) else { return [] }
+            return splitSection(section, maxBullets: maxBullets)
+        }
+    }
 
-        if body.isEmpty { return true }
-        if isBareGreeting(body) { return true }
+    /// Double-newline chunks, each heading merged into the body that follows it.
+    private static func sections(in text: String) -> [String] {
+        var sections: [String] = []
+        var pending: [String] = []
 
-        let normalised = normalisedForComparison(body)
-        if openerParagraphs.contains(where: { normalisedForComparison($0) == normalised }) {
-            return true
+        for chunk in chunks(of: text) {
+            pending.append(chunk)
+            if !isSectionHeading(chunk) {
+                sections.append(pending.joined(separator: "\n\n"))
+                pending = []
+            }
         }
 
-        let joinedOpener = normalisedForComparison(openerParagraphs.joined(separator: "\n\n"))
-        return !joinedOpener.isEmpty && joinedOpener == normalised
+        if !pending.isEmpty {
+            sections.append(pending.joined(separator: "\n\n"))
+        }
+
+        return sections
     }
 
-    /// A section with its ALL-CAPS heading lines removed, leaving the prose.
-    private static func sectionBody(_ section: String) -> String {
-        section
+    /// One card, unless the section is a long bullet list.
+    private static func splitSection(_ section: String, maxBullets: Int) -> [String] {
+        let parts = chunks(of: section)
+        let heading = parts.first.flatMap { isSectionHeading($0) ? $0 : nil }
+        let bodyChunks = heading == nil ? parts : Array(parts.dropFirst())
+
+        // Only a section that is entirely one list can be split. Splitting one
+        // with prose around it would shuffle the prose out of its place.
+        guard bodyChunks.count == 1, let body = bodyChunks.first else {
+            return [section]
+        }
+
+        let lines = body
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        guard lines.count > maxBullets, lines.allSatisfy(MarkdownList.isBullet) else {
+            return [section]
+        }
+
+        return balancedRuns(lines, maxPerRun: maxBullets).enumerated().map { index, run in
+            let text = run.joined(separator: "\n")
+            guard index == 0, let heading else { return text }
+            return heading + "\n\n" + text
+        }
+    }
+
+    /// As few runs as possible, then evened out — six bullets at a maximum of
+    /// four come out 3+3, not 4+2, so no card reads as the leftovers of the one
+    /// before it.
+    private static func balancedRuns(_ lines: [String], maxPerRun: Int) -> [[String]] {
+        let runCount = max(1, Int((Double(lines.count) / Double(maxPerRun)).rounded(.up)))
+        var runs: [[String]] = []
+        var start = 0
+
+        for index in 0..<runCount {
+            let remaining = lines.count - start
+            let size = Int((Double(remaining) / Double(runCount - index)).rounded(.up))
+            runs.append(Array(lines[start..<(start + size)]))
+            start += size
+        }
+
+        return runs
+    }
+
+    private static func chunks(of text: String) -> [String] {
+        text
             .components(separatedBy: "\n\n")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty && !isSectionHeading($0) }
-            .joined(separator: "\n\n")
+            .filter { !$0.isEmpty }
     }
 
-    private static func normalisedForComparison(_ text: String) -> String {
-        text.lowercased()
-            .components(separatedBy: .whitespacesAndNewlines)
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
+    /// A section with its heading lines removed, leaving the prose.
+    private static func sectionBody(_ section: String) -> String {
+        chunks(of: section)
+            .filter { !isSectionHeading($0) }
+            .joined(separator: "\n\n")
     }
 
     private static func isSectionHeading(_ chunk: String) -> Bool {
@@ -321,7 +363,10 @@ public enum UpToSpeedParsing {
         return letters.allSatisfy(\.isUppercase)
     }
 
-    private static func isBareGreeting(_ chunk: String) -> Bool {
+    /// A standalone "Good Saturday evening." with nothing else in it. Public
+    /// because the flow drops these wherever they appear: the opener already
+    /// greets the reader in its own voice.
+    public static func isBareGreeting(_ chunk: String) -> Bool {
         let weekday = #"(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)"#
         let timeOfDay = #"(?:morning|afternoon|evening)"#
         let pattern = #"^(?:good|happy) (?:(?:\#(weekday))(?: \#(timeOfDay))?|\#(timeOfDay)|weekend)[.!?]?$"#
@@ -343,10 +388,7 @@ public enum UpToSpeedParsing {
     /// summary carries no such section (afternoon/evening digests, or a
     /// morning digest that omitted it as a quiet-day simplification).
     public static func yesterdayRecap(from summary: String) -> String? {
-        let chunks = summary
-            .components(separatedBy: "\n\n")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+        let chunks = chunks(of: summary)
 
         guard let headingIndex = chunks.firstIndex(where: isYesterdayHeading) else { return nil }
         let bodyIndex = chunks.index(after: headingIndex)

@@ -167,15 +167,66 @@ public struct FlintDigestBlock: Codable, Sendable, Hashable, Identifiable {
 /// built by the day-briefing skill from the same grounding it uses for the prose
 /// digest. Powers the Up to Speed flow's "Your day" screen.
 public struct FlintDayContext: Codable, Sendable, Hashable {
+    /// The local day this context describes, `yyyy-MM-dd`.
+    ///
+    /// Morning and afternoon digests describe today; the evening digest
+    /// describes tomorrow, because by then today is over and what the reader
+    /// needs from the opener is what happens next. `nil` on digests written
+    /// before the field existed, which are all describing today.
+    public let date: String?
     public let calendar: [FlintDayContextEvent]
     public let birthdays: [FlintDayContextBirthday]
     public let weather: FlintDayContextWeather?
 
+    /// `yyyy-MM-dd` split into its parts, or nil when the wire value is not
+    /// that shape. Deliberately not a `DateFormatter`: a cached formatter
+    /// carries its own time zone, and resolving a bare calendar day against
+    /// one time zone and then comparing it in another is how "Tomorrow" ends
+    /// up labelled "Today" for a reader whose device sits on the other side
+    /// of midnight from it.
+    private static func dayComponents(from date: String) -> DateComponents? {
+        let parts = date.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count == 3,
+              parts[0].count == 4, parts[1].count == 2, parts[2].count == 2,
+              let year = Int(parts[0]), let month = Int(parts[1]), let day = Int(parts[2])
+        else { return nil }
+
+        return DateComponents(year: year, month: month, day: day)
+    }
+
+    /// The day this context describes, resolved in `calendar`'s time zone so it
+    /// can be compared or displayed in that same calendar. Nil when the digest
+    /// names no day, or names one that does not parse.
+    public func day(in calendar: Calendar = .current) -> Date? {
+        guard let date, let components = Self.dayComponents(from: date) else { return nil }
+
+        // The wire format is always Gregorian, whatever the device is set to;
+        // only the time zone is taken from the caller's calendar.
+        var gregorian = Calendar(identifier: .gregorian)
+        gregorian.timeZone = calendar.timeZone
+
+        return gregorian.date(from: components)
+    }
+
+    /// Whether this context describes the day it is being read on. Drives
+    /// whether the opener labels the block "Today" or names another day, and
+    /// whether a "yesterday" recap still makes sense beside it.
+    ///
+    /// A missing or unparseable `date` counts as today: every digest written
+    /// before the field existed described the day it was written on, and a
+    /// malformed one should not silently relabel the reader's own day.
+    public func describesToday(now: Date, calendar: Calendar) -> Bool {
+        guard let parsed = day(in: calendar) else { return true }
+        return calendar.isDate(parsed, inSameDayAs: now)
+    }
+
     public init(
+        date: String? = nil,
         calendar: [FlintDayContextEvent] = [],
         birthdays: [FlintDayContextBirthday] = [],
         weather: FlintDayContextWeather? = nil
     ) {
+        self.date = date
         self.calendar = calendar
         self.birthdays = birthdays
         self.weather = weather
@@ -183,13 +234,14 @@ public struct FlintDayContext: Codable, Sendable, Hashable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        date = try container.decodeIfPresent(String.self, forKey: .date)
         calendar = try container.decodeIfPresent([FlintDayContextEvent].self, forKey: .calendar) ?? []
         birthdays = try container.decodeIfPresent([FlintDayContextBirthday].self, forKey: .birthdays) ?? []
         weather = try container.decodeIfPresent(FlintDayContextWeather.self, forKey: .weather)
     }
 
     enum CodingKeys: String, CodingKey {
-        case calendar, birthdays, weather
+        case date, calendar, birthdays, weather
     }
 }
 
@@ -256,6 +308,19 @@ public struct FlintDayContextWeather: Codable, Sendable, Hashable {
         case location, condition
         case tempHighC = "temp_high_c"
         case rainProbabilityPct = "rain_probability_pct"
+    }
+
+    /// Whether there is actually any weather here to show.
+    ///
+    /// Every property is optional, so `"weather": {}` decodes to a non-nil
+    /// value carrying nothing. Treating that as content put an empty tile with
+    /// a default cloud glyph on the opener — and, on an otherwise empty day,
+    /// the whole day section with it.
+    public var hasContent: Bool {
+        location?.isEmpty == false
+            || condition?.isEmpty == false
+            || tempHighC != nil
+            || rainProbabilityPct != nil
     }
 
     public init(location: String? = nil, condition: String? = nil, tempHighC: Double? = nil, rainProbabilityPct: Int? = nil) {

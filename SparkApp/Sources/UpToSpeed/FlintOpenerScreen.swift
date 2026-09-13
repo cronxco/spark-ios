@@ -2,24 +2,29 @@ import SparkKit
 import SparkUI
 import SwiftUI
 
-/// First screen of the Up to Speed flow — Flint's greeting, a short spoken
-/// intro, and a tap-through list of the chapters ahead.
+/// First screen of the Up to Speed flow — Flint's greeting, the day itself, and
+/// a tap-through list of the chapters ahead.
+///
+/// The day used to be a chapter several swipes in while this card led with two
+/// paragraphs lifted off the digest. That was wrong twice over: it buried the
+/// thing most worth seeing first, and it stripped the briefing chapter of the
+/// prose that was its only content.
 struct FlintOpenerScreen: View {
     let viewModel: UpToSpeedViewModel
 
     var body: some View {
         StoryScreenScaffold(flintByline: .init(meta: openerTime)) {
-            VStack(alignment: .leading, spacing: SparkSpacing.lg) {
+            VStack(alignment: .leading, spacing: SparkSpacing.xl) {
                 Text(viewModel.openerGreeting)
                     .font(SparkTypography.heroXL)
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                ForEach(Array(viewModel.openerParagraphs.enumerated()), id: \.offset) { _, paragraph in
-                    Text(paragraph)
-                        .font(SparkTypography.longFormBody)
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
+                if let dayContext = viewModel.openerDayContext, hasDayContent(dayContext) {
+                    DayContextSection(
+                        dayContext: dayContext,
+                        yesterday: viewModel.openerYesterday
+                    )
                 }
 
                 if !chapterRows.isEmpty {
@@ -42,6 +47,21 @@ struct FlintOpenerScreen: View {
                 }
             }
         }
+    }
+
+    /// A day context block can arrive with everything empty — a quiet day with
+    /// no calendar, no birthdays and no weather. Rendering its heading anyway
+    /// would put an empty "Today" on the card.
+    ///
+    /// Weather is judged by `hasContent` rather than by nil-ness, and
+    /// `DayContextSection` uses the same test: `"weather": {}` decodes to a
+    /// non-nil value holding nothing, which would otherwise count as a reason
+    /// to render the section.
+    private func hasDayContent(_ context: FlintDayContext) -> Bool {
+        !context.calendar.isEmpty
+            || !context.birthdays.isEmpty
+            || context.weather?.hasContent == true
+            || viewModel.openerYesterday != nil
     }
 
     private var chapterRows: [UpToSpeedChapter] {
