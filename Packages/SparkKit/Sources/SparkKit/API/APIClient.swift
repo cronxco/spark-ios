@@ -208,7 +208,8 @@ public actor APIClient {
         absoluteBase: Bool,
         allowRefresh: Bool,
         attempt: Int = 1,
-        isRefreshRequest: Bool = false
+        isRefreshRequest: Bool = false,
+        logicalRequestID: UUID = UUID()
     ) async throws -> RawAPIResponse<Response> {
         let url = try buildURL(endpoint: endpoint, absoluteBase: absoluteBase)
         var request = URLRequest(url: url)
@@ -246,9 +247,17 @@ public actor APIClient {
         let (data, response): (Data, URLResponse)
         let metricsCollector = APITaskMetricsCollector()
         let startedAt = Date()
+        #if DEBUG
+        let capture = APISessionStore.shared.begin(request, requestID: logicalRequestID, attempt: attempt)
+        var captureOutcome = "transport failure"
+        defer { APISessionStore.shared.finish(capture, outcome: captureOutcome) }
+        #endif
         do {
             (data, response) = try await session.data(for: request, delegate: metricsCollector)
         } catch {
+            #if DEBUG
+            captureOutcome = error.isAPICancellation ? "cancelled" : "transport failure"
+            #endif
             if error.isAPICancellation {
                 throw APIError.transport(error)
             }
@@ -267,6 +276,10 @@ public actor APIClient {
             throw APIError.transport(error)
         }
 
+        #if DEBUG
+        APISessionStore.shared.response(capture, status: (response as? HTTPURLResponse)?.statusCode, data: data)
+        captureOutcome = "invalid response"
+        #endif
         guard let http = response as? HTTPURLResponse else {
             await captureTelemetry(
                 operation: "http.client",
@@ -283,6 +296,9 @@ public actor APIClient {
             throw APIError.noData
         }
 
+        #if DEBUG
+        captureOutcome = http.statusCode == 304 ? "not modified" : "HTTP failure"
+        #endif
         if http.statusCode == 304 {
             await captureTelemetry(
                 operation: "http.client",
@@ -319,7 +335,8 @@ public actor APIClient {
                     endpoint,
                     absoluteBase: absoluteBase,
                     retryAttempt: attempt + 1,
-                    tokenUsedForRequest: accessToken
+                    tokenUsedForRequest: accessToken,
+                    logicalRequestID: logicalRequestID
                 )
                 return refreshed
             }
@@ -354,6 +371,9 @@ public actor APIClient {
         logger.info("[\(endpoint.path, privacy: .public)] HTTP \(http.statusCode, privacy: .public) — \(bodyPreview, privacy: .public)")
         #endif
 
+        #if DEBUG
+        captureOutcome = "success"
+        #endif
         if data.isEmpty, let empty = EmptyResponse() as? Response {
             await captureTelemetry(
                 operation: "http.client",
@@ -390,6 +410,9 @@ public actor APIClient {
             )
             return RawAPIResponse(decoded: decoded, data: data, etag: http.value(forHTTPHeaderField: "ETag"))
         } catch {
+            #if DEBUG
+            captureOutcome = "decoding failure"
+            #endif
             let safeBody = APITelemetryRedactor.body(data, contentType: http.value(forHTTPHeaderField: "Content-Type"))
             let bodyString = safeBody.flatMap { String(data: $0, encoding: .utf8) } ?? "<redacted>"
             logger.error("Decoding failed for \(endpoint.path, privacy: .public): \(error.localizedDescription, privacy: .public) — body: \(bodyString, privacy: .public)")
@@ -415,16 +438,17 @@ public actor APIClient {
         _ endpoint: Endpoint<Response>,
         absoluteBase: Bool,
         retryAttempt: Int,
-        tokenUsedForRequest: String?
+        tokenUsedForRequest: String?,
+        logicalRequestID: UUID
     ) async throws -> RawAPIResponse<Response> {
         if let tokenUsedForRequest,
            let currentAccessToken = await tokenStore.accessToken(),
            currentAccessToken != tokenUsedForRequest {
-            return try await perform(endpoint, absoluteBase: absoluteBase, allowRefresh: false, attempt: retryAttempt)
+            return try await perform(endpoint, absoluteBase: absoluteBase, allowRefresh: false, attempt: retryAttempt, logicalRequestID: logicalRequestID)
         }
 
         _ = try await refreshTokens()
-        return try await perform(endpoint, absoluteBase: absoluteBase, allowRefresh: false, attempt: retryAttempt)
+        return try await perform(endpoint, absoluteBase: absoluteBase, allowRefresh: false, attempt: retryAttempt, logicalRequestID: logicalRequestID)
     }
 
     private func refreshTokens() async throws -> AuthTokens {

@@ -147,7 +147,7 @@ struct BlockDetailView: View {
 
         if let body = detail.block.content, !body.isEmpty {
             GlassCard(radius: SparkRadii.lg, padding: SparkSpacing.lg) {
-                SparkRichContentText(text: body, font: SparkTypography.body, foregroundStyle: .primary)
+                SparkLongFormContentView(text: body, paragraphFont: SparkTypography.longFormBody)
             }
         }
 

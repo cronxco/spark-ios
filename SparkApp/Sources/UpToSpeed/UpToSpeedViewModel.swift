@@ -3,11 +3,19 @@ import Observation
 import OSLog
 import SparkKit
 import SparkUI
+import SwiftUI
 import SwiftData
 
 @MainActor
 @Observable
 final class UpToSpeedViewModel {
+    var expandedDisclosures: Set<String> = []
+    func disclosureBinding(_ key: String) -> Binding<Bool> {
+        Binding(get: { self.expandedDisclosures.contains(key) }, set: {
+            if $0 { self.expandedDisclosures.insert(key) }
+            else { self.expandedDisclosures.remove(key) }
+        })
+    }
     private(set) var screens: [UpToSpeedScreen] = []
     private(set) var chapters: [UpToSpeedChapter] = []
     var currentIndex: Int = 0
@@ -39,9 +47,18 @@ final class UpToSpeedViewModel {
     private(set) var digestsFailedToLoad: Int = 0
     private(set) var restoredIDs: Set<String> = []
     private var sessionSeenDates: [String: Date] = [:]
-    private var digestCache: [String: FlintDigest] = [:]
+    private(set) var digestCache: [String: FlintDigest] = [:]
     private var needsReconciliation = false
     private var restorationVersions: [String: Int] = [:]
+
+    func supplementalItems(for screen: UpToSpeedScreen) -> [UpToSpeedItem] {
+        if case .wrap = screen {
+            return allItems.filter { foldedDigestIDs.contains($0.id) }
+        }
+        guard let item = screen.item, item.type == .flintDigest,
+              screens.last(where: { $0.item?.id == item.id })?.id == screen.id else { return [] }
+        return [item]
+    }
 
     func restorationVersion(for itemID: String?) -> Int {
         itemID.flatMap { restorationVersions[$0] } ?? 0
@@ -501,6 +518,7 @@ final class UpToSpeedViewModel {
         digests: [String: FlintDigest] = [:],
         resetIndex: Bool = true
     ) {
+        digestCache.merge(digests) { _, new in new }
         let previousID = screens[safe: currentIndex]?.id
         let previouslyConsumed = Set(consumedIndices.compactMap { index -> String? in
             guard let screen = screens[safe: index], !restoredIDs.contains(screen.item?.id ?? "") else { return nil }

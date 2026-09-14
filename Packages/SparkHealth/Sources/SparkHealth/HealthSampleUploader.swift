@@ -19,6 +19,9 @@ public final class HealthSampleUploader: NSObject, @unchecked Sendable {
     private let lock = NSLock()
     private var completionHandlers: [String: @Sendable () -> Void] = [:]
     private var telemetryByTaskIdentifier: [Int: PendingTelemetry] = [:]
+    #if DEBUG
+    private var captures: [Int: APISessionStore.Ticket] = [:]
+    #endif
     private var environment: APIEnvironment = .current()
     private var accessToken: String?
 
@@ -74,6 +77,10 @@ public final class HealthSampleUploader: NSObject, @unchecked Sendable {
             fileSizeBytes: body.count
         )
         lock.withLock { telemetryByTaskIdentifier[task.taskIdentifier] = pending }
+        #if DEBUG
+        let capture = APISessionStore.shared.begin(request)
+        lock.withLock { captures[task.taskIdentifier] = capture }
+        #endif
         task.resume()
     }
 
@@ -104,7 +111,14 @@ private struct PendingTelemetry: Sendable {
 
 // MARK: - URLSessionDelegate
 
-extension HealthSampleUploader: URLSessionDelegate, URLSessionTaskDelegate {
+extension HealthSampleUploader: URLSessionDelegate, URLSessionTaskDelegate, URLSessionDataDelegate {
+    #if DEBUG
+    nonisolated public func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        if let capture = lock.withLock({ captures[dataTask.taskIdentifier] }) {
+            APISessionStore.shared.response(capture, status: (dataTask.response as? HTTPURLResponse)?.statusCode, data: data, append: true)
+        }
+    }
+    #endif
     nonisolated public func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
         let handlers = lock.withLock { completionHandlers }
         for handler in handlers.values {
@@ -118,6 +132,14 @@ extension HealthSampleUploader: URLSessionDelegate, URLSessionTaskDelegate {
         task: URLSessionTask,
         didCompleteWithError error: Error?
     ) {
+        #if DEBUG
+        if let capture = lock.withLock({ captures.removeValue(forKey: task.taskIdentifier) }) {
+            let status = (task.response as? HTTPURLResponse)?.statusCode
+            let outcome = error.map { $0.isAPICancellation ? "cancelled" : "transport failure" }
+                ?? (status == 304 ? "not modified" : status.map { (200..<300).contains($0) ? "success" : "HTTP failure" } ?? "invalid response")
+            APISessionStore.shared.finish(capture, outcome: outcome, status: status)
+        }
+        #endif
         let pending = lock.withLock {
             telemetryByTaskIdentifier.removeValue(forKey: task.taskIdentifier)
         }

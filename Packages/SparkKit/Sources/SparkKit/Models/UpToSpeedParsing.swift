@@ -13,6 +13,10 @@ public struct NewsRoundupSection: Identifiable, Hashable, Sendable {
     public let watching: String?
     /// The remaining prose (headline / whatsNew / watching removed).
     public let body: String
+    public var fullRoundup: String? = nil
+    public var analysis: String? = nil
+    public var references: [EntityReference] = []
+    public var sourceURL: String? = nil
 
     public init(id: Int, heading: String, sources: [String], whatsNew: String?, watching: String?, body: String) {
         self.id = id
@@ -55,7 +59,7 @@ public enum UpToSpeedParsing {
             // `whatsNew` and `watching` belong to the long prose section. A
             // block is already the short version, so claiming to have found
             // them here would be inventing structure that isn't there.
-            return NewsRoundupSection(
+            var section = NewsRoundupSection(
                 id: index,
                 heading: block.title,
                 sources: italicRuns(in: body),
@@ -63,6 +67,10 @@ public enum UpToSpeedParsing {
                 watching: nil,
                 body: body
             )
+            section.fullRoundup = summary.isEmpty ? nil : summary
+            section.references = block.references ?? []
+            section.sourceURL = block.url
+            return section
         }
     }
 

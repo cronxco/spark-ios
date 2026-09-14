@@ -147,6 +147,14 @@ struct UpToSpeedView: View {
         }
     }
 
+    private func supplement(for screen: UpToSpeedScreen, vm: UpToSpeedViewModel) -> AnyView? {
+        let items = vm.supplementalItems(for: screen)
+        guard !items.isEmpty else { return nil }
+        return AnyView(VStack(alignment: .leading, spacing: SparkSpacing.md) {
+            ForEach(items) { item in DigestSupplementView(item: item, viewModel: vm) }
+        })
+    }
+
     // MARK: - Controls overlay
 
     private func controlsOverlay(vm: UpToSpeedViewModel) -> some View {
@@ -255,18 +263,19 @@ struct UpToSpeedView: View {
         // the swipe lands. Without it an off-screen card reaches the end of its
         // content and would be marked read before the reader ever sees it.
         let consumed: () -> Void = { vm.markScreenConsumed(at: index) }
+        let supplement = supplement(for: screen, vm: vm)
 
         switch screen {
         case .opener:
             FlintOpenerScreen(viewModel: vm, onShowRecap: { showsRecap = true })
         case .flintHeader(let item, let firstSection):
-            FlintHeaderPage(item: item, firstSection: firstSection, isActive: isActive, onReachedBottom: consumed)
+            FlintHeaderPage(item: item, firstSection: firstSection, isActive: isActive, onReachedBottom: consumed, supplement: supplement)
         case .flintParagraph(let item, let text, _):
-            FlintParagraphPage(item: item, text: text, isActive: isActive, onReachedBottom: consumed)
+            FlintParagraphPage(item: item, text: text, isActive: isActive, onReachedBottom: consumed, supplement: supplement)
         case .flintInsight(_, let block):
-            FlintInsightPage(block: block, isActive: isActive, onReachedBottom: consumed)
+            FlintInsightPage(block: block, isActive: isActive, onReachedBottom: consumed, supplement: supplement)
         case .flintQuestion(let item, let block):
-            FlintQuestionPage(item: item, block: block, viewModel: vm, isActive: isActive, onReachedBottom: consumed)
+            FlintQuestionPage(item: item, block: block, viewModel: vm, isActive: isActive, onReachedBottom: consumed, supplement: supplement)
         case .checkIn(let item):
             CheckInScreen(item: item, viewModel: vm)
         case .anomaly(let item):
@@ -277,11 +286,12 @@ struct UpToSpeedView: View {
                 section: section,
                 index: sectionIndex,
                 total: total,
+                viewModel: vm,
                 isActive: isActive,
                 onReachedBottom: consumed
             )
         case .newsSummary(let item):
-            NewsSummaryScreen(item: item, isActive: isActive, onReachedBottom: consumed)
+            NewsSummaryScreen(item: item, isActive: isActive, onReachedBottom: consumed, viewModel: vm)
         case .wrap:
             WrapScreen(
                 viewModel: vm,

@@ -19,6 +19,7 @@ import SwiftUI
 /// they are seen: the pager builds the adjacent page ahead of the swipe, so an
 /// off-screen card reaches end-of-content while the reader is still on the
 /// previous one. Only the active page arms the dwell.
+@MainActor
 public struct StoryScreenScaffold<Content: View>: View {
     public struct Byline: Equatable {
         public let name: String
@@ -38,6 +39,7 @@ public struct StoryScreenScaffold<Content: View>: View {
     public let reserveTopSpace: Bool
     public let isActive: Bool
     public let onReachedBottom: (() -> Void)?
+    public let supplement: AnyView?
     private let content: Content
 
     @State private var isAtEnd = false
@@ -50,6 +52,7 @@ public struct StoryScreenScaffold<Content: View>: View {
         reserveTopSpace: Bool = true,
         isActive: Bool = true,
         onReachedBottom: (() -> Void)? = nil,
+        supplement: AnyView? = nil,
         @ViewBuilder content: () -> Content
     ) {
         self.label = label
@@ -57,6 +60,7 @@ public struct StoryScreenScaffold<Content: View>: View {
         self.reserveTopSpace = reserveTopSpace
         self.isActive = isActive
         self.onReachedBottom = onReachedBottom
+        self.supplement = supplement
         self.content = content()
     }
 
@@ -75,13 +79,17 @@ public struct StoryScreenScaffold<Content: View>: View {
 
                 content
 
-                if onReachedBottom != nil {
+                if let supplement {
+                    supplement
+                }
+
+                if onReachedBottom != nil && showsReadIndicator {
                     readIndicator
                         .padding(.top, SparkSpacing.sm)
                 }
             }
             .padding(.horizontal, SparkSpacing.lg)
-            .padding(.top, reserveTopSpace ? 152 : SparkSpacing.lg)
+            .padding(.top, reserveTopSpace ? headerClearance + 8 : SparkSpacing.lg)
             .padding(.bottom, SparkSpacing.xxl)
         }
         .scrollDismissesKeyboard(.interactively)

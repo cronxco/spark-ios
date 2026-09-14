@@ -134,7 +134,7 @@ private struct RecapItemDetail: View {
         switch item.payload {
         case .flintDigest(let summary):
             if let text = digest?.summary ?? summary.summary {
-                SparkLongFormContentView(text: text, tint: .sparkAccent, paragraphFont: SparkTypography.body)
+                SparkLongFormContentView(text: text, tint: .sparkAccent, paragraphFont: SparkTypography.longFormBody)
             }
             ForEach(digest?.blocks ?? []) { block in
                 if let context = block.dayContext {
@@ -144,7 +144,7 @@ private struct RecapItemDetail: View {
                         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                             Text(block.title).font(SparkTypography.bodyStrong)
                             if let text = block.content {
-                                SparkLongFormContentView(text: text, tint: .sparkAccent, paragraphFont: SparkTypography.body)
+                                SparkLongFormContentView(text: text, tint: .sparkAccent, paragraphFont: SparkTypography.longFormBody)
                             }
                             if let question = block.question { Text(question).font(SparkTypography.body) }
                             if let answer = block.answer { Text(answer).font(SparkTypography.bodyStrong) }
@@ -162,7 +162,7 @@ private struct RecapItemDetail: View {
             Text(checkIn.date).font(SparkTypography.caption)
             ForEach(event?.blocks ?? []) { block in
                 if let text = block.content {
-                    SparkLongFormContentView(text: text, tint: .sparkAccent, paragraphFont: SparkTypography.body)
+                    SparkLongFormContentView(text: text, tint: .sparkAccent, paragraphFont: SparkTypography.longFormBody)
                 }
             }
             if checkIn.eventId == nil { Text("No additional detail is available for this check-in.") }

@@ -11,6 +11,7 @@ struct FlintHeaderPage: View {
     let firstSection: String?
     var isActive: Bool = true
     var onReachedBottom: (() -> Void)?
+    var supplement: AnyView?
 
     private var summary: UpToSpeedFlintDigestSummary? {
         if case .flintDigest(let s) = item.payload { return s }
@@ -21,7 +22,8 @@ struct FlintHeaderPage: View {
         StoryScreenScaffold(
             flintByline: .init(meta: summary?.period.map { "\($0.displayName) briefing" }),
             isActive: isActive,
-            onReachedBottom: onReachedBottom
+            onReachedBottom: onReachedBottom,
+            supplement: supplement
         ) {
             VStack(alignment: .leading, spacing: SparkSpacing.lg) {
                 if let summary {
@@ -43,7 +45,7 @@ struct FlintHeaderPage: View {
 
                 if let section = firstSection {
                     Divider().opacity(0.2)
-                    SparkLongFormContentView(text: section, tint: .sparkAccent, paragraphFont: SparkTypography.body)
+                    SparkLongFormContentView(text: section, tint: .sparkAccent, paragraphFont: SparkTypography.longFormBody)
                 }
             }
         }
@@ -69,6 +71,7 @@ struct FlintParagraphPage: View {
     let text: String
     var isActive: Bool = true
     var onReachedBottom: (() -> Void)?
+    var supplement: AnyView?
 
     private var summary: UpToSpeedFlintDigestSummary? {
         if case .flintDigest(let s) = item.payload { return s }
@@ -79,12 +82,13 @@ struct FlintParagraphPage: View {
         StoryScreenScaffold(
             flintByline: .init(meta: summary?.period.map { "\($0.displayName) briefing" }),
             isActive: isActive,
-            onReachedBottom: onReachedBottom
+            onReachedBottom: onReachedBottom,
+            supplement: supplement
         ) {
             SparkLongFormContentView(
                 text: text,
                 tint: .sparkAccent,
-                paragraphFont: SparkTypography.body
+                paragraphFont: SparkTypography.longFormBody
             )
         }
     }
@@ -97,9 +101,10 @@ struct FlintInsightPage: View {
     let block: FlintDigestBlock
     var isActive: Bool = true
     var onReachedBottom: (() -> Void)?
+    var supplement: AnyView?
 
     var body: some View {
-        StoryScreenScaffold(flintByline: .init(meta: "Insight"), isActive: isActive, onReachedBottom: onReachedBottom) {
+        StoryScreenScaffold(flintByline: .init(meta: "Insight"), isActive: isActive, onReachedBottom: onReachedBottom, supplement: supplement) {
             GlassCard(tint: Color.sparkAccent.opacity(0.1)) {
                 VStack(alignment: .leading, spacing: SparkSpacing.md) {
                     Text(block.title)
@@ -107,12 +112,7 @@ struct FlintInsightPage: View {
                         .foregroundStyle(.primary)
 
                     if let content = block.content, !content.isEmpty {
-                        SparkRichContentText(
-                            text: content,
-                            font: SparkTypography.bodySmall,
-                            foregroundStyle: .secondary,
-                            lineSpacing: 5
-                        )
+                        SparkLongFormContentView(text: content, paragraphFont: SparkTypography.longFormBodySmall)
                     }
                 }
             }
@@ -130,6 +130,7 @@ struct FlintQuestionPage: View {
     let viewModel: UpToSpeedViewModel
     var isActive: Bool = true
     var onReachedBottom: (() -> Void)?
+    var supplement: AnyView?
 
     @Environment(AppModel.self) private var appModel
     @State private var isSubmitting = false
@@ -141,7 +142,8 @@ struct FlintQuestionPage: View {
         StoryScreenScaffold(
             flintByline: .init(meta: labelText),
             isActive: isActive,
-            onReachedBottom: onReachedBottom
+            onReachedBottom: onReachedBottom,
+            supplement: supplement
         ) {
             VStack(alignment: .leading, spacing: SparkSpacing.lg) {
                 Text(block.question ?? block.title)

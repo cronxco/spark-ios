@@ -16,9 +16,7 @@ final class MoneyExploreViewModel {
 
     private(set) var accounts: [MoneyAccount] = []
     private(set) var netWorthHistory: [NetWorthPoint] = []
-    #if DEBUG
-        private(set) var rawFeedEntries: [RawFeedJSONEntry] = []
-    #endif
+
     private(set) var loadState: LoadState = .idle
     private(set) var historyState: LoadState = .idle
 
@@ -40,16 +38,9 @@ final class MoneyExploreViewModel {
         guard case .idle = loadState else { return }
         loadState = .loading
         do {
-            #if DEBUG
-                let response = try await apiClient.requestWithRawResponse(MoneyEndpoint.accounts())
-                accounts = response.decoded.data
-                rawFeedEntries = [
-                    RawFeedJSONEntry(title: "GET /money/accounts", body: response.utf8Body)
-                ]
-            #else
-                let response = try await apiClient.request(MoneyEndpoint.accounts())
+                            let response = try await apiClient.request(MoneyEndpoint.accounts())
                 accounts = response.data
-            #endif
+
             loadState = .loaded
             await buildNetWorthHistory()
         } catch where error.isAPICancellation {
@@ -64,9 +55,7 @@ final class MoneyExploreViewModel {
     func refresh() async {
         accounts = []
         netWorthHistory = []
-        #if DEBUG
-            rawFeedEntries = []
-        #endif
+
         loadState = .idle
         historyState = .idle
         await load()
@@ -83,30 +72,7 @@ final class MoneyExploreViewModel {
         var allBalances: [String: [BalanceEntry]] = [:]
         let snapAccounts = accounts
 
-        #if DEBUG
-            var rawBalances: [String: String] = [:]
-            await withTaskGroup(of: (String, [BalanceEntry], String?).self) { group in
-                for account in snapAccounts {
-                    group.addTask { [apiClient] in
-                        do {
-                            let response = try await apiClient.requestWithRawResponse(MoneyEndpoint.balances(accountId: account.id))
-                            return (account.id, response.decoded.data, response.utf8Body)
-                        } catch {
-                            return (account.id, [], nil)
-                        }
-                    }
-                }
-                for await (id, entries, rawBody) in group {
-                    allBalances[id] = entries
-                    rawBalances[id] = rawBody
-                }
-            }
-            rawFeedEntries.append(contentsOf: snapAccounts.compactMap { account in
-                guard let rawBody = rawBalances[account.id] else { return nil }
-                return RawFeedJSONEntry(title: "GET /money/accounts/\(account.id)/balances", body: rawBody)
-            })
-        #else
-            await withTaskGroup(of: (String, [BalanceEntry]).self) { group in
+                    await withTaskGroup(of: (String, [BalanceEntry]).self) { group in
                 for account in snapAccounts {
                     group.addTask { [apiClient] in
                         let response = try? await apiClient.request(MoneyEndpoint.balances(accountId: account.id))
@@ -117,7 +83,7 @@ final class MoneyExploreViewModel {
                     allBalances[id] = entries
                 }
             }
-        #endif
+
 
         let cal = Calendar.current
         var dateMap: [Date: [String: Double]] = [:]

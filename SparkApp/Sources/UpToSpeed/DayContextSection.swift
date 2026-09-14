@@ -46,7 +46,7 @@ struct DayContextSection: View {
                 }
             }
             if !dayContext.calendar.isEmpty {
-                Button(showsFullDay ? "Show less" : "View day") { showsFullDay.toggle() }
+                Button(showsFullDay ? "Show fewer" : "Show all events") { showsFullDay.toggle() }
                     .font(SparkTypography.bodySmall)
                     .tint(.primary)
             }
@@ -121,6 +121,10 @@ struct DayContextSection: View {
         HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.md) {
             timeLabel(for: entry)
 
+            Circle().fill(personColor(entry.person))
+                .frame(width: 6, height: 6)
+                .accessibilityHidden(true)
+
             Text(entry.title)
                 .font(entry.id == nextEntryID ? SparkTypography.bodyStrong : SparkTypography.body)
                 .foregroundStyle(.primary)
@@ -130,16 +134,6 @@ struct DayContextSection: View {
         .padding(.leading, SparkSpacing.lg)
         .padding(.trailing, SparkSpacing.lg)
         .padding(.vertical, SparkSpacing.md)
-        // Whose commitment it is, as a colour down the edge rather than a name
-        // in the corner — the name was competing with the title for attention.
-        // An overlay rather than a stacked child so the rule takes the row's
-        // full height without depending on how the baseline resolves.
-        .overlay(alignment: .leading) {
-            Capsule()
-                .fill(personColor(entry.person))
-                .frame(width: 3)
-                .padding(.vertical, SparkSpacing.xs)
-        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(personName(entry.person)): \(entry.title), \(accessibleTime(for: entry))")
     }

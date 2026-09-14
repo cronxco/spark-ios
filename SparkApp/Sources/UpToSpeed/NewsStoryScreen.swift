@@ -10,6 +10,8 @@ struct NewsStoryScreen: View {
     let section: NewsRoundupSection
     let index: Int
     let total: Int
+    var viewModel: UpToSpeedViewModel? = nil
+    @State private var expanded = false
     var isActive: Bool = true
     let onReachedBottom: (() -> Void)?
 
@@ -26,12 +28,16 @@ struct NewsStoryScreen: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 if !section.body.isEmpty {
-                    SparkRichContentText(
-                        text: section.body,
-                        font: SparkTypography.body,
-                        foregroundStyle: .primary,
-                        lineSpacing: 6
-                    )
+                    SparkLongFormContentView(text: section.body, paragraphFont: SparkTypography.longFormBody)
+                }
+
+                StoryReferences(references: section.references, sourceURL: section.sourceURL)
+                if let fullText = section.analysis ?? section.fullRoundup {
+                    DisclosureGroup(section.analysis == nil ? "Read full roundup" : "Read analysis",
+                                    isExpanded: viewModel?.disclosureBinding("\(item.id)-news\(index)-analysis") ?? $expanded) {
+                        SparkLongFormContentView(text: fullText, tint: .sparkOcean)
+                            .padding(.top, SparkSpacing.md)
+                    }
                 }
 
                 if let whatsNew = section.whatsNew {
@@ -41,7 +47,7 @@ struct NewsStoryScreen: View {
                             .tracking(0.8)
                             .foregroundStyle(.secondary)
                         Text(whatsNew)
-                            .font(SparkTypography.body)
+                            .font(SparkTypography.longFormBody)
                             .foregroundStyle(.primary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -51,7 +57,7 @@ struct NewsStoryScreen: View {
                     HStack(alignment: .top, spacing: SparkSpacing.sm) {
                         FlintAvatar(size: .sm)
                         Text(watching)
-                            .font(SparkTypography.bodySmall)
+                            .font(SparkTypography.longFormBodySmall)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }

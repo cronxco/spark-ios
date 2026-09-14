@@ -16,7 +16,12 @@ struct NewsSummaryScreen: View {
     var reserveTopSpace = true
 
     @Environment(AppModel.self) private var appModel
-    @State private var showsFullArticle = false
+    var viewModel: UpToSpeedViewModel? = nil
+    @State private var localShowsFullArticle = false
+    private var showsFullArticle: Bool { articleExpansion.wrappedValue }
+    private var articleExpansion: Binding<Bool> {
+        viewModel?.disclosureBinding("\(item.id)-article") ?? $localShowsFullArticle
+    }
     @State private var articleBody: String?
     @State private var isLoadingArticle = false
     @State private var articleError: String?
@@ -54,11 +59,10 @@ struct NewsSummaryScreen: View {
                     if let keyTakeaways = news.keyTakeaways {
                         GlassCard {
                             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                                Text("Key points").font(SparkTypography.bodyStrong)
                                 SparkLongFormContentView(
                                     text: keyTakeaways,
                                     tint: .domainKnowledge,
-                                    paragraphFont: SparkTypography.body
+                                    paragraphFont: SparkTypography.longFormBody
                                 )
                             }
                         }
@@ -66,14 +70,8 @@ struct NewsSummaryScreen: View {
 
                     if let summary = news.summary {
                         GlassCard {
-                            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                                Text("Summary").font(SparkTypography.bodyStrong)
-                                SparkRichContentText(
-                                    text: summary,
-                                    font: SparkTypography.body,
-                                    foregroundStyle: .primary,
-                                    lineSpacing: 6
-                                )
+                            VStack(alignment: .leading) {
+                                SparkLongFormContentView(text: summary, tint: .domainKnowledge)
                             }
                         }
                     }
@@ -117,7 +115,7 @@ struct NewsSummaryScreen: View {
     /// is a second and third request, which is not worth making for a card the
     /// reader may well swipe straight past.
     private var fullArticleDisclosure: some View {
-        DisclosureGroup(isExpanded: $showsFullArticle) {
+        DisclosureGroup(isExpanded: articleExpansion) {
             Group {
                 if isLoadingArticle {
                     HStack(spacing: SparkSpacing.sm) {
@@ -129,6 +127,9 @@ struct NewsSummaryScreen: View {
                 } else if let articleBody {
                     SparkLongFormContentView(text: articleBody, tint: .domainKnowledge)
                 } else {
+                    if articleError != nil {
+                        Button("Retry article") { Task { await loadArticle() } }
+                    }
                     Text(articleError ?? "No full article text was returned for this item.")
                         .font(SparkTypography.bodySmall)
                         .foregroundStyle(.secondary)

@@ -582,7 +582,7 @@ private struct FlintThreadDetailView: View {
                     .font(SparkTypography.bodyStrong)
 
                 if let content = topic.content, !content.isEmpty {
-                    SparkRichContentText(text: content, font: SparkTypography.longFormBody, foregroundStyle: .primary)
+                    SparkLongFormContentView(text: content, paragraphFont: SparkTypography.longFormBody)
                 }
 
                 ViewThatFits(in: .horizontal) {
@@ -834,11 +834,11 @@ private struct FlintBlockSurface: View {
             } else if let content = block.content, !content.isEmpty {
                 if block.blockType == "flint_editorial_note" {
                     DisclosureGroup("Read note", isExpanded: $isEditorialExpanded) {
-                        SparkRichContentText(text: content, font: SparkTypography.bodySmall, foregroundStyle: .secondary)
+                        SparkLongFormContentView(text: content, paragraphFont: SparkTypography.longFormBodySmall)
                             .padding(.top, SparkSpacing.sm)
                     }
                 } else {
-                    SparkRichContentText(text: content, font: SparkTypography.bodySmall, foregroundStyle: .secondary)
+                    SparkLongFormContentView(text: content, paragraphFont: SparkTypography.longFormBodySmall)
                 }
             }
 
