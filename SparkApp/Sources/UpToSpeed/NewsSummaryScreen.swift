@@ -13,6 +13,7 @@ struct NewsSummaryScreen: View {
     let item: UpToSpeedItem
     var isActive: Bool = true
     let onReachedBottom: (() -> Void)?
+    var reserveTopSpace = true
 
     @Environment(AppModel.self) private var appModel
     @State private var showsFullArticle = false
@@ -27,7 +28,8 @@ struct NewsSummaryScreen: View {
 
     var body: some View {
         StoryScreenScaffold(
-            label: news.map(\.source),
+            flintByline: .init(meta: news.map { [Self.publication(for: $0), metaLine($0)].compactMap { $0 }.joined(separator: " · ") }),
+            reserveTopSpace: reserveTopSpace,
             isActive: isActive,
             onReachedBottom: onReachedBottom
         ) {
@@ -37,12 +39,6 @@ struct NewsSummaryScreen: View {
                         .font(SparkTypography.heroSmall)
                         .foregroundStyle(.primary)
                         .fixedSize(horizontal: false, vertical: true)
-
-                    if let meta = metaLine(news) {
-                        Text(meta)
-                            .font(SparkTypography.caption)
-                            .foregroundStyle(.secondary)
-                    }
 
                     // The standfirst. It arrives wrapped in `**…**`, so markdown
                     // rendering is what gives it its weight — no card needed.
@@ -55,33 +51,30 @@ struct NewsSummaryScreen: View {
                         )
                     }
 
-                    if news.keyTakeaways != nil || news.summary != nil {
-                        Divider().opacity(0.2)
-                    }
-
                     if let keyTakeaways = news.keyTakeaways {
-                        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                            SectionLabel("Key points")
-                            // The shared long-form renderer already turns `- `
-                            // lines into tinted bullets; the card used to carry
-                            // its own copy of that parsing.
-                            SparkLongFormContentView(
-                                text: keyTakeaways,
-                                tint: .domainKnowledge,
-                                paragraphFont: SparkTypography.body
-                            )
+                        GlassCard {
+                            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                                Text("Key points").font(SparkTypography.bodyStrong)
+                                SparkLongFormContentView(
+                                    text: keyTakeaways,
+                                    tint: .domainKnowledge,
+                                    paragraphFont: SparkTypography.body
+                                )
+                            }
                         }
                     }
 
                     if let summary = news.summary {
-                        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                            SectionLabel("Summary")
-                            SparkRichContentText(
-                                text: summary,
-                                font: SparkTypography.body,
-                                foregroundStyle: .primary,
-                                lineSpacing: 6
-                            )
+                        GlassCard {
+                            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                                Text("Summary").font(SparkTypography.bodyStrong)
+                                SparkRichContentText(
+                                    text: summary,
+                                    font: SparkTypography.body,
+                                    foregroundStyle: .primary,
+                                    lineSpacing: 6
+                                )
+                            }
                         }
                     }
 
@@ -100,6 +93,17 @@ struct NewsSummaryScreen: View {
     }
 
     // MARK: - Meta
+
+    static func publication(for news: NewsSummary) -> String {
+        if let host = news.url.flatMap({ URL(string: $0)?.host() })?.lowercased() {
+            let names = ["economist.com": "The Economist", "ft.com": "Financial Times", "noemamag.com": "Noema"]
+            for (domain, name) in names where host == domain || host.hasSuffix("." + domain) {
+                return name
+            }
+            return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+        }
+        return news.source.lowercased() == "fetch" ? "News" : news.source.capitalized
+    }
 
     /// When it arrived. The publication is already the scaffold's label, so
     /// repeating it here would just be the same word twice.

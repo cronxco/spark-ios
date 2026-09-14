@@ -19,7 +19,7 @@ struct FlintHeaderPage: View {
 
     var body: some View {
         StoryScreenScaffold(
-            label: summary?.period.map { "\($0.displayName) Digest" },
+            flintByline: .init(meta: summary?.period.map { "\($0.displayName) briefing" }),
             isActive: isActive,
             onReachedBottom: onReachedBottom
         ) {
@@ -32,12 +32,6 @@ struct FlintHeaderPage: View {
                     }
 
                     HStack(spacing: SparkSpacing.sm) {
-                        if summary.blockCount > 0 {
-                            countPill(
-                                "^[\(summary.blockCount) block](inflect: true)",
-                                systemImage: "text.alignleft"
-                            )
-                        }
                         if summary.unansweredQuestionCount > 0 {
                             countPill(
                                 "^[\(summary.unansweredQuestionCount) question](inflect: true)",
@@ -49,7 +43,7 @@ struct FlintHeaderPage: View {
 
                 if let section = firstSection {
                     Divider().opacity(0.2)
-                    SparkLongFormContentView(text: section, tint: .sparkAccent)
+                    SparkLongFormContentView(text: section, tint: .sparkAccent, paragraphFont: SparkTypography.body)
                 }
             }
         }
@@ -83,13 +77,14 @@ struct FlintParagraphPage: View {
 
     var body: some View {
         StoryScreenScaffold(
-            label: summary?.period.map { "\($0.displayName) Digest" },
+            flintByline: .init(meta: summary?.period.map { "\($0.displayName) briefing" }),
             isActive: isActive,
             onReachedBottom: onReachedBottom
         ) {
             SparkLongFormContentView(
                 text: text,
-                tint: .sparkAccent
+                tint: .sparkAccent,
+                paragraphFont: SparkTypography.body
             )
         }
     }
@@ -104,7 +99,7 @@ struct FlintInsightPage: View {
     var onReachedBottom: (() -> Void)?
 
     var body: some View {
-        StoryScreenScaffold(label: "Insight", isActive: isActive, onReachedBottom: onReachedBottom) {
+        StoryScreenScaffold(flintByline: .init(meta: "Insight"), isActive: isActive, onReachedBottom: onReachedBottom) {
             GlassCard(tint: Color.sparkAccent.opacity(0.1)) {
                 VStack(alignment: .leading, spacing: SparkSpacing.md) {
                     Text(block.title)
@@ -144,8 +139,7 @@ struct FlintQuestionPage: View {
 
     var body: some View {
         StoryScreenScaffold(
-            label: labelText,
-            flintByline: .init("Flint is asking"),
+            flintByline: .init(meta: labelText),
             isActive: isActive,
             onReachedBottom: onReachedBottom
         ) {

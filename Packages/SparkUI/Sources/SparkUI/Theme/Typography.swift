@@ -32,11 +32,3 @@ public enum SparkTypography {
     public static let monoSmall = SparkFonts.mono(.caption2)
     public static let monoBody = SparkFonts.mono(.body)
 }
-
-public extension View {
-    /// Clamp Dynamic Type to a3 so hero glyphs don't overflow the iPhone
-    /// frame. Apply at the app root.
-    func sparkDynamicTypeClamp() -> some View {
-        self.dynamicTypeSize(...DynamicTypeSize.accessibility3)
-    }
-}

@@ -29,7 +29,6 @@ struct SparkApp: App {
                     .environment(model)
                     .modelContainer(model.container)
                     .tint(.sparkAccent)
-                    .sparkDynamicTypeClamp()
                     .task(id: model.session) {
                         if model.session == .loggedIn {
                             HealthKitObserver.shared.startObserving()

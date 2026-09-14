@@ -14,21 +14,24 @@ struct NewsStoryScreen: View {
     let onReachedBottom: (() -> Void)?
 
     var body: some View {
-        StoryScreenScaffold(isActive: isActive, onReachedBottom: onReachedBottom) {
+        StoryScreenScaffold(
+            flintByline: .init(meta: section.sources.isEmpty ? "News roundup" : section.sources.joined(separator: " · ")),
+            isActive: isActive,
+            onReachedBottom: onReachedBottom
+        ) {
             VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-                spine
-
                 Text(section.heading)
-                    .font(SparkTypography.hero)
+                    .font(SparkTypography.heroSmall)
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if !section.body.isEmpty {
-                    Text(bodyText)
-                        .font(SparkTypography.longFormBody)
-                        .foregroundStyle(.primary)
-                        .lineSpacing(3)
-                        .fixedSize(horizontal: false, vertical: true)
+                    SparkRichContentText(
+                        text: section.body,
+                        font: SparkTypography.body,
+                        foregroundStyle: .primary,
+                        lineSpacing: 6
+                    )
                 }
 
                 if let whatsNew = section.whatsNew {
@@ -38,7 +41,7 @@ struct NewsStoryScreen: View {
                             .tracking(0.8)
                             .foregroundStyle(.secondary)
                         Text(whatsNew)
-                            .font(SparkTypography.longFormBody)
+                            .font(SparkTypography.body)
                             .foregroundStyle(.primary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -60,28 +63,4 @@ struct NewsStoryScreen: View {
         }
     }
 
-    private var spine: some View {
-        HStack(spacing: SparkSpacing.sm) {
-            Text(total > 1 ? "Story \(index + 1) / \(total)" : "News")
-                .font(SparkTypography.caption)
-                .tracking(1.2)
-                .foregroundStyle(Color.sparkOcean)
-            Rectangle()
-                .fill(Color.sparkOcean.opacity(0.25))
-                .frame(height: 1)
-            if !section.sources.isEmpty {
-                Text(section.sources.joined(separator: " · "))
-                    .font(SparkTypography.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        }
-    }
-
-    /// Strip inline markdown emphasis for plain serif rendering.
-    private var bodyText: String {
-        section.body
-            .replacingOccurrences(of: "**", with: "")
-            .replacingOccurrences(of: "*", with: "")
-    }
 }

@@ -24,6 +24,52 @@ struct FlintEndpointTests {
         #expect(endpoint.query == [URLQueryItem(name: "date", value: "2026-05-16")])
     }
 
+    @Test("history endpoint uses one inclusive range and supports cursors")
+    func historyEndpoint() {
+        let endpoint = FlintEndpoint.history(
+            from: "2026-08-16",
+            to: "2026-09-14",
+            cursor: "next-page"
+        )
+
+        #expect(endpoint.path == "/flint/digests")
+        #expect(endpoint.query.contains(URLQueryItem(name: "from", value: "2026-08-16")))
+        #expect(endpoint.query.contains(URLQueryItem(name: "to", value: "2026-09-14")))
+        #expect(endpoint.query.contains(URLQueryItem(name: "limit", value: "50")))
+        #expect(endpoint.query.contains(URLQueryItem(name: "cursor", value: "next-page")))
+        #expect(!endpoint.query.contains(where: { $0.name == "date" || $0.name == "all" }))
+    }
+
+    @Test("open questions endpoint requests the canonical feed")
+    func questionsEndpoint() {
+        let endpoint = FlintEndpoint.questions(cursor: "page-2")
+
+        #expect(endpoint.path == "/flint/questions")
+        #expect(endpoint.query.contains(URLQueryItem(name: "status", value: "open")))
+        #expect(endpoint.query.contains(URLQueryItem(name: "limit", value: "50")))
+        #expect(endpoint.query.contains(URLQueryItem(name: "cursor", value: "page-2")))
+    }
+
+    @Test("question action carries concurrency and idempotency headers")
+    func questionActionEndpoint() throws {
+        let mutationID = UUID(uuidString: "7D16E962-7C8D-4761-AAC0-0A6A2307306B")!
+        let endpoint = FlintEndpoint.questionAction(
+            blockID: "question-1",
+            version: "\"question-v1\"",
+            idempotencyKey: mutationID,
+            FlintQuestionActionRequest(action: .answer, answer: "Friday", context: "Thursday clashes.")
+        )
+        let body = try #require(endpoint.body)
+        let object = try #require(JSONSerialization.jsonObject(with: body) as? [String: String])
+
+        #expect(endpoint.path == "/flint/questions/question-1/actions")
+        #expect(endpoint.headers["If-Match"] == "\"question-v1\"")
+        #expect(endpoint.headers["Idempotency-Key"] == mutationID.uuidString)
+        #expect(object["action"] == "answer")
+        #expect(object["answer"] == "Friday")
+        #expect(object["context"] == "Thursday clashes.")
+    }
+
     @Test("answer endpoint encodes snake case body")
     func answerEndpoint() throws {
         let endpoint = FlintEndpoint.answerQuestion(
@@ -228,5 +274,81 @@ struct FlintEndpointTests {
 
         #expect(response.count == 1)
         #expect(response.digests.first?.period == .evening)
+    }
+
+    @Test("history response decodes list-safe summaries and cursor metadata")
+    func decodesHistory() throws {
+        let json = """
+        {
+          "data": [{
+            "id": "digest-1",
+            "local_date": "2026-09-14",
+            "period": "morning",
+            "kind": "briefing",
+            "title": "Morning Digest",
+            "summary": "A short summary.",
+            "generated_at": "2026-09-14T07:12:03+01:00",
+            "updated_at": "2026-09-14T07:12:03+01:00",
+            "unanswered_question_count": 1,
+            "version": "W/\\\"digest-v1\\\"",
+            "freshness": {"state": "fresh", "age_seconds": 8280}
+          }],
+          "meta": {
+            "from": "2026-08-16",
+            "to": "2026-09-14",
+            "effective_timezone": "Europe/London",
+            "account_id": "user-1",
+            "next_cursor": "page-2"
+          }
+        }
+        """
+
+        let response = try makeDecoder().decode(FlintDigestHistoryResponse.self, from: Data(json.utf8))
+
+        #expect(response.data.first?.id == "digest-1")
+        #expect(response.data.first?.localDate == "2026-09-14")
+        #expect(response.data.first?.freshness?.ageSeconds == 8280)
+        #expect(response.meta.nextCursor == "page-2")
+    }
+
+    @Test("questions response decodes canonical status history and version")
+    func decodesQuestions() throws {
+        let json = """
+        {
+          "data": [{
+            "id": "question-1",
+            "digest_id": "digest-1",
+            "source_digest": {"local_date": "2026-09-14", "period": "morning"},
+            "status": "open",
+            "question": "Should the review move to Friday?",
+            "topic": "Quarterly planning",
+            "answer_options": ["Yes", "No"],
+            "asked_at": "2026-09-14T07:12:03+01:00",
+            "effective_answer": null,
+            "answer_history": [],
+            "version": "\\\"question-v1\\\""
+          }],
+          "meta": {
+            "next_cursor": null,
+            "effective_timezone": "Europe/London",
+            "account_id": "user-1"
+          }
+        }
+        """
+
+        let response = try makeDecoder().decode(FlintQuestionsResponse.self, from: Data(json.utf8))
+        let question = try #require(response.data.first)
+
+        #expect(question.status == .open)
+        #expect(question.sourceDigest.period == .morning)
+        #expect(question.version == "\"question-v1\"")
+        #expect(question.asDigestBlock.answerOptions == ["Yes", "No"])
+        #expect(question.asDigestBlock.priority == nil)
+    }
+
+    private func makeDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
     }
 }

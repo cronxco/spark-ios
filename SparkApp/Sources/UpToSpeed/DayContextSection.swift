@@ -14,12 +14,20 @@ struct DayContextSection: View {
     let dayContext: FlintDayContext
     let yesterday: String?
     var now: Date = .now
+    @State private var showsFullDay = false
 
-    private var calendarEntries: [FlintDayContextEvent] { dayContext.calendar }
+    private var calendarEntries: [FlintDayContextEvent] {
+        let entries = dayContext.calendar.sorted { ($0.start ?? .distantPast) < ($1.start ?? .distantPast) }
+        return showsFullDay ? entries : Array(entries.filter { !$0.allDay && ($0.start ?? .distantPast) > now }.prefix(3))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-            SectionLabel(dayLabel)
+            Text(dayLabel).font(SparkTypography.bodyStrong)
+
+            if let weather = dayContext.weather, weather.hasContent {
+                weatherRow(weather)
+            }
 
             if !dayContext.birthdays.isEmpty {
                 birthdayRows
@@ -29,8 +37,18 @@ struct DayContextSection: View {
                 calendarCard
             }
 
-            if let weather = dayContext.weather, weather.hasContent {
-                weatherRow(weather)
+            if !showsFullDay {
+                let allDay = dayContext.calendar.filter(\.allDay)
+                if !allDay.isEmpty {
+                    Text("All day · " + allDay.map(\.title).joined(separator: " · "))
+                        .font(SparkTypography.bodySmall)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if !dayContext.calendar.isEmpty {
+                Button(showsFullDay ? "Show less" : "View day") { showsFullDay.toggle() }
+                    .font(SparkTypography.bodySmall)
+                    .tint(.primary)
             }
 
             if let yesterday {
@@ -174,7 +192,7 @@ struct DayContextSection: View {
                 .frame(width: 34)
 
             if let temp = weather.tempHighC {
-                Text("\(Int(temp.rounded()))°")
+                Text("High \(Int(temp.rounded()))°")
                     .font(SparkFonts.display(.title2, weight: .bold))
                     .foregroundStyle(.primary)
             }

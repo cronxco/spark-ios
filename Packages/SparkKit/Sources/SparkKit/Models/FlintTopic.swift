@@ -14,9 +14,11 @@ public struct FlintTopic: Codable, Sendable, Hashable, Identifiable {
     public let lastTouchedAt: Date?
     public let nextReviewAt: Date?
     public let origin: String?
+    public let version: String?
+    public let mentions: [FlintTopicMention]?
 
     enum CodingKeys: String, CodingKey {
-        case id, title, content, kind, status, origin
+        case id, title, content, kind, status, origin, version, mentions
         case firstSeenAt = "first_seen_at"
         case lastTouchedAt = "last_touched_at"
         case nextReviewAt = "next_review_at"
@@ -31,7 +33,9 @@ public struct FlintTopic: Codable, Sendable, Hashable, Identifiable {
         firstSeenAt: Date? = nil,
         lastTouchedAt: Date? = nil,
         nextReviewAt: Date? = nil,
-        origin: String? = nil
+        origin: String? = nil,
+        version: String? = nil,
+        mentions: [FlintTopicMention]? = nil
     ) {
         self.id = id
         self.title = title
@@ -42,6 +46,8 @@ public struct FlintTopic: Codable, Sendable, Hashable, Identifiable {
         self.lastTouchedAt = lastTouchedAt
         self.nextReviewAt = nextReviewAt
         self.origin = origin
+        self.version = version
+        self.mentions = mentions
     }
 }
 
@@ -65,5 +71,36 @@ public struct FlintTopicsResponse: Codable, Sendable {
 
     public init(data: [FlintTopic]) {
         self.data = data
+    }
+}
+
+public struct FlintTopicResponse: Codable, Sendable, Hashable {
+    public let data: FlintTopic
+}
+
+public struct FlintTopicMention: Codable, Sendable, Hashable, Identifiable {
+    public let id: String
+    public let kind: String?
+    public let sourceType: String
+    public let digestID: String
+    public let blockID: String?
+    public let title: String
+    public let detail: String?
+    public let excerpt: String?
+    public let localDate: String?
+    public let period: FlintDigestPeriod?
+    public let occurredAt: Date?
+    public let deepLink: URL?
+    public let sourceDeleted: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id, kind, title, detail, excerpt, period
+        case sourceType = "source_type"
+        case digestID = "digest_id"
+        case blockID = "block_id"
+        case localDate = "local_date"
+        case occurredAt = "occurred_at"
+        case deepLink = "deep_link"
+        case sourceDeleted = "source_deleted"
     }
 }

@@ -49,15 +49,91 @@ struct UpToSpeedQuestionReadTests {
 
     // MARK: - Harness
 
-    private func loadedViewModel() async throws -> UpToSpeedViewModel {
+
+    @Test func readBriefingStillSuppliesDayContext() async throws {
+        let date = Date.now.formatted(.iso8601.year().month().day().dateSeparator(.dash))
+        let feed = Self.feedJSON
+            .replacingOccurrences(of: "2026-09-11", with: date)
+            .replacingOccurrences(of: "\"caught_up_at\":null", with: "\"caught_up_at\":\"2026-09-13T10:00:00Z\"")
+        let detail = """
+        {"event_id":"digest-a","date":"\(date)","title":"Your day","blocks":[
+          {"id":"day","block_type":"flint_day_context","title":"Today",
+           "day_context":{"date":"\(date)","calendar":[{"title":"Lunch","all_day":true}],"weather":{"location":"London","temp_high_c":21}}}
+        ]}
+        """
+        let vm = try await loadedViewModel(feed: feed, detail: detail, expectsQuestion: false)
+        #expect(vm.openerDayContext?.calendar.first?.title == "Lunch")
+        #expect(!vm.screens.contains { $0.item?.id == "digest-a" })
+        #expect(vm.screens.last?.id == "wrap")
+        #expect(!vm.screens.contains { $0.id == "recap" })
+        #expect(vm.recapItems.map(\.id) == ["digest-a"])
+        #expect(vm.pendingReadRefs.isEmpty)
+    }
+
+    @Test func sessionReadAppearsInRecapWithoutDuplicateEntries() async throws {
+        let vm = try await loadedViewModel()
+        for index in vm.screens.indices where vm.screens[index].item?.id == "digest-a" {
+            vm.markScreenConsumed(at: index)
+        }
+        vm.onQuestionAnswered(blockID: "block-question", itemID: "digest-a")
+        vm.onQuestionAnswered(blockID: "block-question", itemID: "digest-a")
+        #expect(vm.recapItems.map(\.id) == ["digest-a"])
+    }
+
+    @Test func readingRecapDetailDoesNotEmitReadRequests() async throws {
+        let vm = try await loadedViewModel()
+        let item = try #require(vm.screens.first(where: { $0.item != nil })?.item)
+        let detail = try await vm.recapDigest(for: item)
+        #expect(detail.id == item.id)
+        #expect(vm.pendingReadRefs.isEmpty)
+        let requests = await AppStubURLProtocol.recorded(host: Self.host)
+        #expect(!requests.contains { $0.httpMethod == "POST" })
+    }
+
+    @Test func staleDayContextIsNotPresentedAsToday() {
+        let context = FlintDayContext(calendar: [.init(title: "Old appointment")])
+        let digest = FlintDigest(eventID: "old", date: "2020-01-01", title: "Old brief", blockCount: 1,
+            blocks: [.init(id: "day", blockType: "flint_day_context", title: "Day", dayContext: context)])
+        #expect(UpToSpeedViewModel.dayContext(from: [digest], now: .now, calendar: .current) == nil)
+    }
+
+    @Test func publicationUsesSourceHostInsteadOfIngestionMethod() {
+        #expect(NewsSummaryScreen.publication(for: NewsSummary(title: "News", source: "fetch", url: "https://www.economist.com/the-world-in-brief")) == "The Economist")
+        #expect(NewsSummaryScreen.publication(for: NewsSummary(title: "News", source: "fetch", url: "https://ft.com/content/story")) == "Financial Times")
+        #expect(NewsSummaryScreen.publication(for: NewsSummary(title: "News", source: "newsletter")) == "Newsletter")
+    }
+
+    @Test func restoreStaysOnCurrentPageUntilRecapCloses() async throws {
+        let vm = try await loadedViewModel()
+        vm.jump(to: 1)
+        let item = try #require(vm.screens[1].item)
+        let page = vm.screens[vm.currentIndex].id
+        #expect(await vm.unmark(item))
+        #expect(vm.restoredIDs.contains(item.id))
+        #expect(vm.screens[vm.currentIndex].id == page)
+        #expect(!(await vm.unmark(item)))
+    }
+
+    @Test func failedRestoreDoesNotChangeJourney() async throws {
+        let vm = try await loadedViewModel(restoreStatus: 500)
+        let item = try #require(vm.screens.first(where: { $0.item != nil })?.item)
+        let pages = vm.screens.map(\.id)
+        #expect(!(await vm.unmark(item)))
+        #expect(vm.restoredIDs.isEmpty)
+        #expect(vm.screens.map(\.id) == pages)
+    }
+
+    private func loadedViewModel(feed: String = Self.feedJSON, detail: String = Self.digestJSON, expectsQuestion: Bool = true, restoreStatus: Int = 200) async throws -> UpToSpeedViewModel {
         await AppStubURLProtocol.set(host: Self.host) { request in
             let path = request.url?.path ?? ""
             if path.hasSuffix("/flint/digests/digest-a") {
-                return (Data(Self.digestJSON.utf8), 200, [:])
+                return (Data(detail.utf8), 200, [:])
             }
             if path.hasSuffix("/up-to-speed") {
-                return (Data(Self.feedJSON.utf8), 200, [:])
+                return (Data(feed.utf8), 200, [:])
             }
+            if path.hasSuffix("/unmark") { return (Data("{\"unmarked\":1}".utf8), restoreStatus, [:]) }
+            if path.hasSuffix("/read") { return (Data("{\"marked\":1}".utf8), 200, [:]) }
             return (Data("{}".utf8), 200, [:])
         }
 
@@ -93,8 +169,10 @@ struct UpToSpeedQuestionReadTests {
         // digest JSON below omits `digest_object_id`, which the decoder used to
         // reject outright. Kept omitted on purpose — the shape is legitimate,
         // and SparkKit now has its own regression test for it.
-        #expect(viewModel.screens.contains { $0.item?.id == "digest-a" })
-        #expect(viewModel.openQuestions.contains { $0.block.id == "block-question" })
+        if expectsQuestion {
+            #expect(viewModel.screens.contains { $0.item?.id == "digest-a" })
+            #expect(viewModel.openQuestions.contains { $0.block.id == "block-question" })
+        }
 
         return viewModel
     }

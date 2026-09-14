@@ -14,6 +14,8 @@ struct UpToSpeedView: View {
     @State private var viewModel: UpToSpeedViewModel?
     @State private var didRequestDismiss = false
     @State private var isKeyboardVisible = false
+    @State private var showsRecap = false
+    @State private var headerHeight: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(isPresented: Binding<Bool>, viewModel: UpToSpeedViewModel? = nil) {
@@ -53,6 +55,17 @@ struct UpToSpeedView: View {
             }
         }
         .simultaneousGesture(dismissDragGesture)
+        .environment(\.storyHeaderClearance, headerHeight + SparkSpacing.lg)
+        .environment(\.storyShowsReadIndicator, true)
+        .sheet(isPresented: $showsRecap, onDismiss: {
+            Task { await viewModel?.reconcileAfterRecap() }
+        }) {
+            if let vm = viewModel {
+                RecapScreen(viewModel: vm)
+                    .environment(\.storyHeaderClearance, SparkSpacing.lg)
+                    .environment(\.storyShowsReadIndicator, false)
+            }
+        }
         .ignoresSafeArea()
         .statusBarHidden()
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
@@ -108,7 +121,8 @@ struct UpToSpeedView: View {
 
         TabView(selection: $vm.currentIndex) {
             ForEach(Array(vm.screens.enumerated()), id: \.element.id) { index, screen in
-                screenRenderer(screen, index: index, isActive: index == vm.currentIndex, vm: vm)
+                screenRenderer(screen, index: index, isActive: index == vm.currentIndex && !showsRecap, vm: vm)
+                    .id("\(screen.id)-\(vm.restorationVersion(for: screen.item?.id))")
                     .tag(index)
             }
         }
@@ -137,31 +151,32 @@ struct UpToSpeedView: View {
 
     private func controlsOverlay(vm: UpToSpeedViewModel) -> some View {
         VStack(spacing: SparkSpacing.sm) {
+            StoryProgressBar(chapters: progressChapters(vm: vm), currentIndex: vm.currentIndex)
             HStack(alignment: .center, spacing: SparkSpacing.sm) {
-                VStack(spacing: SparkSpacing.xs) {
-                    StoryProgressBar(chapters: progressChapters(vm: vm), currentIndex: vm.currentIndex)
-                    HStack {
-                        if let chapter = vm.currentChapter {
-                            Text(chapter.shortLabel)
-                                .font(SparkTypography.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Text(vm.chapterCounter)
-                            .font(SparkTypography.caption)
-                            .foregroundStyle(.tertiary)
-                            .monospacedDigit()
+                HStack(spacing: SparkSpacing.sm) {
+                    if let chapter = vm.currentChapter {
+                        Circle().fill(chapter.accent).frame(width: 7, height: 7)
+                            .accessibilityHidden(true)
+                        Text(chapter.shortLabel)
+                            .font(SparkTypography.bodyStrong)
+                            .foregroundStyle(.primary)
                     }
+                    Text(vm.chapterCounter)
+                        .font(SparkTypography.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
                 }
-                .padding(.horizontal, SparkSpacing.md)
-                .padding(.vertical, SparkSpacing.sm)
-                .frame(maxWidth: .infinity)
-                .sparkGlass(.capsule)
-
+                Spacer(minLength: 0)
+                Button { showsRecap = true } label: {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .frame(width: 44, height: 44)
+                        .sparkGlass(.circle)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.primary)
+                .accessibilityLabel("Recap")
                 closeButton { dismissFlow(vm: vm) }
             }
-            .padding(.horizontal, SparkSpacing.lg)
-            .padding(.top, topSafeArea + SparkSpacing.sm)
 
             if vm.newItemsAvailable > 0 {
                 Button {
@@ -178,10 +193,15 @@ struct UpToSpeedView: View {
                 .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
             }
         }
+        .padding(.horizontal, SparkSpacing.lg)
+        .padding(.top, topSafeArea + SparkSpacing.sm)
+        .padding(.bottom, SparkSpacing.md)
+        .glassEffect(.regular, in: Rectangle())
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
     }
 
     private func progressChapters(vm: UpToSpeedViewModel) -> [StoryProgressBar.ChapterSpec] {
-        vm.chapters.map { .init(label: $0.shortLabel, segments: max($0.cardCount, 1)) }
+        vm.chapters.map { .init(label: $0.shortLabel, segments: max($0.cardCount, 1), accent: $0.accent) }
     }
 
     private var dismissDragGesture: some Gesture {
@@ -238,7 +258,7 @@ struct UpToSpeedView: View {
 
         switch screen {
         case .opener:
-            FlintOpenerScreen(viewModel: vm)
+            FlintOpenerScreen(viewModel: vm, onShowRecap: { showsRecap = true })
         case .flintHeader(let item, let firstSection):
             FlintHeaderPage(item: item, firstSection: firstSection, isActive: isActive, onReachedBottom: consumed)
         case .flintParagraph(let item, let text, _):
@@ -267,7 +287,7 @@ struct UpToSpeedView: View {
                 viewModel: vm,
                 onDone: { dismissFlow(vm: vm) },
                 isActive: isActive,
-                onShowRecap: { vm.jump(to: index + 1) }
+                onShowRecap: { showsRecap = true }
             )
         case .recap:
             RecapScreen(viewModel: vm, isActive: isActive)

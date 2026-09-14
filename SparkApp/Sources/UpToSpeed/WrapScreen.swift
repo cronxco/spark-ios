@@ -11,17 +11,36 @@ struct WrapScreen: View {
     var onShowRecap: (() -> Void)?
 
     @Environment(\.openURL) private var openURL
+    @Environment(\.storyHeaderClearance) private var headerClearance
 
     var body: some View {
+        GeometryReader { geometry in
         StoryScreenScaffold(
             isActive: isActive,
             onReachedBottom: { viewModel.markReachedWrap() }
         ) {
             VStack(alignment: .leading, spacing: SparkSpacing.xl) {
-                Text(headline)
-                    .font(SparkTypography.hero)
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: SparkSpacing.xl)
+
+                VStack(spacing: SparkSpacing.lg) {
+                    Image(systemName: "checkmark")
+                        .font(.system(.largeTitle, weight: .medium))
+                        .foregroundStyle(Color.sparkSuccess)
+                        .padding(SparkSpacing.xl)
+                        .background(Color.sparkSuccess.opacity(0.12), in: .circle)
+                        .accessibilityHidden(true)
+
+                    Text(headline)
+                        .font(SparkTypography.hero)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text("Your catch-up is here whenever you need it.")
+                        .font(SparkTypography.body)
+                        .foregroundStyle(.secondary)
+                }
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
 
                 ForEach(viewModel.readingItems.indices, id: \.self) { index in
                     readingCard(viewModel.readingItems[index])
@@ -31,13 +50,28 @@ struct WrapScreen: View {
                     looseEnds
                 }
 
-                PillButton("Done for now") { onDone() }
-                    .frame(maxWidth: .infinity)
+                Spacer(minLength: SparkSpacing.xl)
 
-                if let onShowRecap, !viewModel.recapItems.isEmpty {
-                    recapLink(count: viewModel.recapItems.count, action: onShowRecap)
+                VStack(spacing: SparkSpacing.md) {
+                    Button(action: onDone) {
+                        Text("Done for now")
+                            .font(SparkTypography.bodyStrong)
+                            .foregroundStyle(.black)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.capsule)
+                    .tint(.sparkAccent)
+
+                    if let onShowRecap, !viewModel.recapItems.isEmpty {
+                        recapLink(count: viewModel.recapItems.count, action: onShowRecap)
+                            .frame(minHeight: 44)
+                    }
                 }
             }
+            .frame(minHeight: max(0, geometry.size.height - headerClearance - SparkSpacing.xxl))
+        }
+        .environment(\.storyShowsReadIndicator, false)
         }
     }
 
@@ -47,7 +81,7 @@ struct WrapScreen: View {
     private func recapLink(count: Int, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: SparkSpacing.xs) {
-                Text(count == 1 ? "Earlier today · 1 item" : "Earlier today · \(count) items")
+                Text("Recap · \(count) items")
                     .font(SparkTypography.bodySmall)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .semibold))
@@ -61,9 +95,9 @@ struct WrapScreen: View {
 
     private var headline: String {
         if let name = firstName {
-            return "That's everything, \(name)."
+            return "You’re up to speed, \(name)."
         }
-        return "That's everything."
+        return "You’re up to speed."
     }
 
     private var firstName: String? {
@@ -88,7 +122,7 @@ struct WrapScreen: View {
 
                 if let blurb = reading.blurb {
                     Text(blurb)
-                        .font(SparkTypography.longFormBodySmall)
+                        .font(SparkTypography.bodySmall)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }

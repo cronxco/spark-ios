@@ -11,17 +11,19 @@ public struct FlintDigest: Codable, Sendable, Hashable, Identifiable {
     public let digestObjectID: String?
     public let date: String
     public let period: FlintDigestPeriod?
+    public let kind: FlintDigestKind?
     public let title: String
     public let summary: String?
     public let createdAt: Date?
     public let blockCount: Int
     public let unansweredQuestionCount: Int?
+    public let version: String?
     public let blocks: [FlintDigestBlock]
 
     public var id: String { eventID }
 
     enum CodingKeys: String, CodingKey {
-        case date, period, title, summary, blocks
+        case date, period, kind, title, summary, version, blocks
         case eventID = "event_id"
         case digestObjectID = "digest_object_id"
         case createdAt = "created_at"
@@ -34,22 +36,26 @@ public struct FlintDigest: Codable, Sendable, Hashable, Identifiable {
         digestObjectID: String? = nil,
         date: String,
         period: FlintDigestPeriod? = nil,
+        kind: FlintDigestKind? = nil,
         title: String,
         summary: String? = nil,
         createdAt: Date? = nil,
         blockCount: Int,
         unansweredQuestionCount: Int? = nil,
+        version: String? = nil,
         blocks: [FlintDigestBlock]
     ) {
         self.eventID = eventID
         self.digestObjectID = digestObjectID
         self.date = date
         self.period = period
+        self.kind = kind
         self.title = title
         self.summary = summary
         self.createdAt = createdAt
         self.blockCount = blockCount
         self.unansweredQuestionCount = unansweredQuestionCount
+        self.version = version
         self.blocks = blocks
     }
 
@@ -59,11 +65,13 @@ public struct FlintDigest: Codable, Sendable, Hashable, Identifiable {
         digestObjectID = try container.decodeLossyStringIfPresent(forKey: .digestObjectID)
         date = try container.decode(String.self, forKey: .date)
         period = try container.decodeIfPresent(FlintDigestPeriod.self, forKey: .period)
+        kind = try container.decodeIfPresent(FlintDigestKind.self, forKey: .kind)
         title = try container.decode(String.self, forKey: .title)
         summary = try container.decodeIfPresent(String.self, forKey: .summary)
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
         blockCount = try container.decodeIfPresent(Int.self, forKey: .blockCount) ?? 0
         unansweredQuestionCount = try container.decodeIfPresent(Int.self, forKey: .unansweredQuestionCount)
+        version = try container.decodeIfPresent(String.self, forKey: .version)
         blocks = try container.decodeIfPresent([FlintDigestBlock].self, forKey: .blocks) ?? []
     }
 }
