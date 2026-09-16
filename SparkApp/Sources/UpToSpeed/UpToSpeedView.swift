@@ -15,6 +15,7 @@ struct UpToSpeedView: View {
     @State private var didRequestDismiss = false
     @State private var isKeyboardVisible = false
     @State private var showsRecap = false
+    @State private var noteComposerContext: FlintNoteContext?
     @State private var headerHeight: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -65,6 +66,9 @@ struct UpToSpeedView: View {
                     .environment(\.storyHeaderClearance, SparkSpacing.lg)
                     .environment(\.storyShowsReadIndicator, false)
             }
+        }
+        .sheet(item: $noteComposerContext) { context in
+            FlintNoteComposerView(context: context, apiClient: appModel.apiClient)
         }
         .ignoresSafeArea()
         .statusBarHidden()
@@ -175,6 +179,16 @@ struct UpToSpeedView: View {
                         .monospacedDigit()
                 }
                 Spacer(minLength: 0)
+                Button {
+                    noteComposerContext = currentScreen(in: vm)?.flintNoteContext ?? .generic
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                        .frame(width: 44, height: 44)
+                        .sparkGlass(.circle)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.primary)
+                .accessibilityLabel("Note to Flint")
                 Button { showsRecap = true } label: {
                     Image(systemName: "clock.arrow.circlepath")
                         .frame(width: 44, height: 44)
@@ -206,6 +220,11 @@ struct UpToSpeedView: View {
         .padding(.bottom, SparkSpacing.md)
         .glassEffect(.regular, in: Rectangle())
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
+    }
+
+    private func currentScreen(in viewModel: UpToSpeedViewModel) -> UpToSpeedScreen? {
+        guard viewModel.screens.indices.contains(viewModel.currentIndex) else { return nil }
+        return viewModel.screens[viewModel.currentIndex]
     }
 
     private func progressChapters(vm: UpToSpeedViewModel) -> [StoryProgressBar.ChapterSpec] {

@@ -34,9 +34,7 @@ final class SentryAPITelemetrySink: APITelemetrySink, @unchecked Sendable {
         let crumb = Breadcrumb(level: level, category: "api")
         crumb.type = "http"
         crumb.message = "\(event.method) \(event.url.path) \(event.statusCode.map(String.init) ?? event.outcome.sentryName)"
-        for (key, value) in breadcrumbData(for: event) {
-            crumb.setData(value: value, key: key)
-        }
+        crumb.data = breadcrumbData(for: event)
         SentrySDK.addBreadcrumb(crumb)
     }
 

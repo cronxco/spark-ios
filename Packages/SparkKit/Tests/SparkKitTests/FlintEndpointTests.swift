@@ -346,6 +346,89 @@ struct FlintEndpointTests {
         #expect(question.asDigestBlock.priority == nil)
     }
 
+    @Test("notes endpoint carries pagination and bypasses bodyless ETag caching")
+    func notesEndpoint() {
+        let endpoint = FlintEndpoint.notes(limit: 25, cursor: "page-2")
+
+        #expect(endpoint.method == .get)
+        #expect(endpoint.path == "/flint/notes")
+        #expect(endpoint.query.contains(URLQueryItem(name: "limit", value: "25")))
+        #expect(endpoint.query.contains(URLQueryItem(name: "cursor", value: "page-2")))
+        #expect(endpoint.headers["Cache-Control"] == "no-cache")
+    }
+
+    @Test("note creation encodes the idempotent contract")
+    func createNoteEndpoint() throws {
+        let mutationID = UUID(uuidString: "7D16E962-7C8D-4761-AAC0-0A6A2307306B")!
+        let request = FlintNoteCreateRequest(
+            clientMutationID: mutationID,
+            authoredAt: Date(timeIntervalSince1970: 1_789_380_600),
+            body: "Keep Friday evening free.",
+            contextLinks: [.init(type: .digest, id: "digest-1")]
+        )
+        let endpoint = FlintEndpoint.createNote(request)
+        let body = try #require(endpoint.body)
+        let object = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let links = try #require(object["context_links"] as? [[String: String]])
+
+        #expect(endpoint.method == .post)
+        #expect(endpoint.path == "/flint/notes")
+        #expect(endpoint.contentType == "application/json")
+        #expect(object["client_mutation_id"] as? String == mutationID.uuidString)
+        #expect(object["body"] as? String == "Keep Friday evening free.")
+        #expect(object["consent_version"] as? String == "flint-note-v1")
+        #expect(object["authored_at"] is String)
+        #expect(links == [["type": "digest", "id": "digest-1"]])
+    }
+
+    @Test("delete note endpoint is an unconditional idempotent delete")
+    func deleteNoteEndpoint() {
+        let endpoint = FlintEndpoint.deleteNote(id: "note-1")
+
+        #expect(endpoint.method == .delete)
+        #expect(endpoint.path == "/flint/notes/note-1")
+        #expect(endpoint.headers.isEmpty)
+    }
+
+    @Test("notes decode pagination metadata and preserve future context types")
+    func decodesNotes() throws {
+        let json = """
+        {
+          "data": [{
+            "id": "note-1",
+            "title": "Note to Flint 14/09/26 13:17",
+            "body": "Keep Friday evening free.",
+            "authored_at": "2026-09-14T13:17:00+01:00",
+            "created_at": "2026-09-14T12:17:01+00:00",
+            "deleted_at": null,
+            "context_links": [
+              {"type": "event", "id": "event-1"},
+              {"type": "object", "id": "object-1"}
+            ],
+            "consent_version": "flint-note-v1",
+            "consented_at": "2026-09-14T12:17:01+00:00",
+            "version": "\\\"note-v1\\\""
+          }],
+          "next_cursor": "page-2",
+          "has_more": true,
+          "meta": {
+            "effective_timezone": "Europe/London",
+            "account_id": "user-1"
+          }
+        }
+        """
+
+        let response = try makeDecoder().decode(FlintNotesResponse.self, from: Data(json.utf8))
+        let note = try #require(response.data.first)
+
+        #expect(note.body == "Keep Friday evening free.")
+        #expect(note.contextLinks[0].type == .event)
+        #expect(note.contextLinks[1].type == .unknown("object"))
+        #expect(response.nextCursor == "page-2")
+        #expect(response.hasMore)
+        #expect(response.meta.effectiveTimezone == "Europe/London")
+    }
+
     private func makeDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601

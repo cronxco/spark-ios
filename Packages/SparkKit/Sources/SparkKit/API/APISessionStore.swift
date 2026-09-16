@@ -70,7 +70,9 @@ public final class APISessionStore: @unchecked Sendable {
         lock.withLock {
             guard ticket.generation == generation, let index = entries.firstIndex(where: { $0.id == ticket.id }) else { return }
             entries[index].status = status
-            let sensitive = entries[index].path.contains("/oauth/") || entries[index].path.contains("/broadcasting/auth")
+            let sensitive = entries[index].path.contains("/oauth/")
+                || entries[index].path.contains("/broadcasting/auth")
+                || entries[index].path.contains("/flint/notes")
             entries[index].omitted = sensitive
             entries[index].originalBytes = (append ? entries[index].originalBytes : 0) + data.count
             if !sensitive {

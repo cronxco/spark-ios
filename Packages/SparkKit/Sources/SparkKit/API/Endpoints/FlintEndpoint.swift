@@ -80,6 +80,34 @@ public enum FlintEndpoint {
         )
     }
 
+    public static func notes(limit: Int = 20, cursor: String? = nil) -> Endpoint<FlintNotesResponse> {
+        var query = [URLQueryItem(name: "limit", value: String(limit))]
+        if let cursor {
+            query.append(URLQueryItem(name: "cursor", value: cursor))
+        }
+        return Endpoint(
+            method: .get,
+            path: "/flint/notes",
+            query: query,
+            headers: ["Cache-Control": "no-cache"]
+        )
+    }
+
+    public static func createNote(_ request: FlintNoteCreateRequest) -> Endpoint<FlintNoteResponse> {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return Endpoint(
+            method: .post,
+            path: "/flint/notes",
+            body: try? encoder.encode(request),
+            contentType: "application/json"
+        )
+    }
+
+    public static func deleteNote(id: String) -> Endpoint<EmptyResponse> {
+        Endpoint(method: .delete, path: "/flint/notes/\(id)")
+    }
+
     private static func digestQuery(
         date: String?,
         period: FlintDigestPeriod?,

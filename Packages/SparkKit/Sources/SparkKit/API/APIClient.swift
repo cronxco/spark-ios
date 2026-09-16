@@ -366,7 +366,9 @@ public actor APIClient {
         }
 
         #if DEBUG
-        let safeBody = APITelemetryRedactor.body(data, contentType: http.value(forHTTPHeaderField: "Content-Type"))
+        let safeBody = APITelemetryRedactor.omitsBody(forPath: endpoint.path)
+            ? nil
+            : APITelemetryRedactor.body(data, contentType: http.value(forHTTPHeaderField: "Content-Type"))
         let bodyPreview = safeBody.flatMap { String(data: $0, encoding: .utf8) } ?? "<redacted>"
         logger.info("[\(endpoint.path, privacy: .public)] HTTP \(http.statusCode, privacy: .public) — \(bodyPreview, privacy: .public)")
         #endif
@@ -413,7 +415,9 @@ public actor APIClient {
             #if DEBUG
             captureOutcome = "decoding failure"
             #endif
-            let safeBody = APITelemetryRedactor.body(data, contentType: http.value(forHTTPHeaderField: "Content-Type"))
+            let safeBody = APITelemetryRedactor.omitsBody(forPath: endpoint.path)
+                ? nil
+                : APITelemetryRedactor.body(data, contentType: http.value(forHTTPHeaderField: "Content-Type"))
             let bodyString = safeBody.flatMap { String(data: $0, encoding: .utf8) } ?? "<redacted>"
             logger.error("Decoding failed for \(endpoint.path, privacy: .public): \(error.localizedDescription, privacy: .public) — body: \(bodyString, privacy: .public)")
             await captureTelemetry(
@@ -507,6 +511,7 @@ public actor APIClient {
         let contentType = request.value(forHTTPHeaderField: "Content-Type")
         let responseContentType = response?.value(forHTTPHeaderField: "Content-Type")
 
+        let omitBody = APITelemetryRedactor.omitsBody(forPath: endpoint.path)
         let event = APITelemetryEvent(
             operation: operation,
             method: request.httpMethod ?? endpoint.method.rawValue,
@@ -516,10 +521,10 @@ public actor APIClient {
             attempt: attempt,
             isRefreshRequest: isRefreshRequest,
             requestHeaders: requestHeaders,
-            requestBody: APITelemetryRedactor.body(request.httpBody, contentType: contentType),
+            requestBody: omitBody ? nil : APITelemetryRedactor.body(request.httpBody, contentType: contentType),
             statusCode: response?.statusCode,
             responseHeaders: responseHeaders,
-            responseBody: APITelemetryRedactor.body(data, contentType: responseContentType),
+            responseBody: omitBody ? nil : APITelemetryRedactor.body(data, contentType: responseContentType),
             responseSizeBytes: data?.count ?? 0,
             durationMillis: Date().timeIntervalSince(startedAt) * 1_000,
             decodeDurationMillis: decodeDurationMillis,

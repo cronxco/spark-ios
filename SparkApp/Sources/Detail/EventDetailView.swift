@@ -64,7 +64,8 @@ struct EventDetailView: View {
             rawTitle: "Raw event",
             rawPayload: eventRawPayload,
             feedbackContext: eventFeedbackContext,
-            refresh: { await viewModel?.retry() }
+            refresh: { await viewModel?.retry() },
+            flintNoteContext: .event(id: eventId, label: onscreenTitle)
         )
         .toolbar { ToolbarItemGroup(placement: .topBarTrailing) { Button("Edit") { showEditor = true }.disabled(!isLoaded); Button { showLocationEditor = true } label: { Image(systemName: "mappin.and.ellipse") }.accessibilityLabel("Edit location").disabled(!isLoaded) } }
         .task(id: eventId) {

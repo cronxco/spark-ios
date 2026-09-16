@@ -46,6 +46,15 @@ struct APISessionStoreTests {
         #expect(!store.snapshot().export.contains("secret"))
     }
 
+    @Test func flintNoteResponseBodyIsOmitted() {
+        let store = APISessionStore()
+        let ticket = store.begin(request("/api/v1/mobile/flint/notes"))
+        store.response(ticket, status: 200, data: Data(#"{"body":"private prose"}"#.utf8))
+
+        #expect(store.snapshot().entries[0].omitted)
+        #expect(!store.snapshot().export.contains("private prose"))
+    }
+
     @Test func concurrentRetriesShareLogicalRequestIdentity() async {
         let store = APISessionStore()
         let logicalRequest = UUID()

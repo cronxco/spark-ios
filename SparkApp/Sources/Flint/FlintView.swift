@@ -8,6 +8,7 @@ struct FlintView: View {
     @Environment(\.tabAccessoryCoordinator) private var tabAccessoryCoordinator
     @State private var viewModel: FlintViewModel?
     @State private var path = NavigationPath()
+    @State private var noteComposerContext: FlintNoteContext?
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -32,6 +33,9 @@ struct FlintView: View {
                 viewModel = FlintViewModel(apiClient: appModel.apiClient)
             }
             await viewModel?.load()
+        }
+        .sheet(item: $noteComposerContext) { context in
+            FlintNoteComposerView(context: context, apiClient: appModel.apiClient)
         }
     }
 
@@ -135,6 +139,13 @@ struct FlintView: View {
             errorContent(message) { Task { await viewModel.refresh() } }
         case .loaded:
             VStack(alignment: .leading, spacing: SparkSpacing.xl) {
+                overviewSection("Notes to Flint") {
+                    FlintNotesOverviewSurface(
+                        onCompose: { noteComposerContext = .generic },
+                        onViewNotes: { path.append(FlintRoute.notes) }
+                    )
+                }
+
                 if let focus = viewModel.topics.first(where: { $0.status?.isActive == true }) {
                     overviewSection("Current focus") {
                         NavigationLink(value: FlintRoute.thread(focus.id)) { FlintFocusSurface(topic: focus) }
@@ -335,6 +346,8 @@ struct FlintView: View {
                 FlintThreadDestination(id: id, viewModel: viewModel)
             case .digest(let id):
                 FlintDigestDestination(id: id, viewModel: viewModel, onOpen: push)
+            case .notes:
+                FlintNotesView(apiClient: appModel.apiClient)
             }
         }
     }
@@ -361,9 +374,47 @@ struct FlintView: View {
     }
 }
 
-private enum FlintRoute: Hashable {
+enum FlintRoute: Hashable {
     case thread(String)
     case digest(String)
+    case notes
+}
+
+private struct FlintNotesOverviewSurface: View {
+    let onCompose: () -> Void
+    let onViewNotes: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.md) {
+            Text("Give Flint context it can remember and use later.")
+                .font(SparkTypography.bodySmall)
+                .foregroundStyle(.secondary)
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: SparkSpacing.sm) { actions }
+                VStack(alignment: .leading, spacing: SparkSpacing.sm) { actions }
+            }
+        }
+        .padding(SparkSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .sparkFlintMaterialSurface()
+    }
+
+    @ViewBuilder
+    private var actions: some View {
+        Button(action: onCompose) {
+            Label("Leave a note", systemImage: "square.and.pencil")
+                .frame(minHeight: 44)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(.sparkAccent)
+
+        Button(action: onViewNotes) {
+            Label("View notes", systemImage: "note.text")
+                .frame(minHeight: 44)
+        }
+        .buttonStyle(.bordered)
+    }
 }
 
 private struct FlintHistoryGroup {
@@ -574,6 +625,8 @@ private struct FlintThreadDestination: View {
 
 private struct FlintThreadDetailView: View {
     let topic: FlintTopic
+    @Environment(AppModel.self) private var appModel
+    @State private var showsNoteComposer = false
 
     var body: some View {
         ScrollView {
@@ -610,6 +663,19 @@ private struct FlintThreadDetailView: View {
         .navigationTitle(topic.title)
         .navigationBarTitleDisplayMode(.inline)
         .sparkAppBackground()
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { showsNoteComposer = true } label: {
+                    Label("Note to Flint", systemImage: "square.and.pencil")
+                }
+            }
+        }
+        .sheet(isPresented: $showsNoteComposer) {
+            FlintNoteComposerView(
+                context: .topic(id: topic.id, label: topic.title),
+                apiClient: appModel.apiClient
+            )
+        }
     }
 
     private func dateFact(_ label: String, _ date: Date?) -> some View {
@@ -665,6 +731,8 @@ private struct FlintDigestReader: View {
     let digest: FlintDigest
     let viewModel: FlintViewModel
     let onOpen: (DetailRoute) -> Void
+    @Environment(AppModel.self) private var appModel
+    @State private var showsNoteComposer = false
 
     var body: some View {
         ScrollView {
@@ -676,6 +744,19 @@ private struct FlintDigestReader: View {
         .navigationTitle(digest.displayTitle)
         .navigationBarTitleDisplayMode(.inline)
         .sparkAppBackground()
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { showsNoteComposer = true } label: {
+                    Label("Note to Flint", systemImage: "square.and.pencil")
+                }
+            }
+        }
+        .sheet(isPresented: $showsNoteComposer) {
+            FlintNoteComposerView(
+                context: .digest(id: digest.id, label: digest.displayTitle),
+                apiClient: appModel.apiClient
+            )
+        }
     }
 }
 
