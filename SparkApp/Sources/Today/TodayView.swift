@@ -54,7 +54,9 @@ struct TodayView: View {
                     }
 
                     #if DEBUG
-                        APISessionInspectorView()
+                        if let vm = viewModel, !vm.rawAPIEntries.isEmpty {
+                            RawFeedJSONView(title: "Raw API response", entries: vm.rawAPIEntries)
+                        }
                     #endif
                 }
                 .padding(.horizontal, SparkSpacing.lg)

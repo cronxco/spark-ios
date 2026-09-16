@@ -114,9 +114,6 @@ struct MoneyExploreView: View {
                 accountsSection(vm: vm)
                     .padding(.horizontal, SparkSpacing.lg)
 
-                #if DEBUG
-                    APISessionInspectorView()
-                #endif
             }
         } else {
             shimmerPlaceholder

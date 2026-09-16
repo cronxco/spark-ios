@@ -76,6 +76,12 @@ struct SettingsRootView: View {
 
                     #if DEBUG
                     NavigationLink {
+                        APISessionSettingsView()
+                    } label: {
+                        Label("API Session", systemImage: "network")
+                    }
+
+                    NavigationLink {
                         DebugView()
                     } label: {
                         Label("Debug", systemImage: "ladybug")

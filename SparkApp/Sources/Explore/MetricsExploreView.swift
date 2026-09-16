@@ -88,9 +88,6 @@ struct MetricsExploreView: View {
                             .padding(.horizontal, SparkSpacing.lg)
                     }
 
-                    #if DEBUG
-                    APISessionInspectorView()
-                #endif
                 }
                 .padding(.top, SparkSpacing.md)
                 .padding(.bottom, SparkSpacing.xl)

@@ -114,9 +114,6 @@ struct HealthExploreView: View {
                     .padding(.horizontal, SparkSpacing.lg)
             }
 
-            #if DEBUG
-                    APISessionInspectorView()
-                #endif
         }
     }
 
