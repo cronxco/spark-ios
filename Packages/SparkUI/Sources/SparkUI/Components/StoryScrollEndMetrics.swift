@@ -12,12 +12,24 @@ struct StoryScrollEndMetrics: Equatable {
     let offsetY: CGFloat
     let containerHeight: CGFloat
     let contentHeight: CGFloat
+    let contentInsetTop: CGFloat
 
-    init(offsetY: CGFloat, containerHeight: CGFloat, contentHeight: CGFloat) {
+    init(
+        offsetY: CGFloat,
+        containerHeight: CGFloat,
+        contentHeight: CGFloat,
+        contentInsetTop: CGFloat = 0
+    ) {
         self.offsetY = offsetY
         self.containerHeight = containerHeight
         self.contentHeight = contentHeight
+        self.contentInsetTop = contentInsetTop
     }
+
+    /// The scroll view is resting at (or rubber-banding beyond) its top edge.
+    /// Accounting for the adjusted inset keeps this correct under the story's
+    /// full-screen safe-area treatment.
+    var isAtTop: Bool { offsetY + contentInsetTop <= 1 }
 
     func isAtEnd(threshold: CGFloat = StoryScrollEndMetrics.defaultThreshold) -> Bool {
         // Nothing laid out yet — no opinion either way.

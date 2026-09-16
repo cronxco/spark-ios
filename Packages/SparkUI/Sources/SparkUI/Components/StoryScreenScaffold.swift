@@ -43,6 +43,10 @@ public struct StoryScreenScaffold<Content: View>: View {
     private let content: Content
 
     @State private var isAtEnd = false
+    @State private var isAtTop = true
+    @Environment(\.storyHeaderClearance) private var headerClearance
+    @Environment(\.storyShowsReadIndicator) private var showsReadIndicator
+    @Environment(\.storyScrollTopChanged) private var storyScrollTopChanged
     @State private var hasReachedBottom = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -99,10 +103,22 @@ public struct StoryScreenScaffold<Content: View>: View {
             StoryScrollEndMetrics(
                 offsetY: geometry.contentOffset.y,
                 containerHeight: geometry.containerSize.height,
-                contentHeight: geometry.contentSize.height
+                contentHeight: geometry.contentSize.height,
+                contentInsetTop: geometry.contentInsets.top
             )
         } action: { _, metrics in
             isAtEnd = metrics.isAtEnd()
+            isAtTop = metrics.isAtTop
+            if isActive {
+                storyScrollTopChanged(metrics.isAtTop)
+            }
+        }
+        .onChange(of: isActive, initial: true) { _, isActive in
+            if isActive {
+                storyScrollTopChanged(isAtTop)
+            } else {
+                isAtEnd = false
+            }
         }
         .task(id: dwellKey) {
             guard onReachedBottom != nil, dwellKey.shouldArm else { return }
@@ -143,6 +159,35 @@ public struct StoryScreenScaffold<Content: View>: View {
         .accessibilityHidden(!hasReachedBottom)
         .accessibilityLabel("Read")
         .accessibilityAddTraits(.isStaticText)
+    }
+}
+
+private struct StoryHeaderClearanceKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 152
+}
+
+private struct StoryShowsReadIndicatorKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+private struct StoryScrollTopChangedKey: EnvironmentKey {
+    static let defaultValue: @MainActor @Sendable (Bool) -> Void = { _ in }
+}
+
+public extension EnvironmentValues {
+    var storyHeaderClearance: CGFloat {
+        get { self[StoryHeaderClearanceKey.self] }
+        set { self[StoryHeaderClearanceKey.self] = newValue }
+    }
+
+    var storyShowsReadIndicator: Bool {
+        get { self[StoryShowsReadIndicatorKey.self] }
+        set { self[StoryShowsReadIndicatorKey.self] = newValue }
+    }
+
+    var storyScrollTopChanged: @MainActor @Sendable (Bool) -> Void {
+        get { self[StoryScrollTopChangedKey.self] }
+        set { self[StoryScrollTopChangedKey.self] = newValue }
     }
 }
 

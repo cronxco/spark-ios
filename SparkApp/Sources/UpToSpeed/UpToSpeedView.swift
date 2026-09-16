@@ -17,6 +17,8 @@ struct UpToSpeedView: View {
     @State private var showsRecap = false
     @State private var noteComposerContext: FlintNoteContext?
     @State private var headerHeight: CGFloat = 0
+    @State private var isCurrentStoryAtTop = true
+    @State private var dismissDragStartedAtTop: Bool?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(isPresented: Binding<Bool>, viewModel: UpToSpeedViewModel? = nil) {
@@ -58,6 +60,7 @@ struct UpToSpeedView: View {
         .simultaneousGesture(dismissDragGesture)
         .environment(\.storyHeaderClearance, headerHeight + SparkSpacing.lg)
         .environment(\.storyShowsReadIndicator, true)
+        .environment(\.storyScrollTopChanged) { isCurrentStoryAtTop = $0 }
         .sheet(isPresented: $showsRecap, onDismiss: {
             Task { await viewModel?.reconcileAfterRecap() }
         }) {
@@ -232,9 +235,19 @@ struct UpToSpeedView: View {
     }
 
     private var dismissDragGesture: some Gesture {
-        DragGesture(minimumDistance: 36)
+        DragGesture(minimumDistance: 0)
+            .onChanged { _ in
+                // Latch the scroll position at touch-down. A drag that starts
+                // lower in the page must not become a dismiss gesture merely
+                // because that same drag scrolls the page back to the top.
+                if dismissDragStartedAtTop == nil {
+                    dismissDragStartedAtTop = isCurrentStoryAtTop
+                }
+            }
             .onEnded { value in
+                defer { dismissDragStartedAtTop = nil }
                 guard let vm = viewModel else { return }
+                guard dismissDragStartedAtTop == true else { return }
                 let vertical = value.translation.height
                 let horizontal = abs(value.translation.width)
                 guard vertical > 120, vertical > horizontal * 1.35 else { return }
