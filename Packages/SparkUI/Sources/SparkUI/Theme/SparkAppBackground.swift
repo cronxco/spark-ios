@@ -112,7 +112,7 @@ public struct SparkAppBackground: View {
         case .night:
             [
                 Color.ocean800.opacity(0.70),
-                Color.slate700.opacity(0.90),
+                Color.slate6.opacity(0.90),
                 Color.ocean950,
                 Color.black.opacity(0.50),
             ]

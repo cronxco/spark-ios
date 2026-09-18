@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - Spark brand palette
 //
-// Tokens mirror the Spark Design System. Each warm family is a ten-step ramp,
+// Tokens mirror the Spark Design System. Each family below is a ten-step ramp,
 // 0 lightest through 9 darkest, with the family's base at 5 — the same scale
 // the design system publishes, so these can be diffed against its
 // `tokens.json` directly. Brand colours are constants — they don't adapt to
@@ -58,16 +58,31 @@ public extension Color {
     static let ocean950 = Color(red: 0.024, green: 0.051, blue: 0.157)
     static let sky100 = Color(red: 0.820, green: 0.855, blue: 0.902)
 
-    // Slate — used as cool dark base in evening/night gradients.
-    static let slate500 = Color(red: 0.004, green: 0.086, blue: 0.153)
-    static let slate600 = Color(red: 0.004, green: 0.055, blue: 0.098)
-    static let slate700 = Color(red: 0.004, green: 0.071, blue: 0.125)
+    // Slate — the near-black ground. `slate5` is the dark-theme surface.
+    static let slate0 = Color(red: 0.008, green: 0.208, blue: 0.369) // #02355E
+    static let slate1 = Color(red: 0.008, green: 0.196, blue: 0.353) // #02325A
+    static let slate2 = Color(red: 0.008, green: 0.165, blue: 0.294) // #022A4B
+    static let slate3 = Color(red: 0.008, green: 0.141, blue: 0.255) // #022441
+    static let slate4 = Color(red: 0.004, green: 0.110, blue: 0.196) // #011C32
+    static let slate5 = Color(red: 0.004, green: 0.086, blue: 0.153) // #011627 — base
+    static let slate6 = Color(red: 0.004, green: 0.067, blue: 0.118) // #01111E
+    static let slate7 = Color(red: 0.004, green: 0.055, blue: 0.098) // #010E19
+    static let slate8 = Color(red: 0.000, green: 0.031, blue: 0.059) // #00080F
+    static let slate9 = Color(red: 0.000, green: 0.024, blue: 0.039) // #00060A
 
-    // Ash — light neutrals.
-    static let ash100 = Color(red: 0.988, green: 0.988, blue: 0.988)
-    static let ash200 = Color(red: 0.961, green: 0.961, blue: 0.961)
-    static let ash300 = Color(red: 0.922, green: 0.922, blue: 0.922)
-    static let ash400 = Color(red: 0.851, green: 0.851, blue: 0.851)
+    // Ash — the light neutral ground. `ash1` is the light-theme surface.
+    // Steps 0-2 are the same #FCFCFC: the ramp is tight enough that they
+    // collapse at 8-bit. Kept so the scale lines up with every other family.
+    static let ash0 = Color(red: 0.988, green: 0.988, blue: 0.988) // #FCFCFC
+    static let ash1 = Color(red: 0.988, green: 0.988, blue: 0.988) // #FCFCFC
+    static let ash2 = Color(red: 0.988, green: 0.988, blue: 0.988) // #FCFCFC
+    static let ash3 = Color(red: 0.980, green: 0.980, blue: 0.980) // #FAFAFA
+    static let ash4 = Color(red: 0.969, green: 0.969, blue: 0.969) // #F7F7F7
+    static let ash5 = Color(red: 0.961, green: 0.961, blue: 0.961) // #F5F5F5 — base
+    static let ash6 = Color(red: 0.949, green: 0.949, blue: 0.949) // #F2F2F2
+    static let ash7 = Color(red: 0.929, green: 0.929, blue: 0.929) // #EDEDED
+    static let ash8 = Color(red: 0.922, green: 0.922, blue: 0.922) // #EBEBEB
+    static let ash9 = Color(red: 0.902, green: 0.902, blue: 0.902) // #E6E6E6
 }
 
 // MARK: - Semantic colours

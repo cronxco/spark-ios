@@ -200,12 +200,42 @@ struct SparkPaletteTests {
 
     @Test("each ramp darkens from 0 to 9")
     func rampsDarkenMonotonically() {
-        for ramp in [Self.flame, Self.ember, Self.spark] {
+        for ramp in [Self.flame, Self.ember, Self.spark, Self.slate] {
             let luminances = ramp.map(Self.relativeLuminance)
             for (lighter, darker) in zip(luminances, luminances.dropFirst()) {
                 #expect(lighter > darker)
             }
         }
+    }
+
+    /// Ash never gets darker going up the ramp, but it is not strictly
+    /// decreasing: steps 0-2 are all #FCFCFC because the family spans only
+    /// #FCFCFC to #E6E6E6 and collapses at 8-bit.
+    @Test("Ash never lightens going up the ramp")
+    func ashIsNonIncreasing() {
+        let luminances = Self.ash.map(Self.relativeLuminance)
+        for (lighter, darker) in zip(luminances, luminances.dropFirst()) {
+            #expect(lighter >= darker)
+        }
+    }
+
+    @Test("Slate is the near-black ground ramp")
+    func slateIsTheDarkGround() {
+        #expect(Self.hex(.slate0) == "02355E")
+        #expect(Self.hex(.slate3) == "022441")
+        #expect(Self.hex(.slate5) == "011627")
+        #expect(Self.hex(.slate6) == "01111E")
+        #expect(Self.hex(.slate7) == "010E19")
+        #expect(Self.hex(.slate9) == "00060A")
+    }
+
+    @Test("Ash is the light neutral ground ramp")
+    func ashIsTheLightGround() {
+        #expect(Self.hex(.ash1) == "FCFCFC")
+        #expect(Self.hex(.ash4) == "F7F7F7")
+        #expect(Self.hex(.ash5) == "F5F5F5")
+        #expect(Self.hex(.ash8) == "EBEBEB")
+        #expect(Self.hex(.ash9) == "E6E6E6")
     }
 
     @Test("semantic tokens point at the right family")
@@ -219,6 +249,8 @@ struct SparkPaletteTests {
     private static let flame: [Color] = [.flame0, .flame1, .flame2, .flame3, .flame4, .flame5, .flame6, .flame7, .flame8, .flame9]
     private static let ember: [Color] = [.ember0, .ember1, .ember2, .ember3, .ember4, .ember5, .ember6, .ember7, .ember8, .ember9]
     private static let spark: [Color] = [.spark0, .spark1, .spark2, .spark3, .spark4, .spark5, .spark6, .spark7, .spark8, .spark9]
+    private static let slate: [Color] = [.slate0, .slate1, .slate2, .slate3, .slate4, .slate5, .slate6, .slate7, .slate8, .slate9]
+    private static let ash: [Color] = [.ash0, .ash1, .ash2, .ash3, .ash4, .ash5, .ash6, .ash7, .ash8, .ash9]
 
     private static func components(_ color: Color) -> (CGFloat, CGFloat, CGFloat) {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
