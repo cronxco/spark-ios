@@ -137,7 +137,7 @@ struct WrapScreen: View {
                         Spacer(minLength: SparkSpacing.sm)
                         Text("Answer")
                             .font(SparkTypography.captionStrong)
-                            .foregroundStyle(Color.spark700)
+                            .foregroundStyle(Color.ember7)
                     }
                     .padding(SparkSpacing.md)
                     .frame(maxWidth: .infinity, alignment: .leading)

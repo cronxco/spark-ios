@@ -2,33 +2,48 @@ import SwiftUI
 
 // MARK: - Spark brand palette
 //
-// Tokens mirror the Spark Design System (see `tokens.css` in the design
-// bundle). Brand colours are constants — they don't adapt to light/dark by
-// themselves. Surface/text tokens further down DO adapt.
+// Tokens mirror the Spark Design System. Each warm family is a ten-step ramp,
+// 0 lightest through 9 darkest, with the family's base at 5 — the same scale
+// the design system publishes, so these can be diffed against its
+// `tokens.json` directly. Brand colours are constants — they don't adapt to
+// light/dark by themselves. Surface/text tokens further down DO adapt.
 
 public extension Color {
-    // Spark — warm amber to orange.
-    static let spark50 = Color(red: 1.000, green: 0.969, blue: 0.839)
-    static let spark100 = Color(red: 1.000, green: 0.914, blue: 0.604)
-    static let spark200 = Color(red: 1.000, green: 0.851, blue: 0.400)
-    static let spark300 = Color(red: 1.000, green: 0.800, blue: 0.200)
-    /// Brand primary — used for CTAs, hero values, active selection.
-    static let spark400 = Color(red: 1.000, green: 0.749, blue: 0.000)
-    static let spark500 = Color(red: 0.969, green: 0.569, blue: 0.161)
-    static let spark600 = Color(red: 0.851, green: 0.455, blue: 0.102)
-    static let spark700 = Color(red: 0.690, green: 0.314, blue: 0.059)
+    // Spark — the brand amber. `spark5` is the brand primary.
+    static let spark0 = Color(red: 1.000, green: 0.976, blue: 0.898) // #FFF9E5
+    static let spark1 = Color(red: 1.000, green: 0.949, blue: 0.800) // #FFF2CC
+    static let spark2 = Color(red: 1.000, green: 0.902, blue: 0.600) // #FFE699
+    static let spark3 = Color(red: 1.000, green: 0.851, blue: 0.400) // #FFD966
+    static let spark4 = Color(red: 1.000, green: 0.800, blue: 0.200) // #FFCC33
+    static let spark5 = Color(red: 1.000, green: 0.749, blue: 0.000) // #FFBF00 — base
+    static let spark6 = Color(red: 0.800, green: 0.600, blue: 0.000) // #CC9900
+    static let spark7 = Color(red: 0.600, green: 0.451, blue: 0.000) // #997300
+    static let spark8 = Color(red: 0.400, green: 0.302, blue: 0.000) // #664D00
+    static let spark9 = Color(red: 0.200, green: 0.149, blue: 0.000) // #332600
 
-    // Flame
-    static let flame100 = Color(red: 0.980, green: 0.741, blue: 0.498)
-    static let flame200 = Color(red: 0.969, green: 0.569, blue: 0.161)
-    static let flame300 = Color(red: 0.690, green: 0.141, blue: 0.067)
-    static let flame400 = Color(red: 0.455, green: 0.094, blue: 0.043)
-    static let flame500 = Color(red: 0.235, green: 0.047, blue: 0.024)
+    // Ember — orange. Bridges Spark and Flame; the activity tint.
+    static let ember0 = Color(red: 0.996, green: 0.961, blue: 0.922) // #FEF5EB
+    static let ember1 = Color(red: 0.992, green: 0.910, blue: 0.827) // #FDE8D3
+    static let ember2 = Color(red: 0.988, green: 0.831, blue: 0.671) // #FCD4AB
+    static let ember3 = Color(red: 0.980, green: 0.741, blue: 0.498) // #FABD7F
+    static let ember4 = Color(red: 0.976, green: 0.651, blue: 0.325) // #F9A653
+    static let ember5 = Color(red: 0.969, green: 0.569, blue: 0.161) // #F79129 — base
+    static let ember6 = Color(red: 0.867, green: 0.451, blue: 0.031) // #DD7308
+    static let ember7 = Color(red: 0.655, green: 0.341, blue: 0.024) // #A75706
+    static let ember8 = Color(red: 0.443, green: 0.231, blue: 0.016) // #713B04
+    static let ember9 = Color(red: 0.212, green: 0.110, blue: 0.008) // #361C02
 
-    // Ember
-    static let ember100 = Color(red: 0.973, green: 0.757, blue: 0.725)
-    static let ember200 = Color(red: 0.961, green: 0.643, blue: 0.600)
-    static let ember300 = Color(red: 0.933, green: 0.388, blue: 0.322)
+    // Flame — red/coral. The media tint and the hottest signal.
+    static let flame0 = Color(red: 0.992, green: 0.933, blue: 0.925) // #FDEEEC
+    static let flame1 = Color(red: 0.988, green: 0.886, blue: 0.871) // #FCE2DE
+    static let flame2 = Color(red: 0.973, green: 0.757, blue: 0.725) // #F8C1B9
+    static let flame3 = Color(red: 0.961, green: 0.643, blue: 0.600) // #F5A499
+    static let flame4 = Color(red: 0.945, green: 0.510, blue: 0.455) // #F18274
+    static let flame5 = Color(red: 0.933, green: 0.388, blue: 0.322) // #EE6352 — base
+    static let flame6 = Color(red: 0.910, green: 0.184, blue: 0.090) // #E82F17
+    static let flame7 = Color(red: 0.690, green: 0.141, blue: 0.067) // #B02411
+    static let flame8 = Color(red: 0.455, green: 0.094, blue: 0.043) // #74180B
+    static let flame9 = Color(red: 0.235, green: 0.047, blue: 0.024) // #3C0C06
 
     // Ocean — cool blues, used for sleep/health.
     static let ocean100 = Color(red: 0.553, green: 0.725, blue: 0.867)
@@ -59,7 +74,7 @@ public extension Color {
 
 public extension Color {
     /// Brand primary. Use for CTAs, active tab tint, hero values.
-    static let sparkAccent = Color.spark400
+    static let sparkAccent = Color.spark5
 
     /// Cool accent — sleep, health, depth.
     static let sparkOcean = Color.ocean300
@@ -80,9 +95,9 @@ public extension Color {
 
 public extension Color {
     static let domainHealth = Color.sparkSuccess
-    static let domainActivity = Color.spark500
-    static let domainMoney = Color.spark400
-    static let domainMedia = Color.ember300
+    static let domainActivity = Color.ember5
+    static let domainMoney = Color.spark5
+    static let domainMedia = Color.flame5
     static let domainKnowledge = Color.ocean300
     static let domainAnomaly = Color.sparkWarning
 }

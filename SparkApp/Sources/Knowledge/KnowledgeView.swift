@@ -219,10 +219,10 @@ private struct KnowledgeItemCard: View {
 
     private var accent: Color {
         let palette: [Color] = [
-            .spark400,
-            .spark500,
+            .spark5,
+            .ember5,
             .ocean300,
-            .ember300,
+            .flame5,
             .sparkSuccess,
             .sparkWarning,
         ]

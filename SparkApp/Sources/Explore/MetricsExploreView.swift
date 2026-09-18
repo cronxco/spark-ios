@@ -376,7 +376,7 @@ struct MetricsExploreView: View {
     }
 
     private var headerTextColor: Color {
-        colorScheme == .dark ? Color.spark100 : Color.sparkTextPrimary
+        colorScheme == .dark ? Color.spark2 : Color.sparkTextPrimary
     }
 
     private var headerSubtitle: String {

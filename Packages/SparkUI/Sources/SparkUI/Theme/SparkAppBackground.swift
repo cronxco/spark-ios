@@ -97,14 +97,14 @@ public struct SparkAppBackground: View {
     private var colors: [Color] {
         switch phase {
         case .morning:
-            [Color.ocean100.opacity(0.24), Color.spark100.opacity(0.18), Color.clear]
+            [Color.ocean100.opacity(0.24), Color.spark2.opacity(0.18), Color.clear]
         case .day:
-            [Color.domainMoney.opacity(0.16), Color.spark100.opacity(0.16), Color.clear]
+            [Color.domainMoney.opacity(0.16), Color.spark2.opacity(0.16), Color.clear]
         case .eveningLight:
             [
-                Color.ember100.opacity(0.22),
-                Color.flame100.opacity(0.18),
-                Color.spark200.opacity(0.12),
+                Color.flame2.opacity(0.22),
+                Color.ember3.opacity(0.18),
+                Color.spark3.opacity(0.12),
                 Color.clear,
             ]
         case .eveningDark:
