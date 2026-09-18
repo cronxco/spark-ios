@@ -221,7 +221,7 @@ private struct KnowledgeItemCard: View {
         let palette: [Color] = [
             .spark5,
             .ember5,
-            .ocean300,
+            .sky5,
             .flame5,
             .sparkSuccess,
             .sparkWarning,

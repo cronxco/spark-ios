@@ -45,18 +45,41 @@ public extension Color {
     static let flame8 = Color(red: 0.455, green: 0.094, blue: 0.043) // #74180B
     static let flame9 = Color(red: 0.235, green: 0.047, blue: 0.024) // #3C0C06
 
-    // Ocean — cool blues, used for sleep/health.
-    static let ocean100 = Color(red: 0.553, green: 0.725, blue: 0.867)
-    static let ocean200 = Color(red: 0.392, green: 0.620, blue: 0.753)
-    static let ocean300 = Color(red: 0.247, green: 0.533, blue: 0.773)
-    static let ocean400 = Color(red: 0.192, green: 0.431, blue: 0.631)
-    static let ocean500 = Color(red: 0.169, green: 0.369, blue: 0.612)
-    static let ocean600 = Color(red: 0.141, green: 0.310, blue: 0.514)
-    static let ocean700 = Color(red: 0.086, green: 0.188, blue: 0.314)
-    static let ocean800 = Color(red: 0.051, green: 0.122, blue: 0.369)
-    static let ocean900 = Color(red: 0.035, green: 0.082, blue: 0.251)
-    static let ocean950 = Color(red: 0.024, green: 0.051, blue: 0.157)
-    static let sky100 = Color(red: 0.820, green: 0.855, blue: 0.902)
+    // Sky — the bright blue. `sky5` is the cool accent.
+    static let sky0 = Color(red: 0.922, green: 0.953, blue: 0.976) // #ebf3f9
+    static let sky1 = Color(red: 0.847, green: 0.906, blue: 0.953) // #d8e7f3
+    static let sky2 = Color(red: 0.694, green: 0.812, blue: 0.906) // #b1cfe7
+    static let sky3 = Color(red: 0.553, green: 0.725, blue: 0.867) // #8db9dd
+    static let sky4 = Color(red: 0.400, green: 0.631, blue: 0.820) // #66a1d1
+    static let sky5 = Color(red: 0.247, green: 0.533, blue: 0.773) // #3f88c5 — base
+    static let sky6 = Color(red: 0.192, green: 0.431, blue: 0.631) // #316ea1
+    static let sky7 = Color(red: 0.145, green: 0.325, blue: 0.475) // #255379
+    static let sky8 = Color(red: 0.094, green: 0.212, blue: 0.306) // #18364e
+    static let sky9 = Color(red: 0.047, green: 0.106, blue: 0.153) // #0c1b27
+
+    // Ocean — deep blue. `ocean5` is the web's light-mode accent fill.
+    static let ocean0 = Color(red: 0.200, green: 0.435, blue: 0.722) // #336fb8
+    static let ocean1 = Color(red: 0.192, green: 0.424, blue: 0.706) // #316cb4
+    static let ocean2 = Color(red: 0.180, green: 0.396, blue: 0.659) // #2e65a8
+    static let ocean3 = Color(red: 0.169, green: 0.369, blue: 0.612) // #2b5e9c
+    static let ocean4 = Color(red: 0.157, green: 0.341, blue: 0.565) // #285790
+    static let ocean5 = Color(red: 0.141, green: 0.310, blue: 0.514) // #244f83 — base
+    static let ocean6 = Color(red: 0.114, green: 0.247, blue: 0.408) // #1d3f68
+    static let ocean7 = Color(red: 0.086, green: 0.188, blue: 0.314) // #163050
+    static let ocean8 = Color(red: 0.055, green: 0.122, blue: 0.204) // #0e1f34
+    static let ocean9 = Color(red: 0.031, green: 0.067, blue: 0.110) // #08111c
+
+    // Flint — navy. The darkest cool family before Slate.
+    static let flint0 = Color(red: 0.071, green: 0.161, blue: 0.490) // #12297d
+    static let flint1 = Color(red: 0.067, green: 0.153, blue: 0.475) // #112779
+    static let flint2 = Color(red: 0.059, green: 0.137, blue: 0.420) // #0f236b
+    static let flint3 = Color(red: 0.051, green: 0.122, blue: 0.369) // #0d1f5e
+    static let flint4 = Color(red: 0.043, green: 0.098, blue: 0.298) // #0b194c
+    static let flint5 = Color(red: 0.035, green: 0.082, blue: 0.251) // #091540 — base
+    static let flint6 = Color(red: 0.027, green: 0.063, blue: 0.192) // #071031
+    static let flint7 = Color(red: 0.024, green: 0.051, blue: 0.157) // #060d28
+    static let flint8 = Color(red: 0.016, green: 0.035, blue: 0.106) // #04091b
+    static let flint9 = Color(red: 0.008, green: 0.016, blue: 0.051) // #02040d
 
     // Slate — the near-black ground. `slate5` is the dark-theme surface.
     static let slate0 = Color(red: 0.008, green: 0.208, blue: 0.369) // #02355E
@@ -91,13 +114,17 @@ public extension Color {
     /// Brand primary. Use for CTAs, active tab tint, hero values.
     static let sparkAccent = Color.spark5
 
-    /// Cool accent — sleep, health, depth.
-    static let sparkOcean = Color.ocean300
+    /// Cool accent — sleep, health, depth. Resolves to `sky5`; the name is a
+    /// role, like `sparkAccent`, not the family it draws from.
+    static let sparkOcean = Color.sky5
 
     static let sparkSuccess = Color(red: 0.478, green: 0.729, blue: 0.631)
     static let sparkWarning = Color(red: 0.694, green: 0.424, blue: 0.537)
     static let sparkError = Color(red: 0.886, green: 0.412, blue: 0.412)
-    static let sparkInfo = Color.ocean200
+    /// Not a ramp step — `#649ec0` is the informational semantic, and the
+    /// design system keeps it outside the eight families alongside success,
+    /// warning and error.
+    static let sparkInfo = Color(red: 0.392, green: 0.620, blue: 0.753)
 
     // Backwards-compat for Phase 1 callers.
     static let sparkPositive = sparkSuccess
@@ -113,7 +140,7 @@ public extension Color {
     static let domainActivity = Color.ember5
     static let domainMoney = Color.spark5
     static let domainMedia = Color.flame5
-    static let domainKnowledge = Color.ocean300
+    static let domainKnowledge = Color.sky5
     static let domainAnomaly = Color.sparkWarning
 }
 
@@ -133,14 +160,14 @@ public extension Color {
 public extension Color {
     /// Primary surface used under cards and sheets.
     static let sparkSurface = Color("SparkSurface", bundle: nil).fallback(
-        light: Color(red: 0.969, green: 0.957, blue: 0.925),
-        dark: Color(red: 0.024, green: 0.051, blue: 0.090)
+        light: .ash1,
+        dark: .slate5
     )
 
     /// Elevated surface for grouped cards.
     static let sparkElevated = Color("SparkElevated", bundle: nil).fallback(
-        light: Color(red: 1, green: 1, blue: 1),
-        dark: Color(red: 0.090, green: 0.106, blue: 0.149)
+        light: .white,
+        dark: .slate3
     )
 
     static let sparkTextPrimary = Color.primary

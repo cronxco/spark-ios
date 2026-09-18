@@ -298,7 +298,7 @@ struct MoneyExploreView: View {
     private func segmentColor(for type: String) -> Color {
         switch type {
         case "savings_account": Color.sparkSuccess
-        case "investment_account", "pension": Color.ocean300
+        case "investment_account", "pension": Color.sky5
         case "current_account": Color.domainMoney
         case "credit_card", "mortgage", "loan": Color.sparkError
         default: Color.secondary.opacity(0.4)
@@ -487,7 +487,7 @@ struct MoneyExploreView: View {
     private func accountGroupTint(for type: String) -> Color {
         switch type {
         case "savings_account": Color.sparkSuccess
-        case "investment_account", "pension": Color.ocean300
+        case "investment_account", "pension": Color.sky5
         case "credit_card", "mortgage", "loan": Color.sparkError
         case "current_account": Color.domainMoney
         default: Color.secondary.opacity(0.6)

@@ -186,21 +186,45 @@ struct SparkPaletteTests {
         #expect(Self.hex(.spark9) == "332600")
     }
 
-    /// The bug was that two names resolved to the same colour across families.
-    @Test("no colour appears in two warm families")
-    func warmFamiliesAreDisjoint() {
-        let flame = Set((0...9).map { Self.hex(Self.flame[$0]) })
-        let ember = Set((0...9).map { Self.hex(Self.ember[$0]) })
-        let spark = Set((0...9).map { Self.hex(Self.spark[$0]) })
+    @Test("Sky, Ocean and Flint are three separate blue ramps")
+    func coolBluesAreSeparate() {
+        #expect(Self.hex(.sky3) == "8DB9DD")
+        #expect(Self.hex(.sky5) == "3F88C5")
+        #expect(Self.hex(.sky6) == "316EA1")
+        #expect(Self.hex(.ocean3) == "2B5E9C")
+        #expect(Self.hex(.ocean5) == "244F83")
+        #expect(Self.hex(.ocean7) == "163050")
+        #expect(Self.hex(.flint3) == "0D1F5E")
+        #expect(Self.hex(.flint5) == "091540")
+        #expect(Self.hex(.flint7) == "060D28")
+    }
 
-        #expect(flame.isDisjoint(with: ember))
-        #expect(flame.isDisjoint(with: spark))
-        #expect(ember.isDisjoint(with: spark))
+    /// The bug, in every family that had it, was one name resolving to a colour
+    /// that belongs to another family. `ocean*` was the worst: it held Sky,
+    /// Ocean and Flint at once.
+    @Test("no colour appears in two families")
+    func familiesAreDisjoint() {
+        let sets = Self.allRamps.map { Set($0.value.map(Self.hex)) }
+        for (i, a) in sets.enumerated() {
+            for b in sets[(i + 1)...] {
+                #expect(a.isDisjoint(with: b))
+            }
+        }
+    }
+
+    /// Every family carries exactly ten steps, so a step number means the same
+    /// depth whichever family it is read from.
+    @Test("every family has ten steps")
+    func everyFamilyHasTenSteps() {
+        #expect(Self.allRamps.count == 8)
+        for ramp in Self.allRamps {
+            #expect(ramp.value.count == 10)
+        }
     }
 
     @Test("each ramp darkens from 0 to 9")
     func rampsDarkenMonotonically() {
-        for ramp in [Self.flame, Self.ember, Self.spark, Self.slate] {
+        for ramp in [Self.flame, Self.ember, Self.spark, Self.sky, Self.ocean, Self.flint, Self.slate] {
             let luminances = ramp.map(Self.relativeLuminance)
             for (lighter, darker) in zip(luminances, luminances.dropFirst()) {
                 #expect(lighter > darker)
@@ -244,6 +268,18 @@ struct SparkPaletteTests {
         #expect(Self.hex(.domainMoney) == Self.hex(.spark5))
         #expect(Self.hex(.domainActivity) == Self.hex(.ember5))
         #expect(Self.hex(.domainMedia) == Self.hex(.flame5))
+        #expect(Self.hex(.domainKnowledge) == Self.hex(.sky5))
+        #expect(Self.hex(.sparkOcean) == Self.hex(.sky5))
+    }
+
+    /// These four are semantics, not palette steps — the design system keeps
+    /// them outside the eight families. They must not collide with a ramp.
+    @Test("status colours stay off the ramps")
+    func statusColoursAreNotRampSteps() {
+        let ramp = Set(Self.allRamps.flatMap { $0.value.map(Self.hex) })
+        for colour in [Color.sparkInfo, .sparkSuccess, .sparkWarning, .sparkError] {
+            #expect(!ramp.contains(Self.hex(colour)))
+        }
     }
 
     private static let flame: [Color] = [.flame0, .flame1, .flame2, .flame3, .flame4, .flame5, .flame6, .flame7, .flame8, .flame9]
@@ -251,6 +287,14 @@ struct SparkPaletteTests {
     private static let spark: [Color] = [.spark0, .spark1, .spark2, .spark3, .spark4, .spark5, .spark6, .spark7, .spark8, .spark9]
     private static let slate: [Color] = [.slate0, .slate1, .slate2, .slate3, .slate4, .slate5, .slate6, .slate7, .slate8, .slate9]
     private static let ash: [Color] = [.ash0, .ash1, .ash2, .ash3, .ash4, .ash5, .ash6, .ash7, .ash8, .ash9]
+    private static let sky: [Color] = [.sky0, .sky1, .sky2, .sky3, .sky4, .sky5, .sky6, .sky7, .sky8, .sky9]
+    private static let ocean: [Color] = [.ocean0, .ocean1, .ocean2, .ocean3, .ocean4, .ocean5, .ocean6, .ocean7, .ocean8, .ocean9]
+    private static let flint: [Color] = [.flint0, .flint1, .flint2, .flint3, .flint4, .flint5, .flint6, .flint7, .flint8, .flint9]
+
+    private static let allRamps: [(name: String, value: [Color])] = [
+        ("flame", flame), ("ember", ember), ("spark", spark), ("sky", sky),
+        ("ocean", ocean), ("flint", flint), ("slate", slate), ("ash", ash),
+    ]
 
     private static func components(_ color: Color) -> (CGFloat, CGFloat, CGFloat) {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
