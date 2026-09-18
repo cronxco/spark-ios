@@ -56,7 +56,7 @@ struct EditAccountSheet: View {
         SparkSheetScaffold("Edit Account") {
             VStack(alignment: .leading, spacing: SparkSpacing.xl) {
                 VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                    SectionLabel("ACCOUNT NAME")
+                    SectionLabel("Account name")
                     TextField("Account name", text: $name)
                         .font(SparkTypography.body)
                         .padding(SparkSpacing.md)
@@ -64,7 +64,7 @@ struct EditAccountSheet: View {
                 }
 
                 VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                    SectionLabel("TYPE")
+                    SectionLabel("Type")
                     Picker("Account Type", selection: $accountType) {
                         ForEach(AccountTypeOption.allCases, id: \.value) { opt in
                             Text(opt.label).tag(opt.value)
@@ -82,7 +82,7 @@ struct EditAccountSheet: View {
                 }
 
                 VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                    SectionLabel("CURRENCY")
+                    SectionLabel("Currency")
                     Picker("Currency", selection: $currency) {
                         Text("GBP (£)").tag("GBP")
                         Text("USD ($)").tag("USD")
@@ -94,7 +94,7 @@ struct EditAccountSheet: View {
                 }
 
                 VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                    SectionLabel("PROVIDER (OPTIONAL)")
+                    SectionLabel("Provider (optional)")
                     TextField("e.g. Monzo, Barclays", text: $provider)
                         .font(SparkTypography.body)
                         .padding(SparkSpacing.md)
@@ -104,7 +104,7 @@ struct EditAccountSheet: View {
                 if showAccountNumber {
                     HStack(alignment: .top, spacing: SparkSpacing.md) {
                         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                            SectionLabel("ACCOUNT NO.")
+                            SectionLabel("Account no.")
                             TextField("Optional", text: $accountNumber)
                                 .font(SparkTypography.body)
                                 .keyboardType(.numberPad)
@@ -112,7 +112,7 @@ struct EditAccountSheet: View {
                                 .sparkGlass(.roundedRect(SparkRadii.md))
                         }
                         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                            SectionLabel("SORT CODE")
+                            SectionLabel("Sort code")
                             TextField("00-00-00", text: $sortCode)
                                 .font(SparkTypography.body)
                                 .keyboardType(.numberPad)
@@ -124,7 +124,7 @@ struct EditAccountSheet: View {
 
                 if showInterestRate {
                     VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                        SectionLabel("INTEREST RATE (%)")
+                        SectionLabel("Interest rate (%)")
                         TextField("0.00", text: $interestRateText)
                             .keyboardType(.decimalPad)
                             .font(SparkTypography.body)
@@ -135,7 +135,7 @@ struct EditAccountSheet: View {
 
                 VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                     Toggle(isOn: $showStartDate) {
-                        SectionLabel("START DATE")
+                        SectionLabel("Start date")
                     }
                     .toggleStyle(.switch)
                     if showStartDate {

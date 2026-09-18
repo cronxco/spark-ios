@@ -13,7 +13,7 @@ struct CheckInHeatmapCard: View {
         GlassCard {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                 HStack {
-                    SectionLabel("LAST 28 DAYS")
+                    SectionLabel("Last 28 days")
                     Spacer()
                     Text("\(completedDayCount) logged")
                         .font(SparkTypography.monoSmall)
