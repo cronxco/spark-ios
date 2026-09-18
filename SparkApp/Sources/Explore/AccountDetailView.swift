@@ -102,10 +102,9 @@ struct AccountDetailView: View {
                 }
 
                 if account.isNegativeBalance {
-                    Text("OUTSTANDING BALANCE")
+                    Text("Outstanding balance")
                         .font(SparkTypography.monoSmall)
                         .foregroundStyle(.secondary)
-                        .textCase(.uppercase)
                 }
 
                 if let balance = account.latestBalance {
@@ -243,7 +242,6 @@ struct AccountDetailView: View {
             Text("Balance History")
                 .font(SparkTypography.monoSmall)
                 .foregroundStyle(.secondary)
-                .textCase(.uppercase)
 
             if vm.balances.isEmpty {
                 GlassCard {

@@ -465,7 +465,7 @@ private struct FlintDigestCheckInPrompt: View {
                     HStack {
                         SectionLabel("Check-in")
                         Spacer()
-                        Text(period.rawValue.uppercased())
+                        Text(period.rawValue.sparkSentenceCase)
                             .font(SparkTypography.monoSmall)
                             .foregroundStyle(.secondary)
                     }

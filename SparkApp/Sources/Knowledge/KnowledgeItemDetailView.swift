@@ -144,7 +144,6 @@ struct KnowledgeItemDetailView: View {
                     Text(sourceLabel(payload: payload))
                         .font(SparkTypography.monoSmall)
                         .foregroundStyle(.white.opacity(0.9))
-                        .textCase(.uppercase)
                 }
                 .padding(SparkSpacing.lg)
             }
@@ -468,7 +467,6 @@ struct KnowledgeItemDetailView: View {
         else { return nil }
         return host
             .replacingOccurrences(of: "www.", with: "")
-            .uppercased()
     }
 
     private func takeawayBullets(from content: String) -> [String] {

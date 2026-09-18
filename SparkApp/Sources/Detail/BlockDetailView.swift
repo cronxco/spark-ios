@@ -201,7 +201,7 @@ struct BlockDetailView: View {
     }
 
     private func blockEyebrow(for block: Block) -> String {
-        var parts = [block.blockType.replacingOccurrences(of: "_", with: " ").uppercased()]
+        var parts = [block.blockType.sparkSentenceCase]
         if let time = block.time {
             parts.append(SparkDetailFormatters.shortDate.string(from: time))
             parts.append(SparkDetailFormatters.shortTime.string(from: time))

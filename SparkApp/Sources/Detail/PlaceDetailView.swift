@@ -143,7 +143,7 @@ struct PlaceDetailView: View {
                 HStack(spacing: SparkSpacing.sm) {
                     DomainGlyph(icon: "mappin.and.ellipse", tint: .sparkAccent, size: 28)
                     if let category = detail.place.category {
-                        Text(category.uppercased())
+                        Text(category.sparkSentenceCase)
                             .font(SparkTypography.monoSmall)
                             .foregroundStyle(.secondary)
                     }

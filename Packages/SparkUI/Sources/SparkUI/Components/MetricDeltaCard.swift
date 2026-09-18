@@ -35,9 +35,8 @@ public struct MetricDeltaCard: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-            Text(label.uppercased())
+            Text(label)
                 .font(SparkTypography.caption)
-                .tracking(1.1)
                 .foregroundStyle(.secondary)
 
             HStack(alignment: .firstTextBaseline, spacing: 3) {

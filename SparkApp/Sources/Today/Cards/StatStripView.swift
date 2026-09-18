@@ -95,7 +95,6 @@ private struct StatTile: View {
             Text(label)
                 .font(SparkTypography.monoSmall)
                 .foregroundStyle(.secondary)
-                .textCase(.uppercase)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)

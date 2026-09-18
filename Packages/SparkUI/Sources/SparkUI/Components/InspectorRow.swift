@@ -17,7 +17,7 @@ public struct InspectorRow<Value: View>: View {
 
     public var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.md) {
-            Text(key.uppercased())
+            Text(key)
                 .font(SparkTypography.monoSmall)
                 .foregroundStyle(.secondary)
                 .frame(width: 84, alignment: .leading)

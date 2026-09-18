@@ -73,7 +73,6 @@ struct RawFeedJSONView: View {
                                     Text(entry.title)
                                         .font(SparkTypography.monoSmall)
                                         .foregroundStyle(.secondary)
-                                        .textCase(.uppercase)
 
                                     Spacer(minLength: 0)
 

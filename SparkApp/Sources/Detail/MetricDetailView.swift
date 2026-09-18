@@ -383,7 +383,7 @@ struct MetricDetailView: View {
                 ForEach(compares.prefix(3)) { compare in
                     GlassCard(radius: SparkRadii.md, padding: SparkSpacing.md) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(compare.label.uppercased())
+                            Text(compare.label)
                                 .font(SparkTypography.monoSmall)
                                 .foregroundStyle(.secondary)
                             Text(formatNumber(compare.value))
@@ -510,7 +510,7 @@ struct MetricDetailView: View {
     }
 
     private func eventSubtitle(for event: Event) -> String? {
-        var parts: [String] = [event.service.uppercased()]
+        var parts: [String] = [event.service.sparkSentenceCase]
         if let time = event.time {
             parts.append(SparkDetailFormatters.compactDateTime.string(from: time))
         }

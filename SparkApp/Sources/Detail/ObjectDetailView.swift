@@ -282,8 +282,8 @@ struct ObjectDetailView: View {
 
     private func objectEyebrow(for object: EventObject) -> String {
         var parts = [
-            object.concept.uppercased(),
-            object.type.replacingOccurrences(of: "_", with: " ").uppercased()
+            object.concept.sparkSentenceCase,
+            object.type.sparkSentenceCase
         ]
         if let time = object.time {
             parts.append(SparkDetailFormatters.shortDate.string(from: time))

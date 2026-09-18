@@ -127,7 +127,6 @@ struct SearchView: View {
                                 Text(group.0)
                                     .font(SparkTypography.monoSmall)
                                     .foregroundStyle(.secondary)
-                                    .textCase(.uppercase)
                                     .padding(.horizontal, SparkSpacing.xs)
 
                                 VStack(spacing: SparkSpacing.sm) {
