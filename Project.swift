@@ -118,7 +118,9 @@ func shareInfoPlist() -> InfoPlist {
         "NSExtension": [
             "NSExtensionPointIdentifier": "com.apple.share-services",
             "NSExtensionAttributes": [
+                "NSExtensionJavaScriptPreprocessingFile": "PageCapture",
                 "NSExtensionActivationRule": [
+                    "NSExtensionActivationSupportsWebPageWithMaxCount": 1,
                     "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
                     "NSExtensionActivationSupportsImageWithMaxCount": 4,
                     "NSExtensionActivationSupportsText": true,
