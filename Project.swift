@@ -312,6 +312,7 @@ let sparkShare: Target = .target(
     entitlements: .file(path: "Extensions/SparkShare/SparkShare.entitlements"),
     dependencies: [
         .package(product: "SparkKit"),
+        .package(product: "SparkUI"),
     ],
     settings: sharedSettings(bundleId: "\(bundleIdBase).Share")
 )
