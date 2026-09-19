@@ -30,11 +30,16 @@ struct SparkSentenceCaseTests {
         #expect("outstanding_balance_due".sparkSentenceCase == "Outstanding balance due")
     }
 
-    /// Unlike `sparkActionTitle`, only the first word is capitalised.
+    /// Unlike `sparkActionTitle`, only the first word is capitalised, and
+    /// sentence case has no notion of minor words — `in` is lowered here
+    /// because every word after the first is, not because it is a preposition.
     @Test("it is sentence case, not title case")
     func differsFromTitleCase() {
+        #expect("direct_debit".sparkSentenceCase == "Direct debit")
+        #expect("direct_debit".sparkActionTitle == "Direct Debit")
+
         #expect("morning_check_in".sparkSentenceCase == "Morning check in")
-        #expect("morning_check_in".sparkActionTitle == "Morning Check In")
+        #expect("morning_check_in".sparkActionTitle == "Morning Check in")
     }
 
     @Test("already-shouting input is flattened, not preserved")
