@@ -23,6 +23,33 @@ final class ShareViewController: UIViewController {
 
         let providers = items.flatMap { $0.attachments ?? [] }
 
+        if let provider = providers.first(where: {
+            $0.hasItemConformingToTypeIdentifier(UTType.propertyList.identifier)
+        }) {
+            _ = provider.loadItem(
+                forTypeIdentifier: UTType.propertyList.identifier,
+                options: nil
+            ) { [weak self] item, _ in
+                let page = Self.preprocessedPage(from: item)
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    switch page {
+                    case .some(.captured(let page)):
+                        self.shareCapturedPage(page)
+                    case .some(.url(let url)):
+                        self.shareURL(url)
+                    case .none:
+                        self.complete()
+                    }
+                }
+            }
+            return
+        }
+
+        handleFallbackProviders(providers)
+    }
+
+    private func handleFallbackProviders(_ providers: [NSItemProvider]) {
         if let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.url.identifier) }) {
             _ = provider.loadObject(ofClass: URL.self) { [weak self] url, _ in
                 // Cast to Sendable type before crossing actor boundary.
@@ -72,6 +99,30 @@ final class ShareViewController: UIViewController {
     }
 
     // MARK: - URL sharing (bookmark)
+
+    private func shareCapturedPage(_ page: CapturedWebPage) {
+        Task {
+            do {
+                let client = APIClient(tokenStore: tokenStore, etagCache: ETagCache())
+                let payload = CapturedWebPageRequest(
+                    url: page.url.absoluteString,
+                    title: page.title,
+                    html: page.html
+                )
+                let endpoint = Endpoint<EmptyShareResponse>(
+                    method: .post,
+                    path: "/bookmarks/capture",
+                    body: try JSONEncoder().encode(payload),
+                    contentType: "application/json"
+                )
+                _ = try await client.request(endpoint)
+                await MainActor.run { self.showToast("Page captured!") }
+            } catch {
+                await MainActor.run { self.showToast("Couldn't capture page.") }
+            }
+            complete()
+        }
+    }
 
     private func shareURL(_ url: URL) {
         Task {
@@ -236,6 +287,31 @@ final class ShareViewController: UIViewController {
         return url
     }
 
+    private static func preprocessedPage(from item: NSSecureCoding?) -> PreprocessedPage? {
+        guard let payload = item as? [String: Any],
+              let results = payload[NSExtensionJavaScriptPreprocessingResultsKey] as? [String: Any],
+              let urlString = results["url"] as? String,
+              let url = URL(string: urlString),
+              ["http", "https"].contains(url.scheme?.lowercased() ?? "")
+        else { return nil }
+
+        guard results["captureError"] == nil,
+              let html = results["html"] as? String,
+              !html.isEmpty,
+              html.utf8.count <= CapturedWebPage.maximumHTMLBytes
+        else { return .url(url) }
+
+        let title = (results["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return .captured(
+            CapturedWebPage(
+                url: url,
+                title: title?.isEmpty == false ? title : nil,
+                html: html
+            )
+        )
+    }
+
     // MARK: - Helpers
 
     private func showToast(_ message: String) {
@@ -262,3 +338,22 @@ final class ShareViewController: UIViewController {
 }
 
 private struct EmptyShareResponse: Decodable, Sendable {}
+
+private enum PreprocessedPage: Sendable {
+    case captured(CapturedWebPage)
+    case url(URL)
+}
+
+private struct CapturedWebPage: Sendable {
+    static let maximumHTMLBytes = 5 * 1024 * 1024
+
+    let url: URL
+    let title: String?
+    let html: String
+}
+
+private struct CapturedWebPageRequest: Encodable, Sendable {
+    let url: String
+    let title: String?
+    let html: String
+}
