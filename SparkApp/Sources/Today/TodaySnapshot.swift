@@ -11,7 +11,6 @@ import SparkUI
 /// presentation layer.
 struct TodaySnapshot {
     let date: Date
-    let timeOfDay: SparkTimeOfDay
     let dateLabel: String
     let health: HealthSnapshot?
     let activity: ActivitySnapshot?
@@ -24,7 +23,6 @@ struct TodaySnapshot {
 
     init(summary: DaySummary?, date: Date, now: Date = .now, checkInStatus: CheckInDayStatus = .allPending) {
         self.date = date
-        self.timeOfDay = SparkTimeOfDay.from(date: now)
         self.dateLabel = Self.dateFormatter.string(from: date)
         self.health = HealthSnapshot(summary?.sections.health?.objectValue)
         self.activity = ActivitySnapshot(summary?.sections.activity?.objectValue)

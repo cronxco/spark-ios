@@ -6,46 +6,62 @@ import UIKit
 #endif
 @testable import SparkUI
 
-@Suite("Spark app background phase")
-struct SparkAppBackgroundPhaseTests {
-    @Test("auto light mode resolves expected day phases")
-    func autoLightModePhases() throws {
-        #expect(phase(hour: 5, colorScheme: .light) == .eveningLight)
-        #expect(phase(hour: 6, colorScheme: .light) == .morning)
-        #expect(phase(hour: 9, colorScheme: .light) == .morning)
-        #expect(phase(hour: 10, colorScheme: .light) == .day)
-        #expect(phase(hour: 16, colorScheme: .light) == .day)
-        #expect(phase(hour: 17, colorScheme: .light) == .eveningLight)
-        #expect(phase(hour: 22, colorScheme: .light) == .eveningLight)
+@Suite("Spark app background slots")
+struct SparkAppBackgroundSlotTests {
+    /// One set of boundaries for both schemes. The five-phase enum this
+    /// replaced split 06/10/17 in light and 06/22 in dark, so light mode never
+    /// reached a night wash and dark mode called 06:00 to 22:00 "evening".
+    @Test("the clock picks a slot on the documented boundaries")
+    func autoResolvesOnSlotBoundaries() throws {
+        #expect(try autoSlot(hour: 0) == .night)
+        #expect(try autoSlot(hour: 4) == .night)
+        #expect(try autoSlot(hour: 5) == .morning)
+        #expect(try autoSlot(hour: 10) == .morning)
+        #expect(try autoSlot(hour: 11) == .day)
+        #expect(try autoSlot(hour: 16) == .day)
+        #expect(try autoSlot(hour: 17) == .evening)
+        #expect(try autoSlot(hour: 20) == .evening)
+        #expect(try autoSlot(hour: 21) == .night)
+        #expect(try autoSlot(hour: 23) == .night)
     }
 
-    @Test("auto dark mode resolves evening and night phases")
-    func autoDarkModePhases() throws {
-        #expect(phase(hour: 5, colorScheme: .dark) == .night)
-        #expect(phase(hour: 6, colorScheme: .dark) == .eveningDark)
-        #expect(phase(hour: 21, colorScheme: .dark) == .eveningDark)
-        #expect(phase(hour: 22, colorScheme: .dark) == .night)
+    @Test("a pinned mode ignores the clock")
+    func pinnedModesIgnoreTheClock() throws {
+        let noon = try #require(Self.date(hour: 12))
+        let calendar = Self.calendar
+
+        #expect(SparkAppBackgroundMode.morning.resolvedSlot(date: noon, calendar: calendar) == .morning)
+        #expect(SparkAppBackgroundMode.day.resolvedSlot(date: noon, calendar: calendar) == .day)
+        #expect(SparkAppBackgroundMode.evening.resolvedSlot(date: noon, calendar: calendar) == .evening)
+        #expect(SparkAppBackgroundMode.night.resolvedSlot(date: noon, calendar: calendar) == .night)
     }
 
-    @Test("manual modes resolve independently of auto time buckets")
-    func manualModePhases() throws {
-        let date = try #require(Self.date(hour: 12))
+    @Test("only auto follows the clock")
+    func onlyAutoHasNoPinnedSlot() {
+        #expect(SparkAppBackgroundMode.auto.slot == nil)
 
-        #expect(SparkAppBackgroundPhase.resolve(mode: .morning, date: date, colorScheme: .dark) == .morning)
-        #expect(SparkAppBackgroundPhase.resolve(mode: .day, date: date, colorScheme: .dark) == .day)
-        #expect(SparkAppBackgroundPhase.resolve(mode: .evening, date: date, colorScheme: .light) == .eveningLight)
-        #expect(SparkAppBackgroundPhase.resolve(mode: .evening, date: date, colorScheme: .dark) == .eveningDark)
-        #expect(SparkAppBackgroundPhase.resolve(mode: .night, date: date, colorScheme: .light) == .night)
+        for mode in SparkAppBackgroundMode.allCases where mode != .auto {
+            #expect(mode.slot != nil)
+        }
     }
 
-    private func phase(hour: Int, colorScheme: ColorScheme) throws -> SparkAppBackgroundPhase {
+    /// These raw values are persisted in the App Group under
+    /// `spark.background.mode`. Renaming one drops a pinned setting back to
+    /// auto on the next launch, silently — which is why the `day` slot kept
+    /// its name rather than becoming `afternoon`.
+    @Test("stored mode values are stable")
+    func storedRawValuesAreStable() {
+        #expect(SparkAppBackgroundMode(rawValue: "auto") == .auto)
+        #expect(SparkAppBackgroundMode(rawValue: "morning") == .morning)
+        #expect(SparkAppBackgroundMode(rawValue: "day") == .day)
+        #expect(SparkAppBackgroundMode(rawValue: "evening") == .evening)
+        #expect(SparkAppBackgroundMode(rawValue: "night") == .night)
+        #expect(SparkAppBackgroundMode(rawValue: "afternoon") == nil)
+    }
+
+    private func autoSlot(hour: Int) throws -> SparkTimeOfDay {
         let date = try #require(Self.date(hour: hour))
-        return SparkAppBackgroundPhase.resolve(
-            mode: .auto,
-            date: date,
-            calendar: Self.calendar,
-            colorScheme: colorScheme
-        )
+        return SparkAppBackgroundMode.auto.resolvedSlot(date: date, calendar: Self.calendar)
     }
 
     private static let calendar: Calendar = {
@@ -291,10 +307,21 @@ struct SparkPaletteTests {
     private static let ocean: [Color] = [.ocean0, .ocean1, .ocean2, .ocean3, .ocean4, .ocean5, .ocean6, .ocean7, .ocean8, .ocean9]
     private static let flint: [Color] = [.flint0, .flint1, .flint2, .flint3, .flint4, .flint5, .flint6, .flint7, .flint8, .flint9]
 
-    private static let allRamps: [(name: String, value: [Color])] = [
+    fileprivate static let allRamps: [(name: String, value: [Color])] = [
         ("flame", flame), ("ember", ember), ("spark", spark), ("sky", sky),
         ("ocean", ocean), ("flint", flint), ("slate", slate), ("ash", ash),
     ]
+
+    /// Every step of every family, by hex. The background washes are checked
+    /// against this so they cannot drift off the ramps the way the deleted
+    /// `TodayBackground` literals did.
+    fileprivate static let rampHexes: Set<String> = Set(allRamps.flatMap { $0.value.map(hex) })
+
+    fileprivate static func isClear(_ color: Color) -> Bool {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        UIColor(color).getRed(&r, green: &g, blue: &b, alpha: &a)
+        return a == 0
+    }
 
     private static func components(_ color: Color) -> (CGFloat, CGFloat, CGFloat) {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
@@ -302,7 +329,7 @@ struct SparkPaletteTests {
         return (r, g, b)
     }
 
-    private static func hex(_ color: Color) -> String {
+    fileprivate static func hex(_ color: Color) -> String {
         let (r, g, b) = components(color)
         return String(format: "%02X%02X%02X", Int((r * 255).rounded()), Int((g * 255).rounded()), Int((b * 255).rounded()))
     }
@@ -313,6 +340,74 @@ struct SparkPaletteTests {
             c <= 0.03928 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
         }
         return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+    }
+}
+
+@Suite("Spark app background washes")
+struct SparkAppBackgroundWashTests {
+    /// The washes went off-ramp once already: the deleted `TodayBackground`
+    /// carried sixteen literal RGB values with no step behind any of them.
+    /// Every stop of every wash is a step of the eight families.
+    @Test("every light stop is a palette step")
+    func lightStopsArePaletteSteps() {
+        for slot in SparkTimeOfDay.allCases {
+            for stop in SparkAppBackground.lightStops(for: slot)
+            where !SparkPaletteTests.isClear(stop) {
+                #expect(SparkPaletteTests.rampHexes.contains(SparkPaletteTests.hex(stop)))
+            }
+        }
+    }
+
+    @Test("every dark base and glow is a palette step")
+    func darkStopsArePaletteSteps() {
+        for slot in SparkTimeOfDay.allCases {
+            for stop in SparkAppBackground.darkBase(for: slot) {
+                #expect(SparkPaletteTests.rampHexes.contains(SparkPaletteTests.hex(stop)))
+            }
+
+            let glows = SparkAppBackground.darkGlows(for: slot)
+            for glow in [glows.top, glows.bottom] {
+                #expect(SparkPaletteTests.rampHexes.contains(SparkPaletteTests.hex(glow.colour)))
+            }
+        }
+    }
+
+    /// Light mode cannot borrow the dark composition. `plusLighter` adds
+    /// light, and the light ground is 252 of a possible 255, so a glow over it
+    /// clips to white. That is why light draws a flat diagonal instead.
+    @Test("the light ground leaves a plusLighter glow no headroom")
+    func lightGroundCannotCarryGlows() {
+        #expect(SparkPaletteTests.hex(.ash1) == "FCFCFC")
+    }
+
+    @Test("each dark slot has a top-trailing and a bottom-leading glow")
+    func darkSlotsAreAnchoredConsistently() {
+        for slot in SparkTimeOfDay.allCases {
+            let glows = SparkAppBackground.darkGlows(for: slot)
+
+            #expect(glows.top.anchor == .topTrailing)
+            #expect(glows.bottom.anchor == .bottomLeading)
+
+            for glow in [glows.top, glows.bottom] {
+                #expect(glow.opacity > 0 && glow.opacity <= 1)
+                #expect(glow.span > 0 && glow.span <= 1)
+            }
+        }
+    }
+
+    /// Four slots, each with its own wash in each scheme. The whole point of
+    /// the change: no slot shares a gradient with another.
+    @Test("no two slots share a wash")
+    func slotsAreDistinct() {
+        let light = SparkTimeOfDay.allCases.map { slot in
+            SparkAppBackground.lightStops(for: slot).map(SparkPaletteTests.hex)
+        }
+        let dark = SparkTimeOfDay.allCases.map { slot in
+            SparkAppBackground.darkBase(for: slot).map(SparkPaletteTests.hex)
+        }
+
+        #expect(Set(light.map { $0.joined(separator: "-") }).count == 4)
+        #expect(Set(dark.map { $0.joined(separator: "-") }).count == 4)
     }
 }
 #endif

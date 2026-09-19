@@ -1,5 +1,6 @@
 import SparkKit
 import SwiftData
+import SparkUI
 import SwiftUI
 import WidgetKit
 
@@ -88,7 +89,7 @@ struct PlumbingSmokeTestView: View {
             }
         }
         .padding(12)
-        .containerBackground(for: .widget) { Color(.systemBackground) }
+        .containerBackground(for: .widget) { Color.sparkSurface }
     }
 
     private func row(label: String, ok: Bool) -> some View {

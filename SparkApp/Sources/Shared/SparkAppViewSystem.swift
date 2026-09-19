@@ -48,44 +48,6 @@ struct SparkSystemScreenHeader: View {
     }
 }
 
-struct SparkMainPageScaffold<Content: View>: View {
-    var horizontalPadding: CGFloat
-    var topPadding: CGFloat
-    var bottomPadding: CGFloat
-    var refresh: (() async -> Void)?
-    @ViewBuilder let content: Content
-
-    init(
-        horizontalPadding: CGFloat = SparkSpacing.lg,
-        topPadding: CGFloat = SparkSpacing.xl,
-        bottomPadding: CGFloat = SparkSpacing.xl,
-        refresh: (() async -> Void)? = nil,
-        @ViewBuilder content: () -> Content
-    ) {
-        self.horizontalPadding = horizontalPadding
-        self.topPadding = topPadding
-        self.bottomPadding = bottomPadding
-        self.refresh = refresh
-        self.content = content()
-    }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-                content
-            }
-            .padding(.horizontal, horizontalPadding)
-            .padding(.top, topPadding)
-            .padding(.bottom, bottomPadding)
-        }
-        .scrollContentBackground(.hidden)
-        .sparkAppBackground()
-        .refreshable {
-            await refresh?()
-        }
-    }
-}
-
 extension View {
     func sparkMainNavigationTitle(_ title: String) -> some View {
         navigationTitle("")

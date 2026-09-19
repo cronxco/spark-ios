@@ -1,3 +1,4 @@
+import SparkUI
 import SwiftUI
 import WidgetKit
 
@@ -52,7 +53,7 @@ struct TodayGlanceWidgetView: View {
                 nextEventTile(snap)
             }
         }
-        .containerBackground(for: .widget) { Color(.systemBackground) }
+        .containerBackground(for: .widget) { Color.sparkSurface }
         .widgetURL(URL(string: "https://spark.cronx.co/today"))
     }
 

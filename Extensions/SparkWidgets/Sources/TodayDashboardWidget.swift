@@ -1,6 +1,7 @@
 import AppIntents
 import SparkIntelligence
 import SparkKit
+import SparkUI
 import SwiftUI
 import WidgetKit
 
@@ -34,7 +35,7 @@ struct TodayDashboardWidgetView: View {
             Spacer(minLength: 0)
         }
         .padding(16)
-        .containerBackground(for: .widget) { Color(.systemBackground) }
+        .containerBackground(for: .widget) { Color.sparkSurface }
         .widgetURL(URL(string: "https://spark.cronx.co/today"))
     }
 

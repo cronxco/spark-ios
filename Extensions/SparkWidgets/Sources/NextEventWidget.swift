@@ -1,3 +1,4 @@
+import SparkUI
 import SwiftUI
 import WidgetKit
 
@@ -64,6 +65,6 @@ struct NextEventWidgetView: View {
     private var containerBG: some View {
         ContainerRelativeShape()
             .fill(.blue.opacity(0.08))
-            .containerBackground(for: .widget) { Color(.systemBackground) }
+            .containerBackground(for: .widget) { Color.sparkSurface }
     }
 }
