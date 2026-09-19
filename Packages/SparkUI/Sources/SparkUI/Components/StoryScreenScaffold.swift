@@ -149,12 +149,12 @@ public struct StoryScreenScaffold<Content: View>: View {
         .padding(.vertical, SparkSpacing.xs)
         .background(Capsule().fill(Color.sparkSuccess.opacity(0.15)))
         .opacity(hasReachedBottom ? 1 : 0)
-        .scaleEffect(reduceMotion ? 1 : (hasReachedBottom ? 1 : 0.8), anchor: .leading)
+        .scaleEffect(reduceMotion ? 1 : (hasReachedBottom ? 1 : 0.8), anchor: .center)
         .animation(
             reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.35, dampingFraction: 0.7),
             value: hasReachedBottom
         )
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .center)
         .accessibilityElement(children: .ignore)
         .accessibilityHidden(!hasReachedBottom)
         .accessibilityLabel("Read")
