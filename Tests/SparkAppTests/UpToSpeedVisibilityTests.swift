@@ -109,7 +109,7 @@ struct UpToSpeedVisibilityTests {
         #expect(recap.map(\.id) == ["anomaly-dismissed", "digest-read"])
     }
 
-    @Test func recapExcludesItemsSeenBeforeToday() throws {
+    @Test func recapIncludesAllReturnedHistory() throws {
         let recap = visibility(hour: 9).caughtUpItems(from: [
             digest(
                 id: "digest-old",
@@ -120,7 +120,7 @@ struct UpToSpeedVisibilityTests {
             anomaly(id: "anomaly-today", acknowledgedAt: timestamp(hour: 8)),
         ])
 
-        #expect(recap.map(\.id) == ["anomaly-today"])
+        #expect(recap.map(\.id) == ["anomaly-today", "digest-old"])
     }
 
     @Test func recapIsEmptyWhenNothingHasBeenSeen() throws {
@@ -134,12 +134,12 @@ struct UpToSpeedVisibilityTests {
 
     /// A submitted check-in is something that happened, not something that can
     /// be un-seen — and the feed has no way to reopen one.
-    @Test func recapExcludesCheckIns() throws {
+    @Test func recapIncludesCompletedCheckInsForReadOnlyReview() throws {
         let recap = visibility(hour: 13).caughtUpItems(from: [
             checkIn(.morning, completed: true, caughtUpAt: .now),
         ])
 
-        #expect(recap.isEmpty)
+        #expect(recap.count == 1)
     }
 
     private func anomaly(id: String, acknowledgedAt: Date? = nil, caughtUpAt: Date? = nil) -> UpToSpeedItem {

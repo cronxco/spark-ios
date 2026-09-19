@@ -13,4 +13,9 @@ public enum FlintTopicsEndpoint {
         }
         return Endpoint(method: .get, path: "/flint/topics", query: query)
     }
+
+    /// GET /flint/topics/{id}, including versioned linked evidence.
+    public static func detail(id: String) -> Endpoint<FlintTopicResponse> {
+        Endpoint(method: .get, path: "/flint/topics/\(id)")
+    }
 }

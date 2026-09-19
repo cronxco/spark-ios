@@ -19,6 +19,7 @@ import SwiftUI
 /// they are seen: the pager builds the adjacent page ahead of the swipe, so an
 /// off-screen card reaches end-of-content while the reader is still on the
 /// previous one. Only the active page arms the dwell.
+@MainActor
 public struct StoryScreenScaffold<Content: View>: View {
     public struct Byline: Equatable {
         public let name: String
@@ -38,9 +39,14 @@ public struct StoryScreenScaffold<Content: View>: View {
     public let reserveTopSpace: Bool
     public let isActive: Bool
     public let onReachedBottom: (() -> Void)?
+    public let supplement: AnyView?
     private let content: Content
 
     @State private var isAtEnd = false
+    @State private var isAtTop = true
+    @Environment(\.storyHeaderClearance) private var headerClearance
+    @Environment(\.storyShowsReadIndicator) private var showsReadIndicator
+    @Environment(\.storyScrollTopChanged) private var storyScrollTopChanged
     @State private var hasReachedBottom = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -50,6 +56,7 @@ public struct StoryScreenScaffold<Content: View>: View {
         reserveTopSpace: Bool = true,
         isActive: Bool = true,
         onReachedBottom: (() -> Void)? = nil,
+        supplement: AnyView? = nil,
         @ViewBuilder content: () -> Content
     ) {
         self.label = label
@@ -57,6 +64,7 @@ public struct StoryScreenScaffold<Content: View>: View {
         self.reserveTopSpace = reserveTopSpace
         self.isActive = isActive
         self.onReachedBottom = onReachedBottom
+        self.supplement = supplement
         self.content = content()
     }
 
@@ -75,13 +83,17 @@ public struct StoryScreenScaffold<Content: View>: View {
 
                 content
 
-                if onReachedBottom != nil {
+                if let supplement {
+                    supplement
+                }
+
+                if onReachedBottom != nil && showsReadIndicator {
                     readIndicator
                         .padding(.top, SparkSpacing.sm)
                 }
             }
             .padding(.horizontal, SparkSpacing.lg)
-            .padding(.top, reserveTopSpace ? 152 : SparkSpacing.lg)
+            .padding(.top, reserveTopSpace ? headerClearance + 8 : SparkSpacing.lg)
             .padding(.bottom, SparkSpacing.xxl)
         }
         .scrollDismissesKeyboard(.interactively)
@@ -91,10 +103,22 @@ public struct StoryScreenScaffold<Content: View>: View {
             StoryScrollEndMetrics(
                 offsetY: geometry.contentOffset.y,
                 containerHeight: geometry.containerSize.height,
-                contentHeight: geometry.contentSize.height
+                contentHeight: geometry.contentSize.height,
+                contentInsetTop: geometry.contentInsets.top
             )
         } action: { _, metrics in
             isAtEnd = metrics.isAtEnd()
+            isAtTop = metrics.isAtTop
+            if isActive {
+                storyScrollTopChanged(metrics.isAtTop)
+            }
+        }
+        .onChange(of: isActive, initial: true) { _, isActive in
+            if isActive {
+                storyScrollTopChanged(isAtTop)
+            } else {
+                isAtEnd = false
+            }
         }
         .task(id: dwellKey) {
             guard onReachedBottom != nil, dwellKey.shouldArm else { return }
@@ -125,16 +149,45 @@ public struct StoryScreenScaffold<Content: View>: View {
         .padding(.vertical, SparkSpacing.xs)
         .background(Capsule().fill(Color.sparkSuccess.opacity(0.15)))
         .opacity(hasReachedBottom ? 1 : 0)
-        .scaleEffect(reduceMotion ? 1 : (hasReachedBottom ? 1 : 0.8), anchor: .leading)
+        .scaleEffect(reduceMotion ? 1 : (hasReachedBottom ? 1 : 0.8), anchor: .center)
         .animation(
             reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.35, dampingFraction: 0.7),
             value: hasReachedBottom
         )
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .center)
         .accessibilityElement(children: .ignore)
         .accessibilityHidden(!hasReachedBottom)
         .accessibilityLabel("Read")
         .accessibilityAddTraits(.isStaticText)
+    }
+}
+
+private struct StoryHeaderClearanceKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 152
+}
+
+private struct StoryShowsReadIndicatorKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+private struct StoryScrollTopChangedKey: EnvironmentKey {
+    static let defaultValue: @MainActor @Sendable (Bool) -> Void = { _ in }
+}
+
+public extension EnvironmentValues {
+    var storyHeaderClearance: CGFloat {
+        get { self[StoryHeaderClearanceKey.self] }
+        set { self[StoryHeaderClearanceKey.self] = newValue }
+    }
+
+    var storyShowsReadIndicator: Bool {
+        get { self[StoryShowsReadIndicatorKey.self] }
+        set { self[StoryShowsReadIndicatorKey.self] = newValue }
+    }
+
+    var storyScrollTopChanged: @MainActor @Sendable (Bool) -> Void {
+        get { self[StoryScrollTopChangedKey.self] }
+        set { self[StoryScrollTopChangedKey.self] = newValue }
     }
 }
 

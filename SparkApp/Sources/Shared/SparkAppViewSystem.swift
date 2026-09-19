@@ -368,11 +368,13 @@ struct SparkSubViewToolbarModifier: ViewModifier {
     let feedbackContext: SparkFeedbackContext?
     let refresh: () async -> Void
     let reprocess: (() async -> Void)?
+    let flintNoteContext: FlintNoteContext?
 
     @Environment(AppModel.self) private var appModel
     @State private var showShareSheet = false
     @State private var showRawSheet = false
     @State private var showFeedbackSheet = false
+    @State private var showFlintNoteComposer = false
 
     func body(content: Content) -> some View {
         content
@@ -388,6 +390,13 @@ struct SparkSubViewToolbarModifier: ViewModifier {
                     .accessibilityLabel("Share")
 
                     Menu {
+                        if flintNoteContext != nil {
+                            Button {
+                                showFlintNoteComposer = true
+                            } label: {
+                                Label("Note to Flint", systemImage: "square.and.pencil")
+                            }
+                        }
                         Button("Tag") {}
                             .disabled(true)
                         if feedbackContext != nil {
@@ -445,6 +454,11 @@ struct SparkSubViewToolbarModifier: ViewModifier {
                     )
                 }
             }
+            .sheet(isPresented: $showFlintNoteComposer) {
+                if let flintNoteContext {
+                    FlintNoteComposerView(context: flintNoteContext, apiClient: appModel.apiClient)
+                }
+            }
     }
 }
 
@@ -459,7 +473,8 @@ extension View {
         rawPayload: String?,
         feedbackContext: SparkFeedbackContext? = nil,
         refresh: @escaping () async -> Void,
-        reprocess: (() async -> Void)? = nil
+        reprocess: (() async -> Void)? = nil,
+        flintNoteContext: FlintNoteContext? = nil
     ) -> some View {
         modifier(SparkSubViewToolbarModifier(
             shareItems: shareItems,
@@ -467,7 +482,8 @@ extension View {
             rawPayload: rawPayload,
             feedbackContext: feedbackContext,
             refresh: refresh,
-            reprocess: reprocess
+            reprocess: reprocess,
+            flintNoteContext: flintNoteContext
         ))
     }
 }

@@ -15,19 +15,19 @@ final class FlintViewModel {
     }
 
     enum FlintTab: String, Identifiable, CaseIterable {
-        case today
+        case overview
         case questions
         case threads
-        case archive
+        case history
 
         var id: String { rawValue }
 
         var title: String {
             switch self {
-            case .today: "Today"
+            case .overview: "Overview"
             case .questions: "Questions"
             case .threads: "Threads"
-            case .archive: "Archive"
+            case .history: "History"
             }
         }
     }
@@ -35,9 +35,9 @@ final class FlintViewModel {
     /// One open question, with the digest it came from so an answer can be
     /// routed back and a time/period label shown.
     struct OpenQuestion: Identifiable {
-        let digest: FlintDigest
-        let block: FlintDigestBlock
-        var id: String { block.id }
+        let question: FlintQuestion
+        var block: FlintDigestBlock { question.asDigestBlock }
+        var id: String { question.id }
     }
 
     private(set) var state: LoadState = .idle
@@ -45,14 +45,21 @@ final class FlintViewModel {
     private(set) var digests: [FlintDigest] = []
     private(set) var answeringBlockIDs: Set<String> = []
     private(set) var answerErrorByBlockID: [String: String] = [:]
-    var selectedTab: FlintTab = .today
+    var selectedTab: FlintTab = .overview
+
+    private(set) var questionsState: LoadState = .idle
+    private(set) var questions: [FlintQuestion] = []
 
     private(set) var topicsState: LoadState = .idle
     private(set) var topics: [FlintTopic] = []
+    private(set) var topicDetails: [String: FlintTopic] = [:]
+    private(set) var topicDetailState: [String: LoadState] = [:]
 
-    var archiveDate: Date = .now
-    private(set) var archiveState: LoadState = .idle
-    private(set) var archiveDigests: [FlintDigest] = []
+    private(set) var historyState: LoadState = .idle
+    private(set) var historyDigests: [FlintDigestSummary] = []
+    var historyFilterDate: Date?
+    private(set) var digestDetails: [String: FlintDigest] = [:]
+    private(set) var digestDetailState: [String: LoadState] = [:]
 
     private let date: Date
     private let apiClient: APIClient
@@ -64,11 +71,7 @@ final class FlintViewModel {
     }
 
     var openQuestions: [OpenQuestion] {
-        digests.flatMap { digest in
-            digest.blocks
-                .filter { $0.isQuestion && !$0.answered }
-                .map { OpenQuestion(digest: digest, block: $0) }
-        }
+        questions.map(OpenQuestion.init(question:))
     }
 
     var unansweredQuestionCount: Int { openQuestions.count }
@@ -101,7 +104,47 @@ final class FlintViewModel {
             state = digests.isEmpty ? .error(userFacingError(error)) : .loaded
         }
 
+        await loadQuestions()
         await loadTopicsIfNeeded()
+    }
+
+    // MARK: - Questions
+
+    func loadQuestionsIfNeeded() async {
+        guard questionsState == .idle else { return }
+        await loadQuestions()
+    }
+
+    func loadQuestions() async {
+        guard questionsState != .loading else { return }
+        questionsState = .loading
+
+        do {
+            var loaded: [FlintQuestion] = []
+            var cursor: String?
+            var seenCursors = Set<String>()
+            repeat {
+                let response = try await apiClient.request(FlintEndpoint.questions(cursor: cursor))
+                loaded.append(contentsOf: response.data)
+                cursor = response.meta.nextCursor
+                if let cursor, !seenCursors.insert(cursor).inserted { break }
+            } while cursor != nil
+
+            questions = loaded
+            questionsState = loaded.isEmpty ? .empty("No open questions.") : .loaded
+        } catch APIError.notModified {
+            questionsState = questions.isEmpty ? .empty("No open questions.") : .loaded
+        } catch where error.isAPICancellation {
+            questionsState = questions.isEmpty ? .idle : .loaded
+        } catch {
+            SparkObservability.captureHandled(error)
+            logger.error("Flint questions load failed: \(String(describing: error))")
+            questionsState = questions.isEmpty ? .error(userFacingError(error)) : .loaded
+        }
+    }
+
+    func question(id: String) -> FlintQuestion? {
+        questions.first { $0.id == id }
     }
 
     // MARK: - Threads
@@ -115,7 +158,12 @@ final class FlintViewModel {
         topicsState = .loading
         do {
             let response = try await apiClient.request(FlintTopicsEndpoint.list())
-            topics = response.data.sorted { ($0.lastTouchedAt ?? .distantPast) > ($1.lastTouchedAt ?? .distantPast) }
+            topics = response.data.sorted {
+                if $0.status?.isActive != $1.status?.isActive {
+                    return $0.status?.isActive == true
+                }
+                return ($0.lastTouchedAt ?? .distantPast) > ($1.lastTouchedAt ?? .distantPast)
+            }
             topicsState = topics.isEmpty ? .empty("No threads yet.") : .loaded
         } catch where error.isAPICancellation {
             topicsState = topics.isEmpty ? .idle : .loaded
@@ -126,64 +174,142 @@ final class FlintViewModel {
         }
     }
 
-    // MARK: - Archive
-
-    /// Picking a new date while a previous fetch is still in flight can let
-    /// the two resume out of order — guard every mutation after the `await`
-    /// on `date` still being the one currently selected, so a slow response
-    /// for an old pick can't clobber a faster one for a newer pick.
-    func selectArchiveDate(_ date: Date) async {
-        archiveDate = date
-        archiveState = .loading
+    func loadTopicDetail(id: String) async {
+        guard topicDetails[id] == nil, topicDetailState[id] != .loading else { return }
+        topicDetailState[id] = .loading
         do {
-            let loaded = try await fetchDigests(date: date).map(Self.orderedDigest)
-            guard date == archiveDate else { return }
-            archiveDigests = Self.sortedNewestFirst(loaded)
-            archiveState = archiveDigests.isEmpty ? .empty(emptyMessage(for: date)) : .loaded
+            let response = try await apiClient.request(FlintTopicsEndpoint.detail(id: id))
+            topicDetails[id] = response.data
+            topicDetailState[id] = .loaded
+        } catch APIError.notModified {
+            topicDetailState[id] = topicDetails[id] == nil ? .idle : .loaded
         } catch where error.isAPICancellation {
-            guard date == archiveDate else { return }
-            archiveState = archiveDigests.isEmpty ? .idle : .loaded
-        } catch where error.isNotFound {
-            guard date == archiveDate else { return }
-            archiveDigests = []
-            archiveState = .empty(emptyMessage(for: date))
+            topicDetailState[id] = topicDetails[id] == nil ? .idle : .loaded
         } catch {
-            guard date == archiveDate else { return }
             SparkObservability.captureHandled(error)
-            archiveState = .error(userFacingError(error))
+            logger.error("Flint topic detail load failed: \(String(describing: error))")
+            topicDetailState[id] = .error(userFacingError(error))
+        }
+    }
+
+    // MARK: - History
+
+    func loadHistoryIfNeeded() async {
+        guard historyState == .idle else { return }
+        await loadHistory()
+    }
+
+    func loadHistory() async {
+        guard historyState != .loading else { return }
+        historyState = .loading
+
+        let calendar = Calendar.current
+        let fromDate = calendar.date(byAdding: .day, value: -29, to: date) ?? date
+
+        do {
+            var loaded: [FlintDigestSummary] = []
+            var cursor: String?
+            var seenCursors = Set<String>()
+            repeat {
+                let response = try await apiClient.request(FlintEndpoint.history(
+                    from: Self.isoKey(for: fromDate),
+                    to: Self.isoKey(for: date),
+                    cursor: cursor
+                ))
+                loaded.append(contentsOf: response.data)
+                cursor = response.meta.nextCursor
+                if let cursor, !seenCursors.insert(cursor).inserted { break }
+            } while cursor != nil
+
+            historyDigests = loaded
+            historyState = loaded.isEmpty ? .empty("No Flint digests were created in the last 30 days.") : .loaded
+        } catch APIError.notModified {
+            historyState = historyDigests.isEmpty ? .empty("No Flint digests were created in the last 30 days.") : .loaded
+        } catch where error.isAPICancellation {
+            historyState = historyDigests.isEmpty ? .idle : .loaded
+        } catch {
+            SparkObservability.captureHandled(error)
+            logger.error("Flint history load failed: \(String(describing: error))")
+            historyState = historyDigests.isEmpty ? .error(userFacingError(error)) : .loaded
+        }
+    }
+
+    func digest(id: String) -> FlintDigest? {
+        digests.first { $0.id == id } ?? digestDetails[id]
+    }
+
+    func loadDigest(id: String) async {
+        guard digest(id: id) == nil, digestDetailState[id] != .loading else { return }
+        digestDetailState[id] = .loading
+        do {
+            digestDetails[id] = Self.orderedDigest(try await apiClient.request(FlintEndpoint.digest(id: id)))
+            digestDetailState[id] = .loaded
+        } catch APIError.notModified {
+            digestDetailState[id] = digestDetails[id] == nil ? .idle : .loaded
+        } catch where error.isAPICancellation {
+            digestDetailState[id] = digestDetails[id] == nil ? .idle : .loaded
+        } catch {
+            SparkObservability.captureHandled(error)
+            logger.error("Flint digest detail load failed: \(String(describing: error))")
+            digestDetailState[id] = .error(userFacingError(error))
         }
     }
 
     // MARK: - Answering
 
-    func answerQuestion(block: FlintDigestBlock, answer: String, note: String? = nil) async {
+    func answerQuestion(question: FlintQuestion, answer: String, note: String? = nil) async {
         let trimmedAnswer = answer.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedAnswer.isEmpty else {
-            answerErrorByBlockID[block.id] = "Enter an answer before submitting."
+            answerErrorByBlockID[question.id] = "Enter an answer before submitting."
             return
         }
 
-        answeringBlockIDs.insert(block.id)
-        answerErrorByBlockID[block.id] = nil
+        answeringBlockIDs.insert(question.id)
+        answerErrorByBlockID[question.id] = nil
 
         do {
-            _ = try await apiClient.request(FlintEndpoint.answerQuestion(
-                blockID: block.id,
-                FlintQuestionAnswerRequest(
+            _ = try await apiClient.request(FlintEndpoint.questionAction(
+                blockID: question.id,
+                version: question.version,
+                idempotencyKey: UUID(),
+                FlintQuestionActionRequest(
+                    action: .answer,
                     answer: trimmedAnswer,
-                    answerNote: trimmedNote?.isEmpty == false ? trimmedNote : nil
+                    context: trimmedNote?.isEmpty == false ? trimmedNote : nil
                 )
             ))
-            answeringBlockIDs.remove(block.id)
+            answeringBlockIDs.remove(question.id)
             await refresh()
         } catch where error.isAPICancellation {
-            answeringBlockIDs.remove(block.id)
+            answeringBlockIDs.remove(question.id)
         } catch {
-            answeringBlockIDs.remove(block.id)
+            answeringBlockIDs.remove(question.id)
             SparkObservability.captureHandled(error)
             logger.error("Flint question answer failed: \(String(describing: error))")
-            answerErrorByBlockID[block.id] = userFacingAnswerError(error)
+            answerErrorByBlockID[question.id] = userFacingAnswerError(error)
+        }
+    }
+
+    func skipQuestion(_ question: FlintQuestion) async {
+        answeringBlockIDs.insert(question.id)
+        answerErrorByBlockID[question.id] = nil
+        do {
+            _ = try await apiClient.request(FlintEndpoint.questionAction(
+                blockID: question.id,
+                version: question.version,
+                idempotencyKey: UUID(),
+                FlintQuestionActionRequest(action: .skip)
+            ))
+            answeringBlockIDs.remove(question.id)
+            await refresh()
+        } catch where error.isAPICancellation {
+            answeringBlockIDs.remove(question.id)
+        } catch {
+            answeringBlockIDs.remove(question.id)
+            SparkObservability.captureHandled(error)
+            logger.error("Flint question skip failed: \(String(describing: error))")
+            answerErrorByBlockID[question.id] = userFacingAnswerError(error)
         }
     }
 
@@ -211,6 +337,12 @@ final class FlintViewModel {
         }
         if case APIError.httpStatus(422, _, _) = error {
             return "Flint could not save that answer."
+        }
+        if case APIError.httpStatus(409, _, _) = error {
+            return "That question action conflicted with an earlier submission. Refresh and try again."
+        }
+        if let apiError = error as? APIError, apiError.isPreconditionFailure {
+            return "That question changed elsewhere. Refresh and try again."
         }
         return (error as? LocalizedError)?.errorDescription ?? "Couldn't submit your answer."
     }
@@ -251,11 +383,13 @@ final class FlintViewModel {
             digestObjectID: digest.digestObjectID,
             date: digest.date,
             period: digest.period,
+            kind: digest.kind,
             title: digest.title,
             summary: digest.summary,
             createdAt: digest.createdAt,
             blockCount: digest.blockCount,
             unansweredQuestionCount: digest.unansweredQuestionCount,
+            version: digest.version,
             blocks: orderedBlocks
         )
     }

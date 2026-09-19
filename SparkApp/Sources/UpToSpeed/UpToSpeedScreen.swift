@@ -49,4 +49,28 @@ enum UpToSpeedScreen: Identifiable {
         case .newsSummary(let item): item
         }
     }
+
+    var flintNoteContext: FlintNoteContext {
+        switch self {
+        case .flintInsight(_, let block), .flintQuestion(_, let block):
+            return .block(id: block.id, label: block.title)
+        case .flintHeader(let item, _),
+             .flintParagraph(let item, _, _),
+             .newsStory(let item, _, _, _),
+             .newsSummary(let item):
+            return .digest(id: item.id, label: Self.digestLabel(for: item))
+        case .checkIn(let item):
+            guard case .checkIn(let checkIn) = item.payload, let eventID = checkIn.eventId else {
+                return .generic
+            }
+            return .event(id: eventID, label: "check-in")
+        case .opener, .anomaly, .wrap, .recap:
+            return .generic
+        }
+    }
+
+    private static func digestLabel(for item: UpToSpeedItem) -> String {
+        guard case .flintDigest(let digest) = item.payload else { return "Flint digest" }
+        return digest.title ?? digest.period.map { "\($0.displayName) Digest" } ?? "Flint digest"
+    }
 }

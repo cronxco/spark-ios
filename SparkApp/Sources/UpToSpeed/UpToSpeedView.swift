@@ -14,6 +14,11 @@ struct UpToSpeedView: View {
     @State private var viewModel: UpToSpeedViewModel?
     @State private var didRequestDismiss = false
     @State private var isKeyboardVisible = false
+    @State private var showsRecap = false
+    @State private var noteComposerContext: FlintNoteContext?
+    @State private var headerHeight: CGFloat = 0
+    @State private var isCurrentStoryAtTop = true
+    @State private var dismissDragStartedAtTop: Bool?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(isPresented: Binding<Bool>, viewModel: UpToSpeedViewModel? = nil) {
@@ -53,6 +58,21 @@ struct UpToSpeedView: View {
             }
         }
         .simultaneousGesture(dismissDragGesture)
+        .environment(\.storyHeaderClearance, headerHeight + SparkSpacing.lg)
+        .environment(\.storyShowsReadIndicator, true)
+        .environment(\.storyScrollTopChanged) { isCurrentStoryAtTop = $0 }
+        .sheet(isPresented: $showsRecap, onDismiss: {
+            Task { await viewModel?.reconcileAfterRecap() }
+        }) {
+            if let vm = viewModel {
+                RecapScreen(viewModel: vm)
+                    .environment(\.storyHeaderClearance, SparkSpacing.lg)
+                    .environment(\.storyShowsReadIndicator, false)
+            }
+        }
+        .sheet(item: $noteComposerContext) { context in
+            FlintNoteComposerView(context: context, apiClient: appModel.apiClient)
+        }
         .ignoresSafeArea()
         .statusBarHidden()
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
@@ -108,7 +128,8 @@ struct UpToSpeedView: View {
 
         TabView(selection: $vm.currentIndex) {
             ForEach(Array(vm.screens.enumerated()), id: \.element.id) { index, screen in
-                screenRenderer(screen, index: index, isActive: index == vm.currentIndex, vm: vm)
+                screenRenderer(screen, index: index, isActive: index == vm.currentIndex && !showsRecap, vm: vm)
+                    .id("\(screen.id)-\(vm.restorationVersion(for: screen.item?.id))")
                     .tag(index)
             }
         }
@@ -133,35 +154,54 @@ struct UpToSpeedView: View {
         }
     }
 
+    private func supplement(for screen: UpToSpeedScreen, vm: UpToSpeedViewModel) -> AnyView? {
+        let items = vm.supplementalItems(for: screen)
+        guard !items.isEmpty else { return nil }
+        return AnyView(VStack(alignment: .leading, spacing: SparkSpacing.md) {
+            ForEach(items) { item in DigestSupplementView(item: item, viewModel: vm) }
+        })
+    }
+
     // MARK: - Controls overlay
 
     private func controlsOverlay(vm: UpToSpeedViewModel) -> some View {
         VStack(spacing: SparkSpacing.sm) {
+            StoryProgressBar(chapters: progressChapters(vm: vm), currentIndex: vm.currentIndex)
             HStack(alignment: .center, spacing: SparkSpacing.sm) {
-                VStack(spacing: SparkSpacing.xs) {
-                    StoryProgressBar(chapters: progressChapters(vm: vm), currentIndex: vm.currentIndex)
-                    HStack {
-                        if let chapter = vm.currentChapter {
-                            Text(chapter.shortLabel)
-                                .font(SparkTypography.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Text(vm.chapterCounter)
-                            .font(SparkTypography.caption)
-                            .foregroundStyle(.tertiary)
-                            .monospacedDigit()
+                HStack(spacing: SparkSpacing.sm) {
+                    if let chapter = vm.currentChapter {
+                        Circle().fill(chapter.accent).frame(width: 7, height: 7)
+                            .accessibilityHidden(true)
+                        Text(chapter.shortLabel)
+                            .font(SparkTypography.bodyStrong)
+                            .foregroundStyle(.primary)
                     }
+                    Text(vm.chapterCounter)
+                        .font(SparkTypography.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
                 }
-                .padding(.horizontal, SparkSpacing.md)
-                .padding(.vertical, SparkSpacing.sm)
-                .frame(maxWidth: .infinity)
-                .sparkGlass(.capsule)
-
+                Spacer(minLength: 0)
+                Button {
+                    noteComposerContext = currentScreen(in: vm)?.flintNoteContext ?? .generic
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                        .frame(width: 44, height: 44)
+                        .sparkGlass(.circle)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.primary)
+                .accessibilityLabel("Note to Flint")
+                Button { showsRecap = true } label: {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .frame(width: 44, height: 44)
+                        .sparkGlass(.circle)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.primary)
+                .accessibilityLabel("Recap")
                 closeButton { dismissFlow(vm: vm) }
             }
-            .padding(.horizontal, SparkSpacing.lg)
-            .padding(.top, topSafeArea + SparkSpacing.sm)
 
             if vm.newItemsAvailable > 0 {
                 Button {
@@ -178,16 +218,36 @@ struct UpToSpeedView: View {
                 .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
             }
         }
+        .padding(.horizontal, SparkSpacing.lg)
+        .padding(.top, topSafeArea + SparkSpacing.sm)
+        .padding(.bottom, SparkSpacing.md)
+        .glassEffect(.regular, in: Rectangle())
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
+    }
+
+    private func currentScreen(in viewModel: UpToSpeedViewModel) -> UpToSpeedScreen? {
+        guard viewModel.screens.indices.contains(viewModel.currentIndex) else { return nil }
+        return viewModel.screens[viewModel.currentIndex]
     }
 
     private func progressChapters(vm: UpToSpeedViewModel) -> [StoryProgressBar.ChapterSpec] {
-        vm.chapters.map { .init(label: $0.shortLabel, segments: max($0.cardCount, 1)) }
+        vm.chapters.map { .init(label: $0.shortLabel, segments: max($0.cardCount, 1), accent: $0.accent) }
     }
 
     private var dismissDragGesture: some Gesture {
-        DragGesture(minimumDistance: 36)
+        DragGesture(minimumDistance: 0)
+            .onChanged { _ in
+                // Latch the scroll position at touch-down. A drag that starts
+                // lower in the page must not become a dismiss gesture merely
+                // because that same drag scrolls the page back to the top.
+                if dismissDragStartedAtTop == nil {
+                    dismissDragStartedAtTop = isCurrentStoryAtTop
+                }
+            }
             .onEnded { value in
+                defer { dismissDragStartedAtTop = nil }
                 guard let vm = viewModel else { return }
+                guard dismissDragStartedAtTop == true else { return }
                 let vertical = value.translation.height
                 let horizontal = abs(value.translation.width)
                 guard vertical > 120, vertical > horizontal * 1.35 else { return }
@@ -235,18 +295,19 @@ struct UpToSpeedView: View {
         // the swipe lands. Without it an off-screen card reaches the end of its
         // content and would be marked read before the reader ever sees it.
         let consumed: () -> Void = { vm.markScreenConsumed(at: index) }
+        let supplement = supplement(for: screen, vm: vm)
 
         switch screen {
         case .opener:
-            FlintOpenerScreen(viewModel: vm)
+            FlintOpenerScreen(viewModel: vm, onShowRecap: { showsRecap = true })
         case .flintHeader(let item, let firstSection):
-            FlintHeaderPage(item: item, firstSection: firstSection, isActive: isActive, onReachedBottom: consumed)
+            FlintHeaderPage(item: item, firstSection: firstSection, isActive: isActive, onReachedBottom: consumed, supplement: supplement)
         case .flintParagraph(let item, let text, _):
-            FlintParagraphPage(item: item, text: text, isActive: isActive, onReachedBottom: consumed)
+            FlintParagraphPage(item: item, text: text, isActive: isActive, onReachedBottom: consumed, supplement: supplement)
         case .flintInsight(_, let block):
-            FlintInsightPage(block: block, isActive: isActive, onReachedBottom: consumed)
+            FlintInsightPage(block: block, isActive: isActive, onReachedBottom: consumed, supplement: supplement)
         case .flintQuestion(let item, let block):
-            FlintQuestionPage(item: item, block: block, viewModel: vm, isActive: isActive, onReachedBottom: consumed)
+            FlintQuestionPage(item: item, block: block, viewModel: vm, isActive: isActive, onReachedBottom: consumed, supplement: supplement)
         case .checkIn(let item):
             CheckInScreen(item: item, viewModel: vm)
         case .anomaly(let item):
@@ -257,17 +318,18 @@ struct UpToSpeedView: View {
                 section: section,
                 index: sectionIndex,
                 total: total,
+                viewModel: vm,
                 isActive: isActive,
                 onReachedBottom: consumed
             )
         case .newsSummary(let item):
-            NewsSummaryScreen(item: item, isActive: isActive, onReachedBottom: consumed)
+            NewsSummaryScreen(item: item, isActive: isActive, onReachedBottom: consumed, viewModel: vm)
         case .wrap:
             WrapScreen(
                 viewModel: vm,
                 onDone: { dismissFlow(vm: vm) },
                 isActive: isActive,
-                onShowRecap: { vm.jump(to: index + 1) }
+                onShowRecap: { showsRecap = true }
             )
         case .recap:
             RecapScreen(viewModel: vm, isActive: isActive)

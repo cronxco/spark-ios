@@ -553,6 +553,34 @@ struct APIClientTests {
         #expect(event.durationMillis >= 0)
     }
 
+    @Test("Flint note prose is omitted from telemetry")
+    func telemetryOmitsFlintNotes() async throws {
+        let sink = TestTelemetrySink()
+        let telemetry = APITelemetry()
+        await telemetry.setSink(sink)
+        let (client, tokenStore) = makeClient(telemetry: telemetry)
+        try await tokenStore.store(access: "a", refresh: "r", expiresIn: 3600)
+
+        let request = FlintNoteCreateRequest(
+            clientMutationID: UUID(),
+            authoredAt: .now,
+            body: "Private note prose"
+        )
+        await StubURLProtocol.set { _ in
+            let payload = """
+            {"data":{"id":"note-1","title":"Note to Flint","body":"Private note prose","authored_at":null,"created_at":null,"deleted_at":null,"context_links":[],"consent_version":"flint-note-v1","consented_at":null,"version":"\\\"v1\\\""}}
+            """
+            return (Data(payload.utf8), 201, ["Content-Type": "application/json"])
+        }
+
+        _ = try await client.request(FlintEndpoint.createNote(request))
+
+        let event = try await #require(sink.events().first)
+        #expect(event.requestBody == nil)
+        #expect(event.responseBody == nil)
+        #expect(event.responseSizeBytes > 0)
+    }
+
     @Test("cancelled requests are not captured as telemetry failures")
     func cancellationDoesNotCaptureTelemetryFailure() async throws {
         let sink = TestTelemetrySink()

@@ -61,6 +61,50 @@ struct FlintTopicsDecodingTests {
         #expect(response.data.isEmpty)
     }
 
+    @Test("decodes topic detail evidence")
+    func decodesTopicDetail() throws {
+        let json = """
+        {
+          "data": {
+            "id": "topic-1",
+            "title": "Quarterly planning",
+            "content": "Keep the review practical.",
+            "kind": "strategic",
+            "status": "active",
+            "first_seen_at": "2026-08-01T08:00:00Z",
+            "last_touched_at": "2026-09-14T07:12:03Z",
+            "next_review_at": "2026-09-20",
+            "origin": "digest_inference",
+            "version": "\\\"topic-v1\\\"",
+            "mentions": [{
+              "id": "relationship-1",
+              "kind": "block",
+              "source_type": "digest_block",
+              "digest_id": "digest-1",
+              "block_id": "block-1",
+              "title": "Planning pressure",
+              "detail": "flint_insight",
+              "excerpt": "The review overlaps travel.",
+              "local_date": "2026-09-14",
+              "period": "morning",
+              "occurred_at": "2026-09-14T07:12:03Z",
+              "deep_link": "spark://block/block-1",
+              "source_deleted": false
+            }]
+          }
+        }
+        """
+
+        let response = try makeDecoder().decode(FlintTopicResponse.self, from: Data(json.utf8))
+        let mention = try #require(response.data.mentions?.first)
+
+        #expect(response.data.version == "\"topic-v1\"")
+        #expect(mention.sourceType == "digest_block")
+        #expect(mention.blockID == "block-1")
+        #expect(mention.deepLink?.absoluteString == "spark://block/block-1")
+        #expect(!mention.sourceDeleted)
+    }
+
     private func makeDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
@@ -69,6 +113,11 @@ struct FlintTopicsDecodingTests {
             let formatter = ISO8601DateFormatter()
             formatter.formatOptions = [.withInternetDateTime]
             if let date = formatter.date(from: string) {
+                return date
+            }
+            let dateOnly = ISO8601DateFormatter()
+            dateOnly.formatOptions = [.withFullDate]
+            if let date = dateOnly.date(from: string) {
                 return date
             }
             throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid date: \(string)")

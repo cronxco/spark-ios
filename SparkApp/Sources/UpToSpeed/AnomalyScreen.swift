@@ -23,7 +23,7 @@ struct AnomalyScreen: View {
     }
 
     var body: some View {
-        StoryScreenScaffold(label: "Something unusual", flintByline: .init()) {
+        StoryScreenScaffold(flintByline: .init(meta: "Something unusual")) {
             VStack(alignment: .leading, spacing: SparkSpacing.xl) {
                 header
                 metricGrid
@@ -66,7 +66,7 @@ struct AnomalyScreen: View {
                 )
 
             Text(headline)
-                .font(SparkTypography.hero)
+                .font(SparkTypography.heroSmall)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -168,12 +168,12 @@ struct AnomalyScreen: View {
     private var narrative: some View {
         if let streak = anomaly?.streakDays, streak > 1 {
             Text("That's \(streak) days in a row now, which is longer than I'd put down to noise.")
-                .font(SparkTypography.longFormBody)
+                .font(SparkTypography.body)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
         } else {
             Text("This is far enough off your baseline that I didn't want it to pass without a mention.")
-                .font(SparkTypography.longFormBody)
+                .font(SparkTypography.body)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
         }

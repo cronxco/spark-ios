@@ -34,9 +34,7 @@ final class SentryAPITelemetrySink: APITelemetrySink, @unchecked Sendable {
         let crumb = Breadcrumb(level: level, category: "api")
         crumb.type = "http"
         crumb.message = "\(event.method) \(event.url.path) \(event.statusCode.map(String.init) ?? event.outcome.sentryName)"
-        for (key, value) in breadcrumbData(for: event) {
-            crumb.setData(value: value, key: key)
-        }
+        crumb.setSparkData(breadcrumbData(for: event))
         SentrySDK.addBreadcrumb(crumb)
     }
 
@@ -140,6 +138,21 @@ final class SentryAPITelemetrySink: APITelemetrySink, @unchecked Sendable {
 
     private func number(_ value: Double?) -> NSNumber {
         NSNumber(value: value ?? 0)
+    }
+}
+
+extension Breadcrumb {
+    func setSparkData(_ data: [String: Any]) {
+        let setDataSelector = NSSelectorFromString("setDataValue:forKey:")
+        if responds(to: setDataSelector) {
+            for (key, value) in data {
+                _ = perform(setDataSelector, with: value, with: key)
+            }
+        } else {
+            // Sentry 9.27's binary XCFramework doesn't expose setData(value:key:),
+            // even though its source interface deprecates the property setter.
+            setValue(data, forKey: "data")
+        }
     }
 }
 
