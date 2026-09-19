@@ -212,7 +212,7 @@ struct EventDetailView: View {
     }
 
     private func eyebrow(for event: Event) -> String {
-        var parts: [String] = [event.service.uppercased()]
+        var parts: [String] = [event.service.sparkSentenceCase]
         if let time = event.time {
             parts.append(SparkDetailFormatters.shortDate.string(from: time))
             parts.append(SparkDetailFormatters.shortTime.string(from: time))

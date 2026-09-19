@@ -142,9 +142,8 @@ struct UpToSpeedView: View {
                     StoryProgressBar(chapters: progressChapters(vm: vm), currentIndex: vm.currentIndex)
                     HStack {
                         if let chapter = vm.currentChapter {
-                            Text(chapter.shortLabel.uppercased())
+                            Text(chapter.shortLabel)
                                 .font(SparkTypography.caption)
-                                .tracking(1.4)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()

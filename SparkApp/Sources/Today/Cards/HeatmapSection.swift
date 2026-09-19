@@ -10,7 +10,6 @@ struct HeatmapSection: View {
                 Text("Last 45 days")
                     .font(SparkTypography.monoSmall)
                     .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
                 Spacer()
                 Text("← older")
                     .font(SparkTypography.monoSmall)

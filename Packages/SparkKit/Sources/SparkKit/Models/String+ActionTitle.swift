@@ -37,3 +37,23 @@ public extension String {
         ]
     }
 }
+
+public extension String {
+    /// A raw identifier as sentence case: `sleep_summary` -> `Sleep summary`,
+    /// `monzo` -> `Monzo`. Spark is sentence case throughout, so any snake or
+    /// kebab identifier reaching the interface goes through this rather than
+    /// being uppercased or title-cased.
+    ///
+    /// Only for machine-written identifiers. Text a person wrote is already
+    /// cased and must be rendered as given — this would flatten its acronyms.
+    var sparkSentenceCase: String {
+        let words = replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .split(whereSeparator: \.isWhitespace)
+            .map { $0.lowercased() }
+
+        guard let first = words.first, let initial = first.first else { return "" }
+        let head = initial.uppercased() + String(first.dropFirst())
+        return ([head] + words.dropFirst()).joined(separator: " ")
+    }
+}

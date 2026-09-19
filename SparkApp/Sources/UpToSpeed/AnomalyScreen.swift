@@ -196,7 +196,7 @@ struct AnomalyScreen: View {
             } label: {
                 Text("See the week")
                     .font(SparkTypography.bodySmall)
-                    .foregroundStyle(Color.spark700)
+                    .foregroundStyle(Color.ember7)
             }
         } else if isLoadingMetric {
             LoadingShimmer()

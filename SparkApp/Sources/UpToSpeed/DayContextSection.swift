@@ -234,9 +234,8 @@ struct DayContextSection: View {
     /// beside the weather where neither had room.
     private func yesterdayBlock(_ text: String) -> some View {
         VStack(alignment: .leading, spacing: SparkSpacing.xs) {
-            Text("YESTERDAY")
+            Text("Yesterday")
                 .font(SparkTypography.caption)
-                .tracking(1.1)
                 .foregroundStyle(.secondary)
             Text(text)
                 .font(SparkTypography.bodySmall)

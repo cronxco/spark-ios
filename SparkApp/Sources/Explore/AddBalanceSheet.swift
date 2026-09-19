@@ -23,7 +23,7 @@ struct AddBalanceSheet: View {
             VStack(alignment: .leading, spacing: SparkSpacing.xl) {
                 // Balance field
                 VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                    SectionLabel("BALANCE (\(currency))")
+                    SectionLabel("Balance (\(currency))")
                     TextField("0.00", text: $balanceText)
                         .keyboardType(.decimalPad)
                         .font(SparkTypography.body)
@@ -33,7 +33,7 @@ struct AddBalanceSheet: View {
 
                 // Date field
                 VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                    SectionLabel("DATE")
+                    SectionLabel("Date")
                     DatePicker("Balance date", selection: $date, displayedComponents: .date)
                         .labelsHidden()
                         .datePickerStyle(.compact)
@@ -44,7 +44,7 @@ struct AddBalanceSheet: View {
                 // Notes field
                 VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                     HStack {
-                        SectionLabel("NOTES")
+                        SectionLabel("Notes")
                         Spacer()
                         Text("\(notes.count)/500")
                             .font(SparkTypography.monoSmall)

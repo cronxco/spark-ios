@@ -103,7 +103,7 @@ struct IntegrationDetailView: View {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                 HStack(spacing: SparkSpacing.sm) {
                     DomainGlyph(icon: "link", tint: .sparkAccent, size: 28)
-                    Text(detail.integration.service.uppercased())
+                    Text(detail.integration.service.sparkSentenceCase)
                         .font(SparkTypography.monoSmall)
                         .foregroundStyle(.secondary)
                 }

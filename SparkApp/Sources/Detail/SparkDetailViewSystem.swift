@@ -16,7 +16,6 @@ struct SparkDetailHero: View {
             Text(eyebrow)
                 .font(SparkTypography.mono)
                 .foregroundStyle(.secondary)
-                .textCase(.uppercase)
                 .lineLimit(2)
 
             if let status, !status.isEmpty {
@@ -77,7 +76,6 @@ struct SparkDetailSectionHeader: View {
                 Text(trailing)
                     .font(SparkTypography.monoSmall)
                     .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
             }
         }
     }
@@ -106,7 +104,6 @@ struct SparkDetailInsightCard: View {
                         .font(SparkTypography.mono)
                         .fontWeight(.semibold)
                         .foregroundStyle(tint)
-                        .textCase(.uppercase)
 
                     Text(text)
                         .font(SparkTypography.body)
@@ -132,7 +129,6 @@ struct SparkDetailValueTile: View {
                 Text(label)
                     .font(SparkTypography.monoSmall)
                     .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
                     .lineLimit(1)
 
                 Text(value)

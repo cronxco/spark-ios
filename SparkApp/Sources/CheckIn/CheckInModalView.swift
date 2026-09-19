@@ -111,7 +111,7 @@ struct CheckInModalView: View {
 
     private var physicalSection: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.md) {
-            SectionLabel("HOW'S YOUR BODY?")
+            SectionLabel("How's your body?")
             EmojiRatingRow(
                 selected: $physical,
                 emojis: CheckInPresentation.physicalEmojis,
@@ -122,7 +122,7 @@ struct CheckInModalView: View {
 
     private var mentalSection: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.md) {
-            SectionLabel("HOW'S YOUR MIND?")
+            SectionLabel("How's your mind?")
             EmojiRatingRow(
                 selected: $mental,
                 emojis: CheckInPresentation.mentalEmojis,
@@ -134,7 +134,7 @@ struct CheckInModalView: View {
     private var notesSection: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.md) {
             HStack {
-                SectionLabel("NOTE")
+                SectionLabel("Note")
                 Spacer()
                 Text("\(notes.count) / 1000")
                     .font(SparkTypography.monoSmall)
@@ -178,7 +178,7 @@ struct CheckInModalView: View {
 
     private var locationSection: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.md) {
-            SectionLabel("LOCATION")
+            SectionLabel("Location")
             LocationChip(state: locationState) {
                 Task { await fetchLocation() }
             } onClear: {

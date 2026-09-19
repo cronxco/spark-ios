@@ -83,7 +83,7 @@ private struct RecapRow: View {
                 }
             }
             .buttonStyle(.plain)
-            .foregroundStyle(Color.spark700)
+            .foregroundStyle(Color.ember7)
             .disabled(isBusy)
             .accessibilityLabel("Restore \(title)")
             .accessibilityHint("Puts this back in your catch-up queue")

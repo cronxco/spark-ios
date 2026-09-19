@@ -27,7 +27,7 @@ struct NewsSummaryScreen: View {
 
     var body: some View {
         StoryScreenScaffold(
-            label: news.map { $0.source.uppercased() },
+            label: news.map(\.source),
             isActive: isActive,
             onReachedBottom: onReachedBottom
         ) {

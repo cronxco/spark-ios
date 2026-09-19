@@ -64,10 +64,9 @@ public struct StoryScreenScaffold<Content: View>: View {
         ScrollView {
             VStack(alignment: .leading, spacing: SparkSpacing.md) {
                 if let label {
-                    Text(label.uppercased())
+                    Text(label)
                         .font(SparkTypography.caption)
                         .foregroundStyle(.secondary)
-                        .tracking(1.2)
                 }
 
                 if let flintByline {

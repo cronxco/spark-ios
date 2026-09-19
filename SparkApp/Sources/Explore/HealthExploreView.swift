@@ -269,7 +269,7 @@ struct HealthExploreView: View {
                     fitnessTile("Distance", icon: "map.fill", quantity: distance, tint: Color.sparkOcean)
                 }
                 if let activeEnergy = today.activeEnergy {
-                    fitnessTile("Active", icon: "flame.fill", quantity: activeEnergy, tint: Color.spark500)
+                    fitnessTile("Active", icon: "flame.fill", quantity: activeEnergy, tint: Color.ember5)
                 }
                 if let exercise = today.exercise {
                     fitnessTile("Exercise", icon: "timer", quantity: exercise, tint: Color.domainHealth)
@@ -684,7 +684,7 @@ struct HealthExploreView: View {
         switch trend.service {
         case "oura": Color.sparkOcean
         case "hevy": Color.domainHealth
-        case "apple_health" where trend.action.contains("energy"): Color.spark500
+        case "apple_health" where trend.action.contains("energy"): Color.ember5
         case "apple_health": Color.domainActivity
         default: Color.sparkInfo
         }

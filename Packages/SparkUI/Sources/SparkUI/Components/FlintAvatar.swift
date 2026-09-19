@@ -31,7 +31,7 @@ public struct FlintAvatar: View {
         Circle()
             .fill(
                 LinearGradient(
-                    colors: [.spark300, .spark500],
+                    colors: [.spark4, .ember5],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )

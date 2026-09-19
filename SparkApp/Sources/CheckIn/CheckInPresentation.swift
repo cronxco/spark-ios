@@ -3,6 +3,11 @@ import SparkUI
 import SwiftUI
 
 enum CheckInPresentation {
+    /// The check-in mood scale: a diverging red-to-green ramp over a physical
+    /// plus mental score of 2...10. These are FILLS. No step reaches 4.5:1 on a
+    /// light ground and the two ends miss it on a dark one, so a score is never
+    /// carried by this colour alone — the heatmap cell pairs it with an
+    /// accessibility label, and text set in it goes in `sparkTextPrimary`.
     static func scoreColor(_ score: Int?) -> Color {
         switch score {
         case 2:  Color(red: 212/255, green: 61/255,  blue: 81/255)
@@ -92,7 +97,7 @@ struct CheckInPeriodSummaryRow: View {
                     Text(CheckInPresentation.mentalEmoji(mental))
                     Text("\(physical + mental)")
                         .font(.system(size: 18, weight: .semibold, design: .rounded))
-                        .foregroundStyle(CheckInPresentation.scoreColor(physical + mental))
+                        .foregroundStyle(Color.sparkTextPrimary)
                         .monospacedDigit()
                 }
                 .font(SparkTypography.bodySmall)

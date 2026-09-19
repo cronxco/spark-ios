@@ -14,7 +14,7 @@ struct SparkMainPageHeader: View {
         VStack(alignment: .leading, spacing: SparkSpacing.xs) {
             Text(title)
                 .font(SparkTypography.heroXL)
-                .foregroundStyle(colorScheme == .dark ? Color.spark100 : Color.sparkTextPrimary)
+                .foregroundStyle(colorScheme == .dark ? Color.spark2 : Color.sparkTextPrimary)
                 .accessibilityAddTraits(.isHeader)
 
             if let subtitle, !subtitle.isEmpty {

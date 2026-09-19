@@ -463,9 +463,9 @@ private struct FlintDigestCheckInPrompt: View {
             GlassCard {
                 VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                     HStack {
-                        SectionLabel("CHECK-IN")
+                        SectionLabel("Check-in")
                         Spacer()
-                        Text(period.rawValue.uppercased())
+                        Text(period.rawValue.sparkSentenceCase)
                             .font(SparkTypography.monoSmall)
                             .foregroundStyle(.secondary)
                     }
