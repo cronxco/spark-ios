@@ -1,6 +1,8 @@
 import SparkKit
-import UniformTypeIdentifiers
+import SparkUI
+import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 /// Share extension — handles URL, image, and text items from the share sheet.
 @objc(ShareViewController)
@@ -9,7 +11,7 @@ final class ShareViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .systemBackground
+        view.backgroundColor = UIColor(Color.sparkSurface)
         handleSharedItems()
     }
 
@@ -316,7 +318,7 @@ final class ShareViewController: UIViewController {
         let label = UILabel()
         label.text = message
         label.textAlignment = .center
-        label.backgroundColor = UIColor.systemBackground.withAlphaComponent(0.9)
+        label.backgroundColor = UIColor(Color.sparkSurface).withAlphaComponent(0.9)
         label.layer.cornerRadius = 12
         label.layer.masksToBounds = true
         label.font = .systemFont(ofSize: 15, weight: .medium)
