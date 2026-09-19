@@ -27,7 +27,7 @@ final class AppStubURLProtocol: URLProtocol, @unchecked Sendable {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
-        let request = self.request
+        let request = Self.materializingBody(of: self.request)
         let client = self.client
         Task {
             let host = request.url?.host ?? ""
@@ -47,6 +47,26 @@ final class AppStubURLProtocol: URLProtocol, @unchecked Sendable {
             client?.urlProtocol(self, didLoad: data)
             client?.urlProtocolDidFinishLoading(self)
         }
+    }
+
+    /// URLSession hands a `URLProtocol` the body as `httpBodyStream`, leaving
+    /// `httpBody` nil. Read the stream once, up front, so recorded requests
+    /// (and handlers) can inspect the body the way the caller set it.
+    private static func materializingBody(of request: URLRequest) -> URLRequest {
+        guard request.httpBody == nil, let stream = request.httpBodyStream else { return request }
+        var data = Data()
+        stream.open()
+        defer { stream.close() }
+        var buffer = [UInt8](repeating: 0, count: 4_096)
+        while stream.hasBytesAvailable {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            if count <= 0 { break }
+            data.append(buffer, count: count)
+        }
+        var copy = request
+        copy.httpBody = data
+        copy.httpBodyStream = nil
+        return copy
     }
 
     // Deliberately empty. Cancelling the delivery task here (tracked, guarded
