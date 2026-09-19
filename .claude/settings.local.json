@@ -15,5 +15,8 @@
       "mcp__claude_ai_Linear__list_comments",
       "WebSearch"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "context7"
+  ]
 }
