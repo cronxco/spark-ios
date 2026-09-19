@@ -141,7 +141,7 @@ struct SignOutAndPreferencesTests {
         let viewModel = NotificationsPreferencesViewModel(apiClient: client)
         await viewModel.load()
         viewModel.scheduleUpdate(NotificationPreferences(deliveryMode: .immediate))
-        try await waitForPatchCount(1)
+        try await waitForSaveStatus(.saved, on: viewModel)
         viewModel.scheduleUpdate(NotificationPreferences(deliveryMode: .workHours))
         try await waitForPatchCount(2)
 
@@ -393,6 +393,17 @@ struct SignOutAndPreferencesTests {
             try await Task.sleep(for: .milliseconds(50))
         }
         Issue.record("Timed out waiting for PATCH request \(expected)")
+    }
+
+    private func waitForSaveStatus(
+        _ expected: NotificationsPreferencesViewModel.SaveStatus,
+        on viewModel: NotificationsPreferencesViewModel
+    ) async throws {
+        for _ in 0..<60 {
+            if viewModel.saveStatus == expected { return }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        Issue.record("Timed out waiting for save status \(expected)")
     }
 }
 
