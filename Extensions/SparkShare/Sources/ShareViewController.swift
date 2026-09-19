@@ -26,11 +26,8 @@ final class ShareViewController: UIViewController {
         if let provider = providers.first(where: {
             $0.hasItemConformingToTypeIdentifier(UTType.propertyList.identifier)
         }) {
-            _ = provider.loadItem(
-                forTypeIdentifier: UTType.propertyList.identifier,
-                options: nil
-            ) { [weak self] item, _ in
-                let page = Self.preprocessedPage(from: item)
+            _ = provider.loadDataRepresentation(for: .propertyList) { [weak self] data, _ in
+                let page = data.flatMap(Self.preprocessedPage(from:))
                 Task { @MainActor [weak self] in
                     guard let self else { return }
                     switch page {
@@ -287,8 +284,9 @@ final class ShareViewController: UIViewController {
         return url
     }
 
-    private static func preprocessedPage(from item: NSSecureCoding?) -> PreprocessedPage? {
-        guard let payload = item as? [String: Any],
+    nonisolated private static func preprocessedPage(from data: Data) -> PreprocessedPage? {
+        guard let item = try? PropertyListSerialization.propertyList(from: data, format: nil),
+              let payload = item as? [String: Any],
               let results = payload[NSExtensionJavaScriptPreprocessingResultsKey] as? [String: Any],
               let urlString = results["url"] as? String,
               let url = URL(string: urlString),
