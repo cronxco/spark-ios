@@ -40,23 +40,44 @@ struct FlintView: View {
     }
 
     private var page: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-                if let viewModel {
-                    sectionPicker(viewModel)
-                    content(viewModel)
-                } else {
+        Group {
+            if let viewModel {
+                sectionPager(viewModel)
+            } else {
+                ScrollView {
                     loadingContent
+                        .frame(maxWidth: 720, alignment: .leading)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, SparkSpacing.lg)
+                        .padding(.top, SparkSpacing.sm)
+                        .padding(.bottom, SparkSpacing.xxl * 2)
+                }
+                .scrollDismissesKeyboard(.interactively)
+            }
+        }
+    }
+
+    private func sectionPager(_ viewModel: FlintViewModel) -> some View {
+        @Bindable var viewModel = viewModel
+
+        return VStack(spacing: 0) {
+            sectionPicker(viewModel)
+                .frame(maxWidth: 720, alignment: .leading)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, SparkSpacing.lg)
+                .padding(.top, SparkSpacing.sm)
+
+            TabView(selection: $viewModel.selectedTab) {
+                ForEach(FlintViewModel.FlintTab.allCases) { tab in
+                    sectionPage(tab, viewModel: viewModel)
+                        .tag(tab)
                 }
             }
-            .frame(maxWidth: 720, alignment: .leading)
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, SparkSpacing.lg)
-            .padding(.top, SparkSpacing.sm)
-            .padding(.bottom, SparkSpacing.xxl * 2)
+            .tabViewStyle(.page(indexDisplayMode: .never))
         }
-        .scrollDismissesKeyboard(.interactively)
-        .refreshable { await refresh() }
+        .onChange(of: viewModel.selectedTab) { _, tab in
+            sectionChanged(to: tab, viewModel: viewModel)
+        }
     }
 
     @ViewBuilder
@@ -78,7 +99,6 @@ struct FlintView: View {
             .buttonStyle(.glass)
             .accessibilityLabel("Flint section")
             .accessibilityValue(viewModel.selectedTab.title)
-            .onChange(of: viewModel.selectedTab) { _, tab in sectionChanged(to: tab, viewModel: viewModel) }
         } else {
             Picker("Flint section", selection: $viewModel.selectedTab) {
                 ForEach(FlintViewModel.FlintTab.allCases) { tab in
@@ -87,7 +107,6 @@ struct FlintView: View {
             }
             .pickerStyle(.segmented)
             .accessibilityLabel("Flint section")
-            .onChange(of: viewModel.selectedTab) { _, tab in sectionChanged(to: tab, viewModel: viewModel) }
         }
     }
 
@@ -104,9 +123,9 @@ struct FlintView: View {
         }
     }
 
-    private func refresh() async {
+    private func refresh(_ tab: FlintViewModel.FlintTab) async {
         guard let viewModel else { return }
-        switch viewModel.selectedTab {
+        switch tab {
         case .overview:
             await viewModel.refresh()
         case .questions:
@@ -119,8 +138,22 @@ struct FlintView: View {
     }
 
     @ViewBuilder
-    private func content(_ viewModel: FlintViewModel) -> some View {
-        switch viewModel.selectedTab {
+    private func sectionPage(_ tab: FlintViewModel.FlintTab, viewModel: FlintViewModel) -> some View {
+        ScrollView {
+            content(tab, viewModel: viewModel)
+                .frame(maxWidth: 720, alignment: .leading)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, SparkSpacing.lg)
+                .padding(.top, SparkSpacing.lg)
+                .padding(.bottom, SparkSpacing.xxl * 2)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .refreshable { await refresh(tab) }
+    }
+
+    @ViewBuilder
+    private func content(_ tab: FlintViewModel.FlintTab, viewModel: FlintViewModel) -> some View {
+        switch tab {
         case .overview: overview(viewModel)
         case .questions: questions(viewModel)
         case .threads: threads(viewModel)
@@ -207,7 +240,7 @@ struct FlintView: View {
         switch viewModel.questionsState {
         case .idle where viewModel.openQuestions.isEmpty,
              .loading where viewModel.openQuestions.isEmpty:
-            loadingContent.task { await viewModel.loadQuestionsIfNeeded() }
+            loadingContent
         default:
             if viewModel.openQuestions.isEmpty {
                 EmptyState(
@@ -299,7 +332,7 @@ struct FlintView: View {
 
             switch viewModel.historyState {
             case .idle, .loading:
-                loadingContent.task { await viewModel.loadHistoryIfNeeded() }
+                loadingContent
             case .empty(let message):
                 EmptyState(systemImage: "calendar", title: "No recent history", message: message)
             case .error(let message):

@@ -344,7 +344,7 @@ enum SparkObservability {
             "can_open_store": snapshot.canOpenStore,
             "total_count": snapshot.totalCount,
         ]
-        crumb.data = data
+        crumb.setSparkData(data)
         SentrySDK.addBreadcrumb(crumb)
     }
 
@@ -352,7 +352,7 @@ enum SparkObservability {
         let crumb = Breadcrumb(level: report.hasFailures ? .error : .info, category: "spotlight")
         crumb.type = "debug"
         crumb.message = "Spotlight index run"
-        crumb.data = spotlightIndexContext(report, source: source)
+        crumb.setSparkData(spotlightIndexContext(report, source: source))
         SentrySDK.addBreadcrumb(crumb)
 
         guard report.hasFailures else { return }
