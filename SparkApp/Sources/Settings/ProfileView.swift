@@ -26,7 +26,7 @@ struct ProfileView: View {
         }
         .navigationTitle("Profile")
         .navigationBarTitleDisplayMode(.inline)
-        .background(Color.sparkSurface.ignoresSafeArea())
+        .sparkAppBackground()
         .task {
             if viewModel == nil {
                 viewModel = ProfileViewModel(apiClient: appModel.apiClient)

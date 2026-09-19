@@ -689,7 +689,7 @@ final class UpToSpeedViewModel {
         let base: String
         switch slot {
         case .morning: base = "Good \(weekday) morning"
-        case .afternoon: base = "Good \(weekday) afternoon"
+        case .day: base = "Good \(weekday) afternoon"
         case .evening: base = "Good \(weekday) evening"
         case .night: base = "Still up"
         }

@@ -1,3 +1,4 @@
+import SparkUI
 import SwiftUI
 import WidgetKit
 
@@ -58,6 +59,6 @@ struct SpendTodayWidgetView: View {
     private var containerBG: some View {
         ContainerRelativeShape()
             .fill(.orange.opacity(0.10))
-            .containerBackground(for: .widget) { Color(.systemBackground) }
+            .containerBackground(for: .widget) { Color.sparkSurface }
     }
 }

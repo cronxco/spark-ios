@@ -23,8 +23,6 @@ struct TodayView: View {
         )
 
         ZStack {
-            SparkResolvedAppBackground()
-
             ScrollView {
                 VStack(alignment: .leading, spacing: SparkSpacing.lg) {
                     let unreadCount = upToSpeedViewModel?.unreadCount ?? 0
@@ -65,7 +63,7 @@ struct TodayView: View {
                 .padding(.top, SparkSpacing.xl + 72)
                 .padding(.bottom, deviceSafeAreaBottom + 66)
             }
-            .scrollContentBackground(.hidden)
+            .sparkAppBackground()
             .refreshable { await viewModel?.refresh() }
         }
         .sparkMainAppToolbar(isVisible: showsToolbar)

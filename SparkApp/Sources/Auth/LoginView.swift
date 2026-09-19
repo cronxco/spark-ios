@@ -30,6 +30,6 @@ struct LoginView: View {
             Spacer().frame(height: SparkSpacing.xxl)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.sparkSurface.ignoresSafeArea())
+        .sparkAppBackground()
     }
 }

@@ -1,3 +1,4 @@
+import SparkUI
 import SwiftUI
 import WidgetKit
 
@@ -67,7 +68,7 @@ struct SleepScoreWidgetView: View {
     private var containerBG: some View {
         ContainerRelativeShape()
             .fill(.indigo.opacity(0.12))
-            .containerBackground(for: .widget) { Color(.systemBackground) }
+            .containerBackground(for: .widget) { Color.sparkSurface }
     }
 
     private func sleepProgress(_ snap: WidgetDataSnapshot) -> Double {
