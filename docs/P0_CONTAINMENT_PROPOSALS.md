@@ -248,7 +248,7 @@ None of this has been compiled. It needs:
 tuist generate
 cd Packages/SparkKit && swift test --parallel   # incl. ConditionalWriteTests
 xcodebuild -workspace Spark.xcworkspace -scheme SparkApp \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=27.0' test
+  -destination 'platform=iOS Simulator,name=iPhone 18 Pro Max,OS=27.0' test
 ```
 
 Plus the checks the suite cannot make:
