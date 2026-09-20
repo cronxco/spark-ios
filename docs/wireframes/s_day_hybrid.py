@@ -25,10 +25,9 @@ brighter-specular surface.
 from ds import (T, S, R, ty, esc, LIGHT, FONT_DISPLAY, FONT_SANS, FONT_MONO,
                 FONT_SERIF)
 from icons import icon
-from comp import flint_avatar, section_label
 from frame import page, tab_bar, main_toolbar, nav_bar
 from s_day import _hero                      # the header, unchanged
-from s_day_options import g27, g27_capsule, _row, _col, _spacer
+from s_day_options import g27, _row, _col
 
 I = LIGHT
 PAD = S["lg"]
@@ -40,35 +39,31 @@ def _label(text):
             f'{esc(text)}</div>')
 
 
-def _section(title, trailing=None, inner=""):
-    tr = (f'<span style="{ty("monoSmall", I.faint)}">{esc(trailing)}</span>'
-          if trailing else "")
-    head = _row(S["sm"], _label(title) + _spacer() + tr)
-    return _col(S["sm"], head + inner)
+def _section(title, inner=""):
+    """Sentence case, and no trailing count: the design system sets nothing
+    in capitals, and a count the section already shows is not worth a line."""
+    return _col(S["sm"], _label(title) + inner)
 
 
 # =====================================================================
 # 1 — the digest opener
 # =====================================================================
 
-def _digest_opener(period, when, greeting, lede, stale_note=None):
+def _digest_opener(period, when, lede, stale_note=None):
     """The most recent digest's first words, in serif. The design system
     reserves serif for long-form reading, and a digest is exactly that.
 
-    No byline, no call to action: the whole card is the link to the digest,
-    and the greeting carries which run it came from — "Good Saturday evening"
-    on a Sunday morning says last night's on its own. `period`, `when` and
-    `stale_note` are kept in the signature because they are what the card
-    would announce if that ever needs saying again."""
+    The opener and nothing else: no byline, no greeting, no call to action.
+    The whole card is the link to the digest. `period`, `when` and
+    `stale_note` stay in the signature because they are what the card would
+    announce if which-run-this-is ever needs saying out loud again — they
+    survive only in the link's accessible name."""
     return (f'<a href="#digest" aria-label="Read the {esc(period.lower())} '
             f'from {esc(when)}" style="display:block;text-decoration:none;'
             f'color:inherit;">'
-            + g27(_col(S["sm"],
-                       f'<div style="{ty("captionStrong", I.muted)}">'
-                       f'{esc(greeting)}</div>'
-                       + f'<p style="font-family:{FONT_SERIF};font-size:18px;'
-                         f'font-weight:400;line-height:1.5;margin:0;'
-                         f'color:{I.ink};">{lede}</p>'))
+            + g27(f'<p style="font-family:{FONT_SERIF};font-size:18px;'
+                  f'font-weight:400;line-height:1.5;margin:0;'
+                  f'color:{I.ink};">{lede}</p>')
             + '</a>')
 
 
@@ -86,7 +81,7 @@ CARD_W = (CONTENT_W - S["md"]) // 2           # 173
 
 
 def _bar(pct, baseline_pct, tint, stale=False, over=False):
-    fill_c = T["warning"] if over else tint
+    fill_c = T["ember7"] if over else tint   # match the flagged lead figure
     if stale:
         body = ('<div style="position:absolute;inset:0;border-radius:4px;'
                 'background-image:repeating-linear-gradient(135deg,'
@@ -122,34 +117,41 @@ def _sub(a_label, a_val, b_label, b_val):
             f'{line(b_label, b_val, last=True)}</div>')
 
 
-def _metric_card(sym, tint, label, value, delta, pct, baseline_pct,
+def _metric_card(tint, label, value, delta, pct, baseline_pct,
                  a_label, a_val, b_label, b_val, w=CARD_W,
                  stale=False, over=False, pending=None, value_size=29):
-    """One domain. Lead figure, baseline bar, two supporting figures."""
+    """One domain. Lead figure, baseline bar, two supporting figures.
+
+    No glyph: the bar already carries the domain tint, and four of them on
+    one screen is decoration. The lead figure is flush right so it lands in
+    the same column as the two supporting values beneath it, and the delta
+    moves up beside the label to keep that column clean."""
     vc = I.faint if stale else (T["ember7"] if over else I.ink)
-    warn = (icon("wifi.exclamationmark", 11, T["ember7"], 2.1) if stale else "")
     dc = T["ember7"] if (over or stale) else I.muted
-    d = ""
-    if delta:
-        d = (f'<span style="{ty("monoSmall", dc)}white-space:nowrap;">'
-             f'{esc(delta)}</span>')
+    if stale:
+        right = icon("wifi.exclamationmark", 11, T["ember7"], 2.1)
+    elif delta:
+        right = (f'<span style="{ty("monoSmall", dc)}white-space:nowrap;">'
+                 f'{esc(delta)}</span>')
+    else:
+        right = ""
     if pending:
         value_row = (f'<div style="font-family:{FONT_SANS};font-size:13.5px;'
                      f'font-weight:600;line-height:1.25;color:{I.faint};'
                      f'margin-top:4px;min-height:36px;display:flex;'
-                     f'align-items:center;">{esc(pending)}</div>')
+                     f'align-items:center;justify-content:flex-end;'
+                     f'text-align:right;">{esc(pending)}</div>')
     else:
-        value_row = (f'<div style="display:flex;align-items:baseline;gap:5px;'
-                     f'margin-top:2px;min-height:34px;">'
+        value_row = (f'<div style="display:flex;align-items:baseline;'
+                     f'justify-content:flex-end;margin-top:2px;'
+                     f'min-height:34px;">'
                      f'<span style="font-family:{FONT_DISPLAY};'
                      f'font-size:{value_size}px;font-weight:700;line-height:1.1;'
-                     f'color:{vc};white-space:nowrap;">{esc(value)}</span>'
-                     f'{d}</div>')
+                     f'color:{vc};white-space:nowrap;">{esc(value)}</span></div>')
     head = (f'<div style="display:flex;align-items:center;gap:5px;">'
-            f'{icon(sym, 12, tint, 2.2)}'
             f'<span style="font-family:{FONT_MONO};font-size:10.5px;'
             f'letter-spacing:0.06em;color:{I.muted};">{esc(label)}</span>'
-            f'<span style="flex-grow:1;"></span>{warn}</div>')
+            f'<span style="flex-grow:1;"></span>{right}</div>')
     return g27(head + value_row + _bar(pct, baseline_pct, tint, stale, over)
                + _sub(a_label, a_val, b_label, b_val),
                pad=S["md"], radius=R["md"],
@@ -165,13 +167,13 @@ def _metric_grid(cards):
 
 def _metrics_complete(w=CARD_W):
     return _metric_grid([
-        _metric_card("moon.zzz.fill", T["dHealth"], "SLEEP", "70", "−14%",
+        _metric_card(T["dHealth"], "Sleep", "70", "−14%",
                      70, 82, "Duration", "7h 19m", "Efficiency", "72%", w=w),
-        _metric_card("figure.walk", T["dActivity"], "ACTIVITY", "90", "+6%",
+        _metric_card(T["dActivity"], "Activity", "90", "+6%",
                      90, 85, "Steps", "4,426", "Active", "354 kcal", w=w),
-        _metric_card("heart.fill", T["dHealth"], "READINESS", "77", "−1%",
+        _metric_card(T["dHealth"], "Readiness", "77", "−1%",
                      77, 78, "Resting HR", "71 bpm", "Stress", "Normal", w=w),
-        _metric_card("sterlingsign.circle.fill", T["dMoney"], "MONEY",
+        _metric_card(T["dMoney"], "Money",
                      "£2,621", "38× usual", 100, 4, "Current a/c", "£3,180",
                      "Net worth 1mo", "+£1,204", w=w, over=True,
                      value_size=23),
@@ -182,14 +184,14 @@ def _metrics_complete(w=CARD_W):
 
 def _metrics_partial(w=CARD_W):
     return _metric_grid([
-        _metric_card("moon.zzz.fill", T["dHealth"], "SLEEP", "80", "−2%",
+        _metric_card(T["dHealth"], "Sleep", "80", "−2%",
                      80, 82, "Efficiency", "83%", "REM", "97", w=w),
-        _metric_card("figure.walk", T["dActivity"], "ACTIVITY", "", "",
+        _metric_card(T["dActivity"], "Activity", "", "",
                      0, None, "Last sync", "23:58", "Steps", "—", w=w,
                      stale=True, pending="Waiting on Apple Health"),
-        _metric_card("heart.fill", T["dHealth"], "READINESS", "86", "+11%",
+        _metric_card(T["dHealth"], "Readiness", "86", "+11%",
                      86, 78, "Resting HR", "67 bpm", "Stress", "Normal", w=w),
-        _metric_card("sterlingsign.circle.fill", T["dMoney"], "MONEY",
+        _metric_card(T["dMoney"], "Money",
                      "£5.26", "vs £68", 8, 100, "Current a/c", "£3,180",
                      "Net worth 1mo", "+£1,204", w=w, value_size=23),
     ])
@@ -199,20 +201,13 @@ def _metrics_partial(w=CARD_W):
 # 3 — outstanding questions, last 48 hours
 # =====================================================================
 
-def _question_card(title, topic, when, body, options=None, answer=None,
-                   priority=None, w=CONTENT_W, peek=False):
+def _question_card(title, when, body, options=None, answer=None,
+                   w=CONTENT_W, peek=False):
+    """The card's amber tint already says Flint is asking, so it needs no
+    glyph, no priority badge and no topic label above the question."""
     op = "opacity:0.45;" if peek else ""
-    prio = ""
-    if priority == "high":
-        prio = g27_capsule(f'<span style="{ty("monoSmall", T["ember7"])}">'
-                           f'needs you</span>', pad="3px 8px",
-                           tint="rgba(255,191,0,0.22)")
-    head = _row(S["sm"],
-                icon("questionmark.circle", 13, T["primary"], 2.2)
-                + f'<span style="{ty("captionStrong", I.ink)}">{esc(title)}</span>'
-                + _spacer() + prio)
-    meta = (f'<div style="{ty("monoSmall", I.faint)}">{esc(topic)} · {esc(when)}'
-            f'</div>')
+    head = f'<div style="{ty("captionStrong", I.ink)}">{esc(title)}</div>'
+    meta = f'<div style="{ty("monoSmall", I.faint)}">{esc(when)}</div>' 
     if answer is not None:
         tail = (f'<div style="display:flex;align-items:flex-start;gap:6px;'
                 f'padding:9px 11px;border-radius:{R["sm"]}px;'
@@ -272,28 +267,21 @@ KIND_TINT = {"tactical": T["dKnowledge"], "strategic": T["tagPerson"],
              "thematic": T["dActivity"]}
 
 
-def _thread_card(kind, title, moved, watching, w=262, fresh=False):
+def _thread_card(kind, title, watching, w=262):
+    """Kind, title, and the sentence naming what would move the thread on.
+    No recency line and no glyph: the card is about what Flint is waiting
+    for, not when it last looked."""
     tint = KIND_TINT.get(kind, I.muted)
     dot = (f'<span style="width:6px;height:6px;border-radius:6px;'
            f'background:{tint};"></span>')
-    live = ""
-    if fresh:
-        live = g27_capsule(f'<span style="{ty("monoSmall", T["ember7"])}">moved'
-                           f'</span>', pad="3px 8px",
-                           tint="rgba(255,191,0,0.22)")
     return g27(_col(6,
                     _row(6, dot
                          + f'<span style="font-family:{FONT_MONO};font-size:10px;'
                            f'letter-spacing:0.06em;color:{I.muted};">'
-                           f'{esc(kind)}</span>'
-                         + f'<span style="{ty("monoSmall", I.faint)}'
-                           f'white-space:nowrap;">· {esc(moved)}</span>'
-                         + _spacer() + live)
+                           f'{esc(kind)}</span>')
                     + f'<div style="{ty("bodyStrong", I.ink)}">{esc(title)}</div>'
-                    + f'<div style="display:flex;align-items:flex-start;gap:5px;'
-                      f'margin-top:1px;">{icon("eye", 11, I.faint, 2)}'
-                      f'<span style="{ty("caption", I.muted)}">{esc(watching)}'
-                      f'</span></div>'),
+                    + f'<div style="{ty("caption", I.muted)}margin-top:1px;">'
+                      f'{esc(watching)}</div>'),
                pad=S["md"], radius=R["md"],
                extra=f"width:{w}px;box-sizing:border-box;flex-shrink:0;")
 
@@ -311,10 +299,10 @@ def _threads_dormant(text):
 
 def _threads():
     cards = [
-        _thread_card("tactical", "US–Iran escalation", "moved yesterday",
+        _thread_card("tactical", "US–Iran escalation",
                      "A G7 decision on releasing reserves, or verified "
-                     "disruption to shipping.", fresh=True),
-        _thread_card("tactical", "Ukraine diplomacy", "3 days ago",
+                     "disruption to shipping."),
+        _thread_card("tactical", "Ukraine diplomacy",
                      "Disbursement detail on the €3.3bn, or published "
                      "settlement terms."),
     ]
@@ -374,9 +362,15 @@ def _tl_row(sym, tint, action, obj, time, rel, source, value=None,
     if others:
         chev = (f'<span style="display:inline-flex;margin-left:4px;">'
                 f'{icon("chevron.down", 11, I.faint, 2.4)}</span>')
+    # tags carry a tint dot, the way TagChip draws them everywhere else
     tag_html = ""
     for t in (tags or []):
-        tag_html += (f'<span style="{ty("monoSmall", I.faint)}"> · #{esc(t)}'
+        tag_html += (f'<span style="{ty("monoSmall", I.faint)}"> · </span>'
+                     f'<span style="display:inline-flex;align-items:center;'
+                     f'gap:4px;vertical-align:baseline;">'
+                     f'<span style="width:5px;height:5px;border-radius:5px;'
+                     f'background:{T["tagTopic"]};"></span>'
+                     f'<span style="{ty("monoSmall", I.muted)}">{esc(t)}</span>'
                      f'</span>')
     size = "15px" if child else "16.5px"
     v = ""
@@ -395,9 +389,10 @@ def _tl_row(sym, tint, action, obj, time, rel, source, value=None,
             f'<span style="font-weight:600;">{esc(action)}</span>{o}{plus}'
             f'{chev}</div>'
             f'<div style="margin-top:2px;">'
-            f'<span style="{ty("monoSmall", I.muted)}">{esc(time)}</span>'
-            f'<span style="{ty("monoSmall", I.faint)}"> · {esc(rel)} · '
-            f'{esc(source)}</span>{tag_html}</div></div>')
+            f'<span title="{esc(time)}" style="{ty("monoSmall", I.muted)}">'
+            f'{esc(rel)}</span>'
+            f'<span style="{ty("monoSmall", I.faint)}"> · {esc(source)}</span>'
+            f'{tag_html}</div></div>')
     return (f'<div style="display:grid;grid-template-columns:20px 1fr auto;'
             f'gap:{S["md"]}px;">{_spine(node)}{body}{v}</div>')
 
@@ -451,51 +446,47 @@ SUN_LEDE = ("A large one-off landed on the accounts: &pound;2,508.27 in from "
 def day_hybrid():
     """Saturday 19 September, ~21:00. Full scroll."""
     q_open = _question_card(
-        "The £2,508 transfer from Daniel", "money", "2 hours ago",
+        "The £2,508 transfer from Daniel", "2 hours ago",
         "A one-off &pound;2,508.27 came in from Daniel this afternoon and went "
         "straight into the Pot of Requirement &mdash; nothing close to that "
         "size has moved between you since May. What was that for?",
-        options=["Answer", "Not relevant"], priority="high", w=316)
+        options=["Answer", "Not relevant"], w=316)
     q_peek = _question_card(
-        "Afternoon check-in", "check-in", "due since 14:00",
+        "Afternoon check-in", "due since 14:00",
         "How was the afternoon?", options=["Log it"], w=316, peek=True)
 
     content = (
         _hero("Will,", "your Saturday.", None)
-        + _digest_opener("Evening digest", "18:34 · 2 hours ago",
-                         "Good Saturday evening.", SAT_LEDE)
-        + _section("KEY METRICS", "vs your baseline", _metrics_complete())
-        + _section("NEEDS YOU", "last 48 hours",
+        + _digest_opener("Evening digest", "18:34 · 2 hours ago", SAT_LEDE)
+        + _section("Metrics", _metrics_complete())
+        + _section("For you",
                    _question_stack([q_open, q_peek], 3, 0, answered_from=2))
-        + _section("THREADS", "2 active", _threads())
-        + _section("TIMELINE", "27 events", _timeline())
+        + _section("Threads", _threads())
+        + _section("Timeline", _timeline())
     )
     body = (nav_bar(right=main_toolbar(unread=2))
             + f'<div style="flex-grow:1;overflow:hidden;display:flex;'
               f'flex-direction:column;gap:{S["lg"]}px;'
               f'padding:{S["sm"]}px {PAD}px 40px;">{content}</div>')
     return page("Day — hybrid (full scroll)", body, slot="evening",
-                h=1980)
+                h=1880)
 
 
 def day_hybrid_fold():
     """Sunday 20 September, 07:45 — before the morning brief has run."""
     q = _question_card(
-        "The £2,508 transfer from Daniel", "money", "answered last night",
+        "The £2,508 transfer from Daniel", "answered last night",
         "What was the one-off &pound;2,508.27 from Daniel for?",
         answer="Paying off joint spending on my credit card — flights and a "
                "deposit for Canada, plus train and Airbnb for Cornwall.",
         w=316)
-    q2 = _question_card("Morning check-in", "check-in", "due", "How did you "
-                        "sleep?", options=["Log it"], w=316, peek=True)
+    q2 = _question_card("Morning check-in", "due", "How did you sleep?",
+                        options=["Log it"], w=316, peek=True)
     content = (
         _hero("Morning,", "Sunday is open.", None, n=2)
-        + _digest_opener("Evening digest", "Last night · 18:34",
-                         "Good Saturday evening.", SUN_LEDE,
-                         stale_note="This morning's brief runs when Oura "
-                                    "posts your sleep score.")
-        + _section("KEY METRICS", "vs your baseline", _metrics_partial())
-        + _section("NEEDS YOU", "last 48 hours",
+        + _digest_opener("Evening digest", "Last night · 18:34", SUN_LEDE)
+        + _section("Metrics", _metrics_partial())
+        + _section("For you",
                    _question_stack([q, q2], 2, 0, answered_from=0))
     )
     body = (nav_bar(right=main_toolbar(unread=1))
@@ -538,13 +529,14 @@ def day_hybrid_metrics():
     body = (f'<div style="flex-grow:1;display:flex;flex-direction:column;'
             f'gap:{S["xl"]}px;padding:{S["xl"]}px {S["xl"]}px;">'
             f'<div><h2 style="font-family:{FONT_DISPLAY};font-size:22px;'
-            f'font-weight:700;margin:0;color:{I.ink};">Key metrics — one '
+            f'font-weight:700;margin:0;color:{I.ink};">Metrics — one '
             f'grammar, four domains</h2>'
             f'<p style="{ty("bodySmall", I.muted)}margin-top:6px;max-width:660px;">'
-            f'Every card leads with the figure scoped to today, draws it against '
-            f'its own baseline on one bar, and carries two supporting figures. '
-            f'Three domains have a 0–100 score; money has none, so its lead is '
-            f'the day&rsquo;s spend and its bar is spend against a typical day. '
+            f'Every card leads with the figure scoped to today, drawn flush '
+            f'right so it lands in the same column as the two supporting '
+            f'values beneath it, against its own baseline on one bar. Three '
+            f'domains have a 0–100 score; money has none, so its lead is the '
+            f'day&rsquo;s spend and its bar is spend against a typical day. '
             f'The baseline tick is what makes the four comparable without '
             f'reading a number.</p></div>'
             f'{legend}'
