@@ -122,19 +122,19 @@ def _metric_card(tint, label, value, delta, pct, baseline_pct,
                  stale=False, over=False, pending=None, value_size=29):
     """One domain. Lead figure, baseline bar, two supporting figures.
 
-    No glyph: the bar already carries the domain tint, and four of them on
-    one screen is decoration. The lead figure is flush right so it lands in
+    No glyph anywhere on the card, the sync-state one included: the bar
+    already carries the domain tint, and four glyphs on one screen is
+    decoration. The lead figure is flush right so it lands in
     the same column as the two supporting values beneath it, and the delta
     moves up beside the label to keep that column clean."""
     vc = I.faint if stale else (T["ember7"] if over else I.ink)
     dc = T["ember7"] if (over or stale) else I.muted
-    if stale:
-        right = icon("wifi.exclamationmark", 11, T["ember7"], 2.1)
-    elif delta:
+    # no glyph on a metric card, the sync state included: the card already
+    # says "Waiting on Apple Health" where its figure would be
+    right = ""
+    if delta and not stale:
         right = (f'<span style="{ty("monoSmall", dc)}white-space:nowrap;">'
                  f'{esc(delta)}</span>')
-    else:
-        right = ""
     if pending:
         value_row = (f'<div style="font-family:{FONT_SANS};font-size:13.5px;'
                      f'font-weight:600;line-height:1.25;color:{I.faint};'
