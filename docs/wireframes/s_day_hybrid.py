@@ -53,32 +53,23 @@ def _section(title, trailing=None, inner=""):
 
 def _digest_opener(period, when, greeting, lede, stale_note=None):
     """The most recent digest's first words, in serif. The design system
-    reserves serif for long-form reading, and a digest is exactly that."""
-    tint = T["secondary"] if period == "Evening digest" else T["primary"]
-    note = ""
-    if stale_note:
-        note = (f'<div style="display:flex;align-items:flex-start;gap:6px;'
-                f'margin-top:2px;">{icon("clock", 11, I.faint, 2.1)}'
-                f'<span style="{ty("caption", I.faint)}">{esc(stale_note)}</span>'
-                f'</div>')
-    byline = _row(S["sm"],
-                  flint_avatar(26)
-                  + f'<span style="{ty("captionStrong", I.ink)}">{esc(period)}</span>'
-                  + f'<span style="width:4px;height:4px;border-radius:4px;'
-                    f'background:{tint};"></span>'
-                  + _spacer()
-                  + f'<span style="{ty("monoSmall", I.faint)}">{esc(when)}</span>')
-    read = (f'<button type="button" style="display:inline-flex;align-items:center;'
-            f'gap:4px;border:0;background:transparent;cursor:pointer;padding:0;'
-            f'{ty("captionStrong", T["ember7"])}">Read the full digest'
-            f'{icon("chevron.right", 11, T["ember7"], 2.4)}</button>')
-    return g27(_col(S["sm"],
-                    byline
-                    + f'<div style="{ty("captionStrong", I.muted)}">{esc(greeting)}</div>'
-                    + f'<p style="font-family:{FONT_SERIF};font-size:18px;'
-                      f'font-weight:400;line-height:1.5;margin:0;color:{I.ink};">'
-                      f'{lede}</p>'
-                    + note + read))
+    reserves serif for long-form reading, and a digest is exactly that.
+
+    No byline, no call to action: the whole card is the link to the digest,
+    and the greeting carries which run it came from — "Good Saturday evening"
+    on a Sunday morning says last night's on its own. `period`, `when` and
+    `stale_note` are kept in the signature because they are what the card
+    would announce if that ever needs saying again."""
+    return (f'<a href="#digest" aria-label="Read the {esc(period.lower())} '
+            f'from {esc(when)}" style="display:block;text-decoration:none;'
+            f'color:inherit;">'
+            + g27(_col(S["sm"],
+                       f'<div style="{ty("captionStrong", I.muted)}">'
+                       f'{esc(greeting)}</div>'
+                       + f'<p style="font-family:{FONT_SERIF};font-size:18px;'
+                         f'font-weight:400;line-height:1.5;margin:0;'
+                         f'color:{I.ink};">{lede}</p>'))
+            + '</a>')
 
 
 # =====================================================================
@@ -470,8 +461,7 @@ def day_hybrid():
         "How was the afternoon?", options=["Log it"], w=316, peek=True)
 
     content = (
-        _hero("Will,", "your Saturday.",
-              "A quiet day until the evening, then a big one on the accounts.")
+        _hero("Will,", "your Saturday.", None)
         + _digest_opener("Evening digest", "18:34 · 2 hours ago",
                          "Good Saturday evening.", SAT_LEDE)
         + _section("KEY METRICS", "vs your baseline", _metrics_complete())
@@ -485,7 +475,7 @@ def day_hybrid():
               f'flex-direction:column;gap:{S["lg"]}px;'
               f'padding:{S["sm"]}px {PAD}px 40px;">{content}</div>')
     return page("Day — hybrid (full scroll)", body, slot="evening",
-                h=2100)
+                h=1980)
 
 
 def day_hybrid_fold():
@@ -499,9 +489,7 @@ def day_hybrid_fold():
     q2 = _question_card("Morning check-in", "check-in", "due", "How did you "
                         "sleep?", options=["Log it"], w=316, peek=True)
     content = (
-        _hero("Morning,", "Sunday is open.",
-              "Nothing on the calendar. Dan is in Brighton until tomorrow.",
-              n=2)
+        _hero("Morning,", "Sunday is open.", None, n=2)
         + _digest_opener("Evening digest", "Last night · 18:34",
                          "Good Saturday evening.", SUN_LEDE,
                          stale_note="This morning's brief runs when Oura "
