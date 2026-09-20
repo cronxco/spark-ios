@@ -27,13 +27,18 @@ struct FlintNotesTests {
         model.updateBody("Keep Friday evening free.")
 
         #expect(await model.submit(using: client, now: Date(timeIntervalSince1970: 1_000)) == nil)
+        let firstAttempt = try #require(model.pendingRequest)
         #expect(await model.submit(using: client, now: Date(timeIntervalSince1970: 2_000))?.id == "note-1")
+        let retry = try #require(model.pendingRequest)
 
-        let bodies = try await Self.recordedBodies()
-        #expect(bodies.count == 2)
-        #expect(bodies[0]["client_mutation_id"] as? String == bodies[1]["client_mutation_id"] as? String)
-        #expect(bodies[0]["authored_at"] as? String == bodies[1]["authored_at"] as? String)
-        #expect((bodies[0]["context_links"] as? [[String: String]])?.first?["id"] == "digest-1")
+        #expect(retry.clientMutationID == firstAttempt.clientMutationID)
+        #expect(retry.authoredAt == firstAttempt.authoredAt)
+        #expect(retry.body == "Keep Friday evening free.")
+        #expect(retry.contextLinks == [.init(type: .digest, id: "digest-1")])
+
+        let requests = await AppStubURLProtocol.recorded(host: Self.host)
+        #expect(requests.count == 2)
+        #expect(requests.allSatisfy { $0.httpMethod == "POST" })
     }
 
     @Test("editing after failure creates a new mutation identity")
@@ -53,12 +58,14 @@ struct FlintNotesTests {
         let model = FlintNoteComposerModel(context: .generic)
         model.updateBody("First version")
         _ = await model.submit(using: client, now: Date(timeIntervalSince1970: 1_000))
+        let firstAttempt = try #require(model.pendingRequest)
         model.updateBody("Second version")
         _ = await model.submit(using: client, now: Date(timeIntervalSince1970: 2_000))
+        let edited = try #require(model.pendingRequest)
 
-        let bodies = try await Self.recordedBodies()
-        #expect(bodies[0]["client_mutation_id"] as? String != bodies[1]["client_mutation_id"] as? String)
-        #expect(bodies[0]["authored_at"] as? String != bodies[1]["authored_at"] as? String)
+        #expect(edited.clientMutationID != firstAttempt.clientMutationID)
+        #expect(edited.authoredAt != firstAttempt.authoredAt)
+        #expect(edited.body == "Second version")
     }
 
     @Test("Up to Speed maps cards to the strongest supported context")
@@ -98,19 +105,6 @@ struct FlintNotesTests {
         #expect(UpToSpeedScreen.checkIn(checkInItem).flintNoteContext.link == .init(type: .event, id: "event-1"))
         #expect(UpToSpeedScreen.opener.flintNoteContext.link == nil)
         #expect(UpToSpeedScreen.wrap.flintNoteContext.link == nil)
-    }
-
-    /// The JSON each recorded request carried. On failure it reports how the
-    /// stub tried to recover the body, since URLSession does not always leave
-    /// one where a `URLProtocol` can see it.
-    private static func recordedBodies() async throws -> [[String: Any]] {
-        let requests = await AppStubURLProtocol.recorded(host: Self.host)
-        let diagnostics = await AppStubURLProtocol.bodyDiagnostics(host: Self.host)
-        return try requests.indices.map { index -> [String: Any] in
-            let source = diagnostics.indices.contains(index) ? diagnostics[index] : "unknown"
-            let body = try #require(requests[index].httpBody, "request \(index) body recovery: \(source)")
-            return try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
-        }
     }
 
     private func makeClient() async throws -> APIClient {

@@ -11,8 +11,6 @@ final class AppStubURLProtocol: URLProtocol, @unchecked Sendable {
     typealias Handler = @Sendable (URLRequest) async -> (Data, Int, [String: String])
 
     private static let storage = Storage()
-    private static let outgoingBodies = OutgoingBodies()
-    private static let bodyKeyHeader = "X-AppStub-Body-Key"
 
     /// Installs `handler` for every request to `host`, and clears anything
     /// previously recorded for it.
@@ -25,39 +23,15 @@ final class AppStubURLProtocol: URLProtocol, @unchecked Sendable {
         await storage.recorded(host: host)
     }
 
-    /// How each recorded request's body was recovered, positionally matching
-    /// `recorded(host:)`. Only useful in a failure message: URLSession has
-    /// several ways of handing a body to a `URLProtocol` and this says which
-    /// one, if any, produced the bytes.
-    static func bodyDiagnostics(host: String) async -> [String] {
-        await storage.diagnostics(host: host)
-    }
-
     override class func canInit(with _: URLRequest) -> Bool { true }
-
-    /// The URL loading system calls this with the request as the caller built
-    /// it, before the body is moved out of `httpBody`. Keep a copy: by
-    /// `startLoading()` it may be the only one left. The copy is keyed by a
-    /// header stamped on the canonical request, so each load takes back its
-    /// own body rather than one that merely shares a method and URL.
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
-        guard let body = request.httpBody, !body.isEmpty,
-              request.value(forHTTPHeaderField: bodyKeyHeader) == nil
-        else { return request }
-
-        let key = UUID().uuidString
-        outgoingBodies.stash(body, key: key)
-        var stamped = request
-        stamped.setValue(key, forHTTPHeaderField: bodyKeyHeader)
-        return stamped
-    }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
-        let (request, diagnostic) = Self.materializingBody(of: self.request, task: task)
+        let request = Self.materializingBody(of: self.request)
         let client = self.client
         Task {
             let host = request.url?.host ?? ""
-            await Self.storage.record(request, diagnostic: diagnostic, host: host)
+            await Self.storage.record(request, host: host)
             guard let handler = await Self.storage.handler(host: host) else {
                 client?.urlProtocol(self, didFailWithError: URLError(.cannotConnectToHost))
                 return
@@ -75,81 +49,24 @@ final class AppStubURLProtocol: URLProtocol, @unchecked Sendable {
         }
     }
 
-    /// URLSession strips `httpBody` from the request it hands a `URLProtocol`,
-    /// and which replacement it offers varies by release: a readable
-    /// `httpBodyStream`, a bound pair that fills in asynchronously, a `task`
-    /// holding the original request, or — on the iOS 27 simulator — none of
-    /// them. Try each in turn so recorded requests (and handlers) see the body
-    /// the way the caller set it, and report which one answered.
-    private static func materializingBody(
-        of original: URLRequest,
-        task: URLSessionTask?
-    ) -> (URLRequest, String) {
-        var request = original
-        // Take the stashed body whichever source ends up supplying one, and
-        // drop the stub's own header again: a body left in the store could
-        // otherwise attach itself to some later request, and the header is
-        // plumbing no test should have to look past.
-        let key = request.value(forHTTPHeaderField: bodyKeyHeader)
-        let stashed = key.flatMap { outgoingBodies.take(key: $0) }
-        if key != nil { request.setValue(nil, forHTTPHeaderField: bodyKeyHeader) }
-
-        if request.httpBody != nil { return (request, "httpBody") }
-
-        var source = "none"
-        var recovered: Data?
-
-        if let stream = request.httpBodyStream {
-            let drained = drain(stream)
-            if !drained.isEmpty {
-                recovered = drained
-                source = "httpBodyStream"
-            } else {
-                source = "httpBodyStream (drained empty)"
-            }
-        }
-        if recovered == nil, let body = task?.originalRequest?.httpBody ?? task?.currentRequest?.httpBody {
-            recovered = body
-            source = "task request"
-        }
-        if recovered == nil, let body = stashed {
-            recovered = body
-            source = "canonicalRequest stash"
-        }
-
-        guard let body = recovered else {
-            return (request, "unrecovered — \(source), stream: \(request.httpBodyStream == nil ? "nil" : "present"), task: \(task == nil ? "nil" : "present")")
-        }
-        var copy = request
-        copy.httpBody = body
-        copy.httpBodyStream = nil
-        return (copy, source)
-    }
-
-    /// Reads a body stream to its end. A stream URLSession fills in
-    /// asynchronously has no bytes ready at first, so wait for them rather
-    /// than reporting an empty body — but only briefly, so a stream that never
-    /// delivers fails the test instead of hanging the suite.
-    private static func drain(_ stream: InputStream) -> Data {
+    /// URLSession hands a `URLProtocol` the body as `httpBodyStream`, leaving
+    /// `httpBody` nil. Read the stream once, up front, so recorded requests
+    /// (and handlers) can inspect the body the way the caller set it.
+    private static func materializingBody(of request: URLRequest) -> URLRequest {
+        guard request.httpBody == nil, let stream = request.httpBodyStream else { return request }
+        var data = Data()
         stream.open()
         defer { stream.close() }
-
-        var data = Data()
         var buffer = [UInt8](repeating: 0, count: 4_096)
-        let deadline = Date().addingTimeInterval(2)
-        while Date() < deadline {
-            guard stream.hasBytesAvailable else {
-                switch stream.streamStatus {
-                case .atEnd, .closed, .error: return data
-                default: Thread.sleep(forTimeInterval: 0.005)
-                }
-                continue
-            }
+        while stream.hasBytesAvailable {
             let count = stream.read(&buffer, maxLength: buffer.count)
             if count <= 0 { break }
             data.append(buffer, count: count)
         }
-        return data
+        var copy = request
+        copy.httpBody = data
+        copy.httpBodyStream = nil
+        return copy
     }
 
     // Deliberately empty. Cancelling the delivery task here (tracked, guarded
@@ -160,54 +77,17 @@ final class AppStubURLProtocol: URLProtocol, @unchecked Sendable {
     // one quietly inverts what the test asserts.
     override func stopLoading() {}
 
-    /// Bodies seen by `canonicalRequest(for:)`, each under the key stamped on
-    /// its request. `canonicalRequest` is a class method with no test context
-    /// to hang onto, hence the process-wide store; it is capped so requests
-    /// that are never loaded cannot grow it forever.
-    private final class OutgoingBodies: @unchecked Sendable {
-        private let lock = NSLock()
-        private var bodies: [String: Data] = [:]
-        private var order: [String] = []
-        private static let limit = 64
-
-        func stash(_ body: Data, key: String) {
-            lock.withLock {
-                bodies[key] = body
-                order.append(key)
-                while order.count > Self.limit {
-                    bodies.removeValue(forKey: order.removeFirst())
-                }
-            }
-        }
-
-        func take(key: String) -> Data? {
-            lock.withLock {
-                guard let body = bodies.removeValue(forKey: key) else { return nil }
-                order.removeAll { $0 == key }
-                return body
-            }
-        }
-    }
-
     private actor Storage {
         private var handlers: [String: Handler] = [:]
         private var requests: [String: [URLRequest]] = [:]
-        private var bodyDiagnostics: [String: [String]] = [:]
 
         func set(host: String, _ handler: @escaping Handler) {
             handlers[host] = handler
             requests[host] = []
-            bodyDiagnostics[host] = []
         }
 
         func handler(host: String) -> Handler? { handlers[host] }
-
-        func record(_ request: URLRequest, diagnostic: String, host: String) {
-            requests[host, default: []].append(request)
-            bodyDiagnostics[host, default: []].append(diagnostic)
-        }
-
+        func record(_ request: URLRequest, host: String) { requests[host, default: []].append(request) }
         func recorded(host: String) -> [URLRequest] { requests[host] ?? [] }
-        func diagnostics(host: String) -> [String] { bodyDiagnostics[host] ?? [] }
     }
 }

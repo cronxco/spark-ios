@@ -42,7 +42,11 @@ final class FlintNoteComposerModel {
     private(set) var errorMessage: String?
 
     private let context: FlintNoteContext
-    private var pendingRequest: FlintNoteCreateRequest?
+    /// The note currently being sent, kept across a failed attempt so a retry
+    /// of the same text reuses its mutation identity. Readable so tests can
+    /// assert on that identity: URLSession does not reliably leave a request
+    /// body where a `URLProtocol` stub can read it.
+    private(set) var pendingRequest: FlintNoteCreateRequest?
 
     init(context: FlintNoteContext) {
         self.context = context
