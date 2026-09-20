@@ -5,14 +5,20 @@ Wireframes for every UI surface the app currently ships, drawn with the
 
 **Canvas:** <https://claude.ai/artifact/8xPd1qiuMMU5eR5FjkE2AW>
 
-73 artboards, grouped into nine rows — onboarding, the Day tab, Up to Speed,
+79 artboards, grouped into nine rows — onboarding, the Day tab, Up to Speed,
 Explore, Knowledge/Flint/Search, the detail screens, settings and integrations,
 the shared sheets, and the ambient surfaces (widgets, Live Activities, the
 background washes).
 
+## Which branch these track
+
+**`feature/flint-up-to-speed` (PR #20)** — not `main`. That branch reworks Up to
+Speed, rebuilds the Flint tab and adds Notes to Flint, so wireframes drawn from
+`main` are already a design behind. Re-check the PR's head before regenerating.
+
 ## What these are drawn from
 
-Every screen mirrors the current Swift. Nothing is aspirational: where the
+Every screen mirrors that branch's Swift. Nothing is aspirational: where the
 app shows a placeholder heatmap, the wireframe shows a placeholder heatmap;
 where a toolbar item is `#if DEBUG`, the wireframe says so.
 
@@ -52,12 +58,13 @@ Then publish `project/` to the canvas above (`canvas.json` is the index; each
 Every screen reachable in the app is here, including the states that are easy
 to forget: Today loading and empty, Up to Speed loading / all-caught-up /
 failed, the check-in card before and after noon, the collapsed account group,
-the anomaly acknowledged badge, and the debug screen.
+the anomaly acknowledged badge, the editorial-note supplement inside a digest
+card, and the debug screen with its API session inspector.
 
 Two surfaces are drawn as reference boards rather than phone frames, because
-they are not screens: `72-Ambient-Surfaces` (widgets, Lock Screen accessories,
+they are not screens: `78-Ambient-Surfaces` (widgets, Lock Screen accessories,
 StandBy, Live Activities, Dynamic Island, the share extension) and
-`73-Background-Washes` (the four slots × two schemes).
+`79-Background-Washes` (the four slots × two schemes).
 
 Phase 5 watch targets are stubs in the Swift and have no UI yet, so they have
 no wireframe.

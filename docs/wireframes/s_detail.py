@@ -101,7 +101,7 @@ def event_detail():
               f'{_value_tile("avg heart rate", "148 bpm", "Average")}</div>')
 
     note_card = card(
-        f'<p style="{ty("body", I.ink)}">Legs heavy for the first two kilometres, '
+        f'<p style="{ty("lfBodySmall", I.ink)}">Legs heavy for the first two kilometres, '
         f'then it settled. Negative split.</p>', radius=R["md"], pad=S["md"])
     note = (f'<div style="display:flex;flex-direction:column;gap:{S["sm"]}px;">'
             f'<div style="display:flex;align-items:center;">{section_label("Notes")}'
@@ -162,7 +162,7 @@ def block_detail():
     value_card = card(
         f'<div style="{ty("mono", I.muted)}">value</div>'
         f'<div style="{ty("display20", I.ink)}margin-top:6px;">6.12 km</div>'
-        f'<p style="{ty("body", I.ink)}margin-top:12px;">Kilometre splits: 5:18, 5:12, '
+        f'<p style="{ty("lfBody", I.ink)}margin-top:12px;">Kilometre splits: 5:18, 5:12, '
         f'5:09, 5:06, 5:04, 5:02 — a 16-second negative split across the second half.</p>')
     body = (
         f'{nav_bar(title="Block", left=back_button(), right=sub_toolbar())}'

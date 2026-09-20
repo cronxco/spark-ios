@@ -219,21 +219,92 @@ def flint_byline(name="Flint", meta=None, ink=LIGHT):
 # ------------------------------------------------ SparkUI/Components/StoryProgressBar.swift
 
 def story_progress(chapters, current_index, ink=DARK):
-    """chapters: list of (label, segments). Chaptered progress bar."""
+    """StoryProgressBar — each chapter fills in its own accent now."""
     segs = []
     i = 0
-    for label, n in chapters:
+    for spec in chapters:
+        label, n = spec[0], spec[1]
+        accent = spec[2] if len(spec) > 2 else T["primary"]
+        group = []
         for k in range(n):
-            filled = i < current_index
-            active = i == current_index
-            c = ink.ink if (filled or active) else f"{ink.ink}33"
-            op = "1" if filled else ("1" if active else "0.35")
-            segs.append(f'<span style="flex-grow:1;height:3px;border-radius:3px;'
-                        f'background:{c};opacity:{op};"></span>')
+            done = i < current_index
+            fill = f"{accent}8c" if done else accent
+            w = "100%" if i <= current_index else "0%"
+            group.append(
+                f'<span style="flex-grow:1;height:4px;border-radius:4px;'
+                f'background:{accent}2e;overflow:hidden;">'
+                f'<span style="display:block;height:4px;border-radius:4px;'
+                f'width:{w};background:{fill};"></span></span>')
             i += 1
-        segs.append('<span style="width:6px;"></span>')
-    return ('<div style="display:flex;align-items:center;gap:3px;width:100%;">'
-            + "".join(segs[:-1]) + "</div>")
+        segs.append(f'<span style="flex-grow:{n};display:flex;gap:4px;">'
+                    + "".join(group) + "</span>")
+    return ('<div style="display:flex;align-items:center;gap:8px;width:100%;">'
+            + "".join(segs) + "</div>")
+
+
+def glass_circle_button(icon_name, label, ink=DARK, size=44):
+    """A 44pt circular glass control — the story header's note, recap, close."""
+    return (f'<button type="button" aria-label="{esc(label)}" '
+            f'style="display:inline-flex;align-items:center;justify-content:center;'
+            f'width:{size}px;height:{size}px;border:1px solid {ink.edge};cursor:pointer;'
+            f'border-radius:{size}px;background:{ink.glass};backdrop-filter:blur(18px);'
+            f'flex-shrink:0;">{icon(icon_name, 17, ink.ink, 2.2)}</button>')
+
+
+def flint_surface(inner, ink=LIGHT, pad=None, radius=R["lg"]):
+    """`sparkFlintMaterialSurface()` — thin material, 10% border, soft shadow.
+    The Flint tab uses this instead of GlassCard."""
+    p = f"padding:{pad}px;" if pad is not None else ""
+    return (f'<div style="{p}border-radius:{radius}px;background:{ink.glassStrong};'
+            f'border:1px solid {ink.ink}1a;backdrop-filter:blur(18px);'
+            f'box-shadow:0 4px 12px rgba(0,0,0,0.05);">{inner}</div>')
+
+
+def answer_form(options=None, selected=None, ink=LIGHT, not_relevant=True,
+                free_text=False):
+    """FlintAnswerFormView — option capsules (or a free-text field), a
+    collapsed context field, then `Not relevant` and `Answer`."""
+    if free_text or not options:
+        head = (f'<div style="{ty("captionStrong", ink.muted)}">Your answer</div>'
+                f'<div style="margin-top:6px;">'
+                + text_field("Type your answer", None, ink=ink, h=44) + "</div>")
+    else:
+        chips = []
+        for i, o in enumerate(options):
+            on = i == selected
+            style = (f'background:{T["primary"]};color:#000;border:1px solid transparent;'
+                     if on else
+                     f'background:{ink.raised};color:{ink.ink};'
+                     f'border:1px solid {ink.ink}1f;')
+            chips.append(f'<button type="button" style="border-radius:{R["pill"]}px;'
+                         f'padding:0 {S["md"]}px;min-height:44px;cursor:pointer;{style}'
+                         f'font-family:{FONT_SANS};font-size:12px;font-weight:600;">'
+                         f'{esc(o)}</button>')
+        head = (f'<div style="display:flex;gap:{S["sm"]}px;flex-wrap:wrap;">'
+                + "".join(chips) + "</div>")
+
+    ctx = (f'<div style="display:flex;align-items:center;gap:5px;min-height:44px;'
+           f'{ty("captionStrong", ink.ink)}">{icon("plus", 12, ink.ink, 2.6)}'
+           f'Add context (optional)</div>')
+
+    nr = ""
+    if not_relevant:
+        nr = (f'<button type="button" style="min-height:44px;padding:0 {S["lg"]}px;'
+              f'border-radius:{R["pill"]}px;cursor:pointer;background:{ink.glass};'
+              f'border:1px solid {ink.edge};backdrop-filter:blur(18px);'
+              f'font-family:{FONT_SANS};font-size:16px;color:{ink.ink};">'
+              f'Not relevant</button>')
+
+    answer = (f'<button type="button" style="display:inline-flex;align-items:center;'
+              f'gap:{S["sm"]}px;min-height:44px;padding:0 {S["lg"]}px;border:0;'
+              f'cursor:pointer;border-radius:{R["pill"]}px;background:{T["primary"]};'
+              f'font-family:{FONT_SANS};font-size:17px;font-weight:600;color:#000;">'
+              f'{icon("paperplane.fill", 15, "#000", 2)}Answer</button>')
+
+    return (f'<div style="display:flex;flex-direction:column;gap:{S["md"]}px;">'
+            f'{head}{ctx}'
+            f'<div style="display:flex;align-items:center;gap:{S["sm"]}px;">'
+            f'{nr}<span style="flex-grow:1;"></span>{answer}</div></div>')
 
 
 # ------------------------------------------------ SparkUI/Components/EmojiRatingRow.swift

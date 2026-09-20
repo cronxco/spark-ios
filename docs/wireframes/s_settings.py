@@ -41,7 +41,7 @@ def settings_root():
                       form_row("API Tokens", "key.fill", last=True)],
                      header="SECURITY")
         + form_group([form_row("About", "info.circle"),
-                      form_row("Debug", "ladybug", last=True)]))
+                      form_row("Debug", "ladybug", value="API session", last=True)]))
     return page("Settings", (
         f'{sheet_grabber()}'
         f'{nav_bar(title="Settings", right=close_button())}'
@@ -246,7 +246,24 @@ def settings_debug():
             f'<span style="{ty("monoSmall", I.muted)}">2026-09-19T14:22:07Z</span></div>'])
         + sec("WIDGETS", [form_row("Reload all timelines", chevron=False, last=True)])
         + sec("SPOTLIGHT & INTENTS", [form_row("Entity cache", value="1,284 entities",
-                                               chevron=False, last=True)]))
+                                               chevron=False, last=True)])
+        + sec("API SESSION", [
+            f'<div style="padding:{S["md"]}px {S["lg"]}px;border-bottom:1px solid {I.edge};">'
+            f'{text_field("Filter endpoint", None)}</div>',
+            f'<div style="display:flex;align-items:center;justify-content:space-between;'
+            f'padding:{S["md"]}px {S["lg"]}px;border-bottom:1px solid {I.edge};">'
+            f'<span style="{ty("body", T["accent"])}">Copy all</span>'
+            f'<span style="{ty("body", T["accent"])}">Clear session</span></div>',
+            f'<div style="padding:{S["md"]}px {S["lg"]}px;">'
+            f'<div style="{ty("caption", I.muted)}">184 attempts · 12 evicted · '
+            f'bodies capped at 2 MB</div>'
+            f'<div style="{ty("mono", I.ink)}margin-top:8px;">'
+            f'GET /briefing/today</div>'
+            f'<div style="{ty("caption", I.muted)}margin-top:2px;">200 · decoded</div>'
+            f'<div style="{ty("mono", I.ink)}margin-top:8px;">'
+            f'GET /flint/notes</div>'
+            f'<div style="{ty("caption", T["error"])}margin-top:2px;">403 · forbidden</div>'
+            f'</div>']))
     return _stack("Debug", content, left=back_button("Settings"))
 
 

@@ -23,15 +23,18 @@ ROWS = [
      "with what the event is.",
      s_day.SCREENS),
     ("Up to Speed",
-     "The full-screen catch-up. Chaptered progress, one card per swipe, a dwell "
-     "before anything counts as read, and a recap that can put a card back.",
+     "The full-screen catch-up. A glass header carries the chaptered progress bar, "
+     "the chapter and three 44pt controls; every card is spoken by Flint; the recap "
+     "is a sheet you can reach at any point, and a note to Flint is always one tap "
+     "away.",
      s_uts.SCREENS),
     ("Explore",
      "Five sections behind one tab-bar accessory: Health, Money, Metrics, Map and "
      "Tags, plus the money account screens.",
      s_explore.SCREENS),
     ("Knowledge, Flint and Search",
-     "Reading, Flint's digests and questions, and the prefix-driven search.",
+     "Reading; Flint's four swipeable sections with its threads, digest reader and "
+     "notes; and the prefix-driven search.",
      s_browse.SCREENS),
     ("Detail screens",
      "One screen per entity in the Spark graph, all sharing SparkDetailHero, the "
@@ -44,6 +47,16 @@ ROWS = [
      "Presented from the sub-view toolbar and the detail screens.",
      s_sheets.SCREENS),
 ]
+
+_seq = [0]
+
+
+def renumber(fname):
+    """Board numbers follow canvas order, so inserting a screen never leaves
+    a gap or a collision."""
+    _seq[0] += 1
+    return f"{_seq[0]:02d}-{fname.split('-', 1)[1]}"
+
 
 boards, order, notes = {}, [], {}
 y = 0
@@ -59,6 +72,7 @@ for row_title, row_body, screens in ROWS:
     note_i += 1
     x = 0
     for fname, fn, title in screens:
+        fname = renumber(fname)
         (OUT / fname).write_text(fn(), encoding="utf-8")
         boards[fname] = {"x": x, "y": y, "w": W, "h": H, "title": title}
         order.append(fname)
@@ -77,6 +91,7 @@ notes[f"s{note_i}"] = {"x": 0, "y": y - NOTE_LIFT + 96,
                        "w": 1180, "size": "l", "color": "gray"}
 x = 0
 for fname, fn, title, w, h in s_sheets.WIDE:
+    fname = renumber(fname)
     (OUT / fname).write_text(fn(), encoding="utf-8")
     boards[fname] = {"x": x, "y": y, "w": w, "h": h, "title": title}
     order.append(fname)

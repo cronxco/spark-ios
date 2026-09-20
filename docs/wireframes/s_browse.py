@@ -4,7 +4,8 @@ from ds import T, S, R, ty, esc, LIGHT, FONT_DISPLAY, FONT_SANS, FONT_MONO
 from icons import icon
 from comp import (card, glass, section_label, section_header, glyph, glyph_square,
                   shimmer_card, empty_state, tag_chip, ref_chip, text_field,
-                  pill_button, segmented, card_header, inspector_row)
+                  pill_button, segmented, card_header, inspector_row, toggle,
+                  flint_surface, answer_form, form_group, form_row)
 from frame import (page, tab_bar, main_toolbar, nav_bar, page_header, back_button,
                    close_button, text_button, sheet_grabber, sub_toolbar)
 
@@ -81,7 +82,7 @@ def knowledge_detail():
 
     summary = card(
         card_header("doc.text", T["dKnowledge"], "Summary")
-        + f'<p style="{ty("body", I.ink)}margin-top:{S["sm"]}px;">Apple has replaced the '
+        + f'<p style="{ty("lfBody", I.ink)}margin-top:{S["sm"]}px;">Apple has replaced the '
           f'intent-matching core of Siri with an on-device Foundation Model, escalating to '
           f'Private Cloud Compute only when a request exceeds what the phone can answer.</p>',
         tint="rgba(63,136,197,0.10)")
@@ -92,7 +93,7 @@ def knowledge_detail():
         + "".join(
             f'<div style="display:flex;align-items:flex-start;gap:{S["sm"]}px;">'
             f'<span style="padding-top:5px;">{icon("checkmark", 11, T["dKnowledge"], 2.6)}</span>'
-            f'<span style="{ty("body", I.ink)}">{esc(b)}</span></div>'
+            f'<span style="{ty("lfBody", I.ink)}">{esc(b)}</span></div>'
             for b in ["App Intents carry semantic indexing through IndexedEntity.",
                       "Third-party apps expose entities, not raw intents.",
                       "On-device handles summarisation; PCC handles reasoning."])
@@ -122,144 +123,312 @@ def knowledge_detail():
 
 
 # ------------------------------------------------------------- Flint
+# Rebuilt on feature/flint-up-to-speed (PR #20): four swipeable sections
+# behind a segmented picker on the page itself, a large nav title, and
+# Notes to Flint. The tab-bar accessory is cleared by this tab now.
 
-FLINT_TABS = [("Today", None), ("Questions", None), ("Threads", None), ("Archive", None)]
-
-
-def _flint_entry(time, title, lede, questions=0, expanded=False, blocks=None):
-    q = (f'<div style="{ty("caption", T["warning"])}margin-top:3px;">'
-         f'{questions} question{"" if questions == 1 else "s"} open</div>' if questions else "")
-    exp = ""
-    if expanded and blocks:
-        exp = (f'<div style="padding-left:56px;display:flex;flex-direction:column;'
-               f'gap:{S["md"]}px;">{blocks}</div>')
-    return (f'<div style="display:flex;flex-direction:column;gap:{S["md"]}px;">'
-            f'<div style="display:flex;align-items:flex-start;gap:{S["md"]}px;">'
-            f'<span style="{ty("caption", I.muted)}width:44px;flex-shrink:0;">{esc(time)}</span>'
-            f'<div style="flex-grow:1;">'
-            f'<div style="{ty("bodyStrong", I.ink)}">{esc(title)}</div>'
-            f'<div style="{ty("lfBodySmall", I.muted)}margin-top:3px;">{esc(lede)}</div>{q}</div>'
-            f'<span style="padding-top:2px;">'
-            f'{icon("chevron.up" if expanded else "chevron.down", 13, I.faint, 2.4)}</span>'
-            f'</div>{exp}</div>')
+FLINT_SECTIONS = ["Overview", "Questions", "Threads", "History"]
 
 
-def _flint_block(sym, tint, title, badge, content, refs=None):
+def _flint_nav(title="Flint"):
+    return (f'{nav_bar(right=main_toolbar(unread=2))}'
+            f'<div style="padding:0 {PAD}px;">'
+            f'<h1 style="{ty("heroXL", I.ink)}">{esc(title)}</h1></div>')
+
+
+def _flint_page(section, content, title="Flint"):
+    return page(f"Flint — {FLINT_SECTIONS[section]}", (
+        f'{_flint_nav(title)}'
+        f'<div style="padding:{S["sm"]}px {PAD}px 0;">'
+        f'{segmented(FLINT_SECTIONS, section)}</div>'
+        f'<div style="flex-grow:1;overflow:hidden;display:flex;flex-direction:column;'
+        f'gap:{S["xl"]}px;padding:{S["lg"]}px {PAD}px 132px;">{content}</div>'
+        f'{tab_bar(3)}'), slot="day")
+
+
+def _flint_section(title, inner):
+    return (f'<div style="display:flex;flex-direction:column;gap:{S["sm"]}px;">'
+            f'<div style="{ty("captionStrong", I.muted)}">{esc(title)}</div>'
+            f'{inner}</div>')
+
+
+def _flint_block(sym, tint, title, topic, content, refs=None, question=None):
+    """FlintBlockSurface — the thin-material surface the Flint tab uses."""
+    sub = (f'<div style="{ty("caption", I.muted)}margin-top:2px;">{esc(topic)}</div>'
+           if topic else "")
+    if question is not None:
+        body_part = f'<div style="margin-top:{S["md"]}px;">{question}</div>'
+    else:
+        body_part = (f'<p style="{ty("lfBodySmall", I.ink)}margin-top:{S["md"]}px;">'
+                     f'{esc(content)}</p>')
     r = ""
     if refs:
-        chips = "".join(ref_chip(n, s, tint) for n, s in refs)
-        r = (f'<div style="margin-top:{S["sm"]}px;">'
+        chips = "".join(ref_chip(n, sy, tint) for n, sy in refs)
+        r = (f'<div style="margin-top:{S["md"]}px;">'
              f'<div style="{ty("caption", I.muted)}margin-bottom:6px;">Connecting:</div>'
              f'<div style="display:flex;gap:6px;flex-wrap:wrap;">{chips}</div></div>')
-    return (f'<div style="padding:{S["md"]}px;border-radius:{R["md"]}px;background:{I.glass};'
-            f'background-image:linear-gradient({tint}14,{tint}14);border:1px solid {I.edge};">'
-            f'<div style="display:flex;align-items:flex-start;gap:{S["md"]}px;">'
-            f'{glyph(sym, tint, 26)}'
-            f'<div style="flex-grow:1;min-width:0;">'
-            f'<div style="display:flex;align-items:baseline;gap:{S["sm"]}px;">'
-            f'<span style="{ty("bodyStrong", I.ink)}flex-grow:1;">{esc(title)}</span>'
-            f'<span style="{ty("monoSmall", I.muted)}">{esc(badge)}</span></div>'
-            f'<p style="{ty("bodySmall", I.muted)}margin-top:6px;">{esc(content)}</p>'
-            f'{r}</div></div></div>')
+    inner = (f'<div style="display:flex;align-items:flex-start;gap:{S["md"]}px;">'
+             f'{glyph(sym, tint, 26)}'
+             f'<div style="flex-grow:1;min-width:0;">'
+             f'<div style="{ty("bodyStrong", I.ink)}">{esc(title)}</div>{sub}</div></div>'
+             f'{body_part}{r}')
+    return flint_surface(inner, I, pad=S["md"])
 
 
-def flint_today():
-    blocks = (
-        _flint_block("heart.fill", T["success"], "Recovery is lagging the week",
-                     "Health insight",
-                     "HRV has been below baseline three nights running. Nothing alarming "
-                     "on its own, but the run is what makes it worth a mention.",
-                     refs=[("HRV overnight", "waveform.path.ecg"), ("Oura", "link")])
-        + _flint_block("questionmark.circle", T["primary"],
-                       "Are you climbing or running this evening?", "High priority",
-                       "Answer this and I will hold the evening plan against it.")
-    )
-    body = (
-        f'{nav_bar(right=main_toolbar(unread=2))}'
-        f'<div style="flex-grow:1;overflow:hidden;display:flex;flex-direction:column;'
-        f'gap:{S["lg"]}px;padding:{S["sm"]}px {PAD}px 132px;">'
-        f'{page_header("Flint", "2 digests today · 2 questions open")}'
-        f'{_flint_entry("07:27", "Morning Digest", "A quiet start with one thing worth watching.", 2, expanded=True, blocks=blocks)}'
-        f'{_flint_entry("13:02", "Afternoon Digest", "Spend is running above baseline, mostly one trip.", 0)}'
-        f'</div>{tab_bar(3, accessory=_accessory(FLINT_TABS, 0))}')
-    return page("Flint — Today", body, slot="day")
+def flint_overview():
+    notes = flint_surface(
+        f'<p style="{ty("bodySmall", I.muted)}">Give Flint context it can remember '
+        f'and use later.</p>'
+        f'<div style="display:flex;gap:{S["sm"]}px;margin-top:{S["md"]}px;">'
+        f'{pill_button("Leave a note", "square.and.pencil")}'
+        f'<button type="button" style="display:inline-flex;align-items:center;'
+        f'gap:{S["sm"]}px;min-height:44px;padding:0 {S["lg"]}px;cursor:pointer;'
+        f'border-radius:{R["pill"]}px;background:{I.ink}0f;border:1px solid {I.ink}1f;'
+        f'font-family:{FONT_SANS};font-size:16px;color:{I.ink};">'
+        f'{icon("doc.text", 16, I.ink, 2)}View notes</button></div>',
+        I, pad=S["md"])
+
+    focus = flint_surface(
+        f'<div style="display:flex;align-items:baseline;">'
+        f'<span style="{ty("bodyStrong", I.ink)}flex-grow:1;">'
+        f'Getting the 5K under 25 minutes</span>'
+        f'{icon("chevron.right", 13, I.faint, 2.4)}</div>'
+        f'<p style="{ty("bodySmall", I.muted)}margin-top:{S["sm"]}px;">You have shaved '
+        f'40 seconds since July, mostly on the second half. The plateau is pacing, '
+        f'not fitness.</p>'
+        f'<div style="{ty("caption", I.muted)}margin-top:{S["sm"]}px;">2 hours ago</div>',
+        I, pad=S["md"])
+
+    noticed = _flint_block(
+        "heart.fill", T["success"], "Recovery is lagging the week", "sleep",
+        "HRV has been below baseline three nights running. Nothing alarming on its "
+        "own, but the run is what makes it worth a mention.",
+        refs=[("HRV overnight", "waveform.path.ecg"), ("Oura", "link")])
+
+    question = _flint_block(
+        "questionmark.circle", T["primary"],
+        "Are you climbing or running this evening?", "training", "",
+        question=answer_form(["Climbing", "Run", "Rest"], ink=I))
+
+    def digest_row(title, lede, time, open_q=0, last=False):
+        bb = "" if last else f"border-bottom:1px solid {I.ink}14;"
+        q = ""
+        if open_q:
+            q = (f'<span style="display:inline-flex;align-items:center;gap:4px;'
+                 f'{ty("caption", T["warning"])}">'
+                 f'{icon("questionmark.circle", 12, T["warning"], 2.2)}{open_q} open</span>')
+        return (f'<div style="display:flex;align-items:flex-start;gap:{S["md"]}px;'
+                f'padding:{S["md"]}px;{bb}">'
+                f'<div style="flex-grow:1;min-width:0;">'
+                f'<div style="{ty("bodyStrong", I.ink)}">{esc(title)}</div>'
+                f'<div style="{ty("bodySmall", I.muted)}margin-top:3px;">{esc(lede)}</div></div>'
+                f'<div style="display:flex;align-items:center;gap:{S["sm"]}px;'
+                f'{ty("caption", I.muted)}">{q}{esc(time)}'
+                f'{icon("chevron.right", 12, I.faint, 2.4)}</div></div>')
+
+    digests = flint_surface(
+        digest_row("Morning Digest", "A quiet start with one thing worth watching.",
+                   "07:27", 2)
+        + digest_row("Afternoon Digest", "Spend is running above baseline, mostly one trip.",
+                     "13:02")
+        + digest_row("Evening Digest", "You closed all three rings for the first time "
+                                       "this week.", "20:40", last=True), I)
+
+    content = (_flint_section("Notes to Flint", notes)
+               + _flint_section("Current focus", focus)
+               + _flint_section("What Flint noticed", noticed)
+               + _flint_section("A question for you",
+                                f'<div style="{ty("caption", I.muted)}margin-bottom:4px;">'
+                                f'Morning · 19 Sep 2026 at 07:27</div>{question}')
+               + _flint_section("Latest digests", digests))
+    return _flint_page(0, content)
 
 
 def flint_questions():
-    def q(context, title, options, note=True):
-        chips = "".join(
-            f'<button type="button" style="border:0;cursor:pointer;padding:{S["sm"]}px {S["md"]}px;'
-            f'border-radius:{R["pill"]}px;background:rgba(255,191,0,0.12);'
-            f'border:1px solid {I.edge};font-family:{FONT_SANS};font-size:12px;'
-            f'font-weight:600;color:{I.ink};">{esc(o)}</button>' for o in options)
-        form = (f'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:{S["sm"]}px;">{chips}</div>'
-                f'<div style="margin-top:{S["sm"]}px;">{text_field("Add a note", None)}</div>'
-                f'<div style="display:flex;justify-content:flex-end;margin-top:{S["sm"]}px;">'
-                f'<span style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;'
-                f'border-radius:{R["pill"]}px;background:{T["primary"]};'
-                f'{ty("bodyStrong", T["primaryContent"])}">'
-                f'{icon("paperplane.fill", 14, T["primaryContent"], 2)}Submit</span></div>')
-        return (f'<div><div style="{ty("caption", I.muted)}margin-bottom:6px;">{esc(context)}</div>'
-                f'<div style="padding:{S["md"]}px;border-radius:{R["md"]}px;background:{I.glass};'
-                f'background-image:linear-gradient(rgba(255,191,0,0.08),rgba(255,191,0,0.08));'
-                f'border:1px solid {I.edge};">'
-                f'<div style="display:flex;align-items:flex-start;gap:{S["md"]}px;">'
-                f'{glyph("questionmark.circle", T["primary"], 26)}'
-                f'<div style="flex-grow:1;">'
-                f'<div style="display:flex;align-items:baseline;gap:{S["sm"]}px;">'
-                f'<span style="{ty("bodyStrong", I.ink)}flex-grow:1;">{esc(title)}</span>'
-                f'<span style="{ty("monoSmall", I.muted)}">High priority</span></div>'
-                f'{form}</div></div></div></div>')
-
-    body = (
-        f'{nav_bar(right=main_toolbar(unread=2))}'
-        f'<div style="flex-grow:1;overflow:hidden;display:flex;flex-direction:column;'
-        f'gap:{S["xl"]}px;padding:{S["sm"]}px {PAD}px 132px;">'
-        f'{page_header("Flint", "2 questions open")}'
-        f'{q("Morning · 07:27", "Are you climbing or running this evening?", ["Climbing", "Run", "Rest", "Not sure yet"])}'
-        f'{q("Morning · 07:27", "Did the new pillow help, or was it the early night?", ["Pillow", "Early night", "Neither"])}'
-        f'</div>{tab_bar(3, accessory=_accessory(FLINT_TABS, 1))}')
-    return page("Flint — Questions", body, slot="day")
+    def q(context, title, options):
+        return (f'<div><div style="{ty("caption", I.muted)}margin-bottom:6px;">'
+                f'{esc(context)}</div>'
+                f'{_flint_block("questionmark.circle", T["primary"], title, None, "", question=answer_form(options, ink=I))}'
+                f'</div>')
+    content = (
+        f'<div style="display:flex;flex-direction:column;gap:{S["lg"]}px;">'
+        f'{q("Morning · 19 Sep 2026 at 07:27", "Are you climbing or running this evening?", ["Climbing", "Run", "Rest"])}'
+        f'{q("Morning · 19 Sep 2026 at 07:27", "Did the new pillow help, or was it the early night?", ["Pillow", "Early night", "Neither"])}'
+        f'</div>')
+    return _flint_page(1, content)
 
 
 def flint_threads():
-    def row(title, meta, active, last=False):
+    def row(title, content_line, status, sym, when, last=False):
+        bb = "" if last else f"border-bottom:1px solid {I.ink}14;"
+        return (f'<div style="display:flex;align-items:flex-start;gap:{S["md"]}px;'
+                f'padding:{S["md"]}px;{bb}">'
+                f'<div style="flex-grow:1;min-width:0;">'
+                f'<div style="{ty("bodyStrong", I.ink)}">{esc(title)}</div>'
+                f'<div style="{ty("bodySmall", I.muted)}margin-top:3px;">'
+                f'{esc(content_line)}</div></div>'
+                f'<div style="display:flex;flex-direction:column;align-items:flex-end;'
+                f'gap:{S["xs"]}px;flex-shrink:0;">'
+                f'<span style="display:inline-flex;align-items:center;gap:4px;'
+                f'{ty("captionStrong", I.muted)}">{icon(sym, 11, I.muted, 2.2)}'
+                f'{esc(status)}</span>'
+                f'<span style="{ty("caption", I.muted)}">{esc(when)}</span>'
+                f'{icon("chevron.right", 11, I.faint, 2.4)}</div></div>')
+
+    active = flint_surface(
+        row("Getting the 5K under 25 minutes",
+            "Pacing, not fitness — the second half is where it goes.",
+            "Active", "circle.dotted", "2 hours ago")
+        + row("Spark Phase 5 scope",
+              "Complications and the wrist check-in; the rest stays on the phone.",
+              "Active", "circle.dotted", "2 days ago")
+        + row("Sleep and the climbing pattern",
+              "Four of the six best nights follow a climbing evening.",
+              "Active", "circle.dotted", "4 days ago", last=True), I)
+
+    other = flint_surface(
+        row("Cutting the coffee after 2pm", "Paused while the trip is on.",
+            "Dormant", "clock", "11 days ago")
+        + row("Reading backlog triage", "Cleared — the list is under twenty again.",
+              "Resolved", "checkmark.circle", "26 days ago", last=True), I)
+
+    content = (_flint_section("Active", active) + _flint_section("Other threads", other))
+    return _flint_page(2, content)
+
+
+def flint_history():
+    filter_card = flint_surface(
+        f'<div style="display:flex;align-items:center;gap:6px;{ty("bodyStrong", I.ink)}">'
+        f'{icon("chevron.right", 13, I.ink, 2.4)}Filter by date</div>', I, pad=S["md"])
+
+    def digest_row(title, lede, time, last=False):
+        bb = "" if last else f"border-bottom:1px solid {I.ink}14;"
+        return (f'<div style="display:flex;align-items:flex-start;gap:{S["md"]}px;'
+                f'padding:{S["md"]}px;{bb}">'
+                f'<div style="flex-grow:1;min-width:0;">'
+                f'<div style="{ty("bodyStrong", I.ink)}">{esc(title)}</div>'
+                f'<div style="{ty("bodySmall", I.muted)}margin-top:3px;">{esc(lede)}</div></div>'
+                f'<div style="display:flex;align-items:center;gap:{S["sm"]}px;'
+                f'{ty("caption", I.muted)}">{esc(time)}'
+                f'{icon("chevron.right", 12, I.faint, 2.4)}</div></div>')
+
+    def group(label, rows):
+        return (f'<div style="display:flex;flex-direction:column;gap:{S["sm"]}px;">'
+                f'<h2 style="{ty("title", I.ink)}">{esc(label)}</h2>'
+                f'{flint_surface(rows, I)}</div>')
+
+    content = (
+        f'<div style="display:flex;flex-direction:column;gap:{S["lg"]}px;">'
+        f'{filter_card}'
+        f'{group("Today", digest_row("Morning Digest", "A quiet start with one thing worth watching.", "07:27") + digest_row("Afternoon Digest", "Spend is running above baseline.", "13:02", last=True))}'
+        f'{group("Yesterday", digest_row("Morning Digest", "Short night; everything else steady.", "07:31") + digest_row("Evening Digest", "All three rings closed.", "20:40", last=True))}'
+        f'</div>')
+    return _flint_page(3, content)
+
+
+def flint_thread_detail():
+    def fact(label, value):
+        return (f'<div><div style="{ty("caption", I.muted)}">{esc(label)}</div>'
+                f'<div style="{ty("bodyStrong", I.ink)}margin-top:2px;">{esc(value)}</div></div>')
+
+    def mention(title, excerpt, when, last=False):
         bb = "" if last else f"border-bottom:1px solid {I.edge};"
-        c = I.ink if active else I.muted
-        dot = T["primary"] if active else f"{I.ink}59"
-        return (f'<div style="display:flex;align-items:center;gap:{S["md"]}px;'
-                f'padding:{S["md"]}px {S["lg"]}px;{bb}">'
-                f'<span style="width:7px;height:7px;border-radius:7px;background:{dot};'
-                f'flex-shrink:0;"></span>'
-                f'<span style="{ty("body", c)}flex-grow:1;">{esc(title)}</span>'
-                f'<span style="{ty("caption", I.faint)}">{esc(meta)}</span></div>')
+        return (f'<div style="padding:{S["sm"]}px 0;{bb}">'
+                f'<div style="{ty("bodyStrong", I.ink)}">{esc(title)}</div>'
+                f'<div style="{ty("bodySmall", I.muted)}margin-top:2px;">{esc(excerpt)}</div>'
+                f'<div style="{ty("caption", I.muted)}margin-top:3px;">{esc(when)}</div></div>')
+
+    note_action = (f'<button type="button" aria-label="Note to Flint" '
+                   f'style="border:0;background:transparent;cursor:pointer;padding:0;">'
+                   f'{icon("square.and.pencil", 20, T["accent"], 1.9)}</button>')
 
     body = (
-        f'{nav_bar(right=main_toolbar(unread=2))}'
+        f'{nav_bar(title="Getting the 5K under 25 minutes", left=back_button("Flint"), right=note_action)}'
         f'<div style="flex-grow:1;overflow:hidden;display:flex;flex-direction:column;'
-        f'gap:{S["lg"]}px;padding:{S["sm"]}px {PAD}px 132px;">'
-        f'{page_header("Flint", "5 running threads")}'
-        f'{glass(row("Getting the 5K under 25 minutes", "Active · today", True) + row("Spark Phase 5 scope", "Active · 2d", True) + row("Sleep and the climbing pattern", "Active · 4d", True) + row("Cutting the coffee after 2pm", "Paused · 11d", False) + row("Reading backlog triage", "Closed · 26d", False, last=True), pad=0)}'
-        f'</div>{tab_bar(3, accessory=_accessory(FLINT_TABS, 2))}')
-    return page("Flint — Threads", body, slot="day")
+        f'gap:{S["xl"]}px;padding:{S["lg"]}px {PAD}px {S["xl"]}px;">'
+        f'<div style="display:flex;align-items:center;gap:6px;{ty("bodyStrong", I.ink)}">'
+        f'{icon("circle.dotted", 15, T["primary"], 2.2)}Active</div>'
+        f'<p style="{ty("lfBody", I.ink)}">You have shaved 40 seconds since July, almost '
+        f'all of it on the second half. The plateau now looks like pacing rather than '
+        f'fitness: your first kilometre is still going out 15 seconds too quick.</p>'
+        f'<div style="display:flex;gap:{S["xl"]}px;">'
+        f'{fact("First seen", "14 Jul 2026")}{fact("Last discussed", "19 Sep 2026")}</div>'
+        f'<div style="display:flex;flex-direction:column;gap:{S["sm"]}px;">'
+        f'<div style="{ty("captionStrong", I.muted)}">Discussed in</div>'
+        f'{mention("Morning Digest", "The plateau is pacing, not fitness.", "19 Sep 2026 at 07:27")}'
+        f'{mention("Evening run", "Negative split — the most even run in six weeks.", "19 Sep 2026 at 18:40")}'
+        f'{mention("Morning Digest", "Worth trying a metronome start.", "12 Sep 2026 at 07:24", last=True)}'
+        f'</div></div>')
+    return page("Flint — thread", body, slot="day")
 
 
-def flint_archive():
-    picker = (f'<div style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;'
-              f'border-radius:{R["sm"]}px;background:{I.ink}0f;{ty("bodySmall", I.ink)}">'
-              f'{icon("calendar", 15, I.muted, 2)}16 Sep 2026'
-              f'{icon("chevron.down", 11, I.muted, 2.6)}</div>')
+def flint_digest_reader():
+    note_action = (f'<button type="button" aria-label="Note to Flint" '
+                   f'style="border:0;background:transparent;cursor:pointer;padding:0;">'
+                   f'{icon("square.and.pencil", 20, T["accent"], 1.9)}</button>')
+    checkin = card(
+        f'<div style="display:flex;align-items:center;">{section_label("Check-in")}'
+        f'<span style="flex-grow:1;"></span>'
+        f'<span style="{ty("monoSmall", I.muted)}">Morning</span></div>'
+        f'<div style="display:flex;align-items:center;margin-top:{S["sm"]}px;">'
+        f'<span style="{ty("bodyStrong", I.ink)}">Morning Check-in</span>'
+        f'<span style="flex-grow:1;"></span>'
+        f'<span style="display:inline-flex;align-items:center;gap:4px;'
+        f'{ty("captionStrong", T["ember7"])}">Log it'
+        f'{icon("chevron.right", 12, T["ember7"], 2.4)}</span></div>')
+
+    read_note = (f'<div style="display:flex;align-items:center;gap:6px;'
+                 f'{ty("bodySmall", I.ink)}">'
+                 f'{icon("chevron.right", 13, I.ink, 2.4)}Read note</div>')
     body = (
-        f'{nav_bar(right=main_toolbar(unread=2))}'
+        f'{nav_bar(title="Morning Digest", left=back_button("Flint"), right=note_action)}'
         f'<div style="flex-grow:1;overflow:hidden;display:flex;flex-direction:column;'
-        f'gap:{S["lg"]}px;padding:{S["sm"]}px {PAD}px 132px;">'
-        f'{page_header("Flint", "Archive")}'
-        f'<div>{picker}</div>'
-        f'{_flint_entry("07:31", "Morning Digest", "Short night; everything else steady.", 0)}'
-        f'{_flint_entry("13:14", "Afternoon Digest", "Two large transactions, both expected.", 0)}'
-        f'{_flint_entry("20:40", "Evening Digest", "You closed all three rings for the first time this week.", 0)}'
-        f'</div>{tab_bar(3, accessory=_accessory(FLINT_TABS, 3))}')
-    return page("Flint — Archive", body, slot="evening")
+        f'gap:{S["xl"]}px;padding:{S["lg"]}px {PAD}px {S["xl"]}px;">'
+        f'<p style="{ty("lfBody", I.ink)}">Your week has been front-loaded: two late '
+        f'finishes and a short night on Tuesday. The rest of today is light until the '
+        f'design review at 11.</p>'
+        f'{_flint_block("heart.fill", T["success"], "Recovery is lagging the week", "sleep", "HRV has been below baseline three nights running.", refs=[("HRV overnight", "waveform.path.ecg")])}'
+        f'{_flint_block("questionmark.circle", T["primary"], "Are you climbing or running this evening?", "training", "", question=answer_form(["Climbing", "Run", "Rest"], ink=I))}'
+        f'{_flint_block("square.and.pencil", T["primary"], "Editorial note", None, "", question=read_note)}'
+        f'{checkin}</div>')
+    return page("Flint — digest reader", body, slot="day")
+
+
+def flint_notes():
+    def note_row(text, when, last=False):
+        bb = "" if last else f"border-bottom:1px solid {I.edge};"
+        return (f'<div style="padding:{S["md"]}px {S["lg"]}px;{bb}">'
+                f'<p style="{ty("body", I.ink)}">{esc(text)}</p>'
+                f'<div style="{ty("caption", I.muted)}margin-top:4px;">{esc(when)}</div></div>')
+
+    new_action = (f'<button type="button" aria-label="New note" '
+                  f'style="border:0;background:transparent;cursor:pointer;padding:0;">'
+                  f'{icon("square.and.pencil", 20, T["accent"], 1.9)}</button>')
+
+    body = (
+        f'{nav_bar(left=back_button("Flint"), right=new_action)}'
+        f'<div style="padding:0 {PAD}px;">'
+        f'<h1 style="{ty("heroXL", I.ink)}">Notes to Flint</h1></div>'
+        f'<div style="flex-grow:1;overflow:hidden;display:flex;flex-direction:column;'
+        f'gap:{S["lg"]}px;padding:{S["lg"]}px {PAD}px {S["xl"]}px;">'
+        f'{form_group([note_row("Climbing is Tuesdays and Thursdays now, not Monday — stop reading a missed Monday as a skipped session.", "19 Sep 2026 at 07:34"), note_row("The Trainline charges are a work trip, not a spending pattern. They stop after the 26th.", "18 Sep 2026 at 21:02"), note_row("I do not want running suggestions on days I have already logged a gym session.", "14 Sep 2026 at 08:11", last=True)])}'
+        f'</div>')
+    return page("Flint — notes", body, slot="day")
+
+
+def flint_note_detail():
+    body = (
+        f'{nav_bar(title="Note to Flint", left=back_button("Notes"), right=sub_toolbar())}'
+        f'<div style="flex-grow:1;overflow:hidden;display:flex;flex-direction:column;'
+        f'gap:{S["lg"]}px;padding:{S["lg"]}px {PAD}px {S["xl"]}px;">'
+        f'<p style="{ty("lfBody", I.ink)}">Climbing is Tuesdays and Thursdays now, not '
+        f'Monday — stop reading a missed Monday as a skipped session.</p>'
+        f'<div style="{ty("caption", I.muted)}">19 Sep 2026 at 07:34</div>'
+        f'<div style="display:flex;flex-direction:column;gap:{S["sm"]}px;">'
+        f'<div style="{ty("captionStrong", I.muted)}">Linked context</div>'
+        f'{form_group([form_row("Open linked digest", "doc.text", tint=T["accent"], last=True)])}'
+        f'</div></div>')
+    return page("Flint — note detail", body, slot="day")
 
 
 # ------------------------------------------------------------- Search
@@ -420,11 +589,15 @@ def notifications_inbox():
 SCREENS = [
     ("40-Knowledge-List.dc.html", knowledge_list, "Knowledge · List"),
     ("41-Knowledge-Detail.dc.html", knowledge_detail, "Knowledge · Item detail"),
-    ("42-Flint-Today.dc.html", flint_today, "Flint · Today"),
+    ("42-Flint-Overview.dc.html", flint_overview, "Flint · Overview"),
     ("43-Flint-Questions.dc.html", flint_questions, "Flint · Questions"),
     ("44-Flint-Threads.dc.html", flint_threads, "Flint · Threads"),
-    ("45-Flint-Archive.dc.html", flint_archive, "Flint · Archive"),
-    ("46-Search-Idle.dc.html", search_idle, "Search · Idle"),
-    ("47-Search-Results.dc.html", search_results, "Search · Results"),
-    ("56-Notifications-Inbox.dc.html", notifications_inbox, "Notifications · Inbox"),
+    ("45-Flint-History.dc.html", flint_history, "Flint · History"),
+    ("46-Flint-ThreadDetail.dc.html", flint_thread_detail, "Flint · Thread"),
+    ("47-Flint-DigestReader.dc.html", flint_digest_reader, "Flint · Digest reader"),
+    ("48-Flint-Notes.dc.html", flint_notes, "Flint · Notes to Flint"),
+    ("49-Flint-NoteDetail.dc.html", flint_note_detail, "Flint · Note detail"),
+    ("50-Search-Idle.dc.html", search_idle, "Search · Idle"),
+    ("51-Search-Results.dc.html", search_results, "Search · Results"),
+    ("52-Notifications-Inbox.dc.html", notifications_inbox, "Notifications · Inbox"),
 ]
