@@ -27,7 +27,7 @@ final class AppStubURLProtocol: URLProtocol, @unchecked Sendable {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
-        let request = Self.materializingBody(of: self.request)
+        let request = Self.materializingBody(of: self.request, task: task)
         let client = self.client
         Task {
             let host = request.url?.host ?? ""
@@ -49,11 +49,34 @@ final class AppStubURLProtocol: URLProtocol, @unchecked Sendable {
         }
     }
 
-    /// URLSession hands a `URLProtocol` the body as `httpBodyStream`, leaving
-    /// `httpBody` nil. Read the stream once, up front, so recorded requests
-    /// (and handlers) can inspect the body the way the caller set it.
-    private static func materializingBody(of request: URLRequest) -> URLRequest {
-        guard request.httpBody == nil, let stream = request.httpBodyStream else { return request }
+    /// URLSession strips `httpBody` from the request it hands a `URLProtocol`.
+    /// It usually leaves the bytes behind in `httpBodyStream`, but not always —
+    /// on the iOS 27 simulator a POST arrives with neither, which is what made
+    /// the Flint notes tests fail on `#require(request.httpBody)`. Take the
+    /// stream when there is one and fall back to the task's own copy of the
+    /// request, which is the `URLRequest` the caller handed to `URLSession`
+    /// and still carries the body. Either way, recorded requests (and
+    /// handlers) see the body the way the caller set it.
+    private static func materializingBody(of request: URLRequest, task: URLSessionTask?) -> URLRequest {
+        guard request.httpBody == nil else { return request }
+
+        var recovered: Data?
+        if let stream = request.httpBodyStream {
+            let drained = Self.drain(stream)
+            recovered = drained.isEmpty ? nil : drained
+        }
+        if recovered == nil {
+            recovered = task?.originalRequest?.httpBody ?? task?.currentRequest?.httpBody
+        }
+
+        guard let body = recovered else { return request }
+        var copy = request
+        copy.httpBody = body
+        copy.httpBodyStream = nil
+        return copy
+    }
+
+    private static func drain(_ stream: InputStream) -> Data {
         var data = Data()
         stream.open()
         defer { stream.close() }
@@ -63,10 +86,7 @@ final class AppStubURLProtocol: URLProtocol, @unchecked Sendable {
             if count <= 0 { break }
             data.append(buffer, count: count)
         }
-        var copy = request
-        copy.httpBody = data
-        copy.httpBodyStream = nil
-        return copy
+        return data
     }
 
     // Deliberately empty. Cancelling the delivery task here (tracked, guarded
