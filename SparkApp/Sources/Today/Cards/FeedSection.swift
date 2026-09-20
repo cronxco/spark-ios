@@ -3,6 +3,17 @@ import SparkUI
 import SwiftData
 import SwiftUI
 
+/// The day's events, on one continuous spine.
+///
+/// Drawn the way the web draws them (`resources/views/livewire/day.blade.php`):
+/// a single rule down the left, an hour pip on it, a service node per group,
+/// the action written as a sentence with its object as a link, and the value
+/// right-aligned. The iOS version this replaces ruled every hour off and
+/// changed a row's weight with what kind of event it was, which made the page
+/// a stack of unrelated cards rather than a day.
+///
+/// Rows carry their own vertical padding and the enclosing stack has none:
+/// any spacing between them opens a gap in the spine.
 struct FeedSection: View {
     let date: Date
     @State private var filter: TimelineFilter = .home
@@ -24,19 +35,39 @@ struct FeedSection: View {
         rawDayEvents.filter(filter.includes)
     }
 
-    private var hourGroups: [(hour: Int, events: [CachedEvent])] {
-        var grouped: [Int: [CachedEvent]] = [:]
-        for event in dayEvents {
-            guard let t = event.time else { continue }
-            let h = Calendar.current.component(.hour, from: t)
-            grouped[h, default: []].append(event)
+    /// Consecutive events sharing an action and a service collapse into one
+    /// row, the way the web groups them — twenty Spotify plays are one line
+    /// that says twenty, not twenty lines.
+    private var rows: [TimelineEntry] {
+        var out: [TimelineEntry] = []
+        var previousHour: Int?
+        let events = dayEvents
+
+        var i = 0
+        while i < events.count {
+            let current = events[i]
+            var j = i + 1
+            while j < events.count,
+                  events[j].action == current.action,
+                  events[j].service == current.service { j += 1 }
+            let run = Array(events[i..<j])
+
+            if let time = current.time {
+                let hour = Calendar.current.component(.hour, from: time)
+                if hour != previousHour {
+                    out.append(.hour(hour))
+                    previousHour = hour
+                }
+            }
+            out.append(.group(run))
+            i = j
         }
-        return grouped.keys.sorted(by: >).map { h in (hour: h, events: grouped[h]!) }
+        return out
     }
 
     var body: some View {
         if !rawDayEvents.isEmpty {
-            VStack(alignment: .leading, spacing: SparkSpacing.md) {
+            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                 timelineHeader
 
                 if dayEvents.isEmpty {
@@ -46,8 +77,15 @@ struct FeedSection: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, SparkSpacing.sm)
                 } else {
-                    ForEach(hourGroups, id: \.hour) { group in
-                        HourGroup(hour: group.hour, events: group.events)
+                    VStack(spacing: 0) {
+                        ForEach(rows) { row in
+                            switch row {
+                            case .hour(let hour):
+                                TimelineHourMarker(hour: hour)
+                            case .group(let events):
+                                TimelineGroupRow(events: events)
+                            }
+                        }
                     }
                 }
             }
@@ -56,9 +94,7 @@ struct FeedSection: View {
 
     private var timelineHeader: some View {
         HStack(alignment: .center, spacing: SparkSpacing.md) {
-            Text("Timeline")
-                .font(SparkFonts.display(.title2, weight: .bold))
-                .lineLimit(1)
+            SectionLabel("Timeline")
             Spacer(minLength: SparkSpacing.sm)
             TimelineFilterPill(filter: $filter)
         }
@@ -74,6 +110,235 @@ struct FeedSection: View {
             "No \(filter.label.lowercased()) events for this day."
         }
     }
+}
+
+private enum TimelineEntry: Identifiable {
+    case hour(Int)
+    case group([CachedEvent])
+
+    var id: String {
+        switch self {
+        case .hour(let h): "hour_\(h)"
+        case .group(let events): events.first?.id ?? UUID().uuidString
+        }
+    }
+}
+
+// MARK: - The spine
+
+/// The rule every row shares. The node sits on it, masked by the page colour
+/// so the line appears to pass behind.
+private struct SpineColumn<Node: View>: View {
+    @ViewBuilder var node: () -> Node
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            Rectangle()
+                .fill(Color.primary.opacity(0.13))
+                .frame(width: 1)
+                .frame(maxHeight: .infinity)
+            node()
+        }
+        .frame(width: 26)
+    }
+}
+
+private struct TimelineHourMarker: View {
+    let hour: Int
+
+    var body: some View {
+        HStack(alignment: .top, spacing: SparkSpacing.md) {
+            SpineColumn {
+                Text(String(format: "%02d", hour))
+                    .font(SparkTypography.monoSmall)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .frame(width: 22, height: 22)
+                    .background(Color.sparkSurface, in: .circle)
+                    .overlay { Circle().stroke(Color.primary.opacity(0.13), lineWidth: 1) }
+                    .offset(y: 4)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(height: 30)
+        .accessibilityLabel("\(hour) hundred hours")
+    }
+}
+
+// MARK: - One group
+
+private struct TimelineGroupRow: View {
+    let events: [CachedEvent]
+    @State private var isExpanded = false
+
+    private var lead: CachedEvent { events[0] }
+    private var surplus: Int { events.count - 1 }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if surplus > 0, !isExpanded {
+                Button {
+                    withAnimation(.snappy(duration: 0.22)) { isExpanded = true }
+                } label: {
+                    TimelineRow(event: lead, surplus: surplus, isChild: false)
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Expands \(surplus) more")
+            } else {
+                NavigationLink(value: DetailRoute.event(id: lead.id)) {
+                    TimelineRow(event: lead, surplus: 0, isChild: false)
+                }
+                .buttonStyle(.plain)
+                .sparkAppEntityIdentifier(type: "event", identifier: lead.id)
+
+                if isExpanded {
+                    ForEach(events.dropFirst()) { event in
+                        NavigationLink(value: DetailRoute.event(id: event.id)) {
+                            TimelineRow(event: event, surplus: 0, isChild: true)
+                        }
+                        .buttonStyle(.plain)
+                        .sparkAppEntityIdentifier(type: "event", identifier: event.id)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct TimelineRow: View {
+    let event: CachedEvent
+    let surplus: Int
+    let isChild: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: SparkSpacing.md) {
+            SpineColumn {
+                if !isChild {
+                    Image(systemName: domainIcon(event.domain))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color.domainTint(for: event.domain))
+                        .frame(width: 26, height: 26)
+                        .background(Color.sparkSurface, in: .circle)
+                        .overlay {
+                            Circle().stroke(
+                                Color.domainTint(for: event.domain).opacity(0.35),
+                                lineWidth: 1.5
+                            )
+                        }
+                        .offset(y: 2)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                sentence
+                meta
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 3)
+            .padding(.bottom, SparkSpacing.sm)
+
+            if let value = signedValue(for: event) {
+                Text(value)
+                    .font(SparkFonts.display(.body, weight: .bold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .padding(.top, 4)
+            }
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    /// "Paid Brother Marcus + 2 others" — the action in ink, its object in the
+    /// link colour, the surplus count quiet.
+    private var sentence: Text {
+        var line = Text(actionTitle(for: event)).fontWeight(.semibold)
+        if event.displayWithObject,
+           let target = event.targetTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !target.isEmpty {
+            line = line + Text(" ") + Text(target)
+                .fontWeight(.semibold)
+                .foregroundStyle(Color.sparkOcean)
+        }
+        if surplus > 0 {
+            line = line + Text(" + \(surplus) other\(surplus == 1 ? "" : "s")")
+                .foregroundStyle(Color.secondary)
+        }
+        return line
+    }
+
+    @ViewBuilder
+    private var meta: some View {
+        HStack(spacing: 4) {
+            // Relative only. The absolute time is on the event's own screen,
+            // one tap away, and in this row's accessible name.
+            if let time = event.time {
+                Text(Self.relative.localizedString(for: time, relativeTo: .now))
+                    .font(SparkTypography.monoSmall)
+                    .foregroundStyle(.secondary)
+            }
+            if let source = metaLine(for: event).nilIfEmpty {
+                Text("·").font(SparkTypography.monoSmall).foregroundStyle(.tertiary)
+                Text(source)
+                    .font(SparkTypography.monoSmall)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+            ForEach(event.decodedTagNames.prefix(2), id: \.self) { tag in
+                Text("·").font(SparkTypography.monoSmall).foregroundStyle(.tertiary)
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(Color.sparkTagTopic)
+                        .frame(width: 5, height: 5)
+                    Text(tag)
+                        .font(SparkTypography.monoSmall)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .lineLimit(1)
+    }
+
+    private var accessibilityLabel: String {
+        var parts = [primaryTitle(for: event)]
+        if surplus > 0 { parts.append("and \(surplus) more") }
+        if let time = event.time { parts.append(Self.absolute.string(from: time)) }
+        if let value = signedValue(for: event) { parts.append(value) }
+        return parts.joined(separator: ", ")
+    }
+
+    private static let relative: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .full
+        return f
+    }()
+
+    private static let absolute: DateFormatter = {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        f.dateStyle = .none
+        return f
+    }()
+}
+
+/// Money moving out takes a minus and money coming in a plus, so direction is
+/// carried by the sign rather than by colour — the status colours are fills in
+/// light mode and do not clear 4.5:1 as text.
+private func signedValue(for event: CachedEvent) -> String? {
+    guard let value = displayValue(for: event) else { return nil }
+    guard event.domain == "money" else { return value }
+    guard !value.hasPrefix("-"), !value.hasPrefix("\u{2212}"), !value.hasPrefix("+") else { return value }
+
+    let action = event.action.lowercased()
+    if action.hasSuffix("_from") || action.contains("credit") || action.contains("received") {
+        return "+" + value
+    }
+    if action.hasSuffix("_to") || action.contains("payment") || action.contains("spent") {
+        return "\u{2212}" + value
+    }
+    return value
 }
 
 private enum TimelineFilter: CaseIterable {
@@ -156,426 +421,6 @@ private struct TimelineFilterPill: View {
         }
         .padding(3)
         .sparkGlass(.capsule)
-    }
-}
-
-// MARK: - Hour group
-
-private enum EventGroup: Identifiable {
-    case single(CachedEvent)
-    case collapsed(events: [CachedEvent])
-
-    var id: String {
-        switch self {
-        case .single(let e): return e.id
-        case .collapsed(let es): return (es.first?.id ?? "") + "_group"
-        }
-    }
-}
-
-private struct HourGroup: View {
-    let hour: Int
-    let events: [CachedEvent]
-
-    @State private var expandedGroupIDs: Set<String> = []
-
-    private var eventGroups: [EventGroup] {
-        var result: [EventGroup] = []
-        var i = 0
-        while i < events.count {
-            let current = events[i]
-            var j = i + 1
-            while j < events.count,
-                  events[j].action == current.action,
-                  events[j].service == current.service { j += 1 }
-            let run = Array(events[i..<j])
-            if run.count >= 3 {
-                result.append(.collapsed(events: run))
-            } else {
-                result.append(contentsOf: run.map { .single($0) })
-            }
-            i = j
-        }
-        return result
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.md) {
-            HStack(spacing: SparkSpacing.md) {
-                Text(String(format: "%02d:00", hour))
-                    .font(SparkFonts.mono(.title3))
-                    .foregroundStyle(Color.secondary.opacity(0.68))
-                    .monospacedDigit()
-                    .frame(width: 72, alignment: .leading)
-
-                Rectangle()
-                    .fill(Color.primary.opacity(0.09))
-                    .frame(height: 1)
-            }
-
-            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                ForEach(eventGroups) { group in
-                    switch group {
-                    case .single(let event):
-                        NavigationLink(value: DetailRoute.event(id: event.id)) {
-                            row(for: event)
-                        }
-                        .sparkAppEntityIdentifier(type: "event", identifier: event.id)
-                        .buttonStyle(.plain)
-                    case .collapsed(let groupEvents):
-                        let groupID = group.id
-                        if expandedGroupIDs.contains(groupID) {
-                            ForEach(groupEvents) { event in
-                                NavigationLink(value: DetailRoute.event(id: event.id)) {
-                                    row(for: event)
-                                }
-                                .sparkAppEntityIdentifier(type: "event", identifier: event.id)
-                                .buttonStyle(.plain)
-                            }
-                        } else {
-                            Button {
-                                withAnimation(.snappy(duration: 0.22)) {
-                                    _ = expandedGroupIDs.insert(groupID)
-                                }
-                            } label: {
-                                row(for: groupEvents[0], surplusCount: groupEvents.count - 1)
-                            }
-                            .sparkAppEntityIdentifier(type: "event", identifier: groupEvents[0].id)
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("\(primaryTitle(for: groupEvents[0])), \(groupEvents.count - 1) others")
-                            .accessibilityHint("Expands the grouped timeline events")
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func row(for event: CachedEvent, surplusCount: Int = 0) -> some View {
-        if isWebDigest(event) {
-            WebDigestEventCard(event: event, surplusCount: surplusCount)
-        } else if isHeroMedia(event) {
-            HeroEventCard(event: event)
-        } else if isStandout(event) {
-            StandoutEventCard(event: event, surplusCount: surplusCount)
-        } else if isSubtle(event) {
-            SubtleEventRow(event: event, surplusCount: surplusCount)
-        } else {
-            RaisedEventCard(event: event, surplusCount: surplusCount)
-        }
-    }
-
-    private func isWebDigest(_ event: CachedEvent) -> Bool {
-        event.domain == "knowledge" && (event.service == "fetch" || event.value?.lowercased().contains("web") == true)
-    }
-
-    private func isHeroMedia(_ event: CachedEvent) -> Bool {
-        event.service == "untappd" ||
-        (event.domain == "media" && event.value != nil)
-    }
-
-    private func isStandout(_ event: CachedEvent) -> Bool {
-        guard event.domain == "money",
-              let value = event.value,
-              let amount = Double(value.replacingOccurrences(of: ",", with: ""))
-        else { return false }
-        return abs(amount) >= 100
-    }
-
-    private func isSubtle(_ event: CachedEvent) -> Bool {
-        event.value == nil || event.action.lowercased().contains("transfer")
-    }
-}
-
-// MARK: - Raised event card
-
-private struct RaisedEventCard: View {
-    let event: CachedEvent
-    var surplusCount: Int = 0
-
-    var body: some View {
-        HStack(alignment: .center, spacing: SparkSpacing.md) {
-            iconBox
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(metaLine(for: event))
-                    .font(SparkTypography.captionStrong)
-                    .foregroundStyle(Color.secondary.opacity(0.68))
-                    .lineLimit(1)
-                Text(titledWithSurplus(primaryTitle(for: event), surplus: surplusCount))
-                    .font(SparkTypography.bodyStrong)
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            if let value = displayValue(for: event) {
-                Text(value)
-                    .font(SparkFonts.display(.title3, weight: .bold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-            }
-        }
-        .padding(.horizontal, SparkSpacing.md)
-        .padding(.vertical, SparkSpacing.md)
-        .background(Color.sparkElevated.opacity(0.86), in: .rect(cornerRadius: SparkRadii.lg))
-        .overlay {
-            RoundedRectangle(cornerRadius: SparkRadii.lg)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-        }
-        .shadow(color: .black.opacity(0.07), radius: 12, x: 0, y: 6)
-    }
-
-    private var iconBox: some View {
-        Image(systemName: domainIcon(event.domain))
-            .font(.system(size: 18, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: 42, height: 42)
-            .background(Color.domainTint(for: event.domain), in: .rect(cornerRadius: 12))
-    }
-}
-
-// MARK: - Standout card
-
-private struct StandoutEventCard: View {
-    let event: CachedEvent
-    var surplusCount: Int = 0
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(metaLine(for: event))
-                    .font(SparkTypography.captionStrong)
-                    .foregroundStyle(Color.secondary.opacity(0.68))
-                    .lineLimit(1)
-                Spacer(minLength: SparkSpacing.sm)
-                if let time = event.time {
-                    Text(shortTime(time))
-                        .font(SparkTypography.monoSmall)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Text(titledWithSurplus(primaryTitle(for: event), surplus: surplusCount))
-                .font(SparkTypography.bodyStrong)
-                .foregroundStyle(.primary)
-                .lineLimit(2)
-
-            if let value = displayValue(for: event) {
-                HStack(spacing: SparkSpacing.xs) {
-                    Text(value)
-                        .font(SparkFonts.display(.title, weight: .bold))
-                        .foregroundStyle(Color.sparkWarning)
-                    Circle()
-                        .fill(Color.sparkWarning)
-                        .frame(width: 8, height: 8)
-                }
-            }
-
-            HStack(spacing: SparkSpacing.xs) {
-                if let actor = event.actorTitle, !actor.isEmpty {
-                    tag(actor)
-                }
-                if event.domain == "money" {
-                    tag("money")
-                }
-                if let count = event.blocksCount, count > 0 {
-                    tag("\(count) blocks")
-                }
-            }
-        }
-        .padding(SparkSpacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.sparkElevated.opacity(0.74), in: .rect(cornerRadius: SparkRadii.lg))
-        .overlay {
-            RoundedRectangle(cornerRadius: SparkRadii.lg)
-                .stroke(Color.sparkWarning.opacity(0.16), lineWidth: 1)
-        }
-        .shadow(color: Color.sparkWarning.opacity(0.14), radius: 18, x: 0, y: 10)
-    }
-
-    private func tag(_ value: String) -> some View {
-        Text("# \(value)")
-            .font(SparkTypography.captionStrong)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, SparkSpacing.sm)
-            .padding(.vertical, 5)
-            .background(Color.sparkSurface.opacity(0.72), in: .capsule)
-            .overlay {
-                Capsule()
-                    .stroke(Color.primary.opacity(0.09), lineWidth: 1)
-            }
-    }
-}
-
-// MARK: - Web digest card
-
-private struct WebDigestEventCard: View {
-    let event: CachedEvent
-    var surplusCount: Int = 0
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // The image fills an already-sized surface; its aspect ratio must
-            // never become the minimum width of the entire Day page.
-            Color.clear
-            .frame(height: 168)
-            .overlay {
-                if let urlString = event.targetMediaUrl, let url = URL(string: urlString) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image.resizable().scaledToFill()
-                        default:
-                            gradientPlaceholder
-                        }
-                    }
-                } else {
-                    gradientPlaceholder
-                }
-            }
-            .clipped()
-
-            VStack(alignment: .leading, spacing: SparkSpacing.xs) {
-                HStack {
-                    Text(metaLine(for: event))
-                        .font(SparkTypography.captionStrong)
-                        .foregroundStyle(Color.secondary.opacity(0.68))
-                    Spacer(minLength: SparkSpacing.sm)
-                    if let time = event.time {
-                        Text(shortTime(time))
-                            .font(SparkTypography.monoSmall)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Text(titledWithSurplus(primaryTitle(for: event), surplus: surplusCount))
-                    .font(SparkTypography.bodyStrong)
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-            }
-            .padding(SparkSpacing.md)
-        }
-        .background(Color.sparkElevated.opacity(0.86), in: .rect(cornerRadius: SparkRadii.hero))
-        .clipShape(.rect(cornerRadius: SparkRadii.hero))
-        .overlay {
-            RoundedRectangle(cornerRadius: SparkRadii.hero)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-        }
-        .shadow(color: .black.opacity(0.08), radius: 18, x: 0, y: 10)
-    }
-
-    private var gradientPlaceholder: some View {
-        ZStack {
-            LinearGradient(
-                colors: [Color.sparkOcean.opacity(0.88), Color.sparkAccent.opacity(0.92)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            Image(systemName: "globe")
-                .font(.system(size: 54, weight: .regular))
-                .foregroundStyle(.white.opacity(0.82))
-            Text(event.targetTitle ?? event.value ?? event.action.sparkActionTitle)
-                .font(SparkTypography.captionStrong)
-                .foregroundStyle(.primary)
-                .padding(.horizontal, SparkSpacing.md)
-                .padding(.vertical, SparkSpacing.xs)
-                .background(Color.white.opacity(0.48), in: .capsule)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .padding(SparkSpacing.sm)
-        }
-    }
-}
-
-// MARK: - Hero event card
-
-private struct HeroEventCard: View {
-    let event: CachedEvent
-
-    var body: some View {
-        let tint = Color.domainTint(for: event.domain)
-        GlassCard(tint: tint.opacity(0.13)) {
-            HStack(alignment: .center, spacing: 14) {
-                Image(systemName: domainIcon(event.domain))
-                    .font(.system(size: 26, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 56, height: 56)
-                    .background(tint, in: .rect(cornerRadius: 14))
-                    .shadow(color: .black.opacity(0.10), radius: 12, x: 0, y: 4)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(strippedTitle(for: event))
-                        .font(SparkFonts.display(.headline, weight: .bold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(2)
-                    if let meta = metaLine(for: event).nilIfEmpty {
-                        Text(meta)
-                            .font(SparkTypography.captionStrong)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                VStack(alignment: .trailing, spacing: 6) {
-                    if let value = displayValue(for: event) {
-                        Text(value)
-                            .font(SparkFonts.display(.title, weight: .bold))
-                            .foregroundStyle(tint)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
-                    }
-                    if let time = event.time {
-                        Text(shortTime(time))
-                            .font(SparkTypography.monoSmall)
-                            .foregroundStyle(.tertiary)
-                            .frame(maxHeight: .infinity, alignment: .bottom)
-                    }
-                }
-            }
-        }
-    }
-
-    private func strippedTitle(for event: CachedEvent) -> String {
-        var title = primaryTitle(for: event)
-        for prefix in ["Finished ", "Started "] {
-            if title.hasPrefix(prefix) { title = String(title.dropFirst(prefix.count)) }
-        }
-        return title
-    }
-}
-
-// MARK: - Subtle event row
-
-private struct SubtleEventRow: View {
-    let event: CachedEvent
-    var surplusCount: Int = 0
-
-    var body: some View {
-        HStack(alignment: .center, spacing: SparkSpacing.sm) {
-            Image(systemName: domainIcon(event.domain))
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 28)
-
-            Text(titledWithSurplus(primaryTitle(for: event), surplus: surplusCount))
-                .font(SparkTypography.bodyStrong)
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-
-            Spacer(minLength: SparkSpacing.sm)
-
-            if let value = displayValue(for: event) {
-                Text(value)
-                    .font(SparkTypography.monoSmall)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        }
-        .padding(.horizontal, SparkSpacing.xs)
-        .padding(.vertical, SparkSpacing.xs)
     }
 }
 

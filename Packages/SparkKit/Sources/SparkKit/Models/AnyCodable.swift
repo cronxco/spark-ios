@@ -78,6 +78,14 @@ public struct AnyCodable: Codable, Sendable, Hashable {
         }
     }
 
+    public var boolValue: Bool? {
+        switch value {
+        case let .bool(v): return v
+        case let .int(v): return v != 0
+        default: return nil
+        }
+    }
+
     public var objectValue: [String: AnyCodable]? {
         if case let .object(v) = value { return v }
         return nil
