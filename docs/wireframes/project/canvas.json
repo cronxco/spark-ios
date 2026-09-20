@@ -1,804 +1,841 @@
 {
-  "attachments": {},
-  "boards": {
-    "01-Onboarding-Welcome.dc.html": {
-      "h": 844,
-      "title": "Onboarding \u00b7 Welcome",
-      "w": 390,
-      "x": 0,
-      "y": 0
-    },
-    "02-Onboarding-SignIn.dc.html": {
-      "h": 844,
-      "title": "Onboarding \u00b7 Sign in",
-      "w": 390,
-      "x": 470,
-      "y": 0
-    },
-    "03-Onboarding-HealthEssentials.dc.html": {
-      "h": 844,
-      "title": "Onboarding \u00b7 Health essentials",
-      "w": 390,
-      "x": 940,
-      "y": 0
-    },
-    "04-Onboarding-HealthActivity.dc.html": {
-      "h": 844,
-      "title": "Onboarding \u00b7 Activity (granted)",
-      "w": 390,
-      "x": 1410,
-      "y": 0
-    },
-    "05-Onboarding-HealthAdvanced.dc.html": {
-      "h": 844,
-      "title": "Onboarding \u00b7 Advanced health",
-      "w": 390,
-      "x": 1880,
-      "y": 0
-    },
-    "06-Onboarding-Notifications.dc.html": {
-      "h": 844,
-      "title": "Onboarding \u00b7 Notifications",
-      "w": 390,
-      "x": 2350,
-      "y": 0
-    },
-    "07-Onboarding-Location.dc.html": {
-      "h": 844,
-      "title": "Onboarding \u00b7 Location",
-      "w": 390,
-      "x": 2820,
-      "y": 0
-    },
-    "08-Onboarding-Done.dc.html": {
-      "h": 844,
-      "title": "Onboarding \u00b7 Done",
-      "w": 390,
-      "x": 3290,
-      "y": 0
-    },
-    "09-Auth-Login.dc.html": {
-      "h": 844,
-      "title": "Auth \u00b7 Signed out",
-      "w": 390,
-      "x": 3760,
-      "y": 0
-    },
-    "10-Day-Today.dc.html": {
-      "h": 844,
-      "title": "Day \u00b7 Today (loaded)",
-      "w": 390,
-      "x": 0,
-      "y": 1214
-    },
-    "11-Day-Today-Loading.dc.html": {
-      "h": 844,
-      "title": "Day \u00b7 Today (loading)",
-      "w": 390,
-      "x": 470,
-      "y": 1214
-    },
-    "12-Day-Today-EmptyError.dc.html": {
-      "h": 844,
-      "title": "Day \u00b7 Today (empty + error)",
-      "w": 390,
-      "x": 940,
-      "y": 1214
-    },
-    "13-Day-Pager.dc.html": {
-      "h": 844,
-      "title": "Day \u00b7 Pager (yesterday)",
-      "w": 390,
-      "x": 1410,
-      "y": 1214
-    },
-    "14-Day-CheckIn.dc.html": {
-      "h": 844,
-      "title": "Day \u00b7 Check-in sheet",
-      "w": 390,
-      "x": 1880,
-      "y": 1214
-    },
-    "15-Day-CheckInHistory.dc.html": {
-      "h": 844,
-      "title": "Day \u00b7 Check-in history",
-      "w": 390,
-      "x": 2350,
-      "y": 1214
-    },
-    "16-UTS-Loading.dc.html": {
-      "h": 844,
-      "title": "Up to Speed \u00b7 Loading",
-      "w": 390,
-      "x": 0,
-      "y": 2428
-    },
-    "17-UTS-CaughtUp.dc.html": {
-      "h": 844,
-      "title": "Up to Speed \u00b7 All caught up",
-      "w": 390,
-      "x": 470,
-      "y": 2428
-    },
-    "18-UTS-Failed.dc.html": {
-      "h": 844,
-      "title": "Up to Speed \u00b7 Failed",
-      "w": 390,
-      "x": 940,
-      "y": 2428
-    },
-    "19-UTS-Opener.dc.html": {
-      "h": 844,
-      "title": "Up to Speed \u00b7 Opener + day context",
-      "w": 390,
-      "x": 1410,
-      "y": 2428
-    },
-    "20-UTS-Anomaly.dc.html": {
-      "h": 844,
-      "title": "Up to Speed \u00b7 Anomaly",
-      "w": 390,
-      "x": 1880,
-      "y": 2428
-    },
-    "21-UTS-MuteSheet.dc.html": {
-      "h": 844,
-      "title": "Up to Speed \u00b7 Mute anomaly",
-      "w": 390,
-      "x": 2350,
-      "y": 2428
-    },
-    "22-UTS-DigestHeader.dc.html": {
-      "h": 844,
-      "title": "Up to Speed \u00b7 Digest header + editorial note",
-      "w": 390,
-      "x": 2820,
-      "y": 2428
-    },
-    "23-UTS-DigestParagraph.dc.html": {
-      "h": 844,
-      "title": "Up to Speed \u00b7 Digest paragraph",
-      "w": 390,
-      "x": 3290,
-      "y": 2428
-    },
-    "24-UTS-Insight.dc.html": {
-      "h": 844,
-      "title": "Up to Speed \u00b7 Insight",
-      "w": 390,
-      "x": 3760,
-      "y": 2428
-    },
-    "25-UTS-Question.dc.html": {
-      "h": 844,
-      "title": "Up to Speed \u00b7 Question",
-      "w": 390,
-      "x": 4230,
-      "y": 2428
-    },
-    "26-UTS-CheckIn.dc.html": {
-      "h": 844,
-      "title": "Up to Speed \u00b7 Check-in",
-      "w": 390,
-      "x": 4700,
-      "y": 2428
-    },
-    "27-UTS-NewsStory.dc.html": {
-      "h": 844,
-      "title": "Up to Speed \u00b7 News story",
-      "w": 390,
-      "x": 5170,
-      "y": 2428
-    },
-    "28-UTS-NewsSummary.dc.html": {
-      "h": 844,
-      "title": "Up to Speed \u00b7 News summary",
-      "w": 390,
-      "x": 5640,
-      "y": 2428
-    },
-    "29-UTS-Wrap.dc.html": {
-      "h": 844,
-      "title": "Up to Speed \u00b7 Wrap",
-      "w": 390,
-      "x": 6110,
-      "y": 2428
-    },
-    "30-UTS-Recap.dc.html": {
-      "h": 844,
-      "title": "Up to Speed \u00b7 Recap (sheet)",
-      "w": 390,
-      "x": 6580,
-      "y": 2428
-    },
-    "31-UTS-RecapDetail.dc.html": {
-      "h": 844,
-      "title": "Up to Speed \u00b7 Recap item",
-      "w": 390,
-      "x": 7050,
-      "y": 2428
-    },
-    "32-UTS-NoteToFlint.dc.html": {
-      "h": 844,
-      "title": "Up to Speed \u00b7 Note to Flint",
-      "w": 390,
-      "x": 7520,
-      "y": 2428
-    },
-    "33-Explore-Health.dc.html": {
-      "h": 844,
-      "title": "Explore \u00b7 Health",
-      "w": 390,
-      "x": 0,
-      "y": 3642
-    },
-    "34-Explore-Money.dc.html": {
-      "h": 844,
-      "title": "Explore \u00b7 Money",
-      "w": 390,
-      "x": 470,
-      "y": 3642
-    },
-    "35-Explore-Metrics.dc.html": {
-      "h": 844,
-      "title": "Explore \u00b7 Metrics",
-      "w": 390,
-      "x": 940,
-      "y": 3642
-    },
-    "36-Explore-Map.dc.html": {
-      "h": 844,
-      "title": "Explore \u00b7 Map (embedded)",
-      "w": 390,
-      "x": 1410,
-      "y": 3642
-    },
-    "37-Explore-Tags.dc.html": {
-      "h": 844,
-      "title": "Explore \u00b7 Tags",
-      "w": 390,
-      "x": 1880,
-      "y": 3642
-    },
-    "38-Money-AccountDetail.dc.html": {
-      "h": 844,
-      "title": "Money \u00b7 Account detail",
-      "w": 390,
-      "x": 2350,
-      "y": 3642
-    },
-    "39-Money-CreateAccount.dc.html": {
-      "h": 844,
-      "title": "Money \u00b7 New account",
-      "w": 390,
-      "x": 2820,
-      "y": 3642
-    },
-    "40-Money-AddBalance.dc.html": {
-      "h": 844,
-      "title": "Money \u00b7 Add balance",
-      "w": 390,
-      "x": 3290,
-      "y": 3642
-    },
-    "41-Money-EditAccount.dc.html": {
-      "h": 844,
-      "title": "Money \u00b7 Edit account",
-      "w": 390,
-      "x": 3760,
-      "y": 3642
-    },
-    "42-Map-Tab.dc.html": {
-      "h": 844,
-      "title": "Map \u00b7 Full tab + sheet",
-      "w": 390,
-      "x": 4230,
-      "y": 3642
-    },
-    "43-Knowledge-List.dc.html": {
-      "h": 844,
-      "title": "Knowledge \u00b7 List",
-      "w": 390,
-      "x": 0,
-      "y": 4856
-    },
-    "44-Knowledge-Detail.dc.html": {
-      "h": 844,
-      "title": "Knowledge \u00b7 Item detail",
-      "w": 390,
-      "x": 470,
-      "y": 4856
-    },
-    "45-Flint-Overview.dc.html": {
-      "h": 844,
-      "title": "Flint \u00b7 Overview",
-      "w": 390,
-      "x": 940,
-      "y": 4856
-    },
-    "46-Flint-Questions.dc.html": {
-      "h": 844,
-      "title": "Flint \u00b7 Questions",
-      "w": 390,
-      "x": 1410,
-      "y": 4856
-    },
-    "47-Flint-Threads.dc.html": {
-      "h": 844,
-      "title": "Flint \u00b7 Threads",
-      "w": 390,
-      "x": 1880,
-      "y": 4856
-    },
-    "48-Flint-History.dc.html": {
-      "h": 844,
-      "title": "Flint \u00b7 History",
-      "w": 390,
-      "x": 2350,
-      "y": 4856
-    },
-    "49-Flint-ThreadDetail.dc.html": {
-      "h": 844,
-      "title": "Flint \u00b7 Thread",
-      "w": 390,
-      "x": 2820,
-      "y": 4856
-    },
-    "50-Flint-DigestReader.dc.html": {
-      "h": 844,
-      "title": "Flint \u00b7 Digest reader",
-      "w": 390,
-      "x": 3290,
-      "y": 4856
-    },
-    "51-Flint-Notes.dc.html": {
-      "h": 844,
-      "title": "Flint \u00b7 Notes to Flint",
-      "w": 390,
-      "x": 3760,
-      "y": 4856
-    },
-    "52-Flint-NoteDetail.dc.html": {
-      "h": 844,
-      "title": "Flint \u00b7 Note detail",
-      "w": 390,
-      "x": 4230,
-      "y": 4856
-    },
-    "53-Search-Idle.dc.html": {
-      "h": 844,
-      "title": "Search \u00b7 Idle",
-      "w": 390,
-      "x": 4700,
-      "y": 4856
-    },
-    "54-Search-Results.dc.html": {
-      "h": 844,
-      "title": "Search \u00b7 Results",
-      "w": 390,
-      "x": 5170,
-      "y": 4856
-    },
-    "55-Notifications-Inbox.dc.html": {
-      "h": 844,
-      "title": "Notifications \u00b7 Inbox",
-      "w": 390,
-      "x": 5640,
-      "y": 4856
-    },
-    "56-Detail-Event.dc.html": {
-      "h": 844,
-      "title": "Detail \u00b7 Event",
-      "w": 390,
-      "x": 0,
-      "y": 6070
-    },
-    "57-Detail-Object.dc.html": {
-      "h": 844,
-      "title": "Detail \u00b7 Object",
-      "w": 390,
-      "x": 470,
-      "y": 6070
-    },
-    "58-Detail-Block.dc.html": {
-      "h": 844,
-      "title": "Detail \u00b7 Block",
-      "w": 390,
-      "x": 940,
-      "y": 6070
-    },
-    "59-Detail-Metric.dc.html": {
-      "h": 844,
-      "title": "Detail \u00b7 Metric",
-      "w": 390,
-      "x": 1410,
-      "y": 6070
-    },
-    "60-Detail-Place.dc.html": {
-      "h": 844,
-      "title": "Detail \u00b7 Place",
-      "w": 390,
-      "x": 1880,
-      "y": 6070
-    },
-    "61-Detail-Anomaly.dc.html": {
-      "h": 844,
-      "title": "Detail \u00b7 Anomaly",
-      "w": 390,
-      "x": 2350,
-      "y": 6070
-    },
-    "62-Detail-Tag.dc.html": {
-      "h": 844,
-      "title": "Detail \u00b7 Tag",
-      "w": 390,
-      "x": 2820,
-      "y": 6070
-    },
-    "63-Settings-Root.dc.html": {
-      "h": 844,
-      "title": "Settings \u00b7 Root",
-      "w": 390,
-      "x": 0,
-      "y": 7284
-    },
-    "64-Settings-Profile.dc.html": {
-      "h": 844,
-      "title": "Settings \u00b7 Profile",
-      "w": 390,
-      "x": 470,
-      "y": 7284
-    },
-    "65-Settings-Notifications.dc.html": {
-      "h": 844,
-      "title": "Settings \u00b7 Notifications",
-      "w": 390,
-      "x": 940,
-      "y": 7284
-    },
-    "66-Settings-Health.dc.html": {
-      "h": 844,
-      "title": "Settings \u00b7 Health & Activity",
-      "w": 390,
-      "x": 1410,
-      "y": 7284
-    },
-    "67-Settings-Integrations.dc.html": {
-      "h": 844,
-      "title": "Settings \u00b7 Integrations",
-      "w": 390,
-      "x": 1880,
-      "y": 7284
-    },
-    "68-Settings-IntegrationDetail.dc.html": {
-      "h": 844,
-      "title": "Settings \u00b7 Integration detail",
-      "w": 390,
-      "x": 2350,
-      "y": 7284
-    },
-    "69-Settings-Devices.dc.html": {
-      "h": 844,
-      "title": "Settings \u00b7 Devices",
-      "w": 390,
-      "x": 2820,
-      "y": 7284
-    },
-    "70-Settings-Tokens.dc.html": {
-      "h": 844,
-      "title": "Settings \u00b7 API tokens",
-      "w": 390,
-      "x": 3290,
-      "y": 7284
-    },
-    "71-Settings-About.dc.html": {
-      "h": 844,
-      "title": "Settings \u00b7 About",
-      "w": 390,
-      "x": 3760,
-      "y": 7284
-    },
-    "72-Settings-Debug.dc.html": {
-      "h": 844,
-      "title": "Settings \u00b7 Debug (DEBUG only)",
-      "w": 390,
-      "x": 4230,
-      "y": 7284
-    },
-    "73-Sheet-TagPicker.dc.html": {
-      "h": 844,
-      "title": "Sheet \u00b7 Add tag",
-      "w": 390,
-      "x": 0,
-      "y": 8498
-    },
-    "74-Sheet-EntityEditor.dc.html": {
-      "h": 844,
-      "title": "Sheet \u00b7 Edit entity",
-      "w": 390,
-      "x": 470,
-      "y": 8498
-    },
-    "75-Sheet-LocationEditor.dc.html": {
-      "h": 844,
-      "title": "Sheet \u00b7 Edit location",
-      "w": 390,
-      "x": 940,
-      "y": 8498
-    },
-    "76-Sheet-Feedback.dc.html": {
-      "h": 844,
-      "title": "Sheet \u00b7 Send feedback",
-      "w": 390,
-      "x": 1410,
-      "y": 8498
-    },
-    "77-Sheet-NotificationDetail.dc.html": {
-      "h": 844,
-      "title": "Sheet \u00b7 Notification detail",
-      "w": 390,
-      "x": 1880,
-      "y": 8498
-    },
-    "78-Ambient-Surfaces.dc.html": {
-      "h": 860,
-      "title": "Ambient surfaces",
-      "w": 1180,
-      "x": 0,
-      "y": 9712
-    },
-    "79-Background-Washes.dc.html": {
-      "h": 700,
-      "title": "Background washes",
-      "w": 1180,
-      "x": 1260,
-      "y": 9712
-    }
+ "v": 3,
+ "createdOnFiles": {
+  "v": 1,
+  "at": "2026-09-20T12:27:45Z"
+ },
+ "title": "Spark iOS \u2014 Screen Wireframes",
+ "launch": {
+  "view": "canvas"
+ },
+ "pages": [],
+ "boards": {
+  "01-Onboarding-Welcome.dc.html": {
+   "x": 0,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Onboarding \u00b7 Welcome"
   },
-  "createdOnFiles": {
-    "at": "2026-09-19T21:17:26Z",
-    "v": 1
+  "02-Onboarding-SignIn.dc.html": {
+   "x": 470,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Onboarding \u00b7 Sign in"
   },
-  "designSystems": [
-    {
-      "artifact": "https://claude.ai/artifact/GbFZoNjtnLwNpKNrJ5SsuN",
-      "copiedAt": "2026-09-19T21:17:26Z",
-      "namespace": "spark",
-      "title": "Spark Design System",
-      "version": null
-    }
-  ],
-  "launch": {
-    "view": "canvas"
+  "03-Onboarding-HealthEssentials.dc.html": {
+   "x": 940,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Onboarding \u00b7 Health essentials"
   },
-  "notes": {
-    "s0": {
-      "color": "gray",
-      "size": 40,
-      "text": "The first-run flow. Every step is SparkOnboardingScaffold: one glyph, a Comfortaa hero, the reason, and a pinned action stack with a skip.",
-      "w": 1180,
-      "x": 0,
-      "y": -154
-    },
-    "s1": {
-      "color": "gray",
-      "size": 40,
-      "text": "The main surface. A paged window of days, each one hero, a stat strip, the anomaly pill, check-ins, and an hour-ruled timeline whose rows change weight with what the event is.",
-      "w": 1180,
-      "x": 0,
-      "y": 1060
-    },
-    "s2": {
-      "color": "gray",
-      "size": 40,
-      "text": "The full-screen catch-up. A glass header carries the chaptered progress bar, the chapter and three 44pt controls; every card is spoken by Flint; the recap is a sheet you can reach at any point, and a note to Flint is always one tap away.",
-      "w": 1180,
-      "x": 0,
-      "y": 2274
-    },
-    "s3": {
-      "color": "gray",
-      "size": 40,
-      "text": "Five sections behind one tab-bar accessory: Health, Money, Metrics, Map and Tags, plus the money account screens.",
-      "w": 1180,
-      "x": 0,
-      "y": 3488
-    },
-    "s4": {
-      "color": "gray",
-      "size": 40,
-      "text": "Reading; Flint's four swipeable sections with its threads, digest reader and notes; and the prefix-driven search.",
-      "w": 1180,
-      "x": 0,
-      "y": 4702
-    },
-    "s5": {
-      "color": "gray",
-      "size": 40,
-      "text": "One screen per entity in the Spark graph, all sharing SparkDetailHero, the section header, the linked row and the value tile.",
-      "w": 1180,
-      "x": 0,
-      "y": 5916
-    },
-    "s6": {
-      "color": "gray",
-      "size": 40,
-      "text": "The settings sheet and its stack, plus connection health.",
-      "w": 1180,
-      "x": 0,
-      "y": 7130
-    },
-    "s7": {
-      "color": "gray",
-      "size": 40,
-      "text": "Presented from the sub-view toolbar and the detail screens.",
-      "w": 1180,
-      "x": 0,
-      "y": 8344
-    },
-    "s8": {
-      "color": "gray",
-      "size": 40,
-      "text": "Widgets, Lock Screen accessories, StandBy, Live Activities and the share extension \u2014 every surface that shows Spark without the app being opened \u2014 and the eight states of the app background.",
-      "w": 1180,
-      "x": 0,
-      "y": 9558
-    },
-    "t0": {
-      "kind": "title1",
-      "maxW": 4150,
-      "text": "Onboarding and sign-in",
-      "w": 240,
-      "x": 0,
-      "y": -250
-    },
-    "t1": {
-      "kind": "title1",
-      "maxW": 2740,
-      "text": "The Day tab",
-      "w": 240,
-      "x": 0,
-      "y": 964
-    },
-    "t2": {
-      "kind": "title1",
-      "maxW": 7910,
-      "text": "Up to Speed",
-      "w": 240,
-      "x": 0,
-      "y": 2178
-    },
-    "t3": {
-      "kind": "title1",
-      "maxW": 4620,
-      "text": "Explore",
-      "w": 240,
-      "x": 0,
-      "y": 3392
-    },
-    "t4": {
-      "kind": "title1",
-      "maxW": 6030,
-      "text": "Knowledge, Flint and Search",
-      "w": 240,
-      "x": 0,
-      "y": 4606
-    },
-    "t5": {
-      "kind": "title1",
-      "maxW": 3210,
-      "text": "Detail screens",
-      "w": 240,
-      "x": 0,
-      "y": 5820
-    },
-    "t6": {
-      "kind": "title1",
-      "maxW": 4620,
-      "text": "Settings and integrations",
-      "w": 240,
-      "x": 0,
-      "y": 7034
-    },
-    "t7": {
-      "kind": "title1",
-      "maxW": 2270,
-      "text": "Shared sheets",
-      "w": 240,
-      "x": 0,
-      "y": 8248
-    },
-    "t8": {
-      "kind": "title1",
-      "maxW": 2440,
-      "text": "Ambient surfaces and the wash",
-      "w": 240,
-      "x": 0,
-      "y": 9462
-    }
+  "04-Onboarding-HealthActivity.dc.html": {
+   "x": 1410,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Onboarding \u00b7 Activity (granted)"
   },
-  "order": [
-    "01-Onboarding-Welcome.dc.html",
-    "02-Onboarding-SignIn.dc.html",
-    "03-Onboarding-HealthEssentials.dc.html",
-    "04-Onboarding-HealthActivity.dc.html",
-    "05-Onboarding-HealthAdvanced.dc.html",
-    "06-Onboarding-Notifications.dc.html",
-    "07-Onboarding-Location.dc.html",
-    "08-Onboarding-Done.dc.html",
-    "09-Auth-Login.dc.html",
-    "10-Day-Today.dc.html",
-    "11-Day-Today-Loading.dc.html",
-    "12-Day-Today-EmptyError.dc.html",
-    "13-Day-Pager.dc.html",
-    "14-Day-CheckIn.dc.html",
-    "15-Day-CheckInHistory.dc.html",
-    "16-UTS-Loading.dc.html",
-    "17-UTS-CaughtUp.dc.html",
-    "18-UTS-Failed.dc.html",
-    "19-UTS-Opener.dc.html",
-    "20-UTS-Anomaly.dc.html",
-    "21-UTS-MuteSheet.dc.html",
-    "22-UTS-DigestHeader.dc.html",
-    "23-UTS-DigestParagraph.dc.html",
-    "24-UTS-Insight.dc.html",
-    "25-UTS-Question.dc.html",
-    "26-UTS-CheckIn.dc.html",
-    "27-UTS-NewsStory.dc.html",
-    "28-UTS-NewsSummary.dc.html",
-    "29-UTS-Wrap.dc.html",
-    "30-UTS-Recap.dc.html",
-    "31-UTS-RecapDetail.dc.html",
-    "32-UTS-NoteToFlint.dc.html",
-    "33-Explore-Health.dc.html",
-    "34-Explore-Money.dc.html",
-    "35-Explore-Metrics.dc.html",
-    "36-Explore-Map.dc.html",
-    "37-Explore-Tags.dc.html",
-    "38-Money-AccountDetail.dc.html",
-    "39-Money-CreateAccount.dc.html",
-    "40-Money-AddBalance.dc.html",
-    "41-Money-EditAccount.dc.html",
-    "42-Map-Tab.dc.html",
-    "43-Knowledge-List.dc.html",
-    "44-Knowledge-Detail.dc.html",
-    "45-Flint-Overview.dc.html",
-    "46-Flint-Questions.dc.html",
-    "47-Flint-Threads.dc.html",
-    "48-Flint-History.dc.html",
-    "49-Flint-ThreadDetail.dc.html",
-    "50-Flint-DigestReader.dc.html",
-    "51-Flint-Notes.dc.html",
-    "52-Flint-NoteDetail.dc.html",
-    "53-Search-Idle.dc.html",
-    "54-Search-Results.dc.html",
-    "55-Notifications-Inbox.dc.html",
-    "56-Detail-Event.dc.html",
-    "57-Detail-Object.dc.html",
-    "58-Detail-Block.dc.html",
-    "59-Detail-Metric.dc.html",
-    "60-Detail-Place.dc.html",
-    "61-Detail-Anomaly.dc.html",
-    "62-Detail-Tag.dc.html",
-    "63-Settings-Root.dc.html",
-    "64-Settings-Profile.dc.html",
-    "65-Settings-Notifications.dc.html",
-    "66-Settings-Health.dc.html",
-    "67-Settings-Integrations.dc.html",
-    "68-Settings-IntegrationDetail.dc.html",
-    "69-Settings-Devices.dc.html",
-    "70-Settings-Tokens.dc.html",
-    "71-Settings-About.dc.html",
-    "72-Settings-Debug.dc.html",
-    "73-Sheet-TagPicker.dc.html",
-    "74-Sheet-EntityEditor.dc.html",
-    "75-Sheet-LocationEditor.dc.html",
-    "76-Sheet-Feedback.dc.html",
-    "77-Sheet-NotificationDetail.dc.html",
-    "78-Ambient-Surfaces.dc.html",
-    "79-Background-Washes.dc.html"
-  ],
-  "pages": [],
-  "title": "Spark iOS \u2014 Screen Wireframes",
-  "v": 3
+  "05-Onboarding-HealthAdvanced.dc.html": {
+   "x": 1880,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Onboarding \u00b7 Advanced health"
+  },
+  "06-Onboarding-Notifications.dc.html": {
+   "x": 2350,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Onboarding \u00b7 Notifications"
+  },
+  "07-Onboarding-Location.dc.html": {
+   "x": 2820,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Onboarding \u00b7 Location"
+  },
+  "08-Onboarding-Done.dc.html": {
+   "x": 3290,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Onboarding \u00b7 Done"
+  },
+  "09-Auth-Login.dc.html": {
+   "x": 3760,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Auth \u00b7 Signed out"
+  },
+  "10-Day-Today.dc.html": {
+   "x": 0,
+   "y": 1214,
+   "w": 390,
+   "h": 844,
+   "title": "Day \u00b7 Today (loaded)"
+  },
+  "11-Day-Today-Loading.dc.html": {
+   "x": 470,
+   "y": 1214,
+   "w": 390,
+   "h": 844,
+   "title": "Day \u00b7 Today (loading)"
+  },
+  "12-Day-Today-EmptyError.dc.html": {
+   "x": 940,
+   "y": 1214,
+   "w": 390,
+   "h": 844,
+   "title": "Day \u00b7 Today (empty + error)"
+  },
+  "13-Day-Pager.dc.html": {
+   "x": 1410,
+   "y": 1214,
+   "w": 390,
+   "h": 844,
+   "title": "Day \u00b7 Pager (yesterday)"
+  },
+  "14-Day-CheckIn.dc.html": {
+   "x": 1880,
+   "y": 1214,
+   "w": 390,
+   "h": 844,
+   "title": "Day \u00b7 Check-in sheet"
+  },
+  "15-Day-CheckInHistory.dc.html": {
+   "x": 2350,
+   "y": 1214,
+   "w": 390,
+   "h": 844,
+   "title": "Day \u00b7 Check-in history"
+  },
+  "16-UTS-Loading.dc.html": {
+   "x": 0,
+   "y": 2428,
+   "w": 390,
+   "h": 844,
+   "title": "Up to Speed \u00b7 Loading"
+  },
+  "17-UTS-CaughtUp.dc.html": {
+   "x": 470,
+   "y": 2428,
+   "w": 390,
+   "h": 844,
+   "title": "Up to Speed \u00b7 All caught up"
+  },
+  "18-UTS-Failed.dc.html": {
+   "x": 940,
+   "y": 2428,
+   "w": 390,
+   "h": 844,
+   "title": "Up to Speed \u00b7 Failed"
+  },
+  "19-UTS-Opener.dc.html": {
+   "x": 1410,
+   "y": 2428,
+   "w": 390,
+   "h": 844,
+   "title": "Up to Speed \u00b7 Opener + day context"
+  },
+  "20-UTS-Anomaly.dc.html": {
+   "x": 1880,
+   "y": 2428,
+   "w": 390,
+   "h": 844,
+   "title": "Up to Speed \u00b7 Anomaly"
+  },
+  "21-UTS-MuteSheet.dc.html": {
+   "x": 2350,
+   "y": 2428,
+   "w": 390,
+   "h": 844,
+   "title": "Up to Speed \u00b7 Mute anomaly"
+  },
+  "22-UTS-DigestHeader.dc.html": {
+   "x": 2820,
+   "y": 2428,
+   "w": 390,
+   "h": 844,
+   "title": "Up to Speed \u00b7 Digest header + editorial note"
+  },
+  "23-UTS-DigestParagraph.dc.html": {
+   "x": 3290,
+   "y": 2428,
+   "w": 390,
+   "h": 844,
+   "title": "Up to Speed \u00b7 Digest paragraph"
+  },
+  "24-UTS-Insight.dc.html": {
+   "x": 3760,
+   "y": 2428,
+   "w": 390,
+   "h": 844,
+   "title": "Up to Speed \u00b7 Insight"
+  },
+  "25-UTS-Question.dc.html": {
+   "x": 4230,
+   "y": 2428,
+   "w": 390,
+   "h": 844,
+   "title": "Up to Speed \u00b7 Question"
+  },
+  "26-UTS-CheckIn.dc.html": {
+   "x": 4700,
+   "y": 2428,
+   "w": 390,
+   "h": 844,
+   "title": "Up to Speed \u00b7 Check-in"
+  },
+  "27-UTS-NewsStory.dc.html": {
+   "x": 5170,
+   "y": 2428,
+   "w": 390,
+   "h": 844,
+   "title": "Up to Speed \u00b7 News story"
+  },
+  "28-UTS-NewsSummary.dc.html": {
+   "x": 5640,
+   "y": 2428,
+   "w": 390,
+   "h": 844,
+   "title": "Up to Speed \u00b7 News summary"
+  },
+  "29-UTS-Wrap.dc.html": {
+   "x": 6110,
+   "y": 2428,
+   "w": 390,
+   "h": 844,
+   "title": "Up to Speed \u00b7 Wrap"
+  },
+  "30-UTS-Recap.dc.html": {
+   "x": 6580,
+   "y": 2428,
+   "w": 390,
+   "h": 844,
+   "title": "Up to Speed \u00b7 Recap (sheet)"
+  },
+  "31-UTS-RecapDetail.dc.html": {
+   "x": 7050,
+   "y": 2428,
+   "w": 390,
+   "h": 844,
+   "title": "Up to Speed \u00b7 Recap item"
+  },
+  "32-UTS-NoteToFlint.dc.html": {
+   "x": 7520,
+   "y": 2428,
+   "w": 390,
+   "h": 844,
+   "title": "Up to Speed \u00b7 Note to Flint"
+  },
+  "33-Explore-Health.dc.html": {
+   "x": 0,
+   "y": 3642,
+   "w": 390,
+   "h": 844,
+   "title": "Explore \u00b7 Health"
+  },
+  "34-Explore-Money.dc.html": {
+   "x": 470,
+   "y": 3642,
+   "w": 390,
+   "h": 844,
+   "title": "Explore \u00b7 Money"
+  },
+  "35-Explore-Metrics.dc.html": {
+   "x": 940,
+   "y": 3642,
+   "w": 390,
+   "h": 844,
+   "title": "Explore \u00b7 Metrics"
+  },
+  "36-Explore-Map.dc.html": {
+   "x": 1410,
+   "y": 3642,
+   "w": 390,
+   "h": 844,
+   "title": "Explore \u00b7 Map (embedded)"
+  },
+  "37-Explore-Tags.dc.html": {
+   "x": 1880,
+   "y": 3642,
+   "w": 390,
+   "h": 844,
+   "title": "Explore \u00b7 Tags"
+  },
+  "38-Money-AccountDetail.dc.html": {
+   "x": 2350,
+   "y": 3642,
+   "w": 390,
+   "h": 844,
+   "title": "Money \u00b7 Account detail"
+  },
+  "39-Money-CreateAccount.dc.html": {
+   "x": 2820,
+   "y": 3642,
+   "w": 390,
+   "h": 844,
+   "title": "Money \u00b7 New account"
+  },
+  "40-Money-AddBalance.dc.html": {
+   "x": 3290,
+   "y": 3642,
+   "w": 390,
+   "h": 844,
+   "title": "Money \u00b7 Add balance"
+  },
+  "41-Money-EditAccount.dc.html": {
+   "x": 3760,
+   "y": 3642,
+   "w": 390,
+   "h": 844,
+   "title": "Money \u00b7 Edit account"
+  },
+  "42-Map-Tab.dc.html": {
+   "x": 4230,
+   "y": 3642,
+   "w": 390,
+   "h": 844,
+   "title": "Map \u00b7 Full tab + sheet"
+  },
+  "43-Knowledge-List.dc.html": {
+   "x": 0,
+   "y": 4856,
+   "w": 390,
+   "h": 844,
+   "title": "Knowledge \u00b7 List"
+  },
+  "44-Knowledge-Detail.dc.html": {
+   "x": 470,
+   "y": 4856,
+   "w": 390,
+   "h": 844,
+   "title": "Knowledge \u00b7 Item detail"
+  },
+  "45-Flint-Overview.dc.html": {
+   "x": 940,
+   "y": 4856,
+   "w": 390,
+   "h": 844,
+   "title": "Flint \u00b7 Overview"
+  },
+  "46-Flint-Questions.dc.html": {
+   "x": 1410,
+   "y": 4856,
+   "w": 390,
+   "h": 844,
+   "title": "Flint \u00b7 Questions"
+  },
+  "47-Flint-Threads.dc.html": {
+   "x": 1880,
+   "y": 4856,
+   "w": 390,
+   "h": 844,
+   "title": "Flint \u00b7 Threads"
+  },
+  "48-Flint-History.dc.html": {
+   "x": 2350,
+   "y": 4856,
+   "w": 390,
+   "h": 844,
+   "title": "Flint \u00b7 History"
+  },
+  "49-Flint-ThreadDetail.dc.html": {
+   "x": 2820,
+   "y": 4856,
+   "w": 390,
+   "h": 844,
+   "title": "Flint \u00b7 Thread"
+  },
+  "50-Flint-DigestReader.dc.html": {
+   "x": 3290,
+   "y": 4856,
+   "w": 390,
+   "h": 844,
+   "title": "Flint \u00b7 Digest reader"
+  },
+  "51-Flint-Notes.dc.html": {
+   "x": 3760,
+   "y": 4856,
+   "w": 390,
+   "h": 844,
+   "title": "Flint \u00b7 Notes to Flint"
+  },
+  "52-Flint-NoteDetail.dc.html": {
+   "x": 4230,
+   "y": 4856,
+   "w": 390,
+   "h": 844,
+   "title": "Flint \u00b7 Note detail"
+  },
+  "53-Search-Idle.dc.html": {
+   "x": 4700,
+   "y": 4856,
+   "w": 390,
+   "h": 844,
+   "title": "Search \u00b7 Idle"
+  },
+  "54-Search-Results.dc.html": {
+   "x": 5170,
+   "y": 4856,
+   "w": 390,
+   "h": 844,
+   "title": "Search \u00b7 Results"
+  },
+  "55-Notifications-Inbox.dc.html": {
+   "x": 5640,
+   "y": 4856,
+   "w": 390,
+   "h": 844,
+   "title": "Notifications \u00b7 Inbox"
+  },
+  "56-Detail-Event.dc.html": {
+   "x": 0,
+   "y": 6070,
+   "w": 390,
+   "h": 844,
+   "title": "Detail \u00b7 Event"
+  },
+  "57-Detail-Object.dc.html": {
+   "x": 470,
+   "y": 6070,
+   "w": 390,
+   "h": 844,
+   "title": "Detail \u00b7 Object"
+  },
+  "58-Detail-Block.dc.html": {
+   "x": 940,
+   "y": 6070,
+   "w": 390,
+   "h": 844,
+   "title": "Detail \u00b7 Block"
+  },
+  "59-Detail-Metric.dc.html": {
+   "x": 1410,
+   "y": 6070,
+   "w": 390,
+   "h": 844,
+   "title": "Detail \u00b7 Metric"
+  },
+  "60-Detail-Place.dc.html": {
+   "x": 1880,
+   "y": 6070,
+   "w": 390,
+   "h": 844,
+   "title": "Detail \u00b7 Place"
+  },
+  "61-Detail-Anomaly.dc.html": {
+   "x": 2350,
+   "y": 6070,
+   "w": 390,
+   "h": 844,
+   "title": "Detail \u00b7 Anomaly"
+  },
+  "62-Detail-Tag.dc.html": {
+   "x": 2820,
+   "y": 6070,
+   "w": 390,
+   "h": 844,
+   "title": "Detail \u00b7 Tag"
+  },
+  "63-Settings-Root.dc.html": {
+   "x": 0,
+   "y": 7284,
+   "w": 390,
+   "h": 844,
+   "title": "Settings \u00b7 Root"
+  },
+  "64-Settings-Profile.dc.html": {
+   "x": 470,
+   "y": 7284,
+   "w": 390,
+   "h": 844,
+   "title": "Settings \u00b7 Profile"
+  },
+  "65-Settings-Notifications.dc.html": {
+   "x": 940,
+   "y": 7284,
+   "w": 390,
+   "h": 844,
+   "title": "Settings \u00b7 Notifications"
+  },
+  "66-Settings-Health.dc.html": {
+   "x": 1410,
+   "y": 7284,
+   "w": 390,
+   "h": 844,
+   "title": "Settings \u00b7 Health & Activity"
+  },
+  "67-Settings-Integrations.dc.html": {
+   "x": 1880,
+   "y": 7284,
+   "w": 390,
+   "h": 844,
+   "title": "Settings \u00b7 Integrations"
+  },
+  "68-Settings-IntegrationDetail.dc.html": {
+   "x": 2350,
+   "y": 7284,
+   "w": 390,
+   "h": 844,
+   "title": "Settings \u00b7 Integration detail"
+  },
+  "69-Settings-Devices.dc.html": {
+   "x": 2820,
+   "y": 7284,
+   "w": 390,
+   "h": 844,
+   "title": "Settings \u00b7 Devices"
+  },
+  "70-Settings-Tokens.dc.html": {
+   "x": 3290,
+   "y": 7284,
+   "w": 390,
+   "h": 844,
+   "title": "Settings \u00b7 API tokens"
+  },
+  "71-Settings-About.dc.html": {
+   "x": 3760,
+   "y": 7284,
+   "w": 390,
+   "h": 844,
+   "title": "Settings \u00b7 About"
+  },
+  "72-Settings-Debug.dc.html": {
+   "x": 4230,
+   "y": 7284,
+   "w": 390,
+   "h": 844,
+   "title": "Settings \u00b7 Debug (DEBUG only)"
+  },
+  "73-Sheet-TagPicker.dc.html": {
+   "x": 0,
+   "y": 8498,
+   "w": 390,
+   "h": 844,
+   "title": "Sheet \u00b7 Add tag"
+  },
+  "74-Sheet-EntityEditor.dc.html": {
+   "x": 470,
+   "y": 8498,
+   "w": 390,
+   "h": 844,
+   "title": "Sheet \u00b7 Edit entity"
+  },
+  "75-Sheet-LocationEditor.dc.html": {
+   "x": 940,
+   "y": 8498,
+   "w": 390,
+   "h": 844,
+   "title": "Sheet \u00b7 Edit location"
+  },
+  "76-Sheet-Feedback.dc.html": {
+   "x": 1410,
+   "y": 8498,
+   "w": 390,
+   "h": 844,
+   "title": "Sheet \u00b7 Send feedback"
+  },
+  "77-Sheet-NotificationDetail.dc.html": {
+   "x": 1880,
+   "y": 8498,
+   "w": 390,
+   "h": 844,
+   "title": "Sheet \u00b7 Notification detail"
+  },
+  "78-DayOption-A-Brief.dc.html": {
+   "x": 0,
+   "y": 9712,
+   "w": 390,
+   "h": 844,
+   "title": "Day option A \u00b7 The Brief"
+  },
+  "79-DayOption-B-Arc.dc.html": {
+   "x": 470,
+   "y": 9712,
+   "w": 390,
+   "h": 844,
+   "title": "Day option B \u00b7 The Arc"
+  },
+  "80-DayOption-C-Signals.dc.html": {
+   "x": 940,
+   "y": 9712,
+   "w": 390,
+   "h": 844,
+   "title": "Day option C \u00b7 Signals"
+  },
+  "81-DayOption-D-Desk.dc.html": {
+   "x": 1410,
+   "y": 9712,
+   "w": 390,
+   "h": 844,
+   "title": "Day option D \u00b7 The Desk"
+  },
+  "82-Ambient-Surfaces.dc.html": {
+   "x": 0,
+   "y": 10926,
+   "w": 1180,
+   "h": 860,
+   "title": "Ambient surfaces"
+  },
+  "83-Background-Washes.dc.html": {
+   "x": 1260,
+   "y": 10926,
+   "w": 1180,
+   "h": 700,
+   "title": "Background washes"
+  }
+ },
+ "order": [
+  "01-Onboarding-Welcome.dc.html",
+  "02-Onboarding-SignIn.dc.html",
+  "03-Onboarding-HealthEssentials.dc.html",
+  "04-Onboarding-HealthActivity.dc.html",
+  "05-Onboarding-HealthAdvanced.dc.html",
+  "06-Onboarding-Notifications.dc.html",
+  "07-Onboarding-Location.dc.html",
+  "08-Onboarding-Done.dc.html",
+  "09-Auth-Login.dc.html",
+  "10-Day-Today.dc.html",
+  "11-Day-Today-Loading.dc.html",
+  "12-Day-Today-EmptyError.dc.html",
+  "13-Day-Pager.dc.html",
+  "14-Day-CheckIn.dc.html",
+  "15-Day-CheckInHistory.dc.html",
+  "16-UTS-Loading.dc.html",
+  "17-UTS-CaughtUp.dc.html",
+  "18-UTS-Failed.dc.html",
+  "19-UTS-Opener.dc.html",
+  "20-UTS-Anomaly.dc.html",
+  "21-UTS-MuteSheet.dc.html",
+  "22-UTS-DigestHeader.dc.html",
+  "23-UTS-DigestParagraph.dc.html",
+  "24-UTS-Insight.dc.html",
+  "25-UTS-Question.dc.html",
+  "26-UTS-CheckIn.dc.html",
+  "27-UTS-NewsStory.dc.html",
+  "28-UTS-NewsSummary.dc.html",
+  "29-UTS-Wrap.dc.html",
+  "30-UTS-Recap.dc.html",
+  "31-UTS-RecapDetail.dc.html",
+  "32-UTS-NoteToFlint.dc.html",
+  "33-Explore-Health.dc.html",
+  "34-Explore-Money.dc.html",
+  "35-Explore-Metrics.dc.html",
+  "36-Explore-Map.dc.html",
+  "37-Explore-Tags.dc.html",
+  "38-Money-AccountDetail.dc.html",
+  "39-Money-CreateAccount.dc.html",
+  "40-Money-AddBalance.dc.html",
+  "41-Money-EditAccount.dc.html",
+  "42-Map-Tab.dc.html",
+  "43-Knowledge-List.dc.html",
+  "44-Knowledge-Detail.dc.html",
+  "45-Flint-Overview.dc.html",
+  "46-Flint-Questions.dc.html",
+  "47-Flint-Threads.dc.html",
+  "48-Flint-History.dc.html",
+  "49-Flint-ThreadDetail.dc.html",
+  "50-Flint-DigestReader.dc.html",
+  "51-Flint-Notes.dc.html",
+  "52-Flint-NoteDetail.dc.html",
+  "53-Search-Idle.dc.html",
+  "54-Search-Results.dc.html",
+  "55-Notifications-Inbox.dc.html",
+  "56-Detail-Event.dc.html",
+  "57-Detail-Object.dc.html",
+  "58-Detail-Block.dc.html",
+  "59-Detail-Metric.dc.html",
+  "60-Detail-Place.dc.html",
+  "61-Detail-Anomaly.dc.html",
+  "62-Detail-Tag.dc.html",
+  "63-Settings-Root.dc.html",
+  "64-Settings-Profile.dc.html",
+  "65-Settings-Notifications.dc.html",
+  "66-Settings-Health.dc.html",
+  "67-Settings-Integrations.dc.html",
+  "68-Settings-IntegrationDetail.dc.html",
+  "69-Settings-Devices.dc.html",
+  "70-Settings-Tokens.dc.html",
+  "71-Settings-About.dc.html",
+  "72-Settings-Debug.dc.html",
+  "73-Sheet-TagPicker.dc.html",
+  "74-Sheet-EntityEditor.dc.html",
+  "75-Sheet-LocationEditor.dc.html",
+  "76-Sheet-Feedback.dc.html",
+  "77-Sheet-NotificationDetail.dc.html",
+  "78-DayOption-A-Brief.dc.html",
+  "79-DayOption-B-Arc.dc.html",
+  "80-DayOption-C-Signals.dc.html",
+  "81-DayOption-D-Desk.dc.html",
+  "82-Ambient-Surfaces.dc.html",
+  "83-Background-Washes.dc.html"
+ ],
+ "notes": {
+  "t0": {
+   "x": 0,
+   "y": -250,
+   "text": "Onboarding and sign-in",
+   "kind": "title1",
+   "maxW": 4150
+  },
+  "s0": {
+   "x": 0,
+   "y": -154,
+   "text": "The first-run flow. Every step is SparkOnboardingScaffold: one glyph, a Comfortaa hero, the reason, and a pinned action stack with a skip.",
+   "w": 1180,
+   "size": "l",
+   "color": "gray"
+  },
+  "t1": {
+   "x": 0,
+   "y": 964,
+   "text": "The Day tab",
+   "kind": "title1",
+   "maxW": 2740
+  },
+  "s1": {
+   "x": 0,
+   "y": 1060,
+   "text": "The main surface. A paged window of days, each one hero, a stat strip, the anomaly pill, check-ins, and an hour-ruled timeline whose rows change weight with what the event is.",
+   "w": 1180,
+   "size": "l",
+   "color": "gray"
+  },
+  "t2": {
+   "x": 0,
+   "y": 2178,
+   "text": "Up to Speed",
+   "kind": "title1",
+   "maxW": 7910
+  },
+  "s2": {
+   "x": 0,
+   "y": 2274,
+   "text": "The full-screen catch-up. A glass header carries the chaptered progress bar, the chapter and three 44pt controls; every card is spoken by Flint; the recap is a sheet you can reach at any point, and a note to Flint is always one tap away.",
+   "w": 1180,
+   "size": "l",
+   "color": "gray"
+  },
+  "t3": {
+   "x": 0,
+   "y": 3392,
+   "text": "Explore",
+   "kind": "title1",
+   "maxW": 4620
+  },
+  "s3": {
+   "x": 0,
+   "y": 3488,
+   "text": "Five sections behind one tab-bar accessory: Health, Money, Metrics, Map and Tags, plus the money account screens.",
+   "w": 1180,
+   "size": "l",
+   "color": "gray"
+  },
+  "t4": {
+   "x": 0,
+   "y": 4606,
+   "text": "Knowledge, Flint and Search",
+   "kind": "title1",
+   "maxW": 6030
+  },
+  "s4": {
+   "x": 0,
+   "y": 4702,
+   "text": "Reading; Flint's four swipeable sections with its threads, digest reader and notes; and the prefix-driven search.",
+   "w": 1180,
+   "size": "l",
+   "color": "gray"
+  },
+  "t5": {
+   "x": 0,
+   "y": 5820,
+   "text": "Detail screens",
+   "kind": "title1",
+   "maxW": 3210
+  },
+  "s5": {
+   "x": 0,
+   "y": 5916,
+   "text": "One screen per entity in the Spark graph, all sharing SparkDetailHero, the section header, the linked row and the value tile.",
+   "w": 1180,
+   "size": "l",
+   "color": "gray"
+  },
+  "t6": {
+   "x": 0,
+   "y": 7034,
+   "text": "Settings and integrations",
+   "kind": "title1",
+   "maxW": 4620
+  },
+  "s6": {
+   "x": 0,
+   "y": 7130,
+   "text": "The settings sheet and its stack, plus connection health.",
+   "w": 1180,
+   "size": "l",
+   "color": "gray"
+  },
+  "t7": {
+   "x": 0,
+   "y": 8248,
+   "text": "Shared sheets",
+   "kind": "title1",
+   "maxW": 2270
+  },
+  "s7": {
+   "x": 0,
+   "y": 8344,
+   "text": "Presented from the sub-view toolbar and the detail screens.",
+   "w": 1180,
+   "size": "l",
+   "color": "gray"
+  },
+  "t8": {
+   "x": 0,
+   "y": 9462,
+   "text": "Day tab \u2014 four redesign options",
+   "kind": "title1",
+   "maxW": 1800
+  },
+  "s8": {
+   "x": 0,
+   "y": 9558,
+   "text": "Not the shipping design. Four different answers to what a personal assistant's home screen is for, drawn on Will's real data for Sunday 20 September 2026, in iOS 27 glass (less transparent, darkened edge, brighter specular). A leads with Flint's judgement; B makes time the spine; C shows only deviation; D treats the day as an inbox and shows the assistant's working.",
+   "w": 1180,
+   "size": "l",
+   "color": "gray"
+  },
+  "t9": {
+   "x": 0,
+   "y": 10676,
+   "text": "Ambient surfaces and the wash",
+   "kind": "title1",
+   "maxW": 2440
+  },
+  "s9": {
+   "x": 0,
+   "y": 10772,
+   "text": "Widgets, Lock Screen accessories, StandBy, Live Activities and the share extension \u2014 every surface that shows Spark without the app being opened \u2014 and the eight states of the app background.",
+   "w": 1180,
+   "size": "l",
+   "color": "gray"
+  }
+ },
+ "designSystems": [
+  {
+   "title": "Spark Design System",
+   "namespace": "spark",
+   "artifact": "https://claude.ai/artifact/GbFZoNjtnLwNpKNrJ5SsuN",
+   "version": null,
+   "copiedAt": "2026-09-20T12:27:45Z"
+  }
+ ]
 }
