@@ -204,7 +204,7 @@ final class TodayViewModel {
                     )
                     page = response.decoded
                     upsertRawAPIEntry(
-                        title: "GET /feed?date=\(dateKey)&limit=100",
+                        title: "GET /feed?date=\(dateKey)&limit=100&cursor=\(cursor ?? "initial")",
                         body: response.utf8Body
                     )
                 #else

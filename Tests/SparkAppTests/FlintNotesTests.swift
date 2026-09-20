@@ -91,7 +91,17 @@ struct FlintNotesTests {
             payload: .checkIn(.init(period: .morning, date: "2026-09-16", completed: true, eventId: "event-1"))
         )
 
+        let newsItem = UpToSpeedItem(
+            id: "event-news-1",
+            type: .newsSummary,
+            caughtUpAt: nil,
+            payload: .newsSummary(.init(title: "Rates hold steady", source: "example.com"))
+        )
+
         #expect(UpToSpeedScreen.flintHeader(digestItem, firstSection: nil).flintNoteContext.link == .init(type: .digest, id: "digest-1"))
+        // A news summary links to its event, not to a digest it is not part of.
+        #expect(UpToSpeedScreen.newsSummary(newsItem).flintNoteContext.link == .init(type: .event, id: "event-news-1"))
+        #expect(UpToSpeedScreen.newsSummary(newsItem).flintNoteContext.label == "Rates hold steady")
         #expect(UpToSpeedScreen.flintInsight(digestItem, block).flintNoteContext.link == .init(type: .block, id: "block-1"))
         #expect(UpToSpeedScreen.checkIn(checkInItem).flintNoteContext.link == .init(type: .event, id: "event-1"))
         #expect(UpToSpeedScreen.opener.flintNoteContext.link == nil)

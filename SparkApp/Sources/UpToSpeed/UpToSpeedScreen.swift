@@ -56,9 +56,13 @@ enum UpToSpeedScreen: Identifiable {
             return .block(id: block.id, label: block.title)
         case .flintHeader(let item, _),
              .flintParagraph(let item, _, _),
-             .newsStory(let item, _, _, _),
-             .newsSummary(let item):
+             .newsStory(let item, _, _, _):
             return .digest(id: item.id, label: Self.digestLabel(for: item))
+        // A news summary is its own event, not part of a digest: its id is the
+        // event id `NewsSummaryScreen` reads the article with.
+        case .newsSummary(let item):
+            guard case .newsSummary(let news) = item.payload else { return .generic }
+            return .event(id: item.id, label: news.title)
         case .checkIn(let item):
             guard case .checkIn(let checkIn) = item.payload, let eventID = checkIn.eventId else {
                 return .generic
