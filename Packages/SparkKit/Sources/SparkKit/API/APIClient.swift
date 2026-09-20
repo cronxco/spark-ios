@@ -235,7 +235,7 @@ public actor APIClient {
         // only. Attaching it to a PATCH/POST/DELETE asks the server to treat a
         // mutation as conditional on a cache entry, which is not what the
         // conditional-write contract means.
-        if endpoint.method == .get, let etag = await etagCache.etag(for: url) {
+        if endpoint.method == .get, endpoint.usesETag, let etag = await etagCache.etag(for: url) {
             request.setValue(etag, forHTTPHeaderField: "If-None-Match")
         }
 

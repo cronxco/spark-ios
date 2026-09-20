@@ -3,7 +3,7 @@ import Foundation
 public enum NotificationsPreferencesEndpoint {
     /// GET /settings/notifications
     public static func get() -> Endpoint<NotificationPreferences> {
-        Endpoint(method: .get, path: "/settings/notifications")
+        Endpoint(method: .get, path: "/settings/notifications", usesETag: false)
     }
 
     /// PATCH /settings/notifications
