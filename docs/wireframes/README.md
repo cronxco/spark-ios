@@ -5,10 +5,10 @@ Wireframes for every UI surface the app currently ships, drawn with the
 
 **Canvas:** <https://claude.ai/artifact/8xPd1qiuMMU5eR5FjkE2AW>
 
-79 artboards, grouped into nine rows — onboarding, the Day tab, Up to Speed,
+83 artboards, grouped into ten rows — onboarding, the Day tab, Up to Speed,
 Explore, Knowledge/Flint/Search, the detail screens, settings and integrations,
-the shared sheets, and the ambient surfaces (widgets, Live Activities, the
-background washes).
+the shared sheets, the ambient surfaces (widgets, Live Activities, the
+background washes), and a final row of four Day tab redesign options.
 
 ## Which branch these track
 
@@ -42,6 +42,7 @@ where a toolbar item is `#if DEBUG`, the wireframe says so.
 | `comp.py` | SparkUI components — `GlassCard`, `StatusPill`, `PillButton`, `EmojiRatingRow`, `Heatmap45`, `MetricDeltaCard`, `StoryProgressBar`, … |
 | `frame.py` | app chrome — the floating tab bar and its bottom accessory, both toolbars, the nav bar, and the `.dc.html` page template |
 | `s_*.py` | one module per area, one function per screen |
+| `s_day_options.py` | four Day tab redesign options — proposals, not the shipping design |
 | `build.py` | writes `project/` and lays the artboards out on the canvas |
 
 ## Regenerating
@@ -60,6 +61,34 @@ to forget: Today loading and empty, Up to Speed loading / all-caught-up /
 failed, the check-in card before and after noon, the collapsed account group,
 the anomaly acknowledged badge, the editorial-note supplement inside a digest
 card, and the debug screen with its API session inspector.
+
+## The Day tab options row
+
+The last row is the one part of this file that is **not** drawn from the Swift.
+`s_day_options.py` holds four proposals for what the Day tab — the app's home
+screen, and therefore the assistant's front door — could be instead:
+
+| board | bet |
+| --- | --- |
+| A · The Brief | Flint's judgement is the product; the numbers are its citations |
+| B · The Arc | a day is a shape, not a list, so time is the spine |
+| C · Signals | silence is the default; only deviation earns space |
+| D · The Desk | the day is an inbox, and the assistant shows its working |
+
+They are populated with real Spark data for Sunday 20 September 2026 — the
+morning digest, sleep 80 / readiness 86 / HRV 65.6ms, the open Canada-trip
+question, Dan's Brighton trip, and the Apple Health sync gap that makes 211
+steps look like a −97% anomaly when it is not.
+
+They also propose one token change: `g27()` rather than `comp.glass()`. iOS 27
+pulled default transparency back, darkened the edge and brightened the specular
+highlight, so these surfaces sit at 0.72 rather than 0.58, carry a 0.12 edge
+rather than 0.08, and add an inset top highlight. Nothing else in the design
+system moves.
+
+Canvas for this row alone: <https://claude.ai/artifact/6desr38XtB1Qb9hRRtL5Jk>
+
+## Reference boards
 
 Two surfaces are drawn as reference boards rather than phone frames, because
 they are not screens: `78-Ambient-Surfaces` (widgets, Lock Screen accessories,

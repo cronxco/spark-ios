@@ -3,6 +3,7 @@
 import json, os, pathlib, datetime
 
 import s_onboarding, s_day, s_uts, s_explore, s_browse, s_detail, s_settings, s_sheets
+import s_day_options
 
 ROOT = pathlib.Path(__file__).parent
 OUT = ROOT / "project"
@@ -46,6 +47,14 @@ ROWS = [
     ("Shared sheets",
      "Presented from the sub-view toolbar and the detail screens.",
      s_sheets.SCREENS),
+    ("Day tab — four redesign options",
+     "Not the shipping design. Four different answers to what a personal "
+     "assistant's home screen is for, drawn on Will's real data for Sunday "
+     "20 September 2026, in iOS 27 glass (less transparent, darkened edge, "
+     "brighter specular). A leads with Flint's judgement; B makes time the "
+     "spine; C shows only deviation; D treats the day as an inbox and shows "
+     "the assistant's working.",
+     s_day_options.SCREENS),
 ]
 
 _seq = [0]
