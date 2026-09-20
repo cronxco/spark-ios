@@ -29,11 +29,7 @@ struct FlintNotesTests {
         #expect(await model.submit(using: client, now: Date(timeIntervalSince1970: 1_000)) == nil)
         #expect(await model.submit(using: client, now: Date(timeIntervalSince1970: 2_000))?.id == "note-1")
 
-        let requests = await AppStubURLProtocol.recorded(host: Self.host)
-        let bodies = try requests.map { request -> [String: Any] in
-            let body = try #require(request.httpBody)
-            return try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
-        }
+        let bodies = try await Self.recordedBodies()
         #expect(bodies.count == 2)
         #expect(bodies[0]["client_mutation_id"] as? String == bodies[1]["client_mutation_id"] as? String)
         #expect(bodies[0]["authored_at"] as? String == bodies[1]["authored_at"] as? String)
@@ -60,11 +56,7 @@ struct FlintNotesTests {
         model.updateBody("Second version")
         _ = await model.submit(using: client, now: Date(timeIntervalSince1970: 2_000))
 
-        let requests = await AppStubURLProtocol.recorded(host: Self.host)
-        let bodies = try requests.map { request -> [String: Any] in
-            let body = try #require(request.httpBody)
-            return try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
-        }
+        let bodies = try await Self.recordedBodies()
         #expect(bodies[0]["client_mutation_id"] as? String != bodies[1]["client_mutation_id"] as? String)
         #expect(bodies[0]["authored_at"] as? String != bodies[1]["authored_at"] as? String)
     }
@@ -106,6 +98,19 @@ struct FlintNotesTests {
         #expect(UpToSpeedScreen.checkIn(checkInItem).flintNoteContext.link == .init(type: .event, id: "event-1"))
         #expect(UpToSpeedScreen.opener.flintNoteContext.link == nil)
         #expect(UpToSpeedScreen.wrap.flintNoteContext.link == nil)
+    }
+
+    /// The JSON each recorded request carried. On failure it reports how the
+    /// stub tried to recover the body, since URLSession does not always leave
+    /// one where a `URLProtocol` can see it.
+    private static func recordedBodies() async throws -> [[String: Any]] {
+        let requests = await AppStubURLProtocol.recorded(host: Self.host)
+        let diagnostics = await AppStubURLProtocol.bodyDiagnostics(host: Self.host)
+        return try requests.indices.map { index -> [String: Any] in
+            let source = diagnostics.indices.contains(index) ? diagnostics[index] : "unknown"
+            let body = try #require(requests[index].httpBody, "request \(index) body recovery: \(source)")
+            return try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        }
     }
 
     private func makeClient() async throws -> APIClient {
