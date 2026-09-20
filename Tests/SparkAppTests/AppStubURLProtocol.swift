@@ -12,6 +12,7 @@ final class AppStubURLProtocol: URLProtocol, @unchecked Sendable {
 
     private static let storage = Storage()
     private static let outgoingBodies = OutgoingBodies()
+    private static let bodyKeyHeader = "X-AppStub-Body-Key"
 
     /// Installs `handler` for every request to `host`, and clears anything
     /// previously recorded for it.
@@ -36,12 +37,19 @@ final class AppStubURLProtocol: URLProtocol, @unchecked Sendable {
 
     /// The URL loading system calls this with the request as the caller built
     /// it, before the body is moved out of `httpBody`. Keep a copy: by
-    /// `startLoading()` it may be the only one left.
+    /// `startLoading()` it may be the only one left. The copy is keyed by a
+    /// header stamped on the canonical request, so each load takes back its
+    /// own body rather than one that merely shares a method and URL.
     override class func canonicalRequest(for request: URLRequest) -> URLRequest {
-        if let body = request.httpBody, !body.isEmpty {
-            outgoingBodies.stash(body, for: request)
-        }
-        return request
+        guard let body = request.httpBody, !body.isEmpty,
+              request.value(forHTTPHeaderField: bodyKeyHeader) == nil
+        else { return request }
+
+        let key = UUID().uuidString
+        outgoingBodies.stash(body, key: key)
+        var stamped = request
+        stamped.setValue(key, forHTTPHeaderField: bodyKeyHeader)
+        return stamped
     }
 
     override func startLoading() {
@@ -74,9 +82,18 @@ final class AppStubURLProtocol: URLProtocol, @unchecked Sendable {
     /// them. Try each in turn so recorded requests (and handlers) see the body
     /// the way the caller set it, and report which one answered.
     private static func materializingBody(
-        of request: URLRequest,
+        of original: URLRequest,
         task: URLSessionTask?
     ) -> (URLRequest, String) {
+        var request = original
+        // Take the stashed body whichever source ends up supplying one, and
+        // drop the stub's own header again: a body left in the store could
+        // otherwise attach itself to some later request, and the header is
+        // plumbing no test should have to look past.
+        let key = request.value(forHTTPHeaderField: bodyKeyHeader)
+        let stashed = key.flatMap { outgoingBodies.take(key: $0) }
+        if key != nil { request.setValue(nil, forHTTPHeaderField: bodyKeyHeader) }
+
         if request.httpBody != nil { return (request, "httpBody") }
 
         var source = "none"
@@ -95,7 +112,7 @@ final class AppStubURLProtocol: URLProtocol, @unchecked Sendable {
             recovered = body
             source = "task request"
         }
-        if recovered == nil, let body = outgoingBodies.take(for: request) {
+        if recovered == nil, let body = stashed {
             recovered = body
             source = "canonicalRequest stash"
         }
@@ -143,35 +160,32 @@ final class AppStubURLProtocol: URLProtocol, @unchecked Sendable {
     // one quietly inverts what the test asserts.
     override func stopLoading() {}
 
-    /// Bodies seen by `canonicalRequest(for:)`, queued per method-and-URL and
-    /// taken in order by `startLoading()`. `canonicalRequest` is a class method
-    /// with no test context to hang onto, hence the process-wide store; the
-    /// queue is capped so a request that never loads cannot grow it forever.
+    /// Bodies seen by `canonicalRequest(for:)`, each under the key stamped on
+    /// its request. `canonicalRequest` is a class method with no test context
+    /// to hang onto, hence the process-wide store; it is capped so requests
+    /// that are never loaded cannot grow it forever.
     private final class OutgoingBodies: @unchecked Sendable {
         private let lock = NSLock()
-        private var queues: [String: [Data]] = [:]
-        private static let limit = 32
+        private var bodies: [String: Data] = [:]
+        private var order: [String] = []
+        private static let limit = 64
 
-        func stash(_ body: Data, for request: URLRequest) {
+        func stash(_ body: Data, key: String) {
             lock.withLock {
-                var queue = queues[Self.key(request), default: []]
-                queue.append(body)
-                if queue.count > Self.limit { queue.removeFirst(queue.count - Self.limit) }
-                queues[Self.key(request)] = queue
+                bodies[key] = body
+                order.append(key)
+                while order.count > Self.limit {
+                    bodies.removeValue(forKey: order.removeFirst())
+                }
             }
         }
 
-        func take(for request: URLRequest) -> Data? {
+        func take(key: String) -> Data? {
             lock.withLock {
-                guard var queue = queues[Self.key(request)], !queue.isEmpty else { return nil }
-                let body = queue.removeFirst()
-                queues[Self.key(request)] = queue
+                guard let body = bodies.removeValue(forKey: key) else { return nil }
+                order.removeAll { $0 == key }
                 return body
             }
-        }
-
-        private static func key(_ request: URLRequest) -> String {
-            "\(request.httpMethod ?? "GET") \(request.url?.absoluteString ?? "")"
         }
     }
 
