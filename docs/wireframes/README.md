@@ -5,10 +5,11 @@ Wireframes for every UI surface the app currently ships, drawn with the
 
 **Canvas:** <https://claude.ai/artifact/8xPd1qiuMMU5eR5FjkE2AW>
 
-83 artboards, grouped into ten rows — onboarding, the Day tab, Up to Speed,
+86 artboards, grouped into eleven rows — onboarding, the Day tab, Up to Speed,
 Explore, Knowledge/Flint/Search, the detail screens, settings and integrations,
 the shared sheets, the ambient surfaces (widgets, Live Activities, the
-background washes), and a final row of four Day tab redesign options.
+background washes), a row of four Day tab redesign options, and the hybrid
+those options led to.
 
 ## Which branch these track
 
@@ -43,7 +44,29 @@ where a toolbar item is `#if DEBUG`, the wireframe says so.
 | `frame.py` | app chrome — the floating tab bar and its bottom accessory, both toolbars, the nav bar, and the `.dc.html` page template |
 | `s_*.py` | one module per area, one function per screen |
 | `s_day_options.py` | four Day tab redesign options — proposals, not the shipping design |
+| `s_day_hybrid.py` | the hybrid the options led to — also a proposal |
 | `build.py` | writes `project/` and lays the artboards out on the canvas |
+
+## A rendering bug worth knowing about
+
+The font stacks in `ds.py` quote family names with **single** quotes. They have
+to: these strings are interpolated into `style="…"` attributes, and a double
+quote there closes the attribute early, so the browser silently drops
+`font-family` *and every property after it* — size, weight, leading, colour.
+Every hero on every board was rendering at the default `h1` size until this was
+fixed. If you add a font stack, single-quote the family names.
+
+The boards are checked by rendering them in headless Chromium and reading each
+artboard's real content height back, rather than by eye:
+
+```bash
+/opt/pw-browsers/chromium-1194/chrome-linux/chrome --headless --no-sandbox \
+  --virtual-time-budget=4000 --dump-dom file://…/board.html
+```
+
+with a small probe script that sets `height:auto` on the root and writes the
+measured height into `document.title`. That is how the full-scroll board was
+found to be clipping by 422px.
 
 ## Regenerating
 
@@ -86,7 +109,35 @@ highlight, so these surfaces sit at 0.72 rather than 0.58, carry a 0.12 edge
 rather than 0.08, and add an inset top highlight. Nothing else in the design
 system moves.
 
-Canvas for this row alone: <https://claude.ai/artifact/6desr38XtB1Qb9hRRtL5Jk>
+## The hybrid
+
+`s_day_hybrid.py` is where the options landed. It keeps the shipping greeting
+and Up-to-Speed header, then:
+
+1. **the most recent digest's opener**, in serif — last night's evening digest
+   if this morning's has not run yet, which it says out loud;
+2. **four metric cards** — sleep, activity, readiness, money — each leading
+   with the figure scoped to today, drawn against its own baseline on one bar,
+   with two supporting figures beneath;
+3. **48 hours of Flint questions** as a swipeable stack, answered ones included
+   so you can see what you already told it;
+4. **Threads**, each showing what Flint is *watching for* — the sentence every
+   Topic's running summary ends on — rather than restating the summary;
+5. **the timeline rebuilt on the web's spine** (`resources/views/livewire/day.blade.php`
+   in the `spark` repo): one continuous rule, a service node per group, the
+   action written as a sentence with the object as a link, the value
+   right-aligned, and collapsible groups.
+
+Three boards, two of them real moments: `Fold` is Sunday 20 September at 07:45,
+before the morning brief has run; `Full` is Saturday the 19th at about 21:00,
+when every service has reported; `Metrics` draws the metric block on its own,
+complete beside partial.
+
+Timeline values are ink, with the sign carrying in or out, and only a genuine
+outlier takes `ember-7`. The status colours are fills in light mode and do not
+clear 4.5:1 as text, so they are not used as text here.
+
+Canvas for both rows: <https://claude.ai/artifact/6desr38XtB1Qb9hRRtL5Jk>
 
 ## Reference boards
 

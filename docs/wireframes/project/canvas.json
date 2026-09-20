@@ -2,7 +2,7 @@
  "v": 3,
  "createdOnFiles": {
   "v": 1,
-  "at": "2026-09-20T12:27:45Z"
+  "at": "2026-09-20T13:01:22Z"
  },
  "title": "Spark iOS \u2014 Screen Wireframes",
  "launch": {
@@ -577,16 +577,37 @@
    "h": 844,
    "title": "Day option D \u00b7 The Desk"
   },
-  "82-Ambient-Surfaces.dc.html": {
+  "82-DayHybrid-Fold.dc.html": {
    "x": 0,
    "y": 10926,
+   "w": 390,
+   "h": 844,
+   "title": "Day hybrid \u00b7 first load"
+  },
+  "83-DayHybrid-Full.dc.html": {
+   "x": 470,
+   "y": 10926,
+   "w": 390,
+   "h": 844,
+   "title": "Day hybrid \u00b7 full scroll"
+  },
+  "84-DayHybrid-Metrics.dc.html": {
+   "x": 940,
+   "y": 10926,
+   "w": 390,
+   "h": 844,
+   "title": "Day hybrid \u00b7 metric block"
+  },
+  "85-Ambient-Surfaces.dc.html": {
+   "x": 0,
+   "y": 12140,
    "w": 1180,
    "h": 860,
    "title": "Ambient surfaces"
   },
-  "83-Background-Washes.dc.html": {
+  "86-Background-Washes.dc.html": {
    "x": 1260,
-   "y": 10926,
+   "y": 12140,
    "w": 1180,
    "h": 700,
    "title": "Background washes"
@@ -674,8 +695,11 @@
   "79-DayOption-B-Arc.dc.html",
   "80-DayOption-C-Signals.dc.html",
   "81-DayOption-D-Desk.dc.html",
-  "82-Ambient-Surfaces.dc.html",
-  "83-Background-Washes.dc.html"
+  "82-DayHybrid-Fold.dc.html",
+  "83-DayHybrid-Full.dc.html",
+  "84-DayHybrid-Metrics.dc.html",
+  "85-Ambient-Surfaces.dc.html",
+  "86-Background-Washes.dc.html"
  ],
  "notes": {
   "t0": {
@@ -816,13 +840,28 @@
   "t9": {
    "x": 0,
    "y": 10676,
-   "text": "Ambient surfaces and the wash",
+   "text": "Day tab \u2014 the hybrid",
    "kind": "title1",
-   "maxW": 2440
+   "maxW": 1330
   },
   "s9": {
    "x": 0,
    "y": 10772,
+   "text": "Where the options landed. The shipping greeting and Up-to-Speed header, then the most recent digest's opener (last night's, if this morning's has not run), four scored metric cards drawn against their own baselines, 48 hours of Flint questions as a swipeable stack, what each Thread is waiting for, and the timeline rebuilt on the web's spine. Two real moments plus the metric block on its own.",
+   "w": 1180,
+   "size": "l",
+   "color": "gray"
+  },
+  "t10": {
+   "x": 0,
+   "y": 11890,
+   "text": "Ambient surfaces and the wash",
+   "kind": "title1",
+   "maxW": 2440
+  },
+  "s10": {
+   "x": 0,
+   "y": 11986,
    "text": "Widgets, Lock Screen accessories, StandBy, Live Activities and the share extension \u2014 every surface that shows Spark without the app being opened \u2014 and the eight states of the app background.",
    "w": 1180,
    "size": "l",
@@ -835,7 +874,7 @@
    "namespace": "spark",
    "artifact": "https://claude.ai/artifact/GbFZoNjtnLwNpKNrJ5SsuN",
    "version": null,
-   "copiedAt": "2026-09-20T12:27:45Z"
+   "copiedAt": "2026-09-20T13:01:22Z"
   }
  ]
 }
