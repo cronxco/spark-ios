@@ -47,6 +47,30 @@ struct UpToSpeedBlockParsingTests {
         #expect(sections[0].watching == nil)
     }
 
+    @Test("uses structured news instead of reparsing prose")
+    func structuredNewsSections() {
+        let block = FlintDigestBlock(
+            id: "story-1",
+            blockType: "flint_news",
+            title: "Rates hold",
+            content: "Legacy fallback.",
+            news: FlintNewsContent(
+                summary: "The Bank held rates.",
+                sources: [FlintNewsSource(publication: "The Economist", position: "Focused on inflation.")],
+                whyItMatters: "Mortgage pricing may remain stable.",
+                whatToWatch: "The next inflation release."
+            )
+        )
+
+        let section = UpToSpeedParsing.newsRoundupSections(blocks: [block], summary: "")[0]
+
+        #expect(section.body == "The Bank held rates.")
+        #expect(section.sources == ["The Economist"])
+        #expect(section.sourcePositions.first?.position == "Focused on inflation.")
+        #expect(section.whyItMatters == "Mortgage pricing may remain stable.")
+        #expect(section.watching == "The next inflation release.")
+    }
+
     @Test("falls back to splitting the summary when there are no news blocks")
     func sectionsFallBackToProse() {
         let summary = """
