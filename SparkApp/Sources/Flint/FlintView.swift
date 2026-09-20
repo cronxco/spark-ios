@@ -945,6 +945,26 @@ private struct FlintBlockSurface: View {
                         .font(SparkTypography.bodySmall)
                         .foregroundStyle(.secondary)
                 }
+            } else if let news = block.news {
+                VStack(alignment: .leading, spacing: SparkSpacing.md) {
+                    Text(news.summary)
+                        .font(SparkTypography.longFormBodySmall)
+                    ForEach(Array(news.sources.enumerated()), id: \.offset) { _, source in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(source.publication).font(SparkTypography.captionStrong)
+                            Text(source.position)
+                                .font(SparkTypography.bodySmall)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    if let whyItMatters = news.whyItMatters {
+                        Label(whyItMatters, systemImage: "scope")
+                            .font(SparkTypography.bodySmall)
+                    }
+                    Label(news.whatToWatch, systemImage: "binoculars.fill")
+                        .font(SparkTypography.bodySmall)
+                        .foregroundStyle(.secondary)
+                }
             } else if let content = block.content, !content.isEmpty {
                 if block.blockType == "flint_editorial_note" {
                     DisclosureGroup("Read note", isExpanded: $isEditorialExpanded) {

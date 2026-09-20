@@ -62,4 +62,32 @@ struct FlintReadingBlockDecodingTests {
         #expect(block.blockType == "flint_news")
         #expect(block.title == "Saudi pipeline closure")
     }
+
+    @Test("decodes structured news fields")
+    func structuredNews() throws {
+        let json = Data("""
+        {
+          "id": "story-1",
+          "block_type": "flint_news",
+          "title": "Rates hold",
+          "content": "Legacy fallback.",
+          "news": {
+            "summary": "The Bank held rates.",
+            "sources": [
+              {"publication": "The Economist", "position": "Focused on inflation."},
+              {"publication": "POLITICO", "position": "Focused on the vote split."}
+            ],
+            "why_it_matters": "Mortgage pricing may remain stable.",
+            "what_to_watch": "The next inflation release."
+          }
+        }
+        """.utf8)
+
+        let block = try Self.decoder.decode(FlintDigestBlock.self, from: json)
+
+        #expect(block.news?.summary == "The Bank held rates.")
+        #expect(block.news?.sources.map(\.publication) == ["The Economist", "POLITICO"])
+        #expect(block.news?.whyItMatters == "Mortgage pricing may remain stable.")
+        #expect(block.news?.whatToWatch == "The next inflation release.")
+    }
 }
