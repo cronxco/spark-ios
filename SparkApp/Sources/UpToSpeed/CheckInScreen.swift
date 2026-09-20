@@ -25,7 +25,7 @@ struct CheckInScreen: View {
     }
 
     var body: some View {
-        StoryScreenScaffold(label: "Check-In") {
+        StoryScreenScaffold(flintByline: .init(meta: "Check-in")) {
             if let summary {
                 if summary.completed || submitted {
                     completedView(period: summary.period)

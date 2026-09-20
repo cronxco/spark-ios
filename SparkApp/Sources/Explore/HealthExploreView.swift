@@ -114,12 +114,6 @@ struct HealthExploreView: View {
                     .padding(.horizontal, SparkSpacing.lg)
             }
 
-            #if DEBUG
-                if let vm = viewModel, !vm.rawFeedEntries.isEmpty {
-                    RawFeedJSONView(entries: vm.rawFeedEntries)
-                        .padding(.horizontal, SparkSpacing.lg)
-                }
-            #endif
         }
     }
 

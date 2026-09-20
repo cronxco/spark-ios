@@ -3,8 +3,7 @@ import SparkUI
 import SwiftUI
 
 /// Reusable answer form for Flint question blocks.
-/// Handles both multiple-choice (sparkGlass capsule buttons) and free-text
-/// (TextField) question types. Submission is delegated via closure so this
+/// Handles both multiple-choice and free-text question types. Submission is delegated via closure so this
 /// view can be used from FlintViewModel-backed screens (FlintView) and
 /// from the Up to Speed stories flow (FlintDigestScreen).
 struct FlintAnswerFormView: View {
@@ -12,10 +11,13 @@ struct FlintAnswerFormView: View {
     let isSubmitting: Bool
     let errorMessage: String?
     let onSubmit: (String, String?) async -> Void
+    var onNotRelevant: (() async -> Void)? = nil
 
     @State private var selectedAnswer: String = ""
     @State private var freeformAnswer: String = ""
     @State private var answerNote: String = ""
+    @State private var showsContext = false
+    @FocusState private var answerFieldFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.md) {
@@ -73,54 +75,102 @@ struct FlintAnswerFormView: View {
                         } label: {
                             Text(option)
                                 .font(SparkTypography.captionStrong)
-                                .foregroundStyle(selectedAnswer == option ? Color.white : Color.primary)
+                                .foregroundStyle(selectedAnswer == option ? Color.black : Color.primary)
                                 .padding(.horizontal, SparkSpacing.md)
                                 .padding(.vertical, SparkSpacing.sm)
-                                .sparkGlass(
-                                    .capsule,
-                                    tint: selectedAnswer == option ? Color.sparkAccent : Color.sparkAccent.opacity(0.1)
+                                .background(
+                                    selectedAnswer == option ? Color.sparkAccent : Color.sparkElevated,
+                                    in: Capsule()
                                 )
+                                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.12)))
                         }
                         .buttonStyle(.plain)
+                        .frame(minHeight: 44)
+                        .accessibilityAddTraits(selectedAnswer == option ? .isSelected : [])
                     }
                 }
             } else {
-                TextField("Answer", text: $freeformAnswer, axis: .vertical)
+                Text("Your answer")
+                    .font(SparkTypography.captionStrong)
+                    .foregroundStyle(.secondary)
+
+                TextField("Type your answer", text: $freeformAnswer, axis: .vertical)
                     .font(SparkTypography.bodySmall)
                     .lineLimit(1...4)
                     .padding(SparkSpacing.md)
                     .textFieldInputBackground()
+                    .focused($answerFieldFocused)
+                    .submitLabel(.send)
+                    .onSubmit(submit)
             }
 
-            TextField("Add a note", text: $answerNote, axis: .vertical)
-                .font(SparkTypography.bodySmall)
-                .lineLimit(1...3)
-                .padding(SparkSpacing.md)
-                .textFieldInputBackground()
-
-            Button {
-                let answer = submittedAnswer
-                let note = answerNote.isEmpty ? nil : answerNote
-                Task { await onSubmit(answer, note) }
-            } label: {
-                HStack(spacing: SparkSpacing.sm) {
-                    if isSubmitting {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Image(systemName: "paperplane.fill")
-                    }
-                    Text("Submit")
-                        .font(SparkTypography.bodyStrong)
+            if showsContext {
+                TextField("Add context (optional)", text: $answerNote, axis: .vertical)
+                    .font(SparkTypography.bodySmall)
+                    .lineLimit(1...3)
+                    .padding(SparkSpacing.md)
+                    .textFieldInputBackground()
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            } else {
+                Button("Add context (optional)", systemImage: "plus") {
+                    withAnimation { showsContext = true }
                 }
-                .padding(.horizontal, SparkSpacing.lg)
-                .padding(.vertical, SparkSpacing.sm)
-                .foregroundStyle(Color.white)
-                .sparkGlass(.capsule, tint: Color.sparkAccent)
+                .font(SparkTypography.captionStrong)
+                .buttonStyle(.plain)
+                .frame(minHeight: 44)
             }
-            .buttonStyle(.plain)
-            .disabled(isSubmitting || submittedAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .frame(maxWidth: .infinity, alignment: .trailing)
+
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    if let onNotRelevant {
+                        notRelevantButton(action: onNotRelevant)
+                    }
+                    Spacer(minLength: SparkSpacing.sm)
+                    answerButton
+                }
+
+                VStack(alignment: .leading) {
+                    answerButton
+                        .frame(maxWidth: .infinity)
+                    if let onNotRelevant {
+                        notRelevantButton(action: onNotRelevant)
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+            }
         }
+    }
+
+    private var answerButton: some View {
+        Button(action: submit) {
+            HStack {
+                if isSubmitting {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "paperplane.fill")
+                }
+                Text("Answer")
+                    .font(SparkTypography.bodyStrong)
+            }
+            .frame(minHeight: 44)
+        }
+        .buttonStyle(.glassProminent)
+        .tint(.sparkAccent)
+        .disabled(isSubmitting || submittedAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    private func notRelevantButton(action: @escaping () async -> Void) -> some View {
+        Button("Not relevant") { Task { await action() } }
+            .buttonStyle(.glass)
+            .frame(minHeight: 44)
+            .disabled(isSubmitting)
+    }
+
+    private func submit() {
+        let answer = submittedAnswer
+        guard !isSubmitting, !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let note = answerNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        Task { await onSubmit(answer, note.isEmpty ? nil : note) }
     }
 
     private var submittedAnswer: String {

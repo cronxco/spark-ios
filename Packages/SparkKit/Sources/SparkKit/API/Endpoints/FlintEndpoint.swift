@@ -17,6 +17,56 @@ public enum FlintEndpoint {
         Endpoint(method: .get, path: "/flint/digests/\(id)")
     }
 
+    public static func history(
+        from: String,
+        to: String,
+        limit: Int = 50,
+        cursor: String? = nil
+    ) -> Endpoint<FlintDigestHistoryResponse> {
+        var query = [
+            URLQueryItem(name: "from", value: from),
+            URLQueryItem(name: "to", value: to),
+            URLQueryItem(name: "limit", value: String(limit)),
+        ]
+        if let cursor {
+            query.append(URLQueryItem(name: "cursor", value: cursor))
+        }
+        return Endpoint(method: .get, path: "/flint/digests", query: query)
+    }
+
+    public static func questions(
+        status: FlintQuestionStatus = .open,
+        limit: Int = 50,
+        cursor: String? = nil
+    ) -> Endpoint<FlintQuestionsResponse> {
+        var query = [
+            URLQueryItem(name: "status", value: status.rawValue),
+            URLQueryItem(name: "limit", value: String(limit)),
+        ]
+        if let cursor {
+            query.append(URLQueryItem(name: "cursor", value: cursor))
+        }
+        return Endpoint(method: .get, path: "/flint/questions", query: query)
+    }
+
+    public static func questionAction(
+        blockID: String,
+        version: String,
+        idempotencyKey: UUID,
+        _ request: FlintQuestionActionRequest
+    ) -> Endpoint<FlintQuestionActionResponse> {
+        Endpoint(
+            method: .post,
+            path: "/flint/questions/\(blockID)/actions",
+            body: try? JSONEncoder().encode(request),
+            contentType: "application/json",
+            headers: [
+                "If-Match": version,
+                "Idempotency-Key": idempotencyKey.uuidString,
+            ]
+        )
+    }
+
     public static func answerQuestion(
         blockID: String,
         _ request: FlintQuestionAnswerRequest
@@ -28,6 +78,34 @@ public enum FlintEndpoint {
             body: body,
             contentType: "application/json"
         )
+    }
+
+    public static func notes(limit: Int = 20, cursor: String? = nil) -> Endpoint<FlintNotesResponse> {
+        var query = [URLQueryItem(name: "limit", value: String(limit))]
+        if let cursor {
+            query.append(URLQueryItem(name: "cursor", value: cursor))
+        }
+        return Endpoint(
+            method: .get,
+            path: "/flint/notes",
+            query: query,
+            headers: ["Cache-Control": "no-cache"]
+        )
+    }
+
+    public static func createNote(_ request: FlintNoteCreateRequest) -> Endpoint<FlintNoteResponse> {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return Endpoint(
+            method: .post,
+            path: "/flint/notes",
+            body: try? encoder.encode(request),
+            contentType: "application/json"
+        )
+    }
+
+    public static func deleteNote(id: String) -> Endpoint<EmptyResponse> {
+        Endpoint(method: .delete, path: "/flint/notes/\(id)")
     }
 
     private static func digestQuery(

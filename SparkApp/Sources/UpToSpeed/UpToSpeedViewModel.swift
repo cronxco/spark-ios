@@ -3,11 +3,19 @@ import Observation
 import OSLog
 import SparkKit
 import SparkUI
+import SwiftUI
 import SwiftData
 
 @MainActor
 @Observable
 final class UpToSpeedViewModel {
+    var expandedDisclosures: Set<String> = []
+    func disclosureBinding(_ key: String) -> Binding<Bool> {
+        Binding(get: { self.expandedDisclosures.contains(key) }, set: {
+            if $0 { self.expandedDisclosures.insert(key) }
+            else { self.expandedDisclosures.remove(key) }
+        })
+    }
     private(set) var screens: [UpToSpeedScreen] = []
     private(set) var chapters: [UpToSpeedChapter] = []
     var currentIndex: Int = 0
@@ -37,6 +45,60 @@ final class UpToSpeedViewModel {
     /// the feed summary for these, so the count exists to say so rather than
     /// present a half-empty story as the whole day.
     private(set) var digestsFailedToLoad: Int = 0
+    private(set) var restoredIDs: Set<String> = []
+    private var sessionSeenDates: [String: Date] = [:]
+    private(set) var digestCache: [String: FlintDigest] = [:]
+    private var needsReconciliation = false
+    private var restorationVersions: [String: Int] = [:]
+
+    func supplementalItems(for screen: UpToSpeedScreen) -> [UpToSpeedItem] {
+        if case .wrap = screen {
+            return allItems.filter { foldedDigestIDs.contains($0.id) }
+        }
+        guard let item = screen.item, item.type == .flintDigest,
+              screens.last(where: { $0.item?.id == item.id })?.id == screen.id else { return [] }
+        return [item]
+    }
+
+    func restorationVersion(for itemID: String?) -> Int {
+        itemID.flatMap { restorationVersions[$0] } ?? 0
+    }
+
+    func recapDate(for item: UpToSpeedItem) -> Date {
+        if case .checkIn(let summary) = item.payload, item.caughtUpAt == nil {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "yyyy-MM-dd"
+            return formatter.date(from: summary.date) ?? .distantPast
+        }
+        return sessionSeenDates[item.id]
+            ?? UpToSpeedVisibility(now: .now, calendar: .current).seenAt(item)
+            ?? .distantPast
+    }
+
+    func recapDigest(for item: UpToSpeedItem) async throws -> FlintDigest {
+        if let cached = digestCache[item.id] { return cached }
+        let digest = try await apiClient.request(FlintEndpoint.digest(id: item.id))
+        digestCache[item.id] = digest
+        return digest
+    }
+
+    func reconcileAfterRecap() async {
+        guard needsReconciliation else { return }
+        await flushAndWait()
+        await fetchAndBuild(resetIndex: false, surfaceErrors: false)
+    }
+
+    private func updateRecap() {
+        var seen = Set<String>()
+        let retained = recapItems.filter { restoredIDs.contains($0.id) || sessionSeenDates[$0.id] != nil }
+        recapItems = (allItems + retained).filter { item in
+            let eligible = sessionSeenDates[item.id] != nil
+                || restoredIDs.contains(item.id)
+                || UpToSpeedVisibility(now: .now, calendar: .current).caughtUpItems(from: [item]).isEmpty == false
+            return eligible && seen.insert(item.id).inserted
+        }.sorted { recapDate(for: $0) > recapDate(for: $1) }
+    }
 
     private let logger = Logger(subsystem: "co.cronx.sparkapp", category: "UpToSpeed")
 
@@ -99,9 +161,30 @@ final class UpToSpeedViewModel {
         do {
             let response = try await apiClient.request(UpToSpeedEndpoint.feed(includeAcknowledged: true))
             let items = response.items
-            let digests = await preloadDigests(for: visibleUnreadItems(from: items))
+            // Day context remains useful after its briefing has been read.
+            let formatter = DateFormatter()
+            formatter.calendar = Calendar(identifier: .gregorian)
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = .current
+            formatter.dateFormat = "yyyy-MM-dd"
+            let today = formatter.string(from: .now)
+            let candidates = items.filter {
+                if case .flintDigest(let summary) = $0.payload {
+                    return $0.caughtUpAt == nil || summary.date == today
+                }
+                return false
+            }
+            let digests = await preloadDigests(for: candidates)
+            digestCache.merge(digests) { _, new in new }
             allItems = items
+            for id in restoredIDs {
+                restorationVersions[id, default: 0] += 1
+                sessionSeenDates.removeValue(forKey: id)
+            }
             buildScreenQueue(items: items, digests: digests, resetIndex: resetIndex)
+            needsReconciliation = false
+            restoredIDs.removeAll()
+            updateRecap()
         } catch is CancellationError {
         } catch APIError.transport(let underlying)
             where (underlying as? URLError)?.code == .cancelled {
@@ -125,6 +208,7 @@ final class UpToSpeedViewModel {
             let freshUnread = visibleUnreadItems(from: response.items).count
             newItemsAvailable = max(0, freshUnread - snapshotCount)
             allItems = response.items
+            updateRecap()
         } catch {}
     }
 
@@ -161,6 +245,7 @@ final class UpToSpeedViewModel {
     /// there for the dwell. This is the only route by which a screen becomes
     /// eligible to be marked read.
     func markScreenConsumed(at index: Int) {
+        guard !isLoading else { return }
         guard !consumedIndices.contains(index) else { return }
         consumedIndices.insert(index)
         evaluateRead(at: index)
@@ -295,18 +380,25 @@ final class UpToSpeedViewModel {
     ///
     /// Flushes first: a pending mark for the same item would otherwise land
     /// after the unmark and quietly re-hide it.
-    func unmark(_ item: UpToSpeedItem) async {
-        guard !unmarkingIDs.contains(item.id) else { return }
+    @discardableResult
+    func unmark(_ item: UpToSpeedItem) async -> Bool {
+        if case .checkIn = item.payload { return false }
+        guard !unmarkingIDs.contains(item.id), !restoredIDs.contains(item.id) else { return false }
         unmarkingIDs.insert(item.id)
         defer { unmarkingIDs.remove(item.id) }
 
+        let wasPending = pendingReadRefs.contains { $0.id == item.id }
         pendingReadRefs.removeAll { $0.id == item.id }
         await flushAndWait()
 
         let ref = UpToSpeedReadRef(type: item.type, id: item.id)
-        guard (try? await apiClient.request(UpToSpeedEndpoint.unmark([ref]))) != nil else { return }
-
-        await reloadQueue()
+        guard let result = try? await apiClient.request(UpToSpeedEndpoint.unmark([ref])), result.unmarked > 0 else {
+            if wasPending && !pendingReadRefs.contains(where: { $0.id == item.id }) { pendingReadRefs.append(ref) }
+            return false
+        }
+        restoredIDs.insert(item.id)
+        needsReconciliation = true
+        return true
     }
 
     /// The domain of an anomaly item, when the payload carries one.
@@ -426,6 +518,12 @@ final class UpToSpeedViewModel {
         digests: [String: FlintDigest] = [:],
         resetIndex: Bool = true
     ) {
+        digestCache.merge(digests) { _, new in new }
+        let previousID = screens[safe: currentIndex]?.id
+        let previouslyConsumed = Set(consumedIndices.compactMap { index -> String? in
+            guard let screen = screens[safe: index], !restoredIDs.contains(screen.item?.id ?? "") else { return nil }
+            return screen.id
+        })
         digestQuestionMap = [:]
         answeredQuestionIDs = []
         consumedIndices = []
@@ -462,16 +560,11 @@ final class UpToSpeedViewModel {
         // most-recently-created day-context block across all of today's digests.
         // In the evening that is the digest describing tomorrow, which is what
         // the opener should lead with once today is over.
-        var dayContextCandidate: FlintDayContext?
+        let dayContextCandidate = Self.dayContext(from: Array(digests.values), now: .now, calendar: .current)
 
         for item in digestItems {
             let full = digests[item.id]
             let title = digestTitle(item: item, digest: full)
-
-            if let block = full?.blocks.first(where: { $0.blockType == "flint_day_context" }),
-               let context = block.dayContext {
-                dayContextCandidate = context
-            }
 
             // Fold a reading-list digest's picks into the wrap screen — but only
             // when there is something to show. A duplicate reading-list digest,
@@ -544,7 +637,7 @@ final class UpToSpeedViewModel {
         // items can be the only content available. Also, a solo folded
         // reading-list digest leaves `built` with no .wrap-keyed entries, so
         // wrap content must count as substance independently.
-        recapItems = caughtUpItems(from: items)
+        updateRecap()
         let hasSubstance = !built.isEmpty || wrapChapterHasContent || !recapItems.isEmpty
 
         guard hasSubstance else {
@@ -558,12 +651,6 @@ final class UpToSpeedViewModel {
         built.insert((.opener, .intro), at: 0)
         built.append((.wrap, .wrap))
 
-        // The recap is an appendix, not part of the catch-up proper: it sits
-        // past the wrap so swiping on reaches it, and the wrap offers a way in.
-        if !recapItems.isEmpty {
-            built.append((.recap, .recap))
-        }
-
         screens = built.map(\.screen)
         chapters = UpToSpeedChapter.chapters(for: built.map(\.key))
 
@@ -572,9 +659,27 @@ final class UpToSpeedViewModel {
         if resetIndex {
             currentIndex = 0
         } else {
-            currentIndex = min(currentIndex, screens.count - 1)
+            currentIndex = screens.firstIndex(where: { $0.id == previousID }) ?? min(currentIndex, screens.count - 1)
+            consumedIndices = Set(screens.indices.filter { previouslyConsumed.contains(screens[$0].id) })
         }
         newItemsAvailable = 0
+    }
+
+    nonisolated static func dayContext(from digests: [FlintDigest], now: Date, calendar: Calendar) -> FlintDayContext? {
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) ?? now
+        return digests.sorted {
+            if $0.createdAt != $1.createdAt { return ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }
+            if $0.date != $1.date { return $0.date < $1.date }
+            return $0.id < $1.id
+        }.flatMap { digest in
+            digest.blocks.compactMap { block -> FlintDayContext? in
+                guard block.blockType == "flint_day_context", let context = block.dayContext else { return nil }
+                let dated = FlintDayContext(date: context.date ?? digest.date, calendar: context.calendar, birthdays: context.birthdays, weather: context.weather)
+                guard let day = dated.day(in: calendar),
+                      calendar.isDate(day, inSameDayAs: now) || calendar.isDate(day, inSameDayAs: tomorrow) else { return nil }
+                return dated
+            }
+        }.last
     }
 
     private func visibleUnreadItems(from items: [UpToSpeedItem]) -> [UpToSpeedItem] {
@@ -704,6 +809,9 @@ final class UpToSpeedViewModel {
     }
 
     private func enqueueMarkRead(_ ref: UpToSpeedReadRef) {
+        guard !restoredIDs.contains(ref.id) else { return }
+        if sessionSeenDates[ref.id] == nil { sessionSeenDates[ref.id] = .now }
+        updateRecap()
         guard !pendingReadRefs.contains(where: { $0.id == ref.id }) else { return }
         pendingReadRefs.append(ref)
     }
@@ -760,9 +868,8 @@ struct UpToSpeedVisibility {
     }
 
     private func isRecapCandidate(_ item: UpToSpeedItem) -> Bool {
-        if case .checkIn = item.payload { return false }
-        guard let seen = seenAt(item) else { return false }
-        return calendar.isDate(seen, inSameDayAs: now)
+        if case .checkIn(let summary) = item.payload { return summary.completed }
+        return seenAt(item) != nil
     }
 
     private func isCheckInPeriodAvailable(_ period: CheckInPeriod) -> Bool {

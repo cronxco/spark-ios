@@ -29,7 +29,6 @@ struct SparkApp: App {
                     .environment(model)
                     .modelContainer(model.container)
                     .tint(.sparkAccent)
-                    .sparkDynamicTypeClamp()
                     .task(id: model.session) {
                         if model.session == .loggedIn {
                             HealthKitObserver.shared.startObserving()
@@ -307,9 +306,6 @@ enum SparkObservability {
                 isExpectedMetricNotFoundEvent(event) ? nil : event
             }
 
-            // Logging (captures OSLog output)
-            options.enableLogs = true
-
             #if DEBUG
             options.debug = true
             options.tracesSampleRate = 1.0
@@ -348,9 +344,7 @@ enum SparkObservability {
             "can_open_store": snapshot.canOpenStore,
             "total_count": snapshot.totalCount,
         ]
-        for (key, value) in data {
-            crumb.setData(value: value, key: key)
-        }
+        crumb.setSparkData(data)
         SentrySDK.addBreadcrumb(crumb)
     }
 
@@ -358,9 +352,7 @@ enum SparkObservability {
         let crumb = Breadcrumb(level: report.hasFailures ? .error : .info, category: "spotlight")
         crumb.type = "debug"
         crumb.message = "Spotlight index run"
-        for (key, value) in spotlightIndexContext(report, source: source) {
-            crumb.setData(value: value, key: key)
-        }
+        crumb.setSparkData(spotlightIndexContext(report, source: source))
         SentrySDK.addBreadcrumb(crumb)
 
         guard report.hasFailures else { return }

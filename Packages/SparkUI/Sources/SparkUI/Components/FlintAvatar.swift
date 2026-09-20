@@ -66,7 +66,7 @@ public struct FlintByline: View {
             if let meta {
                 Text(meta)
                     .font(SparkTypography.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
         }

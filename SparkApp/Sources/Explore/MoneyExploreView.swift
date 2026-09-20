@@ -114,12 +114,6 @@ struct MoneyExploreView: View {
                 accountsSection(vm: vm)
                     .padding(.horizontal, SparkSpacing.lg)
 
-                #if DEBUG
-                    if !vm.rawFeedEntries.isEmpty {
-                        RawFeedJSONView(entries: vm.rawFeedEntries)
-                            .padding(.horizontal, SparkSpacing.lg)
-                    }
-                #endif
             }
         } else {
             shimmerPlaceholder

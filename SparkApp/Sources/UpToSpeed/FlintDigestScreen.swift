@@ -11,6 +11,7 @@ struct FlintHeaderPage: View {
     let firstSection: String?
     var isActive: Bool = true
     var onReachedBottom: (() -> Void)?
+    var supplement: AnyView?
 
     private var summary: UpToSpeedFlintDigestSummary? {
         if case .flintDigest(let s) = item.payload { return s }
@@ -19,9 +20,10 @@ struct FlintHeaderPage: View {
 
     var body: some View {
         StoryScreenScaffold(
-            label: summary?.period.map { "\($0.displayName) Digest" },
+            flintByline: .init(meta: summary?.period.map { "\($0.displayName) briefing" }),
             isActive: isActive,
-            onReachedBottom: onReachedBottom
+            onReachedBottom: onReachedBottom,
+            supplement: supplement
         ) {
             VStack(alignment: .leading, spacing: SparkSpacing.lg) {
                 if let summary {
@@ -32,12 +34,6 @@ struct FlintHeaderPage: View {
                     }
 
                     HStack(spacing: SparkSpacing.sm) {
-                        if summary.blockCount > 0 {
-                            countPill(
-                                "^[\(summary.blockCount) block](inflect: true)",
-                                systemImage: "text.alignleft"
-                            )
-                        }
                         if summary.unansweredQuestionCount > 0 {
                             countPill(
                                 "^[\(summary.unansweredQuestionCount) question](inflect: true)",
@@ -49,7 +45,7 @@ struct FlintHeaderPage: View {
 
                 if let section = firstSection {
                     Divider().opacity(0.2)
-                    SparkLongFormContentView(text: section, tint: .sparkAccent)
+                    SparkLongFormContentView(text: section, tint: .sparkAccent, paragraphFont: SparkTypography.longFormBody)
                 }
             }
         }
@@ -75,6 +71,7 @@ struct FlintParagraphPage: View {
     let text: String
     var isActive: Bool = true
     var onReachedBottom: (() -> Void)?
+    var supplement: AnyView?
 
     private var summary: UpToSpeedFlintDigestSummary? {
         if case .flintDigest(let s) = item.payload { return s }
@@ -83,13 +80,15 @@ struct FlintParagraphPage: View {
 
     var body: some View {
         StoryScreenScaffold(
-            label: summary?.period.map { "\($0.displayName) Digest" },
+            flintByline: .init(meta: summary?.period.map { "\($0.displayName) briefing" }),
             isActive: isActive,
-            onReachedBottom: onReachedBottom
+            onReachedBottom: onReachedBottom,
+            supplement: supplement
         ) {
             SparkLongFormContentView(
                 text: text,
-                tint: .sparkAccent
+                tint: .sparkAccent,
+                paragraphFont: SparkTypography.longFormBody
             )
         }
     }
@@ -102,9 +101,10 @@ struct FlintInsightPage: View {
     let block: FlintDigestBlock
     var isActive: Bool = true
     var onReachedBottom: (() -> Void)?
+    var supplement: AnyView?
 
     var body: some View {
-        StoryScreenScaffold(label: "Insight", isActive: isActive, onReachedBottom: onReachedBottom) {
+        StoryScreenScaffold(flintByline: .init(meta: "Insight"), isActive: isActive, onReachedBottom: onReachedBottom, supplement: supplement) {
             GlassCard(tint: Color.sparkAccent.opacity(0.1)) {
                 VStack(alignment: .leading, spacing: SparkSpacing.md) {
                     Text(block.title)
@@ -112,12 +112,7 @@ struct FlintInsightPage: View {
                         .foregroundStyle(.primary)
 
                     if let content = block.content, !content.isEmpty {
-                        SparkRichContentText(
-                            text: content,
-                            font: SparkTypography.bodySmall,
-                            foregroundStyle: .secondary,
-                            lineSpacing: 5
-                        )
+                        SparkLongFormContentView(text: content, paragraphFont: SparkTypography.longFormBodySmall)
                     }
                 }
             }
@@ -135,6 +130,7 @@ struct FlintQuestionPage: View {
     let viewModel: UpToSpeedViewModel
     var isActive: Bool = true
     var onReachedBottom: (() -> Void)?
+    var supplement: AnyView?
 
     @Environment(AppModel.self) private var appModel
     @State private var isSubmitting = false
@@ -144,10 +140,10 @@ struct FlintQuestionPage: View {
 
     var body: some View {
         StoryScreenScaffold(
-            label: labelText,
-            flintByline: .init("Flint is asking"),
+            flintByline: .init(meta: labelText),
             isActive: isActive,
-            onReachedBottom: onReachedBottom
+            onReachedBottom: onReachedBottom,
+            supplement: supplement
         ) {
             VStack(alignment: .leading, spacing: SparkSpacing.lg) {
                 Text(block.question ?? block.title)

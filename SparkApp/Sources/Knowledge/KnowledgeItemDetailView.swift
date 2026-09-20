@@ -208,7 +208,7 @@ struct KnowledgeItemDetailView: View {
         GlassCard(tint: Color.domainKnowledge.opacity(0.08)) {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                 GlassCardHeader(icon: "doc.text", tint: .domainKnowledge, title: "Summary")
-                SparkRichContentText(text: text, font: SparkTypography.body, foregroundStyle: .primary)
+                SparkLongFormContentView(text: text, paragraphFont: SparkTypography.longFormBody)
             }
         }
     }
@@ -251,7 +251,7 @@ struct KnowledgeItemDetailView: View {
                                         .font(.caption2)
                                         .foregroundStyle(Color.domainKnowledge)
                                         .padding(.top, 3)
-                                    SparkRichContentText(text: bullet, font: SparkTypography.body, foregroundStyle: .primary)
+                                    SparkLongFormContentView(text: bullet, paragraphFont: SparkTypography.longFormBody)
                                 }
                             }
                         }
@@ -268,7 +268,7 @@ struct KnowledgeItemDetailView: View {
                         trailing: displayType(for: block)
                     )
                     if let content = nonEmpty(block.content) {
-                        SparkRichContentText(text: content, font: SparkTypography.body, foregroundStyle: .primary)
+                        SparkLongFormContentView(text: content, paragraphFont: SparkTypography.longFormBody)
                     }
                     if let value = nonEmpty(block.value) {
                         Text([value, block.unit].compactMap(nonEmpty).joined(separator: " "))

@@ -62,6 +62,7 @@ struct TodayView: View {
                 .padding(.horizontal, SparkSpacing.lg)
                 .padding(.top, SparkSpacing.xl + 72)
                 .padding(.bottom, deviceSafeAreaBottom + 66)
+                .containerRelativeFrame(.horizontal)
             }
             .sparkAppBackground()
             .refreshable { await viewModel?.refresh() }
@@ -139,17 +140,25 @@ struct TodayView: View {
 
     private func heroTitleWithAction(titleLines: [String], unreadCount: Int) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top, spacing: SparkSpacing.md) {
-                if let firstLine = titleLines.first {
-                    heroTitleText(firstLine, index: 0)
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: SparkSpacing.md) {
+                    if let firstLine = titleLines.first {
+                        heroTitleText(firstLine, index: 0)
+                    }
+
+                    Spacer(minLength: SparkSpacing.md)
+
+                    GetUpToSpeedButton(
+                        unreadCount: unreadCount,
+                        onTap: { showUpToSpeed = true }
+                    )
                 }
-
-                Spacer(minLength: SparkSpacing.md)
-
-                GetUpToSpeedButton(
-                    unreadCount: unreadCount,
-                    onTap: { showUpToSpeed = true }
-                )
+                VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                    if let firstLine = titleLines.first {
+                        heroTitleText(firstLine, index: 0)
+                    }
+                    GetUpToSpeedButton(unreadCount: unreadCount, onTap: { showUpToSpeed = true })
+                }
             }
 
             if titleLines.count > 1 {

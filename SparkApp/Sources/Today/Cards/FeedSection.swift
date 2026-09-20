@@ -418,7 +418,11 @@ private struct WebDigestEventCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Group {
+            // The image fills an already-sized surface; its aspect ratio must
+            // never become the minimum width of the entire Day page.
+            Color.clear
+            .frame(height: 168)
+            .overlay {
                 if let urlString = event.targetMediaUrl, let url = URL(string: urlString) {
                     AsyncImage(url: url) { phase in
                         switch phase {
@@ -432,7 +436,6 @@ private struct WebDigestEventCard: View {
                     gradientPlaceholder
                 }
             }
-            .frame(height: 168)
             .clipped()
 
             VStack(alignment: .leading, spacing: SparkSpacing.xs) {

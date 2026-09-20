@@ -231,6 +231,11 @@ final class AppModel {
 
     private func fetchAndCacheUserId() async {
         guard let fetched = try? await apiClient.request(MeEndpoint.get()) else { return }
+        #if DEBUG
+        if let previous = UserDefaults.sparkAppGroup.string(forKey: "spark.userId"), previous != fetched.id {
+            APISessionStore.shared.clear()
+        }
+        #endif
         profile = fetched
         UserDefaults.sparkAppGroup.set(fetched.id, forKey: "spark.userId")
     }
@@ -416,6 +421,9 @@ final class AppModel {
 
         await authService.signOut()
         await etagCache.clearAll()
+        #if DEBUG
+        APISessionStore.shared.clear()
+        #endif
         profile = nil
         pendingRoute = nil
 

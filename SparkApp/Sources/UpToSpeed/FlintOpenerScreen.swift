@@ -11,12 +11,13 @@ import SwiftUI
 /// prose that was its only content.
 struct FlintOpenerScreen: View {
     let viewModel: UpToSpeedViewModel
+    var onShowRecap: (() -> Void)?
 
     var body: some View {
         StoryScreenScaffold(flintByline: .init(meta: openerTime)) {
             VStack(alignment: .leading, spacing: SparkSpacing.xl) {
                 Text(viewModel.openerGreeting)
-                    .font(SparkTypography.heroXL)
+                    .font(SparkTypography.heroSmall)
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -28,6 +29,7 @@ struct FlintOpenerScreen: View {
                 }
 
                 if !chapterRows.isEmpty {
+                    Text("Up ahead").font(SparkTypography.bodyStrong)
                     GlassCard(padding: 0) {
                         VStack(spacing: 0) {
                             ForEach(Array(chapterRows.enumerated()), id: \.element.id) { index, chapter in
@@ -44,6 +46,19 @@ struct FlintOpenerScreen: View {
                             }
                         }
                     }
+                }
+                if let onShowRecap, !viewModel.recapItems.isEmpty {
+                    Button(action: onShowRecap) {
+                        Label("Recap", systemImage: "clock.arrow.circlepath")
+                            .font(SparkTypography.bodySmall)
+                    }
+                    .buttonStyle(.plain)
+                }
+                if viewModel.digestsFailedToLoad > 0 {
+                    Button("Some of your briefing couldn’t load. Try again") {
+                        Task { await viewModel.reloadQueue() }
+                    }
+                    .font(SparkTypography.bodySmall)
                 }
             }
         }

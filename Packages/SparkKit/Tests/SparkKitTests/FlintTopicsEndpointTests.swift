@@ -22,4 +22,13 @@ struct FlintTopicsEndpointTests {
         #expect(endpoint.query.first { $0.name == "status" }?.value == "dormant")
         #expect(endpoint.query.first { $0.name == "kind" }?.value == "thematic")
     }
+
+    @Test("detail endpoint addresses one topic")
+    func detailEndpoint() {
+        let endpoint = FlintTopicsEndpoint.detail(id: "topic-1")
+
+        #expect(endpoint.method == .get)
+        #expect(endpoint.path == "/flint/topics/topic-1")
+        #expect(endpoint.query.isEmpty)
+    }
 }

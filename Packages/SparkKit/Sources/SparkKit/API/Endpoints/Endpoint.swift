@@ -16,6 +16,11 @@ public struct Endpoint<Response: Decodable & Sendable>: Sendable {
     public let contentType: String?
     public let requiresAuth: Bool
 
+    /// Whether GETs send `If-None-Match` from the shared `ETagCache`. Turn off
+    /// for endpoints whose caller keeps no local copy of the body: a 304 gives
+    /// them nothing to render.
+    public let usesETag: Bool
+
     /// Extra request headers.
     ///
     /// Chiefly `If-Match`: the backend guards destructive and last-write-wins
@@ -29,6 +34,7 @@ public struct Endpoint<Response: Decodable & Sendable>: Sendable {
         body: Data? = nil,
         contentType: String? = nil,
         requiresAuth: Bool = true,
+        usesETag: Bool = true,
         headers: [String: String] = [:]
     ) {
         self.method = method
@@ -37,6 +43,7 @@ public struct Endpoint<Response: Decodable & Sendable>: Sendable {
         self.body = body
         self.contentType = contentType
         self.requiresAuth = requiresAuth
+        self.usesETag = usesETag
         self.headers = headers
     }
 
@@ -54,6 +61,7 @@ public struct Endpoint<Response: Decodable & Sendable>: Sendable {
             body: body,
             contentType: contentType,
             requiresAuth: requiresAuth,
+            usesETag: usesETag,
             headers: merged
         )
     }

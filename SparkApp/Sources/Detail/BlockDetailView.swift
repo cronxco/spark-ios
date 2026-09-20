@@ -99,7 +99,8 @@ struct BlockDetailView: View {
             rawTitle: "Raw block",
             rawPayload: blockRawPayload,
             feedbackContext: blockFeedbackContext,
-            refresh: { await viewModel?.load() }
+            refresh: { await viewModel?.load() },
+            flintNoteContext: .block(id: blockId, label: flintNoteLabel)
         )
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Edit") { showEditor = true }.disabled(!isLoaded) } }
         .task(id: blockId) {
@@ -121,6 +122,13 @@ struct BlockDetailView: View {
     private var isLoaded: Bool {
         if case .loaded = viewModel?.state { return true }
         return false
+    }
+
+    private var flintNoteLabel: String {
+        if case .loaded(let detail) = viewModel?.state {
+            return detail.block.title
+        }
+        return "this block"
     }
 
     private var blockRawPayload: String? {
@@ -147,7 +155,7 @@ struct BlockDetailView: View {
 
         if let body = detail.block.content, !body.isEmpty {
             GlassCard(radius: SparkRadii.lg, padding: SparkSpacing.lg) {
-                SparkRichContentText(text: body, font: SparkTypography.body, foregroundStyle: .primary)
+                SparkLongFormContentView(text: body, paragraphFont: SparkTypography.longFormBody)
             }
         }
 

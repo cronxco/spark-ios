@@ -185,7 +185,7 @@ final class ShareViewController: UIViewController {
     }
 
     /// Copies a provider-owned image into storage that survives its callback.
-    private static func copySharedImage(from source: URL) -> URL? {
+    nonisolated private static func copySharedImage(from source: URL) -> URL? {
         let directory = FileManager.default
             .containerURL(forSecurityApplicationGroupIdentifier: "group.co.cronx.sparkapp")?
             .appendingPathComponent("ShareUploads", isDirectory: true)

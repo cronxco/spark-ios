@@ -10,25 +10,34 @@ struct NewsStoryScreen: View {
     let section: NewsRoundupSection
     let index: Int
     let total: Int
+    var viewModel: UpToSpeedViewModel? = nil
+    @State private var expanded = false
     var isActive: Bool = true
     let onReachedBottom: (() -> Void)?
 
     var body: some View {
-        StoryScreenScaffold(isActive: isActive, onReachedBottom: onReachedBottom) {
+        StoryScreenScaffold(
+            flintByline: .init(meta: section.sources.isEmpty ? "News roundup" : section.sources.joined(separator: " · ")),
+            isActive: isActive,
+            onReachedBottom: onReachedBottom
+        ) {
             VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-                spine
-
                 Text(section.heading)
-                    .font(SparkTypography.hero)
+                    .font(SparkTypography.heroSmall)
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if !section.body.isEmpty {
-                    Text(bodyText)
-                        .font(SparkTypography.longFormBody)
-                        .foregroundStyle(.primary)
-                        .lineSpacing(3)
-                        .fixedSize(horizontal: false, vertical: true)
+                    SparkLongFormContentView(text: section.body, paragraphFont: SparkTypography.longFormBody)
+                }
+
+                StoryReferences(references: section.references, sourceURL: section.sourceURL)
+                if let fullText = section.analysis ?? section.fullRoundup {
+                    DisclosureGroup(section.analysis == nil ? "Read full roundup" : "Read analysis",
+                                    isExpanded: viewModel?.disclosureBinding("\(item.id)-news\(index)-analysis") ?? $expanded) {
+                        SparkLongFormContentView(text: fullText, tint: .sparkOcean)
+                            .padding(.top, SparkSpacing.md)
+                    }
                 }
 
                 if let whatsNew = section.whatsNew {
@@ -48,7 +57,7 @@ struct NewsStoryScreen: View {
                     HStack(alignment: .top, spacing: SparkSpacing.sm) {
                         FlintAvatar(size: .sm)
                         Text(watching)
-                            .font(SparkTypography.bodySmall)
+                            .font(SparkTypography.longFormBodySmall)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -60,28 +69,4 @@ struct NewsStoryScreen: View {
         }
     }
 
-    private var spine: some View {
-        HStack(spacing: SparkSpacing.sm) {
-            Text(total > 1 ? "Story \(index + 1) / \(total)" : "News")
-                .font(SparkTypography.caption)
-                .tracking(1.2)
-                .foregroundStyle(Color.sparkOcean)
-            Rectangle()
-                .fill(Color.sparkOcean.opacity(0.25))
-                .frame(height: 1)
-            if !section.sources.isEmpty {
-                Text(section.sources.joined(separator: " · "))
-                    .font(SparkTypography.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        }
-    }
-
-    /// Strip inline markdown emphasis for plain serif rendering.
-    private var bodyText: String {
-        section.body
-            .replacingOccurrences(of: "**", with: "")
-            .replacingOccurrences(of: "*", with: "")
-    }
 }

@@ -169,6 +169,10 @@ public enum APITelemetryRedactor {
         "cookie",
     ]
 
+    public static func omitsBody(forPath path: String) -> Bool {
+        path == "/flint/notes" || path.hasPrefix("/flint/notes/")
+    }
+
     public static func headers(_ headers: [String: String]) -> [String: String] {
         Dictionary(uniqueKeysWithValues: headers.map { key, value in
             if sensitiveHeaderNames.contains(key.lowercased()) {

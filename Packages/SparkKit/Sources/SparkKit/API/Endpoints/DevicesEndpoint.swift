@@ -3,7 +3,7 @@ import Foundation
 public enum DevicesEndpoint {
     /// GET /devices
     public static func list() -> Endpoint<DevicesListResponse> {
-        Endpoint(method: .get, path: "/devices")
+        Endpoint(method: .get, path: "/devices", usesETag: false)
     }
 
     /// POST /devices — register this device. Success is enough; the app does not consume the response body.

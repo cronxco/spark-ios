@@ -12,10 +12,12 @@ public struct StoryProgressBar: View {
     public struct ChapterSpec: Equatable {
         public let label: String
         public let segments: Int
+        public let accent: Color?
 
-        public init(label: String, segments: Int) {
+        public init(label: String, segments: Int, accent: Color? = nil) {
             self.label = label
             self.segments = segments
+            self.accent = accent
         }
     }
 
@@ -42,7 +44,7 @@ public struct StoryProgressBar: View {
             ForEach(Array(chapters.enumerated()), id: \.offset) { chapterIndex, chapter in
                 HStack(spacing: 4) {
                     ForEach(0..<chapter.segments, id: \.self) { segmentInChapter in
-                        segment(for: globalIndex(chapterIndex: chapterIndex, segmentInChapter: segmentInChapter))
+                        segment(for: globalIndex(chapterIndex: chapterIndex, segmentInChapter: segmentInChapter), accent: chapter.accent ?? .sparkAccent)
                     }
                 }
                 .accessibilityElement(children: .ignore)
@@ -65,13 +67,13 @@ public struct StoryProgressBar: View {
     }
 
     @ViewBuilder
-    private func segment(for index: Int) -> some View {
+    private func segment(for index: Int, accent: Color) -> some View {
         GeometryReader { geo in
             Capsule()
-                .fill(Color.primary.opacity(0.15))
+                .fill(accent.opacity(0.18))
                 .overlay(alignment: .leading) {
                     Capsule()
-                        .fill(index < currentIndex ? Color.primary.opacity(0.5) : Color.sparkAccent)
+                        .fill(index < currentIndex ? accent.opacity(0.55) : accent)
                         .frame(width: geo.size.width * fillFraction(for: index))
                 }
         }

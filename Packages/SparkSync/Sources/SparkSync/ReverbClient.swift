@@ -240,6 +240,7 @@ public actor ReverbClient {
         components.queryItems = nil
         let authURL = components.url!
 
+        let logicalRequestID = UUID()
         for attempt in 1...2 {
             let forceRefresh = attempt > 1
             guard let token = try? await apiClient.accessTokenRefreshingIfNeeded(forceRefresh: forceRefresh) else {
@@ -257,9 +258,18 @@ public actor ReverbClient {
             ])
 
             let startedAt = Date()
+            #if DEBUG
+            let capture = APISessionStore.shared.begin(request, requestID: logicalRequestID, attempt: attempt)
+            var captureOutcome = "transport failure"
+            defer { APISessionStore.shared.finish(capture, outcome: captureOutcome) }
+            #endif
             do {
                 let (data, response) = try await session.data(for: request)
                 let http = response as? HTTPURLResponse
+                #if DEBUG
+                APISessionStore.shared.response(capture, status: http?.statusCode, data: data)
+                captureOutcome = "HTTP failure"
+                #endif
                 await captureAuthTelemetry(
                     request: request,
                     response: http,
@@ -271,9 +281,18 @@ public actor ReverbClient {
                     continue
                 }
                 guard http?.statusCode == 200 else { return nil }
+                #if DEBUG
+                captureOutcome = "decoding failure"
+                #endif
                 let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
+                #if DEBUG
+                captureOutcome = "success"
+                #endif
                 return authResponse.auth
             } catch {
+                #if DEBUG
+                if error.isAPICancellation { captureOutcome = "cancelled" }
+                #endif
                 logger.error("Reverb auth request failed: \(error, privacy: .public)")
                 await captureAuthTelemetry(
                     request: request,
