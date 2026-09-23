@@ -31,8 +31,9 @@ final class TodayViewModel {
     private(set) var topics: [FlintTopic] = []
     private(set) var moneyContext: MoneyContext = .empty
 
-    /// How far back "recent" reaches for the question stack.
-    private static let questionWindow: TimeInterval = 48 * 3600
+    /// How far back "recent" reaches for the question stack, in the server's
+    /// relative-window syntax.
+    private static let questionWindow = "48h"
 
     var metrics: DayMetrics {
         DayMetrics(summary: cached, money: moneyContext)
@@ -81,62 +82,66 @@ final class TodayViewModel {
     }
 
     private func loadLatestDigest() async {
-        // Today's newest run first; before it has happened, yesterday's.
-        // Calendar rather than a 86,400-second step: on the two days a year
-        // the clocks move, subtracting a flat day lands on the wrong date.
-        let previousDay = Calendar.current.date(byAdding: .day, value: -1, to: date)
-        let keys = [date, previousDay].compactMap { $0 }.map(Self.isoKey(for:))
-        for key in keys {
-            do {
-                let response = try await apiClient.request(FlintEndpoint.digests(date: key, all: true))
-                let newest = response.digests
-                    .filter { $0.kind != .newsRoundup }
-                    .max { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }
-                if let newest, newest.opener != nil {
-                    latestDigest = newest
-                    return
-                }
-            } catch where error.isAPICancellation {
-                return
-            } catch {
-                SparkObservability.captureHandled(error)
-            }
+        // One request, on any day at any hour: before the morning brief has
+        // run, the server's "latest" is last night's evening digest.
+        do {
+            latestDigest = try await apiClient.request(FlintEndpoint.latest(kind: .briefing))
+        } catch where error.isAPICancellation {
+            return
+        } catch APIError.httpStatus(404, _, _) {
+            // No briefing has ever been written for this account. Not an
+            // error worth reporting — the card simply is not there.
+            latestDigest = nil
+        } catch {
+            SparkObservability.captureHandled(error)
         }
     }
 
     private func loadRecentQuestions() async {
         do {
-            async let openResponse = apiClient.request(FlintEndpoint.questions(status: .open))
-            async let answeredResponse = apiClient.request(FlintEndpoint.questions(status: .answered))
-            let (open, answered) = try await (openResponse, answeredResponse)
-
-            let cutoff = Date.now.addingTimeInterval(-Self.questionWindow)
-            func withinWindow(_ question: FlintQuestion) -> Bool {
-                guard let asked = question.askedAt else { return false }
-                return asked >= cutoff
+            // Status and window are both applied by the server now, in one
+            // request, where this used to be two unbounded fetches filtered
+            // on the device.
+            let window = Self.questionWindow
+            let questions = try await apiClient.collectAllPages(maxPages: 3) { cursor in
+                FlintEndpoint.questions(
+                    statuses: [.open, .answered],
+                    since: window,
+                    cursor: cursor
+                )
             }
-
-            let sortedOpen = open.data
-                .filter(withinWindow)
-                .sorted { ($0.askedAt ?? .distantPast) > ($1.askedAt ?? .distantPast) }
-            let sortedAnswered = answered.data
-                .filter(withinWindow)
-                .sorted { ($0.askedAt ?? .distantPast) > ($1.askedAt ?? .distantPast) }
-
-            recentQuestions = sortedOpen + sortedAnswered
+            recentQuestions = Self.orderForStack(questions)
         } catch where error.isAPICancellation {
             return
         } catch {
             SparkObservability.captureHandled(error)
         }
+    }
+
+    /// Open questions first, then answered ones, newest first within each —
+    /// the stack leads with what is wanted and keeps what was already said.
+    /// Presentation order, so it stays here.
+    static func orderForStack(_ questions: [FlintQuestion]) -> [FlintQuestion] {
+        let newestFirst: (FlintQuestion, FlintQuestion) -> Bool = {
+            ($0.askedAt ?? .distantPast) > ($1.askedAt ?? .distantPast)
+        }
+        let open = questions.filter { $0.status == .open }.sorted(by: newestFirst)
+        let answered = questions.filter { $0.status == .answered }.sorted(by: newestFirst)
+        return open + answered
     }
 
     private func loadTopics() async {
         do {
-            let response = try await apiClient.request(FlintTopicsEndpoint.list())
-            topics = response.data.filter {
-                $0.status?.isActive == true || $0.status == .dormant
+            // Two small filtered lists rather than every thread ever: the
+            // strip shows active threads and a line for dormant ones, never
+            // the resolved or expired ones.
+            async let active = apiClient.collectAllPages { cursor in
+                FlintTopicsEndpoint.list(status: .active, cursor: cursor)
             }
+            async let dormant = apiClient.collectAllPages { cursor in
+                FlintTopicsEndpoint.list(status: .dormant, cursor: cursor)
+            }
+            topics = try await active + dormant
         } catch where error.isAPICancellation {
             return
         } catch {
@@ -144,27 +149,14 @@ final class TodayViewModel {
         }
     }
 
-    /// Balances are their own resource, and there is no "pinned" flag on an
-    /// account yet — the first current account stands in for one.
     private func loadMoneyContext() async {
         do {
-            let response = try await apiClient.request(MoneyEndpoint.accounts())
-            let accounts = response.data
-            guard !accounts.isEmpty else { return }
-
-            let pinned = accounts.first { ($0.accountType ?? $0.kind).lowercased().contains("current") }
-                ?? accounts.first
-
-            var context = MoneyContext()
-            if let pinned, let balance = pinned.latestBalance {
-                context.pinnedAccountLabel = pinned.title
-                context.pinnedAccountBalance = DayMetrics.currency(
-                    pinned.isNegativeBalance ? -abs(balance.balance) : balance.balance,
-                    code: balance.currency
-                )
+            async let accountsRequest = apiClient.collectAllPages { cursor in
+                MoneyEndpoint.accounts(cursor: cursor)
             }
-            context.netWorthChange = await netWorthChange(for: accounts)
-            moneyContext = context
+            async let netWorthRequest = apiClient.request(MoneyEndpoint.netWorth(compare: .oneMonth))
+            let (accounts, netWorth) = try await (accountsRequest, netWorthRequest)
+            moneyContext = Self.moneyContext(accounts: accounts, netWorth: netWorth.data)
         } catch where error.isAPICancellation {
             return
         } catch {
@@ -172,68 +164,59 @@ final class TodayViewModel {
         }
     }
 
-    /// Net worth now against the closest balance on or before a month ago.
-    /// Accounts whose history does not reach back that far are left out of
-    /// both sides, so the comparison stays like-for-like.
-    private func netWorthChange(for accounts: [MoneyAccount]) async -> String? {
-        guard let monthAgo = Calendar.current.date(byAdding: .month, value: -1, to: .now) else {
-            return nil
+    /// The account the user pinned; failing that, the first current account,
+    /// so the card is useful before anyone has chosen. Net worth's change is
+    /// the server's comparison, which already leaves out accounts whose
+    /// history does not span the month on both sides.
+    static func moneyContext(accounts: [MoneyAccount], netWorth: NetWorth) -> MoneyContext {
+        var context = MoneyContext()
+
+        let pinned = accounts.first(where: \.pinned)
+            ?? accounts.first { ($0.accountType ?? $0.kind).lowercased().contains("current") }
+        if let pinned, let balance = pinned.latestBalance {
+            context.pinnedAccountLabel = pinned.title
+            context.pinnedAccountBalance = DayMetrics.currency(
+                pinned.isNegativeBalance ? -abs(balance.balance) : balance.balance,
+                code: balance.currency
+            )
         }
 
-        var histories: [String: [BalanceEntry]] = [:]
-        await withTaskGroup(of: (String, [BalanceEntry]).self) { group in
-            for account in accounts {
-                group.addTask { [apiClient] in
-                    let response = try? await apiClient.request(
-                        MoneyEndpoint.balances(accountId: account.id)
-                    )
-                    return (account.id, response?.data ?? [])
-                }
-            }
-            for await (id, entries) in group {
-                histories[id] = entries
+        if let comparison = netWorth.comparison {
+            let change = comparison.change
+            if abs(change) < 1 {
+                context.netWorthChange = "level"
+            } else {
+                let formatted = DayMetrics.currency(abs(change), code: netWorth.currency)
+                context.netWorthChange = (change > 0 ? "+" : "\u{2212}") + formatted
             }
         }
-
-        var now = 0.0
-        var then = 0.0
-        var currency = "GBP"
-        var comparable = false
-
-        for account in accounts {
-            let entries = (histories[account.id] ?? []).sorted { $0.time < $1.time }
-            guard let latest = entries.last,
-                  let earlier = entries.last(where: { $0.time <= monthAgo })
-            else { continue }
-            // A debt account counts against net worth, the same rule the
-            // money explore screen applies.
-            func adjusted(_ balance: Double) -> Double {
-                account.isNegativeBalance ? -abs(balance) : balance
-            }
-            now += adjusted(latest.balance)
-            then += adjusted(earlier.balance)
-            currency = latest.currency
-            comparable = true
-        }
-
-        guard comparable else { return nil }
-        let delta = now - then
-        guard abs(delta) >= 1 else { return "level" }
-        let formatted = DayMetrics.currency(abs(delta), code: currency)
-        return (delta > 0 ? "+" : "\u{2212}") + formatted
+        return context
     }
 
+    /// Answers through `POST /flint/questions/{id}/actions`, which checks the
+    /// question's version and carries an idempotency key, and returns the
+    /// updated question so the stack updates in place. The older `/answer`
+    /// endpoint this used is deprecated server-side.
     func answer(question: FlintQuestion, with option: String) async {
         do {
-            _ = try await apiClient.request(
-                FlintEndpoint.answerQuestion(
+            let response = try await apiClient.request(
+                FlintEndpoint.questionAction(
                     blockID: question.id,
-                    FlintQuestionAnswerRequest(answer: option)
+                    version: question.version,
+                    idempotencyKey: UUID(),
+                    FlintQuestionActionRequest(action: .answer, answer: option)
                 )
             )
-            await loadRecentQuestions()
+            let updated = response.data
+            recentQuestions = Self.orderForStack(
+                recentQuestions.map { $0.id == updated.id ? updated : $0 }
+            )
         } catch where error.isAPICancellation {
             return
+        } catch let error as APIError where error.isPreconditionFailure {
+            // Answered or changed elsewhere since the stack loaded: take the
+            // server's current state rather than overwrite it.
+            await loadRecentQuestions()
         } catch {
             SparkObservability.captureHandled(error)
         }
@@ -464,6 +447,8 @@ final class TodayViewModel {
             existing.targetTitle = event.target?.title
             existing.targetType = event.target?.type
             existing.targetMediaUrl = event.target?.mediaUrl
+            existing.groupKey = event.groupKey
+            existing.direction = event.direction?.rawValue
             existing.lastSyncedAt = .now
         } else {
             context.insert(CachedEvent(
@@ -486,7 +471,9 @@ final class TodayViewModel {
                 actorMediaUrl: event.actor?.mediaUrl,
                 targetTitle: event.target?.title,
                 targetType: event.target?.type,
-                targetMediaUrl: event.target?.mediaUrl
+                targetMediaUrl: event.target?.mediaUrl,
+                groupKey: event.groupKey,
+                direction: event.direction?.rawValue
             ))
         }
     }

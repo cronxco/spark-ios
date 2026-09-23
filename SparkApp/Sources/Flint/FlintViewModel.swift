@@ -126,7 +126,10 @@ final class FlintViewModel {
             repeat {
                 let response = try await apiClient.request(FlintEndpoint.questions(cursor: cursor))
                 loaded.append(contentsOf: response.data)
-                cursor = response.meta.nextCursor
+                // The cursor is top-level on this endpoint. This read
+                // `meta.nextCursor`, which the server never sends here, so only
+                // the first page of questions ever loaded.
+                cursor = response.nextCursor
                 if let cursor, !seenCursors.insert(cursor).inserted { break }
             } while cursor != nil
 
@@ -157,8 +160,12 @@ final class FlintViewModel {
     func loadTopics() async {
         topicsState = .loading
         do {
-            let response = try await apiClient.request(FlintTopicsEndpoint.list())
-            topics = response.data.sorted {
+            // Topics are cursor-paged now; follow the cursor rather than
+            // trusting the first page to be every thread.
+            let all = try await apiClient.collectAllPages { cursor in
+                FlintTopicsEndpoint.list(cursor: cursor)
+            }
+            topics = all.sorted {
                 if $0.status?.isActive != $1.status?.isActive {
                     return $0.status?.isActive == true
                 }
@@ -217,7 +224,9 @@ final class FlintViewModel {
                     cursor: cursor
                 ))
                 loaded.append(contentsOf: response.data)
-                cursor = response.meta.nextCursor
+                // Top-level on the wire, like the questions cursor; reading it
+                // from `meta` stopped history after the first page.
+                cursor = response.nextCursor
                 if let cursor, !seenCursors.insert(cursor).inserted { break }
             } while cursor != nil
 

@@ -91,6 +91,15 @@ private struct FlintQuestionCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+            // The short label the question carries as a digest block, so the
+            // card can be recognised before its full text is read.
+            if let title = question.title, !title.isEmpty, title != question.question {
+                Text(title)
+                    .font(SparkTypography.captionStrong)
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+            }
+
             if let asked = question.askedAt {
                 Text(Self.relative.localizedString(for: asked, relativeTo: .now))
                     .font(SparkTypography.monoSmall)

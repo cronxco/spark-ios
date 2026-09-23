@@ -25,6 +25,11 @@ public final class CachedEvent {
     public var targetTitle: String?
     public var targetType: String?
     public var targetMediaUrl: String?
+    /// The server's run key; see `Event.groupKey`. `nil` on rows cached
+    /// before the field existed.
+    public var groupKey: String?
+    /// `MoneyDirection` raw value, money events only.
+    public var direction: String?
     public var lastSyncedAt: Date
 
     public init(
@@ -48,6 +53,8 @@ public final class CachedEvent {
         targetTitle: String? = nil,
         targetType: String? = nil,
         targetMediaUrl: String? = nil,
+        groupKey: String? = nil,
+        direction: String? = nil,
         lastSyncedAt: Date = .init()
     ) {
         self.id = id
@@ -70,6 +77,8 @@ public final class CachedEvent {
         self.targetTitle = targetTitle
         self.targetType = targetType
         self.targetMediaUrl = targetMediaUrl
+        self.groupKey = groupKey
+        self.direction = direction
         self.lastSyncedAt = lastSyncedAt
     }
 }

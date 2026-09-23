@@ -183,6 +183,69 @@ struct DayMetricsTests {
         #expect(sleep.secondary.value == "97")
     }
 
+    @Test("spend draws against the server's day-level baseline")
+    func spendDrawsAgainstBaseline() throws {
+        // £106.89 against a typical day the server puts 58% higher.
+        let metrics = DayMetrics(
+            summary: summary(money: [
+                "total_spend": AnyCodable(.double(106.89)),
+                "internal_transfers": AnyCodable(.double(2560.27)),
+                "total_spend_vs_baseline_pct": AnyCodable(.double(-36.8)),
+            ])
+        )
+
+        let money = try #require(card(metrics, "money"))
+        guard case .value(let text, let delta) = money.reading else {
+            Issue.record("money should read its spend")
+            return
+        }
+        // Spend, not the £2,560 that moved between the user's own accounts.
+        #expect(text == "£106.89")
+        #expect(delta == "\u{2212}37%")
+        let fill = try #require(money.fill)
+        let baseline = try #require(money.baseline)
+        #expect(fill < baseline)
+        #expect(money.isFlagged == false)
+    }
+
+    @Test("spend with too little history draws an empty track, not a guess")
+    func spendWithoutHistory() throws {
+        let metrics = DayMetrics(
+            summary: summary(money: [
+                "total_spend": AnyCodable(.double(24)),
+                "total_spend_baseline_unavailable_reason": AnyCodable(.string("insufficient_history")),
+            ])
+        )
+        let money = try #require(card(metrics, "money"))
+        #expect(money.fill == nil)
+        #expect(money.baseline == nil)
+    }
+
+    @Test("a stale service waits even when its day is not marked partial")
+    func staleWithoutPartialWaits() throws {
+        let sync = DaySummary.SyncStatus(
+            services: ["apple_health": .init(eventCount: 4, lastEventTime: .now, stale: true)]
+        )
+        let metrics = DayMetrics(summary: summary(sync: sync))
+        let activity = try #require(card(metrics, "activity"))
+        guard case .waiting(let reason) = activity.reading else {
+            Issue.record("activity should wait while the server calls Apple Health stale")
+            return
+        }
+        #expect(reason.contains("Apple Health"))
+    }
+
+    @Test("no activity integration is a quiet card, not a wait")
+    func noActivityIntegration() throws {
+        let metrics = DayMetrics(summary: summary())
+        let activity = try #require(card(metrics, "activity"))
+        guard case .waiting(let reason) = activity.reading else {
+            Issue.record("activity has nothing to show")
+            return
+        }
+        #expect(!reason.contains("Apple Health"))
+    }
+
     @Test("spend has no published baseline, so its bar stays empty")
     func spendHasNoBaseline() throws {
         let metrics = DayMetrics(
@@ -199,5 +262,95 @@ struct DayMetricsTests {
         #expect(money.baseline == nil)
         #expect(money.primary.label == "Current Account")
         #expect(money.secondary.value == "+£1,204")
+    }
+}
+
+
+@Suite("Day tab money context")
+@MainActor
+struct DayMoneyContextTests {
+    private func account(_ id: String, type: String, pinned: Bool?, balance: Double) -> MoneyAccount {
+        MoneyAccount(
+            id: id, title: id, kind: "monzo_account", accountType: type,
+            currency: "GBP", isNegativeBalance: false, provider: nil,
+            accountNumber: nil, sortCode: nil, interestRate: nil,
+            startDate: nil, integrationId: nil, isPinned: pinned,
+            latestBalance: try? JSONDecoder.day.decode(
+                BalanceEntry.self,
+                from: Data(#"{"id":"b-\#(id)","balance":\#(balance),"currency":"GBP","time":"2026-09-20T09:00:00Z","notes":null}"#.utf8)
+            ),
+            updatedAt: .now
+        )
+    }
+
+    private func netWorth(change: Double) throws -> NetWorth {
+        try JSONDecoder.day.decode(NetWorthResponse.self, from: Data("""
+        {"data":{"total":48210.64,"currency":"GBP",
+         "comparison":{"window":"1month","then":47006.46,"change":\(change),"change_pct":2.56}}}
+        """.utf8)).data
+    }
+
+    @Test("the pinned account wins over the first current account")
+    func pinnedWins() throws {
+        let context = TodayViewModel.moneyContext(
+            accounts: [
+                account("Current", type: "current", pinned: false, balance: 3180),
+                account("Joint", type: "joint", pinned: true, balance: 912.5),
+            ],
+            netWorth: try netWorth(change: 1204.18)
+        )
+        #expect(context.pinnedAccountLabel == "Joint")
+        #expect(context.netWorthChange == "+£1,204")
+    }
+
+    @Test("with nothing pinned, the first current account stands in")
+    func currentStandsIn() throws {
+        let context = TodayViewModel.moneyContext(
+            accounts: [
+                account("Savings", type: "savings", pinned: nil, balance: 18400),
+                account("Current", type: "current", pinned: nil, balance: 3180),
+            ],
+            netWorth: try netWorth(change: -250)
+        )
+        #expect(context.pinnedAccountLabel == "Current")
+        #expect(context.netWorthChange == "\u{2212}£250.00")
+    }
+
+    @Test("a change under a pound reads as level")
+    func level() throws {
+        let context = TodayViewModel.moneyContext(accounts: [], netWorth: try netWorth(change: 0.4))
+        #expect(context.netWorthChange == "level")
+        #expect(context.pinnedAccountLabel == nil)
+    }
+}
+
+@Suite("Day tab question stack")
+@MainActor
+struct DayQuestionOrderTests {
+    private func question(_ id: String, _ status: String, asked: String) throws -> FlintQuestion {
+        try JSONDecoder.day.decode(FlintQuestion.self, from: Data("""
+        {"id":"\(id)","digest_id":"d","source_digest":{"local_date":null,"period":null},
+         "status":"\(status)","question":"q","answer_options":null,"asked_at":"\(asked)",
+         "effective_answer":null,"answer_history":[],"version":"v"}
+        """.utf8))
+    }
+
+    @Test("open questions lead, answered ones follow, newest first within each")
+    func ordering() throws {
+        let ordered = TodayViewModel.orderForStack([
+            try question("answered-old", "answered", asked: "2026-09-19T08:00:00Z"),
+            try question("open-old", "open", asked: "2026-09-19T09:00:00Z"),
+            try question("answered-new", "answered", asked: "2026-09-19T20:00:00Z"),
+            try question("open-new", "open", asked: "2026-09-20T08:35:00Z"),
+        ])
+        #expect(ordered.map(\.id) == ["open-new", "open-old", "answered-new", "answered-old"])
+    }
+}
+
+private extension JSONDecoder {
+    static var day: JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
     }
 }

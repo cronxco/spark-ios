@@ -70,6 +70,7 @@ public enum DeltaSyncer {
             existing.url = event.url
             existing.displayName = event.displayName
             existing.hidden = event.hidden
+            existing.displayWithObject = event.displayWithObject
             existing.displayValue = event.displayValue
             existing.tagNames = CachedEvent.encodeTagNames(event.tags)
             existing.blocksCount = event.blocksCount
@@ -79,6 +80,8 @@ public enum DeltaSyncer {
             existing.targetTitle = event.target?.title
             existing.targetType = event.target?.type
             existing.targetMediaUrl = event.target?.mediaUrl
+            existing.groupKey = event.groupKey
+            existing.direction = event.direction?.rawValue
             existing.lastSyncedAt = syncedAt
         } else {
             context.insert(CachedEvent(
@@ -92,6 +95,7 @@ public enum DeltaSyncer {
                 url: event.url,
                 displayName: event.displayName,
                 hidden: event.hidden,
+                displayWithObject: event.displayWithObject,
                 displayValue: event.displayValue,
                 tagNames: CachedEvent.encodeTagNames(event.tags),
                 blocksCount: event.blocksCount,
@@ -101,6 +105,8 @@ public enum DeltaSyncer {
                 targetTitle: event.target?.title,
                 targetType: event.target?.type,
                 targetMediaUrl: event.target?.mediaUrl,
+                groupKey: event.groupKey,
+                direction: event.direction?.rawValue,
                 lastSyncedAt: syncedAt
             ))
         }

@@ -8,9 +8,8 @@ import SwiftUI
 ///
 /// The backend publishes `vs_baseline_pct` rather than the baseline itself, so
 /// the baseline is recovered from it: `value = baseline × (1 + pct / 100)`.
-/// That is exact for every metric the summary carries a percentage for, and
-/// absent for the ones it does not — spend, today, which is why the money
-/// card's bar has no tick.
+/// That is exact for every metric the summary carries a percentage for, spend
+/// included now that it has a day-level baseline of its own.
 struct MetricReading: Sendable, Hashable {
     let value: Double
     let vsBaselinePct: Double?
@@ -101,18 +100,16 @@ struct DayMetrics: Sendable {
     let cards: [Card]
 
 
-    init(
-        summary: DaySummary?,
-        money: MoneyContext = .empty,
-        now: Date = .now
-    ) {
+    init(summary: DaySummary?, money: MoneyContext = .empty) {
         let health = summary?.sections.health?.objectValue
         let activity = summary?.sections.activity?.objectValue
         let moneySection = summary?.sections.money?.objectValue
 
         // Apple Health writes in bursts; before the first one lands, the day
-        // reads as near-zero steps. Say so rather than reporting a fall.
-        let activityIsBehind = summary?.syncStatus.isBehind("apple_health", now: now) ?? false
+        // reads as near-zero steps. Whether it is behind is the server's call
+        // — `stale`, or `coverage: partial` — so there is no clock arithmetic
+        // here. Say so rather than reporting a fall.
+        let activityIsBehind = summary?.syncStatus.isBehind("apple_health") ?? false
 
         cards = [
             Self.sleepCard(health),
@@ -194,8 +191,10 @@ struct DayMetrics: Sendable {
             bar = steps.quantityBar
             reading = .value(Self.count(steps.value), delta: steps.deltaText)
         } else {
+            // Not behind, and nothing reported: a quiet morning, or no
+            // activity integration at all. Neither is something to wait on.
             bar = .empty
-            reading = .waiting("Waiting on Apple Health")
+            reading = .waiting("No activity yet")
         }
 
         return Card(
@@ -244,27 +243,46 @@ struct DayMetrics: Sendable {
         _ money: [String: AnyCodable]?,
         context: MoneyContext
     ) -> Card {
-        let spend = money?["total_spend"]?.doubleValue
+        // `total_spend` is outflow to third parties only. Money moved between
+        // the user's own accounts is `internal_transfers` and is not spend —
+        // the day a savings transfer landed used to read as £2,621 spent.
         let currency = money?["transactions"]?.arrayValue?
             .first?.objectValue?["currency"]?.stringValue ?? "GBP"
 
+        // The spend baseline is published under its own flat key, not as a
+        // nested `vs_baseline_pct`, because `total_spend` is a number rather
+        // than an object. When there is not yet enough history the server says
+        // so in `total_spend_baseline_unavailable_reason` and the key is absent.
+        let spend: MetricReading?
+        if let value = money?["total_spend"]?.doubleValue {
+            spend = MetricReading(
+                value: abs(value),
+                vsBaselinePct: money?["total_spend_vs_baseline_pct"]?.doubleValue
+            )
+        } else {
+            spend = nil
+        }
+
         let reading: BaselineMetricCard.Reading
         if let spend {
-            reading = .value(Self.currency(abs(spend), code: currency), delta: nil)
+            reading = .value(Self.currency(spend.value, code: currency), delta: spend.deltaText)
         } else {
             reading = .waiting("No spend today")
         }
 
-        // The day summary carries no baseline for spend, so there is nothing
-        // to draw the bar against and nothing to flag against either. Both
-        // light up with no change here the moment it publishes one.
+        // An open-ended quantity: scaled so today and a typical day both fit.
+        // No baseline yet leaves the track empty rather than inventing one.
+        let bar = spend?.quantityBar ?? .empty
+
+        // Not flagged. Ember is for a day the server calls anomalous, and the
+        // money section does not publish that judgement for spend.
         return Card(
             id: "money",
             label: "Money",
             tint: .domainMoney,
             reading: reading,
-            fill: nil,
-            baseline: nil,
+            fill: bar.fill,
+            baseline: bar.baseline,
             isFlagged: false,
             primary: .init(context.pinnedAccountLabel ?? "Balance", context.pinnedAccountBalance),
             secondary: .init("Net worth 1mo", context.netWorthChange)

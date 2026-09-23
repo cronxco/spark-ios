@@ -27,38 +27,64 @@ public struct DaySummary: Codable, Sendable, Hashable {
     /// }
     /// ```
     ///
+    /// Every connected integration appears, including one with nothing to
+    /// report for the day (`event_count` 0, `last_event_time` null), and each
+    /// carries the server's own freshness judgement — `stale` and `as_of` —
+    /// so the client never infers "behind" from a timestamp and a threshold.
+    ///
     /// The flat `up_to_date` / `stale` / `last_event_at` fields this type
     /// started with are kept because `FlintBriefingFacts` reads them, but no
-    /// deployed backend sends them — they decode to `nil`, which is why a
-    /// service being hours behind never reached the UI. `services` is the one
-    /// to read.
+    /// deployed backend sends them. `services` is the one to read.
     public struct SyncStatus: Codable, Sendable, Hashable {
         public struct Service: Codable, Sendable, Hashable {
             public let eventCount: Int
+            /// `nil` for a service that is connected but has written nothing
+            /// for this day — which is not the same as being behind.
             public let lastEventTime: Date?
             public let actions: [String]
+            /// `complete` or `partial`, and only for services whose data
+            /// arrives through the day rather than in one batch — today just
+            /// `apple_health`. Absent everywhere else.
             public let coverage: String?
+            /// The server's reason when `coverage` is partial, fit to show.
+            public let coverageNote: String?
+            /// The server's judgement that this service is behind for the day,
+            /// using the cadence it knows the integration runs at. `nil` from a
+            /// server that predates the field.
+            public let stale: Bool?
+            /// When the server last successfully reached the service. Distinct
+            /// from `lastEventTime`: a service can be perfectly in sync and
+            /// simply have nothing to report.
+            public let asOf: Date?
 
             /// The backend says `partial` when it knows a service has only
             /// written some of the day so far.
             public var isPartial: Bool { coverage == "partial" }
 
             enum CodingKeys: String, CodingKey {
-                case coverage, actions
+                case coverage, actions, stale
                 case eventCount = "event_count"
                 case lastEventTime = "last_event_time"
+                case coverageNote = "coverage_note"
+                case asOf = "as_of"
             }
 
             public init(
                 eventCount: Int = 0,
                 lastEventTime: Date? = nil,
                 actions: [String] = [],
-                coverage: String? = nil
+                coverage: String? = nil,
+                coverageNote: String? = nil,
+                stale: Bool? = nil,
+                asOf: Date? = nil
             ) {
                 self.eventCount = eventCount
                 self.lastEventTime = lastEventTime
                 self.actions = actions
                 self.coverage = coverage
+                self.coverageNote = coverageNote
+                self.stale = stale
+                self.asOf = asOf
             }
 
             public init(from decoder: Decoder) throws {
@@ -67,6 +93,9 @@ public struct DaySummary: Codable, Sendable, Hashable {
                 lastEventTime = try c.decodeIfPresent(Date.self, forKey: .lastEventTime)
                 actions = try c.decodeIfPresent([String].self, forKey: .actions) ?? []
                 coverage = try c.decodeIfPresent(String.self, forKey: .coverage)
+                coverageNote = try c.decodeIfPresent(String.self, forKey: .coverageNote)
+                stale = try c.decodeIfPresent(Bool.self, forKey: .stale)
+                asOf = try c.decodeIfPresent(Date.self, forKey: .asOf)
             }
         }
 
@@ -92,18 +121,16 @@ public struct DaySummary: Codable, Sendable, Hashable {
             services[service]?.lastEventTime
         }
 
-        /// Whether `service` has gone quiet for longer than `threshold`, or has
-        /// told us outright that its day is partial. A service missing from the
-        /// map has not written today and counts as behind.
-        public func isBehind(
-            _ service: String,
-            now: Date = .now,
-            threshold: TimeInterval = 3 * 3600
-        ) -> Bool {
-            guard let entry = services[service] else { return true }
-            if entry.isPartial { return true }
-            guard let last = entry.lastEventTime else { return true }
-            return now.timeIntervalSince(last) > threshold
+        /// Whether the day's figures for `service` should not be trusted yet:
+        /// the server says it is stale, or that its day is only partly in.
+        ///
+        /// Both judgements are the server's. There is deliberately no clock
+        /// arithmetic here — the server knows each integration's cadence and
+        /// the client does not. A service absent from the map is not
+        /// connected, which is nothing to wait on.
+        public func isBehind(_ service: String) -> Bool {
+            guard let entry = services[service] else { return false }
+            return entry.stale == true || entry.isPartial
         }
 
         // `sync_status` is a free-form map of service names, so the flat legacy

@@ -35,9 +35,9 @@ struct FeedSection: View {
         rawDayEvents.filter(filter.includes)
     }
 
-    /// Consecutive events sharing an action and a service collapse into one
-    /// row, the way the web groups them — twenty Spotify plays are one line
-    /// that says twenty, not twenty lines.
+    /// Consecutive events sharing the server's `group_key` collapse into one
+    /// row — twenty Spotify plays are one line that says twenty. The key is
+    /// decided server-side so the web and the app group identically.
     private var rows: [TimelineEntry] {
         var out: [TimelineEntry] = []
         var previousHour: Int?
@@ -46,10 +46,9 @@ struct FeedSection: View {
         var i = 0
         while i < events.count {
             let current = events[i]
+            let key = runKey(for: current)
             var j = i + 1
-            while j < events.count,
-                  events[j].action == current.action,
-                  events[j].service == current.service { j += 1 }
+            while j < events.count, runKey(for: events[j]) == key { j += 1 }
             let run = Array(events[i..<j])
 
             if let time = current.time {
@@ -110,6 +109,14 @@ struct FeedSection: View {
             "No \(filter.label.lowercased()) events for this day."
         }
     }
+}
+
+/// The server's run key, or — for rows cached before the field existed —
+/// the service and action the client used to group on. The fallback drops
+/// the actor, so it can merge runs the server would keep apart; it lasts
+/// only until the cache refreshes.
+private func runKey(for event: CachedEvent) -> String {
+    event.groupKey ?? "\(event.service):\(event.action)"
 }
 
 private enum TimelineEntry: Identifiable {
@@ -326,19 +333,21 @@ private struct TimelineRow: View {
 /// Money moving out takes a minus and money coming in a plus, so direction is
 /// carried by the sign rather than by colour — the status colours are fills in
 /// light mode and do not clear 4.5:1 as text.
+///
+/// Direction is the server's (`CompactEvent.direction`). Money moved between
+/// the user's own accounts is neither in nor out, so it carries no sign; nor
+/// does anything the server has not classified. There is no guessing from
+/// action names here any more.
 private func signedValue(for event: CachedEvent) -> String? {
     guard let value = displayValue(for: event) else { return nil }
     guard event.domain == "money" else { return value }
     guard !value.hasPrefix("-"), !value.hasPrefix("\u{2212}"), !value.hasPrefix("+") else { return value }
 
-    let action = event.action.lowercased()
-    if action.hasSuffix("_from") || action.contains("credit") || action.contains("received") {
-        return "+" + value
+    switch event.direction {
+    case "out"?: return "\u{2212}" + value
+    case "in"?: return "+" + value
+    default: return value
     }
-    if action.hasSuffix("_to") || action.contains("payment") || action.contains("spent") {
-        return "\u{2212}" + value
-    }
-    return value
 }
 
 private enum TimelineFilter: CaseIterable {

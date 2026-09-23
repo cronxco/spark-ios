@@ -14,6 +14,12 @@ public struct FlintDigest: Codable, Sendable, Hashable, Identifiable {
     public let kind: FlintDigestKind?
     public let title: String
     public let summary: String?
+    /// The lede, published by the server — explicit when the generating skill
+    /// sends one, otherwise extracted from `summary` server-side. The client
+    /// renders it verbatim and knows nothing about digest prose structure.
+    public let opener: String?
+    /// The IANA zone `date` was resolved in.
+    public let effectiveTimezone: String?
     public let createdAt: Date?
     public let blockCount: Int
     public let unansweredQuestionCount: Int?
@@ -23,12 +29,13 @@ public struct FlintDigest: Codable, Sendable, Hashable, Identifiable {
     public var id: String { eventID }
 
     enum CodingKeys: String, CodingKey {
-        case date, period, kind, title, summary, version, blocks
+        case date, period, kind, title, summary, opener, version, blocks
         case eventID = "event_id"
         case digestObjectID = "digest_object_id"
         case createdAt = "created_at"
         case blockCount = "block_count"
         case unansweredQuestionCount = "unanswered_question_count"
+        case effectiveTimezone = "effective_timezone"
     }
 
     public init(
@@ -39,6 +46,8 @@ public struct FlintDigest: Codable, Sendable, Hashable, Identifiable {
         kind: FlintDigestKind? = nil,
         title: String,
         summary: String? = nil,
+        opener: String? = nil,
+        effectiveTimezone: String? = nil,
         createdAt: Date? = nil,
         blockCount: Int,
         unansweredQuestionCount: Int? = nil,
@@ -52,6 +61,8 @@ public struct FlintDigest: Codable, Sendable, Hashable, Identifiable {
         self.kind = kind
         self.title = title
         self.summary = summary
+        self.opener = opener
+        self.effectiveTimezone = effectiveTimezone
         self.createdAt = createdAt
         self.blockCount = blockCount
         self.unansweredQuestionCount = unansweredQuestionCount
@@ -68,6 +79,11 @@ public struct FlintDigest: Codable, Sendable, Hashable, Identifiable {
         kind = try container.decodeIfPresent(FlintDigestKind.self, forKey: .kind)
         title = try container.decode(String.self, forKey: .title)
         summary = try container.decodeIfPresent(String.self, forKey: .summary)
+        // An empty opener is no opener: the card hides rather than rendering blank.
+        let rawOpener = try container.decodeIfPresent(String.self, forKey: .opener)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        opener = (rawOpener?.isEmpty ?? true) ? nil : rawOpener
+        effectiveTimezone = try container.decodeIfPresent(String.self, forKey: .effectiveTimezone)
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
         blockCount = try container.decodeIfPresent(Int.self, forKey: .blockCount) ?? 0
         unansweredQuestionCount = try container.decodeIfPresent(Int.self, forKey: .unansweredQuestionCount)
