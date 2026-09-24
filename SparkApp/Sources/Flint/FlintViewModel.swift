@@ -395,6 +395,8 @@ final class FlintViewModel {
             kind: digest.kind,
             title: digest.title,
             summary: digest.summary,
+            opener: digest.opener,
+            effectiveTimezone: digest.effectiveTimezone,
             createdAt: digest.createdAt,
             blockCount: digest.blockCount,
             unansweredQuestionCount: digest.unansweredQuestionCount,
