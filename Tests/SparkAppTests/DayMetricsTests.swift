@@ -237,6 +237,41 @@ struct DayMetricsTests {
         #expect(reason.contains("Apple Health"))
     }
 
+    @Test("an Oura score still reads while Apple Health is behind")
+    func ouraScoreSurvivesPartialAppleHealth() throws {
+        let sync = DaySummary.SyncStatus(
+            services: ["apple_health": .init(eventCount: 13, lastEventTime: .now, coverage: "partial")]
+        )
+        let metrics = DayMetrics(
+            summary: summary(
+                health: [
+                    "activity_score": AnyCodable(.object(["score": AnyCodable(.int(82))])),
+                ],
+                activity: [
+                    "steps": AnyCodable(.object(["value": AnyCodable(.int(211))])),
+                ],
+                sync: sync
+            )
+        )
+
+        let activity = try #require(card(metrics, "activity"))
+        guard case .value(let text, _) = activity.reading else {
+            Issue.record("activity should read Oura's score")
+            return
+        }
+        #expect(text == "82")
+        // Apple Health's own partial figures stay hidden.
+        #expect(activity.primary.value == nil)
+        #expect(activity.secondary.value == nil)
+    }
+
+    @Test("an overdrawn balance rounds like a positive one")
+    func negativeCurrencyRounds() {
+        // Whole pounds at this size, whichever side of zero.
+        #expect(!DayMetrics.currency(-3180, code: "GBP").contains("."))
+        #expect(!DayMetrics.currency(3180, code: "GBP").contains("."))
+    }
+
     @Test("no activity integration is a quiet card, not a wait")
     func noActivityIntegration() throws {
         let metrics = DayMetrics(summary: summary())
@@ -316,6 +351,17 @@ struct DayMoneyContextTests {
         )
         #expect(context.pinnedAccountLabel == "Current")
         #expect(context.netWorthChange == "\u{2212}£250.00")
+    }
+
+    @Test("a failed net-worth request still leaves the pinned balance")
+    func netWorthMissing() {
+        let context = TodayViewModel.moneyContext(
+            accounts: [account("Current", type: "current", pinned: true, balance: 3180)],
+            netWorth: nil
+        )
+        #expect(context.pinnedAccountLabel == "Current")
+        #expect(context.pinnedAccountBalance != nil)
+        #expect(context.netWorthChange == nil)
     }
 
     @Test("a change under a pound reads as level")

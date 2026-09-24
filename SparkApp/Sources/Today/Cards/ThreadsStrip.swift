@@ -10,11 +10,11 @@ import SwiftUI
 /// stated.
 ///
 /// Dormant threads collapse to a single line with the next review date, so
-/// they are visible without taking space from the live ones.
+/// they are visible without taking space from the live ones. Tapping it opens
+/// the thread that date belongs to.
 struct ThreadsStrip: View {
     let topics: [FlintTopic]
     let onOpen: (FlintTopic) -> Void
-    let onOpenAll: () -> Void
 
     private var active: [FlintTopic] {
         topics.filter { $0.status?.isActive == true }
@@ -22,6 +22,15 @@ struct ThreadsStrip: View {
 
     private var dormant: [FlintTopic] {
         topics.filter { $0.status == .dormant }
+    }
+
+    /// The dormant thread due back soonest, so the row's date and the thread
+    /// it opens are the same one. Falls back to the first dormant thread when
+    /// none has a review ahead of it.
+    private var nextDormant: FlintTopic? {
+        let upcoming = dormant.filter { ($0.nextReviewAt ?? .distantPast) >= .now }
+        return upcoming.min { ($0.nextReviewAt ?? .distantFuture) < ($1.nextReviewAt ?? .distantFuture) }
+            ?? dormant.first
     }
 
     var body: some View {
@@ -53,7 +62,9 @@ struct ThreadsStrip: View {
     }
 
     private var dormantRow: some View {
-        Button(action: onOpenAll) {
+        Button {
+            if let nextDormant { onOpen(nextDormant) }
+        } label: {
             HStack(spacing: SparkSpacing.sm) {
                 Text(dormantSummary)
                     .font(SparkTypography.caption)
@@ -74,11 +85,7 @@ struct ThreadsStrip: View {
 
     private var dormantSummary: String {
         let count = "\(dormant.count) dormant"
-        let next = dormant
-            .compactMap(\.nextReviewAt)
-            .filter { $0 >= .now }
-            .min()
-        guard let next else { return count }
+        guard let next = nextDormant?.nextReviewAt, next >= .now else { return count }
         return "\(count) · next review \(Self.reviewDate.string(from: next))"
     }
 

@@ -167,7 +167,9 @@ struct DayMetrics: Sendable {
         let steps = MetricReading(activity?["steps"]?.objectValue)
         let energy = MetricReading(activity?["active_energy_kcal"]?.objectValue)
 
-        if isBehind {
+        // Only Apple Health's own figures are in doubt when it is behind; an
+        // Oura score for the day still stands, so wait only without one.
+        if isBehind, score == nil {
             return Card(
                 id: "activity",
                 label: "Activity",
@@ -205,8 +207,8 @@ struct DayMetrics: Sendable {
             fill: bar.fill,
             baseline: bar.baseline,
             isFlagged: false,
-            primary: .init("Steps", steps.map { Self.count($0.value) }),
-            secondary: .init("Active", energy.map { "\(Int($0.value.rounded())) kcal" })
+            primary: .init("Steps", isBehind ? nil : steps.map { Self.count($0.value) }),
+            secondary: .init("Active", isBehind ? nil : energy.map { "\(Int($0.value.rounded())) kcal" })
         )
     }
 
@@ -312,7 +314,7 @@ struct DayMetrics: Sendable {
         let f = NumberFormatter()
         f.numberStyle = .currency
         f.currencyCode = code
-        f.maximumFractionDigits = amount >= 1000 ? 0 : 2
+        f.maximumFractionDigits = abs(amount) >= 1000 ? 0 : 2
         return f.string(from: NSNumber(value: amount)) ?? "\(amount)"
     }
 }

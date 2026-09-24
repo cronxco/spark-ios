@@ -86,6 +86,16 @@ struct FeedSection: View {
                             }
                         }
                     }
+                    // The spine is drawn once behind every row, where it gets
+                    // the stack's final height. Inside a row it only ever got
+                    // that row's node column, which is shorter than a row whose
+                    // text wraps, and the rule broke off between rows.
+                    .background(alignment: .leading) {
+                        Rectangle()
+                            .fill(Color.primary.opacity(0.13))
+                            .frame(width: 1)
+                            .padding(.leading, (SpineColumn<EmptyView>.width - 1) / 2)
+                    }
                 }
             }
         }
@@ -133,20 +143,17 @@ private enum TimelineEntry: Identifiable {
 
 // MARK: - The spine
 
-/// The rule every row shares. The node sits on it, masked by the page colour
-/// so the line appears to pass behind.
+/// The column the spine runs down. The rule itself is drawn behind the whole
+/// timeline by `FeedSection`; this places a row's node on it, masked by the
+/// page colour so the line appears to pass behind.
 private struct SpineColumn<Node: View>: View {
+    static var width: CGFloat { 26 }
+
     @ViewBuilder var node: () -> Node
 
     var body: some View {
-        ZStack(alignment: .top) {
-            Rectangle()
-                .fill(Color.primary.opacity(0.13))
-                .frame(width: 1)
-                .frame(maxHeight: .infinity)
-            node()
-        }
-        .frame(width: 26)
+        node()
+            .frame(width: Self.width, alignment: .top)
     }
 }
 

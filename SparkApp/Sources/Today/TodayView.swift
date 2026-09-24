@@ -16,6 +16,8 @@ struct TodayView: View {
     @State private var upToSpeedViewModel: UpToSpeedViewModel?
     @State private var selectedThread: FlintTopic?
 
+    private var isToday: Bool { Calendar.current.isDateInToday(date) }
+
     var body: some View {
         let snapshot = TodaySnapshot(
             summary: viewModel?.cached,
@@ -34,7 +36,10 @@ struct TodayView: View {
                     // Flint's own words first: the numbers below are what it
                     // is talking about, not a dashboard the digest happens to
                     // sit near.
-                    if let digest = viewModel?.latestDigest {
+                    // The digest, questions and threads are "now", not this
+                    // date's; the view model only loads them for today, and a
+                    // page that was today before midnight stops showing them.
+                    if isToday, let digest = viewModel?.latestDigest {
                         DigestOpenerCard(digest: digest) { showUpToSpeed = true }
                     }
 
@@ -42,7 +47,7 @@ struct TodayView: View {
 
                     anomalyPill(for: snapshot)
 
-                    if let vm = viewModel, !vm.recentQuestions.isEmpty {
+                    if isToday, let vm = viewModel, !vm.recentQuestions.isEmpty {
                         FlintQuestionStack(
                             questions: vm.recentQuestions,
                             onAnswer: { question, option in
@@ -63,12 +68,8 @@ struct TodayView: View {
                         }
                     )
 
-                    if let vm = viewModel, !vm.topics.isEmpty {
-                        ThreadsStrip(
-                            topics: vm.topics,
-                            onOpen: { selectedThread = $0 },
-                            onOpenAll: { selectedThread = vm.topics.first { $0.status == .dormant } }
-                        )
+                    if isToday, let vm = viewModel, !vm.topics.isEmpty {
+                        ThreadsStrip(topics: vm.topics) { selectedThread = $0 }
                     }
 
                     CheckInHeatmapCard(date: date, showHistory: $showHistory)

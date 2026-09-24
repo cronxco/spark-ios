@@ -74,6 +74,11 @@ final class TodayViewModel {
     /// failure is survivable — a missing digest hides one card, it does not
     /// empty the screen — so they run concurrently and swallow their errors.
     func loadFlintSurfaces() async {
+        // All four are "now" — the newest digest, the last 48 hours of
+        // questions, live threads and current balances — so on any other
+        // day's page they would sit beside that day's metrics as if they
+        // belonged to it.
+        guard Calendar.current.isDateInToday(date) else { return }
         async let digest: Void = loadLatestDigest()
         async let questions: Void = loadRecentQuestions()
         async let threads: Void = loadTopics()
@@ -150,25 +155,35 @@ final class TodayViewModel {
     }
 
     private func loadMoneyContext() async {
+        // Independent: a net-worth failure should not cost the card its
+        // pinned balance, nor the reverse.
+        async let accountsRequest = apiClient.collectAllPages { cursor in
+            MoneyEndpoint.accounts(cursor: cursor)
+        }
+        async let netWorthRequest = apiClient.request(MoneyEndpoint.netWorth(compare: .oneMonth))
+
+        var accounts: [MoneyAccount] = []
+        var netWorth: NetWorth?
         do {
-            async let accountsRequest = apiClient.collectAllPages { cursor in
-                MoneyEndpoint.accounts(cursor: cursor)
-            }
-            async let netWorthRequest = apiClient.request(MoneyEndpoint.netWorth(compare: .oneMonth))
-            let (accounts, netWorth) = try await (accountsRequest, netWorthRequest)
-            moneyContext = Self.moneyContext(accounts: accounts, netWorth: netWorth.data)
-        } catch where error.isAPICancellation {
-            return
+            accounts = try await accountsRequest
         } catch {
+            if error.isAPICancellation { return }
             SparkObservability.captureHandled(error)
         }
+        do {
+            netWorth = try await netWorthRequest.data
+        } catch {
+            if error.isAPICancellation { return }
+            SparkObservability.captureHandled(error)
+        }
+        moneyContext = Self.moneyContext(accounts: accounts, netWorth: netWorth)
     }
 
     /// The account the user pinned; failing that, the first current account,
     /// so the card is useful before anyone has chosen. Net worth's change is
     /// the server's comparison, which already leaves out accounts whose
     /// history does not span the month on both sides.
-    static func moneyContext(accounts: [MoneyAccount], netWorth: NetWorth) -> MoneyContext {
+    static func moneyContext(accounts: [MoneyAccount], netWorth: NetWorth?) -> MoneyContext {
         var context = MoneyContext()
 
         let pinned = accounts.first(where: \.pinned)
@@ -181,7 +196,7 @@ final class TodayViewModel {
             )
         }
 
-        if let comparison = netWorth.comparison {
+        if let netWorth, let comparison = netWorth.comparison {
             let change = comparison.change
             if abs(change) < 1 {
                 context.netWorthChange = "level"
@@ -225,11 +240,15 @@ final class TodayViewModel {
     func refresh() async {
         await revalidate(force: true)
         await revalidateCheckIns()
+        await loadFlintSurfaces()
     }
 
     func backgroundRevalidate() async {
         await revalidate(force: false, silent: true)
         await revalidateCheckIns()
+        // The morning brief often lands after launch, and a question can be
+        // answered on another device; neither should wait for a relaunch.
+        await loadFlintSurfaces()
     }
 
     func loadCheckIns() async {
