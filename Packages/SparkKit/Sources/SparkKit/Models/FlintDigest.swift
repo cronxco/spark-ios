@@ -108,6 +108,8 @@ public struct FlintDigestBlock: Codable, Sendable, Hashable, Identifiable {
     public let answered: Bool
     public let references: [EntityReference]?
     public let dayContext: FlintDayContext?
+    /// Structured fields for a news-roundup story. Older digests use `content`.
+    public let news: FlintNewsContent?
     /// Link a block points at — reading picks and drops carry one.
     public let url: String?
     /// Estimated read time in whole minutes, for a reading pick.
@@ -117,7 +119,7 @@ public struct FlintDigestBlock: Codable, Sendable, Hashable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case id, title, time, content, question, topic, priority, answer, answered, references
-        case url, minutes
+        case url, minutes, news
         case blockType = "block_type"
         case answerOptions = "answer_options"
         case answerNote = "answer_note"
@@ -141,6 +143,7 @@ public struct FlintDigestBlock: Codable, Sendable, Hashable, Identifiable {
         answered: Bool = false,
         references: [EntityReference]? = nil,
         dayContext: FlintDayContext? = nil,
+        news: FlintNewsContent? = nil,
         url: String? = nil,
         minutes: Int? = nil
     ) {
@@ -159,6 +162,7 @@ public struct FlintDigestBlock: Codable, Sendable, Hashable, Identifiable {
         self.answered = answered
         self.references = references
         self.dayContext = dayContext
+        self.news = news
         self.url = url
         self.minutes = minutes
     }
@@ -180,8 +184,39 @@ public struct FlintDigestBlock: Codable, Sendable, Hashable, Identifiable {
         answered = try container.decodeIfPresent(Bool.self, forKey: .answered) ?? (answer != nil)
         references = try container.decodeIfPresent([EntityReference].self, forKey: .references)
         dayContext = try container.decodeIfPresent(FlintDayContext.self, forKey: .dayContext)
+        news = try container.decodeIfPresent(FlintNewsContent.self, forKey: .news)
         url = try container.decodeIfPresent(String.self, forKey: .url)
         minutes = try container.decodeIfPresent(Int.self, forKey: .minutes)
+    }
+}
+
+public struct FlintNewsContent: Codable, Sendable, Hashable {
+    public let summary: String
+    public let sources: [FlintNewsSource]
+    public let whyItMatters: String?
+    public let whatToWatch: String
+
+    enum CodingKeys: String, CodingKey {
+        case summary, sources
+        case whyItMatters = "why_it_matters"
+        case whatToWatch = "what_to_watch"
+    }
+
+    public init(summary: String, sources: [FlintNewsSource], whyItMatters: String? = nil, whatToWatch: String) {
+        self.summary = summary
+        self.sources = sources
+        self.whyItMatters = whyItMatters
+        self.whatToWatch = whatToWatch
+    }
+}
+
+public struct FlintNewsSource: Codable, Sendable, Hashable {
+    public let publication: String
+    public let position: String
+
+    public init(publication: String, position: String) {
+        self.publication = publication
+        self.position = position
     }
 }
 

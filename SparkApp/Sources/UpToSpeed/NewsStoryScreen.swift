@@ -31,6 +31,37 @@ struct NewsStoryScreen: View {
                     SparkLongFormContentView(text: section.body, paragraphFont: SparkTypography.longFormBody)
                 }
 
+                if !section.sourcePositions.isEmpty {
+                    VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                        Text("Reporting")
+                            .font(SparkTypography.captionStrong)
+                            .tracking(0.8)
+                            .foregroundStyle(.secondary)
+                        ForEach(Array(section.sourcePositions.enumerated()), id: \.offset) { _, source in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(source.publication).font(SparkTypography.bodyStrong)
+                                Text(source.position)
+                                    .font(SparkTypography.longFormBodySmall)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .padding(SparkSpacing.md)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .sparkGlass(.roundedRect(SparkRadii.md))
+                }
+
+                if let whyItMatters = section.whyItMatters {
+                    VStack(alignment: .leading, spacing: SparkSpacing.xs) {
+                        Text("Why it matters")
+                            .font(SparkTypography.captionStrong)
+                            .tracking(0.8)
+                            .foregroundStyle(.secondary)
+                        Text(whyItMatters)
+                            .font(SparkTypography.longFormBody)
+                    }
+                }
+
                 StoryReferences(references: section.references, sourceURL: section.sourceURL)
                 if let fullText = section.analysis ?? section.fullRoundup {
                     DisclosureGroup(section.analysis == nil ? "Read full roundup" : "Read analysis",

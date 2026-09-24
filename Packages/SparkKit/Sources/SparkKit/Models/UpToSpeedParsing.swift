@@ -17,6 +17,8 @@ public struct NewsRoundupSection: Identifiable, Hashable, Sendable {
     public var analysis: String? = nil
     public var references: [EntityReference] = []
     public var sourceURL: String? = nil
+    public var sourcePositions: [FlintNewsSource] = []
+    public var whyItMatters: String? = nil
 
     public init(id: Int, heading: String, sources: [String], whatsNew: String?, watching: String?, body: String) {
         self.id = id
@@ -54,7 +56,8 @@ public enum UpToSpeedParsing {
         }
 
         return stories.enumerated().map { index, block in
-            let body = block.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let body = (block.news?.summary ?? block.content)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
             // `whatsNew` and `watching` belong to the long prose section. A
             // block is already the short version, so claiming to have found
@@ -62,11 +65,13 @@ public enum UpToSpeedParsing {
             var section = NewsRoundupSection(
                 id: index,
                 heading: block.title,
-                sources: italicRuns(in: body),
+                sources: block.news?.sources.map(\.publication) ?? italicRuns(in: body),
                 whatsNew: nil,
-                watching: nil,
+                watching: block.news?.whatToWatch,
                 body: body
             )
+            section.sourcePositions = block.news?.sources ?? []
+            section.whyItMatters = block.news?.whyItMatters
             section.fullRoundup = summary.isEmpty ? nil : summary
             section.references = block.references ?? []
             section.sourceURL = block.url
