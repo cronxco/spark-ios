@@ -34,8 +34,10 @@ struct MetricReadingTests {
     @Test("a score draws on a fixed scale so two score cards are comparable")
     func scoreBar() throws {
         let bar = MetricReading(value: 80, vsBaselinePct: -2).scoreBar
-        #expect(abs(try #require(bar.fill) - 0.8) < 0.001)
-        #expect(abs(try #require(bar.baseline) - 0.816) < 0.005)
+        let fill = try #require(bar.fill)
+        let baseline = try #require(bar.baseline)
+        #expect(abs(fill - 0.8) < 0.001)
+        #expect(abs(baseline - 0.816) < 0.005)
     }
 
     @Test("an open-ended quantity scales so today and its baseline both fit")

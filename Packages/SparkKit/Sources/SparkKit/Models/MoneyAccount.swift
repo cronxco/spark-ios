@@ -173,7 +173,6 @@ public struct CreateAccountRequest: Encodable, Sendable {
         self.interestRate = interestRate
         self.startDate = startDate
         self.isNegativeBalance = isNegativeBalance
-        self.isPinned = isPinned
     }
 
     enum CodingKeys: String, CodingKey {
@@ -223,6 +222,7 @@ public struct UpdateAccountRequest: Encodable, Sendable {
         self.interestRate = interestRate
         self.startDate = startDate
         self.isNegativeBalance = isNegativeBalance
+        self.isPinned = isPinned
     }
 
     enum CodingKeys: String, CodingKey {

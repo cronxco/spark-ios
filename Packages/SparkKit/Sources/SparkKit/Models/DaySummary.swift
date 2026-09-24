@@ -204,6 +204,20 @@ public struct DaySummary: Codable, Sendable, Hashable {
         public let money: AnyCodable?
         public let media: AnyCodable?
         public let knowledge: AnyCodable?
+
+        public init(
+            health: AnyCodable? = nil,
+            activity: AnyCodable? = nil,
+            money: AnyCodable? = nil,
+            media: AnyCodable? = nil,
+            knowledge: AnyCodable? = nil
+        ) {
+            self.health = health
+            self.activity = activity
+            self.money = money
+            self.media = media
+            self.knowledge = knowledge
+        }
     }
 
     public init(

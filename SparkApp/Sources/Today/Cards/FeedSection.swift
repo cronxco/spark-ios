@@ -260,18 +260,23 @@ private struct TimelineRow: View {
 
     /// "Paid Brother Marcus + 2 others" — the action in ink, its object in the
     /// link colour, the surplus count quiet.
+    ///
+    /// Built by interpolating styled `Text` into `Text`: concatenating with
+    /// `+` is deprecated on this SDK, and warnings are errors.
     private var sentence: Text {
         var line = Text(actionTitle(for: event)).fontWeight(.semibold)
         if event.displayWithObject,
            let target = event.targetTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
            !target.isEmpty {
-            line = line + Text(" ") + Text(target)
+            let object = Text(target)
                 .fontWeight(.semibold)
                 .foregroundStyle(Color.sparkOcean)
+            line = Text("\(line) \(object)")
         }
         if surplus > 0 {
-            line = line + Text(" + \(surplus) other\(surplus == 1 ? "" : "s")")
-                .foregroundStyle(Color.secondary)
+            let others = "+ \(surplus) other" + (surplus == 1 ? "" : "s")
+            let more = Text(others).foregroundStyle(Color.secondary)
+            line = Text("\(line) \(more)")
         }
         return line
     }

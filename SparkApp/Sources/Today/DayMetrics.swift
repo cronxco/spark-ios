@@ -151,8 +151,8 @@ struct DayMetrics: Sendable {
             // Efficiency is the contributor that survives a short night; REM
             // stands in for it on a day Oura has scored but not yet broken
             // down into stages.
-            secondary: efficiency.map { .init("Efficiency", "\($0)%") }
-                ?? .init("REM", rem.map { "\($0)" })
+            secondary: efficiency.map { BaselineMetricCard.Supporting("Efficiency", "\($0)%") }
+                ?? BaselineMetricCard.Supporting("REM", rem.map { "\($0)" })
         )
     }
 
