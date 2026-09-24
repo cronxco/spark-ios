@@ -128,7 +128,11 @@ struct DayMetrics: Sendable {
         let contributors = scoreObject?["contributors"]?.objectValue
 
         let seconds = duration?["duration_seconds"]?.intValue
-        let efficiency = contributors?["Efficiency"]?.intValue
+        // Oura's measured efficiency is a percentage. The score's
+        // `Efficiency` contributor is a 0–100 rating of it — 65 there was
+        // 69% measured — so it is shown bare, like REM, never with a `%`.
+        let efficiencyPct = duration?["efficiency_pct"]?.intValue
+        let efficiencyRating = contributors?["Efficiency"]?.intValue
         let rem = contributors?["Rem Sleep"]?.intValue
 
         let bar = score?.scoreBar ?? .empty
@@ -146,12 +150,13 @@ struct DayMetrics: Sendable {
             reading: reading,
             fill: bar.fill,
             baseline: bar.baseline,
-            isFlagged: false,
+            isFlagged: score?.isAnomaly ?? false,
             primary: .init("Duration", seconds.map(Self.duration)),
-            // Efficiency is the contributor that survives a short night; REM
+            // Efficiency is the figure that survives a short night; REM
             // stands in for it on a day Oura has scored but not yet broken
             // down into stages.
-            secondary: efficiency.map { BaselineMetricCard.Supporting("Efficiency", "\($0)%") }
+            secondary: efficiencyPct.map { BaselineMetricCard.Supporting("Efficiency", "\($0)%") }
+                ?? efficiencyRating.map { BaselineMetricCard.Supporting("Efficiency", "\($0)") }
                 ?? BaselineMetricCard.Supporting("REM", rem.map { "\($0)" })
         )
     }
@@ -199,6 +204,10 @@ struct DayMetrics: Sendable {
             reading = .waiting("No activity yet")
         }
 
+        // Whichever figure the card is reading is the one that can be flagged;
+        // Apple Health's steps only when they are not behind.
+        let isFlagged = score?.isAnomaly ?? (isBehind ? false : steps?.isAnomaly ?? false)
+
         return Card(
             id: "activity",
             label: "Activity",
@@ -206,7 +215,7 @@ struct DayMetrics: Sendable {
             reading: reading,
             fill: bar.fill,
             baseline: bar.baseline,
-            isFlagged: false,
+            isFlagged: isFlagged,
             primary: .init("Steps", isBehind ? nil : steps.map { Self.count($0.value) }),
             secondary: .init("Active", isBehind ? nil : energy.map { "\(Int($0.value.rounded())) kcal" })
         )
@@ -235,7 +244,7 @@ struct DayMetrics: Sendable {
             reading: reading,
             fill: bar.fill,
             baseline: bar.baseline,
-            isFlagged: false,
+            isFlagged: score?.isAnomaly ?? false,
             primary: .init("Resting HR", restingHR.map { "\(Int($0.value.rounded())) bpm" }),
             secondary: .init("Stress", stress)
         )
@@ -267,7 +276,9 @@ struct DayMetrics: Sendable {
 
         let reading: BaselineMetricCard.Reading
         if let spend {
-            reading = .value(Self.currency(spend.value, code: currency), delta: spend.deltaText)
+            // Nothing spent is "−100%" against any baseline, which says
+            // nothing the £0.00 doesn't. Newer servers stop sending it.
+            reading = .value(Self.currency(spend.value, code: currency), delta: spend.value == 0 ? nil : spend.deltaText)
         } else {
             reading = .waiting("No spend today")
         }

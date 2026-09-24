@@ -265,6 +265,109 @@ struct DayMetricsTests {
         #expect(activity.secondary.value == nil)
     }
 
+    @Test("a score the server calls anomalous is drawn flagged")
+    func anomalousScoresAreFlagged() throws {
+        let metrics = DayMetrics(
+            summary: summary(
+                health: [
+                    "sleep_score": AnyCodable(.object([
+                        "score": AnyCodable(.int(38)),
+                        "vs_baseline_pct": AnyCodable(.double(-53)),
+                        "is_anomaly": AnyCodable(.bool(true)),
+                    ])),
+                    "readiness_score": AnyCodable(.object([
+                        "score": AnyCodable(.int(61)),
+                        "vs_baseline_pct": AnyCodable(.double(-21.1)),
+                        "is_anomaly": AnyCodable(.bool(false)),
+                    ])),
+                ]
+            )
+        )
+
+        #expect(try #require(card(metrics, "sleep")).isFlagged == true)
+        #expect(try #require(card(metrics, "readiness")).isFlagged == false)
+    }
+
+    @Test("sleep efficiency is Oura's measured percentage, not the contributor rating")
+    func sleepEfficiencyIsMeasured() throws {
+        let contributors = AnyCodable(.object(["Efficiency": AnyCodable(.int(65))]))
+        let measured = DayMetrics(
+            summary: summary(health: [
+                "sleep_score": AnyCodable(.object([
+                    "score": AnyCodable(.int(38)),
+                    "contributors": contributors,
+                ])),
+                "sleep_duration": AnyCodable(.object([
+                    "duration_seconds": AnyCodable(.int(25110)),
+                    "efficiency_pct": AnyCodable(.int(69)),
+                ])),
+            ])
+        )
+        let sleep = try #require(card(measured, "sleep"))
+        #expect(sleep.primary.value == "6h 58m")
+        #expect(sleep.secondary.label == "Efficiency")
+        #expect(sleep.secondary.value == "69%")
+
+        // Without the measured figure, the 0–100 rating is shown bare.
+        let rated = DayMetrics(
+            summary: summary(health: [
+                "sleep_score": AnyCodable(.object([
+                    "score": AnyCodable(.int(38)),
+                    "contributors": contributors,
+                ])),
+            ])
+        )
+        #expect(try #require(card(rated, "sleep")).secondary.value == "65")
+    }
+
+    @Test("a day with nothing spent carries no percentage")
+    func zeroSpendHasNoDelta() throws {
+        // An older server still sends −100% for a zero day.
+        let metrics = DayMetrics(
+            summary: summary(money: [
+                "total_spend": AnyCodable(.int(0)),
+                "internal_transfers": AnyCodable(.double(5.34)),
+                "total_spend_vs_baseline_pct": AnyCodable(.int(-100)),
+            ])
+        )
+        let money = try #require(card(metrics, "money"))
+        guard case .value(let text, let delta) = money.reading else {
+            Issue.record("money should read its spend")
+            return
+        }
+        #expect(text == "£0.00")
+        #expect(delta == nil)
+    }
+
+    @Test("Apple Health whose day is complete reads even if called stale")
+    func completeAppleHealthReads() throws {
+        let sync = DaySummary.SyncStatus(
+            services: ["apple_health": .init(eventCount: 26, lastEventTime: .now, coverage: "complete", stale: true)]
+        )
+        let metrics = DayMetrics(
+            summary: summary(
+                activity: [
+                    "steps": AnyCodable(.object([
+                        "value": AnyCodable(.int(8064)),
+                        "vs_baseline_pct": AnyCodable(.double(-5.6)),
+                    ])),
+                    "active_energy_kcal": AnyCodable(.object(["value": AnyCodable(.double(384.16))])),
+                ],
+                sync: sync
+            )
+        )
+
+        let activity = try #require(card(metrics, "activity"))
+        guard case .value(let text, let delta) = activity.reading else {
+            Issue.record("activity should read its steps")
+            return
+        }
+        #expect(text == "8,064")
+        #expect(delta == "\u{2212}6%")
+        #expect(activity.primary.value == "8,064")
+        #expect(activity.secondary.value == "384 kcal")
+    }
+
     @Test("an overdrawn balance rounds like a positive one")
     func negativeCurrencyRounds() {
         // Whole pounds at this size, whichever side of zero.

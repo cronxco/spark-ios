@@ -85,6 +85,17 @@ struct DaySummarySyncStatusTests {
         #expect(status.isBehind("apple_health") == true)
     }
 
+    /// Apple Health is pushed, not polled. Servers before push tracking
+    /// called it stale all day while calling its day complete, and the
+    /// Activity card waited on it with 8,064 steps already in.
+    @Test("coverage, where the server gives it, wins over stale")
+    func coverageWinsOverStale() throws {
+        let status = DaySummary.SyncStatus(services: [
+            "apple_health": .init(eventCount: 26, coverage: "complete", stale: true),
+        ])
+        #expect(status.isBehind("apple_health") == false)
+    }
+
     @Test("a service that is not connected is nothing to wait on")
     func missingIsNotBehind() throws {
         let status = try decode(DaySummary.self, payload).syncStatus

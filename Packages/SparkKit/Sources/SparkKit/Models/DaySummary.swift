@@ -122,15 +122,22 @@ public struct DaySummary: Codable, Sendable, Hashable {
         }
 
         /// Whether the day's figures for `service` should not be trusted yet:
-        /// the server says it is stale, or that its day is only partly in.
+        /// the server says its day is only partly in, or — for a service
+        /// with no day-level coverage — that it is stale.
         ///
         /// Both judgements are the server's. There is deliberately no clock
         /// arithmetic here — the server knows each integration's cadence and
         /// the client does not. A service absent from the map is not
         /// connected, which is nothing to wait on.
+        ///
+        /// Where the server publishes `coverage` it is the finer judgement of
+        /// the two, and it wins: Apple Health is pushed rather than polled,
+        /// and servers before push tracking called it stale all day long
+        /// while also calling its day complete.
         public func isBehind(_ service: String) -> Bool {
             guard let entry = services[service] else { return false }
-            return entry.stale == true || entry.isPartial
+            if entry.coverage != nil { return entry.isPartial }
+            return entry.stale == true
         }
 
         // `sync_status` is a free-form map of service names, so the flat legacy
