@@ -41,6 +41,3 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/
 fastlane/test_output/
-
-# wireframe generator bytecode
-docs/wireframes/__pycache__/

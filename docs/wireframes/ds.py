@@ -60,13 +60,10 @@ S = {"xxs": 2, "xs": 4, "sm": 8, "md": 12, "lg": 16, "xl": 24, "xxl": 32, "xxxl"
 # radii
 R = {"xs": 4, "sm": 8, "md": 14, "lg": 22, "hero": 28, "pill": 9999}
 
-# Font stacks quote family names with SINGLE quotes: these strings are
-# interpolated into style="..." attributes, and a double quote there ends
-# the attribute, silently dropping font-family and everything after it.
-FONT_DISPLAY = "'Comfortaa', system-ui, sans-serif"
-FONT_SANS = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif"
-FONT_MONO = "'PT Mono', ui-monospace, monospace"
-FONT_SERIF = "ui-serif, 'New York', Georgia, serif"
+FONT_DISPLAY = '"Comfortaa", system-ui, sans-serif'
+FONT_SANS = '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif'
+FONT_MONO = '"PT Mono", ui-monospace, monospace'
+FONT_SERIF = 'ui-serif, "New York", Georgia, serif'
 
 W, H = 390, 844  # iPhone logical points
 
