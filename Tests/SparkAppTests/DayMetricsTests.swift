@@ -364,6 +364,32 @@ struct DayMoneyContextTests {
         #expect(context.netWorthChange == nil)
     }
 
+    @Test("a failed refresh keeps what the card already showed")
+    func failedRefreshKeepsPrevious() throws {
+        let previous = MoneyContext(
+            pinnedAccountLabel: "Current",
+            pinnedAccountBalance: "£3,180",
+            netWorthChange: "+£1,204"
+        )
+
+        // Both requests failed: nothing changes.
+        #expect(TodayViewModel.mergedMoneyContext(previous: previous, accounts: nil, netWorth: nil) == previous)
+
+        // Accounts failed, net worth arrived: only the comparison updates.
+        let netWorthOnly = TodayViewModel.mergedMoneyContext(
+            previous: previous,
+            accounts: nil,
+            netWorth: try netWorth(change: -250)
+        )
+        #expect(netWorthOnly.pinnedAccountBalance == "£3,180")
+        #expect(netWorthOnly.netWorthChange == "\u{2212}£250.00")
+
+        // Accounts succeeded but empty: the balance really has gone.
+        let emptyAccounts = TodayViewModel.mergedMoneyContext(previous: previous, accounts: [], netWorth: nil)
+        #expect(emptyAccounts.pinnedAccountBalance == nil)
+        #expect(emptyAccounts.netWorthChange == "+£1,204")
+    }
+
     @Test("a change under a pound reads as level")
     func level() throws {
         let context = TodayViewModel.moneyContext(accounts: [], netWorth: try netWorth(change: 0.4))

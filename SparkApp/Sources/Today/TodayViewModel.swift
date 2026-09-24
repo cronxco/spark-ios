@@ -162,7 +162,9 @@ final class TodayViewModel {
         }
         async let netWorthRequest = apiClient.request(MoneyEndpoint.netWorth(compare: .oneMonth))
 
-        var accounts: [MoneyAccount] = []
+        // `nil` means the request failed, as opposed to succeeding with
+        // nothing in it.
+        var accounts: [MoneyAccount]?
         var netWorth: NetWorth?
         do {
             accounts = try await accountsRequest
@@ -176,7 +178,31 @@ final class TodayViewModel {
             if error.isAPICancellation { return }
             SparkObservability.captureHandled(error)
         }
-        moneyContext = Self.moneyContext(accounts: accounts, netWorth: netWorth)
+        moneyContext = Self.mergedMoneyContext(
+            previous: moneyContext,
+            accounts: accounts,
+            netWorth: netWorth
+        )
+    }
+
+    /// A refresh whose request failed keeps what the card already showed for
+    /// that half, rather than blanking a balance over one dropped request. A
+    /// request that succeeded replaces its half, even with nothing.
+    static func mergedMoneyContext(
+        previous: MoneyContext,
+        accounts: [MoneyAccount]?,
+        netWorth: NetWorth?
+    ) -> MoneyContext {
+        let fresh = moneyContext(accounts: accounts ?? [], netWorth: netWorth)
+        var merged = fresh
+        if accounts == nil {
+            merged.pinnedAccountLabel = previous.pinnedAccountLabel
+            merged.pinnedAccountBalance = previous.pinnedAccountBalance
+        }
+        if netWorth == nil {
+            merged.netWorthChange = previous.netWorthChange
+        }
+        return merged
     }
 
     /// The account the user pinned; failing that, the first current account,
