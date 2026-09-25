@@ -27,7 +27,7 @@ public struct FlintBriefingFacts: Sendable, Hashable {
             facts.append("Sync status: \(upToDate ? "up to date" : "not fully up to date")")
         }
         if let lastEventAt = summary.syncStatus.lastEventAt {
-            facts.append("Last synced event: \(ISO8601DateFormatter().string(from: lastEventAt))")
+            facts.append("Last synced event: \(Self.localTimestamp(lastEventAt, timezone: summary.timezone))")
         }
         if !staleSources.isEmpty {
             facts.append("Stale sources: \(staleSources.joined(separator: ", "))")
@@ -178,6 +178,15 @@ public struct FlintBriefingFacts: Sendable, Hashable {
             parts.append("\(streakDays)-day streak")
         }
         return parts.joined(separator: " ")
+    }
+
+    /// ISO 8601 with the day's own offset (`2026-09-25T01:06:53+01:00`) rather
+    /// than UTC, so the model reads the local clock time instead of mistaking
+    /// `00:06Z` for "just after midnight". Falls back to UTC for an unknown zone.
+    static func localTimestamp(_ date: Date, timezone: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = TimeZone(identifier: timezone) ?? TimeZone(secondsFromGMT: 0)
+        return formatter.string(from: date)
     }
 
     private static func humanize(_ key: String) -> String {
