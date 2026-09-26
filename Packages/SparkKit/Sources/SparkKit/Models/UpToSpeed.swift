@@ -99,6 +99,9 @@ public struct UpToSpeedCheckInSummary: Codable, Sendable {
 /// tldr, summary, and keyTakeaways may be nil if the corresponding block was absent.
 public struct NewsSummary: Codable, Sendable {
     public let title: String
+    /// The outlet, when the server knows it (newsletters). Nil for fetched
+    /// pages and bookmarks, where the client falls back to the URL host.
+    public let publication: String?
     public let source: String
     public let url: String?
     public let time: Date?
@@ -107,12 +110,13 @@ public struct NewsSummary: Codable, Sendable {
     public let keyTakeaways: String?
 
     enum CodingKeys: String, CodingKey {
-        case title, source, url, time, tldr, summary
+        case title, publication, source, url, time, tldr, summary
         case keyTakeaways = "key_takeaways"
     }
 
     public init(
         title: String,
+        publication: String? = nil,
         source: String,
         url: String? = nil,
         time: Date? = nil,
@@ -121,6 +125,7 @@ public struct NewsSummary: Codable, Sendable {
         keyTakeaways: String? = nil
     ) {
         self.title = title
+        self.publication = publication
         self.source = source
         self.url = url
         self.time = time
@@ -132,6 +137,7 @@ public struct NewsSummary: Codable, Sendable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         title = try container.decode(String.self, forKey: .title)
+        publication = try container.decodeIfPresent(String.self, forKey: .publication)
         source = try container.decode(String.self, forKey: .source)
         url = try container.decodeIfPresent(String.self, forKey: .url)
         time = try container.decodeIfPresent(Date.self, forKey: .time)

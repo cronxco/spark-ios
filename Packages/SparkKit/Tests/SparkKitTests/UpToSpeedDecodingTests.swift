@@ -152,11 +152,43 @@ struct UpToSpeedDecodingTests {
         if case .newsSummary(let n) = news.payload {
             #expect(n.title == "Article Title")
             #expect(n.source == "fetch")
+            // Older payloads carry no publication; it must not fail decoding.
+            #expect(n.publication == nil)
             #expect(n.tldr == "Short summary.")
             #expect(n.keyTakeaways == "Key points here.")
         } else {
             Issue.record("Expected newsSummary payload")
         }
+    }
+
+    @Test("news_summary decodes the publication name when the server sends one")
+    func decodesNewsSummaryPublication() throws {
+        let json = """
+        {
+          "items": [
+            {
+              "id": "e-1",
+              "type": "news_summary",
+              "caught_up_at": null,
+              "payload": {
+                "title": "City verdict lands",
+                "publication": "POLITICO London Playbook",
+                "source": "newsletter",
+                "tldr": "Short."
+              }
+            }
+          ]
+        }
+        """
+
+        let response = try Self.decoder.decode(UpToSpeedResponse.self, from: Data(json.utf8))
+
+        guard case .newsSummary(let n) = response.items[0].payload else {
+            Issue.record("Expected newsSummary payload")
+            return
+        }
+        #expect(n.title == "City verdict lands")
+        #expect(n.publication == "POLITICO London Playbook")
     }
 
     @Test("news_summary with nil fields decodes correctly")
