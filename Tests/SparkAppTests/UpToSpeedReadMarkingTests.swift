@@ -99,6 +99,19 @@ struct UpToSpeedReadMarkingTests {
         #expect(cited == ["a": 1, "b": 2])
     }
 
+    // Each roundup digest numbers its sections from zero. With two unread,
+    // numbering by `section.id` gave both a "story 1".
+    @Test func citedStoriesNumberAcrossRoundups() {
+        var firstDigest = section(0)
+        firstDigest.references = [EntityReference(type: .event, id: "a", title: "A")]
+        var secondDigest = section(0)
+        secondDigest.references = [EntityReference(type: .event, id: "b", title: "B")]
+
+        let cited = UpToSpeedViewModel.citedStories(in: [firstDigest, secondDigest])
+
+        #expect(cited == ["a": 1, "b": 2])
+    }
+
     @Test func headlinesListCitedArticlesFirstThenFeedOrder() {
         let articles = ["x", "b", "y", "a"].map(newsSummary(id:))
 

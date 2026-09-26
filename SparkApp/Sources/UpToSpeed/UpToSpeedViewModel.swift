@@ -321,12 +321,15 @@ final class UpToSpeedViewModel {
 
     // MARK: - Story ↔ article links
 
-    /// The screen index of the roundup story numbered `story` (1-based).
+    /// The screen index of the roundup story numbered `story` (1-based),
+    /// counted across every roundup in the queue — the same numbering
+    /// `citedStories` hands out.
     func storyScreenIndex(story: Int) -> Int? {
-        screens.firstIndex {
-            if case .newsStory(_, let section, _, _) = $0 { return section.id == story - 1 }
+        let storyIndices = screens.indices.filter {
+            if case .newsStory = screens[$0] { return true }
             return false
         }
+        return storyIndices.indices.contains(story - 1) ? storyIndices[story - 1] : nil
     }
 
     /// The screen index of the Headlines page for an article.
@@ -350,12 +353,15 @@ final class UpToSpeedViewModel {
         return matches.count == 1 ? matches[0] : nil
     }
 
-    /// Article id → the first story (1-based) that cites it.
+    /// Article id → the first story (1-based) that cites it. Numbered by
+    /// position across all the sections, not `section.id`: each roundup
+    /// digest numbers its own sections from zero, so two unread roundups
+    /// would otherwise both have a "story 1".
     nonisolated static func citedStories(in sections: [NewsRoundupSection]) -> [String: Int] {
         var result: [String: Int] = [:]
-        for section in sections {
+        for (position, section) in sections.enumerated() {
             for reference in section.references where result[reference.id] == nil {
-                result[reference.id] = section.id + 1
+                result[reference.id] = position + 1
             }
         }
         return result
