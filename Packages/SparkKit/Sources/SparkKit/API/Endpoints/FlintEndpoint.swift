@@ -13,6 +13,18 @@ public enum FlintEndpoint {
         Endpoint(method: .get, path: "/flint/digests", query: digestQuery(date: date, period: period, all: false))
     }
 
+    /// GET /flint/digests/latest — the single most recent digest across
+    /// dates. Before the morning brief has run that is last night's evening
+    /// digest, which a date-scoped request cannot express. 404 when the user
+    /// has no digest of that kind at all.
+    public static func latest(kind: FlintDigestKind? = .briefing) -> Endpoint<FlintDigest> {
+        var query: [URLQueryItem] = []
+        if let kind {
+            query.append(URLQueryItem(name: "kind", value: kind.rawValue))
+        }
+        return Endpoint(method: .get, path: "/flint/digests/latest", query: query)
+    }
+
     public static func digest(id: String) -> Endpoint<FlintDigest> {
         Endpoint(method: .get, path: "/flint/digests/\(id)")
     }
@@ -49,6 +61,30 @@ public enum FlintEndpoint {
         return Endpoint(method: .get, path: "/flint/questions", query: query)
     }
 
+    /// GET /flint/questions?status=open,answered&since=48h
+    ///
+    /// Several statuses in one request, and a window applied server-side —
+    /// `since` takes an ISO timestamp or a relative window such as `48h` or
+    /// `7d`.
+    public static func questions(
+        statuses: [FlintQuestionStatus],
+        since: String? = nil,
+        limit: Int = 20,
+        cursor: String? = nil
+    ) -> Endpoint<FlintQuestionsResponse> {
+        var query = [
+            URLQueryItem(name: "status", value: statuses.map(\.rawValue).joined(separator: ",")),
+            URLQueryItem(name: "limit", value: String(limit)),
+        ]
+        if let since {
+            query.append(URLQueryItem(name: "since", value: since))
+        }
+        if let cursor {
+            query.append(URLQueryItem(name: "cursor", value: cursor))
+        }
+        return Endpoint(method: .get, path: "/flint/questions", query: query)
+    }
+
     public static func questionAction(
         blockID: String,
         version: String,
@@ -67,6 +103,9 @@ public enum FlintEndpoint {
         )
     }
 
+    /// Deprecated server-side (it now sends `Deprecation` and a `Sunset`):
+    /// answer through `questionAction` instead, which carries `If-Match` and
+    /// an idempotency key. Kept only while the remaining caller moves over.
     public static func answerQuestion(
         blockID: String,
         _ request: FlintQuestionAnswerRequest

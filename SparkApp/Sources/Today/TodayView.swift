@@ -14,6 +14,9 @@ struct TodayView: View {
     @State private var showHistory = false
     @State private var showUpToSpeed = false
     @State private var upToSpeedViewModel: UpToSpeedViewModel?
+    @State private var selectedThread: FlintTopic?
+
+    private var isToday: Bool { Calendar.current.isDateInToday(date) }
 
     var body: some View {
         let snapshot = TodaySnapshot(
@@ -30,9 +33,29 @@ struct TodayView: View {
                     hero(snapshot: snapshot, unreadCount: unreadCount)
                         .sparkAppEntityIdentifier(type: "day", identifier: TodayViewModel.isoKey(for: date))
 
-                    StatStripView(snapshot: snapshot)
+                    // Flint's own words first: the numbers below are what it
+                    // is talking about, not a dashboard the digest happens to
+                    // sit near.
+                    // The digest, questions and threads are "now", not this
+                    // date's; the view model only loads them for today, and a
+                    // page that was today before midnight stops showing them.
+                    if isToday, let digest = viewModel?.latestDigest {
+                        DigestOpenerCard(digest: digest) { showUpToSpeed = true }
+                    }
+
+                    MetricsGrid(metrics: viewModel?.metrics ?? DayMetrics(summary: nil))
 
                     anomalyPill(for: snapshot)
+
+                    if isToday, let vm = viewModel, !vm.recentQuestions.isEmpty {
+                        FlintQuestionStack(
+                            questions: vm.recentQuestions,
+                            onAnswer: { question, option in
+                                Task { await vm.answer(question: question, with: option) }
+                            },
+                            onOpen: { showUpToSpeed = true }
+                        )
+                    }
 
                     CheckInCard(
                         date: date,
@@ -44,6 +67,10 @@ struct TodayView: View {
                             checkInSelection = CheckInSheetSelection(date: date, period: .afternoon)
                         }
                     )
+
+                    if isToday, let vm = viewModel, !vm.topics.isEmpty {
+                        ThreadsStrip(topics: vm.topics) { selectedThread = $0 }
+                    }
 
                     CheckInHeatmapCard(date: date, showHistory: $showHistory)
 
@@ -72,6 +99,9 @@ struct TodayView: View {
             if let vm = viewModel {
                 CheckInModalView(viewModel: vm, date: selection.date, initialPeriod: selection.period)
             }
+        }
+        .sheet(item: $selectedThread) { topic in
+            ThreadDetailSheet(topic: topic)
         }
         .sheet(isPresented: $showHistory) {
             if let vm = viewModel {

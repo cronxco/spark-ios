@@ -180,20 +180,47 @@ struct AccountDetailView: View {
     }
 
     private func actionsRow(account: MoneyAccount) -> some View {
-        HStack(spacing: SparkSpacing.sm) {
-            PillButton("Add Balance", systemImage: "plus.circle.fill", tint: Color.domainMoney) {
-                showAddBalance = true
-            }
-
-            if account.kind == "manual_account" {
-                PillButton("Edit", systemImage: "pencil", tint: .secondary) {
-                    showEditAccount = true
+        // Scrolls rather than wraps: pinning applies to every account type,
+        // so a manual account now carries four pills, which do not fit a
+        // phone's width side by side.
+        ScrollView(.horizontal) {
+            HStack(spacing: SparkSpacing.sm) {
+                PillButton("Add Balance", systemImage: "plus.circle.fill", tint: Color.domainMoney) {
+                    showAddBalance = true
                 }
-                PillButton("Archive", systemImage: "archivebox", tint: .orange) {
-                    showArchiveConfirm = true
+
+                PillButton(
+                    account.pinned ? "Pinned" : "Pin",
+                    systemImage: account.pinned ? "pin.fill" : "pin",
+                    tint: account.pinned ? Color.domainMoney : .secondary
+                ) {
+                    let target = !account.pinned
+                    Task {
+                        do {
+                            try await viewModel?.setPinned(target)
+                        } catch {
+                            SparkObservability.captureHandled(error)
+                        }
+                    }
+                }
+                .disabled(viewModel?.isUpdatingPin == true)
+                .accessibilityHint(
+                    account.pinned
+                        ? "Stops showing this account on the Day tab"
+                        : "Shows this account on the Day tab"
+                )
+
+                if account.kind == "manual_account" {
+                    PillButton("Edit", systemImage: "pencil", tint: .secondary) {
+                        showEditAccount = true
+                    }
+                    PillButton("Archive", systemImage: "archivebox", tint: .orange) {
+                        showArchiveConfirm = true
+                    }
                 }
             }
         }
+        .scrollIndicators(.hidden)
     }
 
     private func detailsCard(account: MoneyAccount) -> some View {

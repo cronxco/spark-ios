@@ -16,12 +16,17 @@ public struct FlintTopic: Codable, Sendable, Hashable, Identifiable {
     public let origin: String?
     public let version: String?
     public let mentions: [FlintTopicMention]?
+    /// What would move the thread on — the one sentence of it worth a home
+    /// screen. Written by the server: explicit when the routine sends one,
+    /// otherwise extracted from the closing sentence of `content`.
+    public let watchingFor: String?
 
     enum CodingKeys: String, CodingKey {
         case id, title, content, kind, status, origin, version, mentions
         case firstSeenAt = "first_seen_at"
         case lastTouchedAt = "last_touched_at"
         case nextReviewAt = "next_review_at"
+        case watchingFor = "watching_for"
     }
 
     public init(
@@ -35,7 +40,8 @@ public struct FlintTopic: Codable, Sendable, Hashable, Identifiable {
         nextReviewAt: Date? = nil,
         origin: String? = nil,
         version: String? = nil,
-        mentions: [FlintTopicMention]? = nil
+        mentions: [FlintTopicMention]? = nil,
+        watchingFor: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -48,6 +54,7 @@ public struct FlintTopic: Codable, Sendable, Hashable, Identifiable {
         self.origin = origin
         self.version = version
         self.mentions = mentions
+        self.watchingFor = watchingFor
     }
 }
 
@@ -66,11 +73,28 @@ public enum FlintTopicStatus: String, Codable, Sendable, Hashable {
     public var isActive: Bool { self == .active }
 }
 
-public struct FlintTopicsResponse: Codable, Sendable {
+public struct FlintTopicsResponse: Codable, Sendable, CursorPaged {
     public let data: [FlintTopic]
+    public let nextCursor: String?
+    public let hasMore: Bool
 
-    public init(data: [FlintTopic]) {
+    enum CodingKeys: String, CodingKey {
+        case data
+        case nextCursor = "next_cursor"
+        case hasMore = "has_more"
+    }
+
+    public init(data: [FlintTopic], nextCursor: String? = nil, hasMore: Bool = false) {
         self.data = data
+        self.nextCursor = nextCursor
+        self.hasMore = hasMore
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        data = try c.decode([FlintTopic].self, forKey: .data)
+        nextCursor = try c.decodeIfPresent(String.self, forKey: .nextCursor)
+        hasMore = try c.decodeIfPresent(Bool.self, forKey: .hasMore) ?? false
     }
 }
 

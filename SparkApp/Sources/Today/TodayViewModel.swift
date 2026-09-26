@@ -22,6 +22,23 @@ final class TodayViewModel {
     private(set) var networkState: TodayNetworkState = .idle
     private(set) var checkInDayStatus: CheckInDayStatus = .allPending
 
+    /// The newest thing Flint has written, which before the morning brief has
+    /// run is last night's evening digest rather than nothing.
+    private(set) var latestDigest: FlintDigest?
+    /// Open questions first, then ones answered inside the window, so the
+    /// stack shows both what is wanted and what was already said.
+    private(set) var recentQuestions: [FlintQuestion] = []
+    private(set) var topics: [FlintTopic] = []
+    private(set) var moneyContext: MoneyContext = .empty
+
+    /// How far back "recent" reaches for the question stack, in the server's
+    /// relative-window syntax.
+    private static let questionWindow = "48h"
+
+    var metrics: DayMetrics {
+        DayMetrics(summary: cached, money: moneyContext)
+    }
+
     private let apiClient: APIClient
     private let container: ModelContainer
     private let defaults: UserDefaults
@@ -49,16 +66,215 @@ final class TodayViewModel {
         await revalidateCheckIns()
         await loadFeed()
         await revalidateUpToSpeed()
+        await loadFlintSurfaces()
+    }
+
+    /// The digest opener, the question stack, the threads and the money
+    /// figures the day summary does not carry. Each is independent and each
+    /// failure is survivable — a missing digest hides one card, it does not
+    /// empty the screen — so they run concurrently and swallow their errors.
+    func loadFlintSurfaces() async {
+        // All four are "now" — the newest digest, the last 48 hours of
+        // questions, live threads and current balances — so on any other
+        // day's page they would sit beside that day's metrics as if they
+        // belonged to it.
+        guard Calendar.current.isDateInToday(date) else { return }
+        async let digest: Void = loadLatestDigest()
+        async let questions: Void = loadRecentQuestions()
+        async let threads: Void = loadTopics()
+        async let money: Void = loadMoneyContext()
+        _ = await (digest, questions, threads, money)
+    }
+
+    private func loadLatestDigest() async {
+        // One request, on any day at any hour: before the morning brief has
+        // run, the server's "latest" is last night's evening digest.
+        do {
+            latestDigest = try await apiClient.request(FlintEndpoint.latest(kind: .briefing))
+        } catch where error.isAPICancellation {
+            return
+        } catch APIError.httpStatus(404, _, _) {
+            // No briefing has ever been written for this account. Not an
+            // error worth reporting — the card simply is not there.
+            latestDigest = nil
+        } catch {
+            SparkObservability.captureHandled(error)
+        }
+    }
+
+    private func loadRecentQuestions() async {
+        do {
+            // Status and window are both applied by the server now, in one
+            // request, where this used to be two unbounded fetches filtered
+            // on the device.
+            let window = Self.questionWindow
+            let questions = try await apiClient.collectAllPages(maxPages: 3) { cursor in
+                FlintEndpoint.questions(
+                    statuses: [.open, .answered],
+                    since: window,
+                    cursor: cursor
+                )
+            }
+            recentQuestions = Self.orderForStack(questions)
+        } catch where error.isAPICancellation {
+            return
+        } catch {
+            SparkObservability.captureHandled(error)
+        }
+    }
+
+    /// Open questions first, then answered ones, newest first within each —
+    /// the stack leads with what is wanted and keeps what was already said.
+    /// Presentation order, so it stays here.
+    static func orderForStack(_ questions: [FlintQuestion]) -> [FlintQuestion] {
+        let newestFirst: (FlintQuestion, FlintQuestion) -> Bool = {
+            ($0.askedAt ?? .distantPast) > ($1.askedAt ?? .distantPast)
+        }
+        let open = questions.filter { $0.status == .open }.sorted(by: newestFirst)
+        let answered = questions.filter { $0.status == .answered }.sorted(by: newestFirst)
+        return open + answered
+    }
+
+    private func loadTopics() async {
+        do {
+            // Two small filtered lists rather than every thread ever: the
+            // strip shows active threads and a line for dormant ones, never
+            // the resolved or expired ones.
+            async let active = apiClient.collectAllPages { cursor in
+                FlintTopicsEndpoint.list(status: .active, cursor: cursor)
+            }
+            async let dormant = apiClient.collectAllPages { cursor in
+                FlintTopicsEndpoint.list(status: .dormant, cursor: cursor)
+            }
+            topics = try await active + dormant
+        } catch where error.isAPICancellation {
+            return
+        } catch {
+            SparkObservability.captureHandled(error)
+        }
+    }
+
+    private func loadMoneyContext() async {
+        // Independent: a net-worth failure should not cost the card its
+        // pinned balance, nor the reverse.
+        async let accountsRequest = apiClient.collectAllPages { cursor in
+            MoneyEndpoint.accounts(cursor: cursor)
+        }
+        async let netWorthRequest = apiClient.request(MoneyEndpoint.netWorth(compare: .oneMonth))
+
+        // `nil` means the request failed, as opposed to succeeding with
+        // nothing in it.
+        var accounts: [MoneyAccount]?
+        var netWorth: NetWorth?
+        do {
+            accounts = try await accountsRequest
+        } catch {
+            if error.isAPICancellation { return }
+            SparkObservability.captureHandled(error)
+        }
+        do {
+            netWorth = try await netWorthRequest.data
+        } catch {
+            if error.isAPICancellation { return }
+            SparkObservability.captureHandled(error)
+        }
+        moneyContext = Self.mergedMoneyContext(
+            previous: moneyContext,
+            accounts: accounts,
+            netWorth: netWorth
+        )
+    }
+
+    /// A refresh whose request failed keeps what the card already showed for
+    /// that half, rather than blanking a balance over one dropped request. A
+    /// request that succeeded replaces its half, even with nothing.
+    static func mergedMoneyContext(
+        previous: MoneyContext,
+        accounts: [MoneyAccount]?,
+        netWorth: NetWorth?
+    ) -> MoneyContext {
+        let fresh = moneyContext(accounts: accounts ?? [], netWorth: netWorth)
+        var merged = fresh
+        if accounts == nil {
+            merged.pinnedAccountLabel = previous.pinnedAccountLabel
+            merged.pinnedAccountBalance = previous.pinnedAccountBalance
+        }
+        if netWorth == nil {
+            merged.netWorthChange = previous.netWorthChange
+        }
+        return merged
+    }
+
+    /// The account the user pinned; failing that, the first current account,
+    /// so the card is useful before anyone has chosen. Net worth's change is
+    /// the server's comparison, which already leaves out accounts whose
+    /// history does not span the month on both sides.
+    static func moneyContext(accounts: [MoneyAccount], netWorth: NetWorth?) -> MoneyContext {
+        var context = MoneyContext()
+
+        let pinned = accounts.first(where: \.pinned)
+            ?? accounts.first { ($0.accountType ?? $0.kind).lowercased().contains("current") }
+        if let pinned, let balance = pinned.latestBalance {
+            context.pinnedAccountLabel = pinned.title
+            context.pinnedAccountBalance = DayMetrics.currency(
+                pinned.isNegativeBalance ? -abs(balance.balance) : balance.balance,
+                code: balance.currency
+            )
+        }
+
+        if let netWorth, let comparison = netWorth.comparison {
+            let change = comparison.change
+            if abs(change) < 1 {
+                context.netWorthChange = "level"
+            } else {
+                let formatted = DayMetrics.currency(abs(change), code: netWorth.currency)
+                context.netWorthChange = (change > 0 ? "+" : "\u{2212}") + formatted
+            }
+        }
+        return context
+    }
+
+    /// Answers through `POST /flint/questions/{id}/actions`, which checks the
+    /// question's version and carries an idempotency key, and returns the
+    /// updated question so the stack updates in place. The older `/answer`
+    /// endpoint this used is deprecated server-side.
+    func answer(question: FlintQuestion, with option: String) async {
+        do {
+            let response = try await apiClient.request(
+                FlintEndpoint.questionAction(
+                    blockID: question.id,
+                    version: question.version,
+                    idempotencyKey: UUID(),
+                    FlintQuestionActionRequest(action: .answer, answer: option)
+                )
+            )
+            let updated = response.data
+            recentQuestions = Self.orderForStack(
+                recentQuestions.map { $0.id == updated.id ? updated : $0 }
+            )
+        } catch where error.isAPICancellation {
+            return
+        } catch let error as APIError where error.isPreconditionFailure {
+            // Answered or changed elsewhere since the stack loaded: take the
+            // server's current state rather than overwrite it.
+            await loadRecentQuestions()
+        } catch {
+            SparkObservability.captureHandled(error)
+        }
     }
 
     func refresh() async {
         await revalidate(force: true)
         await revalidateCheckIns()
+        await loadFlintSurfaces()
     }
 
     func backgroundRevalidate() async {
         await revalidate(force: false, silent: true)
         await revalidateCheckIns()
+        // The morning brief often lands after launch, and a question can be
+        // answered on another device; neither should wait for a relaunch.
+        await loadFlintSurfaces()
     }
 
     func loadCheckIns() async {
@@ -276,6 +492,8 @@ final class TodayViewModel {
             existing.targetTitle = event.target?.title
             existing.targetType = event.target?.type
             existing.targetMediaUrl = event.target?.mediaUrl
+            existing.groupKey = event.groupKey
+            existing.direction = event.direction?.rawValue
             existing.lastSyncedAt = .now
         } else {
             context.insert(CachedEvent(
@@ -298,7 +516,9 @@ final class TodayViewModel {
                 actorMediaUrl: event.actor?.mediaUrl,
                 targetTitle: event.target?.title,
                 targetType: event.target?.type,
-                targetMediaUrl: event.target?.mediaUrl
+                targetMediaUrl: event.target?.mediaUrl,
+                groupKey: event.groupKey,
+                direction: event.direction?.rawValue
             ))
         }
     }
