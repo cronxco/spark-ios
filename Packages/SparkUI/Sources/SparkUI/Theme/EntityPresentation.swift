@@ -50,6 +50,21 @@ public enum EntityPresentation {
         }
     }
 
+    /// Glyph for an integration, keyed by the plugin domain the backend
+    /// reports. Kept separate from `icon(domain:…)` so metric glyphs, which
+    /// match on action first, are unaffected.
+    public static func integrationIcon(domain: String?) -> String {
+        switch (domain ?? "").lowercased() {
+        case "health": "heart.text.square.fill"
+        case "activity": "figure.run"
+        case "money": "sterlingsign.circle.fill"
+        case "media": "play.circle.fill"
+        case "knowledge": "book.fill"
+        case "online": "globe"
+        default: "puzzlepiece.extension.fill"
+        }
+    }
+
     public static func icon(for reference: EntityReference) -> String {
         icon(
             domain: reference.domain,

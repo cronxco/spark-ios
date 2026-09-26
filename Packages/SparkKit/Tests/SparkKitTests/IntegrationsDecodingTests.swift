@@ -85,4 +85,90 @@ struct IntegrationsDecodingTests {
         #expect(IntegrationDetail(integration: Integration(id: "4", service: "s", name: "n", status: "needs_reauth")).status == .needsReauth)
         #expect(IntegrationDetail(integration: Integration(id: "5", service: "s", name: "n", status: "broken")).status == .error("broken"))
     }
+
+    @Test("detail decodes the backend's show response")
+    func detailDecodesBackendShowResponse() throws {
+        // Shape of IntegrationsController::show on the backend.
+        let json = """
+        {
+          "integration": {
+            "id": "integration_1",
+            "service": "oura",
+            "name": "Sleep",
+            "instance_type": "sleep",
+            "status": "needs_update",
+            "domain": "health",
+            "paused": false,
+            "last_sync_at": "2026-09-26T09:00:00+00:00",
+            "next_update_at": "2026-09-26T10:00:00+00:00",
+            "schedule_summary": null
+          },
+          "last_sync_at": "2026-09-26T09:00:00+00:00",
+          "coverage_percent": null,
+          "recent_events": [
+            {
+              "id": "event_1",
+              "time": "2026-09-26T08:55:00+00:00",
+              "service": "oura",
+              "domain": "health",
+              "action": "had_sleep_score",
+              "group_key": "oura:had_sleep_score:object_1"
+            }
+          ],
+          "domain": "health",
+          "status_message": "Overdue for an update.",
+          "supports_reauth": true,
+          "oauth_start_url": "https://spark.cronx.co/api/v1/mobile/integrations/integration_1/oauth/start"
+        }
+        """
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let detail = try decoder.decode(IntegrationDetail.self, from: Data(json.utf8))
+
+        #expect(detail.status == .needsUpdate)
+        #expect(detail.status.needsAttention)
+        #expect(detail.canReauthorise)
+        #expect(detail.recentEvents.count == 1)
+        #expect(detail.integration.domain == "health")
+        #expect(detail.integration.paused == false)
+        #expect(detail.integration.nextUpdateAt != nil)
+        #expect(detail.lastSyncAt != nil)
+    }
+
+    @Test("reauth falls back to the URL when the backend predates supports_reauth")
+    func reauthFallsBackToURL() {
+        let integration = Integration(id: "1", service: "oura", name: "Sleep")
+        #expect(!IntegrationDetail(integration: integration).canReauthorise)
+        #expect(IntegrationDetail(integration: integration, oauthStartURL: URL(string: "https://example.test")).canReauthorise)
+        #expect(!IntegrationDetail(integration: integration, oauthStartURL: URL(string: "https://example.test"), supportsReauth: false).canReauthorise)
+    }
+
+    @Test("status keys from Integration::statusKey map onto the shared vocabulary")
+    func statusKeysMapOntoSharedVocabulary() {
+        #expect(IntegrationStatus(rawStatus: "up_to_date") == .upToDate)
+        #expect(IntegrationStatus(rawStatus: "processing") == .syncing)
+        #expect(IntegrationStatus(rawStatus: "needs_update") == .needsUpdate)
+        #expect(IntegrationStatus(rawStatus: "paused") == .paused)
+        #expect(IntegrationStatus(rawStatus: "stale") == .stale)
+        #expect(!IntegrationStatus.stale.needsAttention)
+        #expect(!IntegrationStatus.paused.needsAttention)
+        #expect(IntegrationStatus.needsUpdate.label == "Needs update")
+        #expect(Integration(id: "1", service: "s", name: "n", status: "stale").statusKind == .stale)
+    }
+
+    @Test("sync and pause carry the detail read's version as If-Match")
+    func conditionalWritesCarryIfMatch() throws {
+        let sync = IntegrationsEndpoint.syncNow(id: "i1", etag: "\"v1\"")
+        #expect(sync.path == "/integrations/i1/sync")
+        #expect(sync.headers["If-Match"] == "\"v1\"")
+
+        let pause = IntegrationsEndpoint.setPaused(id: "i1", paused: true, etag: "\"v1\"")
+        #expect(pause.method == .post)
+        #expect(pause.path == "/integrations/i1/pause")
+        #expect(pause.headers["If-Match"] == "\"v1\"")
+        let body = try JSONSerialization.jsonObject(with: #require(pause.body)) as? [String: Bool]
+        #expect(body?["paused"] == true)
+    }
 }
+

@@ -102,7 +102,11 @@ struct IntegrationDetailView: View {
         GlassCard {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                 HStack(spacing: SparkSpacing.sm) {
-                    DomainGlyph(icon: "link", tint: .sparkAccent, size: 28)
+                    DomainGlyph(
+                        icon: EntityPresentation.integrationIcon(domain: detail.domain ?? detail.integration.domain),
+                        tint: EntityPresentation.tint(domain: detail.domain ?? detail.integration.domain),
+                        size: 28
+                    )
                     Text(detail.integration.service.sparkSentenceCase)
                         .font(SparkTypography.monoSmall)
                         .foregroundStyle(.secondary)
@@ -112,55 +116,86 @@ struct IntegrationDetailView: View {
                 StatusPill(
                     pillTone(for: detail.status),
                     message: detail.status.label,
-                    trailing: detail.lastSyncAt.map { Self.relative(from: $0) }
+                    trailing: detail.lastSyncAt.map { SparkRelativeTime.string(for: $0) }
                 )
+                if let message = detail.statusMessage, !message.isEmpty {
+                    Text(message)
+                        .font(SparkTypography.bodySmall)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }
 
     @ViewBuilder
     private func actionRow(for detail: IntegrationDetail) -> some View {
-        HStack(spacing: SparkSpacing.md) {
-            Button {
-                Task { await viewModel?.syncNow() }
-            } label: {
-                Label("Sync now", systemImage: "arrow.clockwise")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.sparkAccent)
-            .disabled(viewModel?.actionInProgress == .syncing)
+        let isPaused = detail.status == .paused
+        VStack(spacing: SparkSpacing.md) {
+            HStack(spacing: SparkSpacing.md) {
+                if !isPaused {
+                    Button {
+                        Task { await viewModel?.syncNow() }
+                    } label: {
+                        Label("Update now", systemImage: "arrow.clockwise")
+                            .frame(maxWidth: .infinity)
+                            // Design system: text on the amber primary fill is
+                            // primary-content (slate), never white.
+                            .foregroundStyle(Color.slate5)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.sparkAccent)
+                    .disabled(viewModel?.actionInProgress != nil || detail.status == .syncing)
+                }
 
-            Button {
-                guard let anchor = ASPresentationAnchorHandle.current() else { return }
-                Task { await viewModel?.reauthorise(presentationAnchor: anchor) }
-            } label: {
-                Label("Reauthorise", systemImage: "lock.rotation")
-                    .frame(maxWidth: .infinity)
+                Button {
+                    Task { await viewModel?.setPaused(!isPaused) }
+                } label: {
+                    Label(isPaused ? "Resume" : "Pause", systemImage: isPaused ? "play.fill" : "pause.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(viewModel?.actionInProgress != nil)
             }
-            .buttonStyle(.bordered)
-            .tint(.sparkAccent)
-            .disabled(detail.oauthStartURL == nil || viewModel?.actionInProgress == .reauthing)
+
+            if detail.canReauthorise {
+                Button {
+                    guard let anchor = ASPresentationAnchorHandle.current() else { return }
+                    Task { await viewModel?.reauthorise(presentationAnchor: anchor) }
+                } label: {
+                    Label("Reauthorise", systemImage: "lock.rotation")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(viewModel?.actionInProgress != nil)
+            }
         }
     }
 
     private func inspectorRows(for detail: IntegrationDetail) -> some View {
         GlassCard(radius: SparkRadii.md, padding: 0) {
             VStack(spacing: 0) {
-                InspectorRow("Service", detail.integration.service)
+                InspectorRow("Service", detail.integration.service.sparkSentenceCase)
                 if let domain = detail.domain {
-                    InspectorRow("Domain", domain)
+                    InspectorRow("Domain", domain.sparkSentenceCase)
                 }
                 if let coverage = detail.coveragePercent {
                     InspectorRow("Coverage", "\(Int(coverage * 100))%")
                 }
                 if let last = detail.lastSyncAt {
-                    InspectorRow("Last sync", isMono: true) {
-                        Text(Self.fullTimeFormatter.string(from: last))
+                    InspectorRow("Last sync", isMono: SparkRelativeTime.isAbsolute(last)) {
+                        Text(SparkRelativeTime.string(for: last))
                     }
                 }
+                if let next = detail.integration.nextUpdateAt, detail.status != .paused {
+                    InspectorRow(next < .now ? "Was due" : "Next update", isMono: SparkRelativeTime.isAbsolute(next)) {
+                        Text(SparkRelativeTime.string(for: next))
+                    }
+                }
+                if let schedule = detail.integration.scheduleSummary {
+                    InspectorRow("Schedule", schedule)
+                }
                 if let instance = detail.integration.instanceType {
-                    InspectorRow("Instance", instance)
+                    InspectorRow("Instance", instance.sparkSentenceCase)
                 }
             }
         }
@@ -173,8 +208,8 @@ struct IntegrationDetailView: View {
                     Text(event.action)
                         .font(SparkTypography.bodySmall)
                     if let time = event.time {
-                        Text(Self.shortTimeFormatter.string(from: time))
-                            .font(SparkTypography.monoSmall)
+                        Text(SparkRelativeTime.string(for: time))
+                            .font(SparkRelativeTime.isAbsolute(time) ? SparkTypography.monoSmall : SparkTypography.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -191,28 +226,10 @@ struct IntegrationDetailView: View {
     private func pillTone(for status: IntegrationStatus) -> StatusPill.Tone {
         switch status {
         case .upToDate: .ok
-        case .syncing, .unknown: .neutral
-        case .needsReauth, .error: .warning
+        case .syncing, .paused, .stale, .unknown: .neutral
+        case .needsUpdate, .needsReauth, .error: .warning
         }
     }
-
-    private static func relative(from date: Date) -> String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: date, relativeTo: .now)
-    }
-
-    private static let shortTimeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "d MMM, HH:mm"
-        return f
-    }()
-
-    private static let fullTimeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd  HH:mm"
-        return f
-    }()
 }
 
 private extension DetailLoadState where T == IntegrationDetail {
