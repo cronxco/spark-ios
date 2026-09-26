@@ -1,5 +1,4 @@
 import SparkKit
-import SparkUI
 import SwiftUI
 
 struct MainTabView: View {
@@ -13,26 +12,18 @@ struct MainTabView: View {
             ? tabAccessoryCoordinator.accessory
             : nil
 
-        ZStack {
-            if selection == .day {
-                SparkResolvedAppBackground()
-            }
-
-            tabs
-                .tabBarMinimizeBehavior(.onScrollDown)
-                .tabViewBottomAccessory(isEnabled: activeAccessory != nil) {
-                    if let activeAccessory {
-                        TabAccessoryView(accessory: activeAccessory)
-                    }
+        tabs
+            .tabBarMinimizeBehavior(.onScrollDown)
+            .tabViewBottomAccessory(isEnabled: activeAccessory != nil) {
+                if let activeAccessory {
+                    TabAccessoryView(accessory: activeAccessory)
                 }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .ignoresSafeArea()
-        .environment(\.tabAccessoryCoordinator, tabAccessoryCoordinator)
-        .onChange(of: model.pendingRoute) { _, new in
-            guard new != nil else { return }
-            selection = .day
-        }
+            }
+            .environment(\.tabAccessoryCoordinator, tabAccessoryCoordinator)
+            .onChange(of: model.pendingRoute) { _, new in
+                guard new != nil else { return }
+                selection = .day
+            }
     }
 
     private var tabs: some View {

@@ -103,7 +103,7 @@ struct FeedSection: View {
 
     private var timelineHeader: some View {
         HStack(alignment: .center, spacing: SparkSpacing.md) {
-            SectionLabel("Timeline")
+            SectionLabel("Timeline", style: .dayHeading)
             Spacer(minLength: SparkSpacing.sm)
             TimelineFilterPill(filter: $filter)
         }
@@ -164,7 +164,7 @@ private struct TimelineHourMarker: View {
         HStack(alignment: .top, spacing: SparkSpacing.md) {
             SpineColumn {
                 Text(String(format: "%02d", hour))
-                    .font(SparkTypography.monoSmall)
+                    .font(SparkTypography.caption)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
                     .frame(width: 22, height: 22)
@@ -174,7 +174,7 @@ private struct TimelineHourMarker: View {
             }
             Spacer(minLength: 0)
         }
-        .frame(height: 30)
+        .frame(height: 42)
         .accessibilityLabel("\(hour) hundred hours")
     }
 }
@@ -295,24 +295,24 @@ private struct TimelineRow: View {
             // one tap away, and in this row's accessible name.
             if let time = event.time {
                 Text(Self.relative.localizedString(for: time, relativeTo: .now))
-                    .font(SparkTypography.monoSmall)
+                    .font(SparkTypography.caption)
                     .foregroundStyle(.secondary)
             }
             if let source = metaLine(for: event).nilIfEmpty {
-                Text("·").font(SparkTypography.monoSmall).foregroundStyle(.tertiary)
+                Text("·").font(SparkTypography.caption).foregroundStyle(.tertiary)
                 Text(source)
-                    .font(SparkTypography.monoSmall)
+                    .font(SparkTypography.caption)
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
             }
             ForEach(event.decodedTagNames.prefix(2), id: \.self) { tag in
-                Text("·").font(SparkTypography.monoSmall).foregroundStyle(.tertiary)
+                Text("·").font(SparkTypography.caption).foregroundStyle(.tertiary)
                 HStack(spacing: 4) {
                     Circle()
                         .fill(Color.sparkTagTopic)
                         .frame(width: 5, height: 5)
                     Text(tag)
-                        .font(SparkTypography.monoSmall)
+                        .font(SparkTypography.caption)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -432,7 +432,7 @@ private struct TimelineFilterPill: View {
                     let isActive = filter == option
                     Image(systemName: icon)
                         .font(.system(size: 13, weight: .semibold))
-                        .frame(width: 32, height: 28)
+                        .frame(width: 44, height: 44)
                         .foregroundStyle(isActive ? Self.darkInk : Color.secondary)
                         .background(isActive ? Color.sparkAccent : Color.clear, in: .capsule)
                 }

@@ -2,7 +2,6 @@ import SparkKit
 import SparkUI
 import SwiftData
 import SwiftUI
-import UIKit
 
 struct TodayView: View {
     let date: Date
@@ -12,9 +11,11 @@ struct TodayView: View {
     @State private var viewModel: TodayViewModel?
     @State private var checkInSelection: CheckInSheetSelection?
     @State private var showHistory = false
+    @State private var checkInHistoryVM: CheckInHistoryViewModel?
     @State private var showUpToSpeed = false
     @State private var upToSpeedViewModel: UpToSpeedViewModel?
     @State private var selectedThread: FlintTopic?
+    @State private var hasScrolledPastTop = false
 
     private var isToday: Bool { Calendar.current.isDateInToday(date) }
 
@@ -45,7 +46,7 @@ struct TodayView: View {
 
                     MetricsGrid(metrics: viewModel?.metrics ?? DayMetrics(summary: nil))
 
-                    anomalyPill(for: snapshot)
+                    anomalySummary(for: snapshot)
 
                     if isToday, let vm = viewModel, !vm.recentQuestions.isEmpty {
                         FlintQuestionStack(
@@ -72,7 +73,7 @@ struct TodayView: View {
                         ThreadsStrip(topics: vm.topics) { selectedThread = $0 }
                     }
 
-                    CheckInHeatmapCard(date: date, showHistory: $showHistory)
+                    CheckInHeatmapCard(historyVM: checkInHistoryVM, showHistory: $showHistory)
 
                     FeedSection(date: date)
 
@@ -87,15 +88,39 @@ struct TodayView: View {
                     #endif
                 }
                 .padding(.horizontal, SparkSpacing.lg)
-                .padding(.top, SparkSpacing.xl + 72)
-                .padding(.bottom, deviceSafeAreaBottom + 66)
+                .padding(.top, SparkSpacing.sm)
+                .padding(.bottom, SparkSpacing.xl)
                 .containerRelativeFrame(.horizontal)
             }
-            .sparkAppBackground()
-            .refreshable { await viewModel?.refresh() }
+            .scrollEdgeEffectStyle(.soft, for: .top)
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top > SparkSpacing.sm
+            } action: { _, hasScrolled in
+                hasScrolledPastTop = hasScrolled
+            }
+            // The page-style TabView stops the scroll view at the navigation
+            // bar. Fade cards before that boundary so their borders do not
+            // appear abruptly sliced beneath the toolbar.
+            .mask(alignment: .top) {
+                if hasScrolledPastTop {
+                    VStack(spacing: 0) {
+                        LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                            .frame(height: 28)
+                        Color.black
+                    }
+                } else {
+                    Color.black
+                }
+            }
+            .refreshable {
+                await viewModel?.refresh()
+                await checkInHistoryVM?.load()
+            }
         }
         .sparkMainAppToolbar(isVisible: showsToolbar)
-        .sheet(item: $checkInSelection) { selection in
+        .sheet(item: $checkInSelection, onDismiss: {
+            Task { await checkInHistoryVM?.load() }
+        }) { selection in
             if let vm = viewModel {
                 CheckInModalView(viewModel: vm, date: selection.date, initialPeriod: selection.period)
             }
@@ -104,8 +129,8 @@ struct TodayView: View {
             ThreadDetailSheet(topic: topic)
         }
         .sheet(isPresented: $showHistory) {
-            if let vm = viewModel {
-                CheckInHistoryView(apiClient: appModel.apiClient, container: appModel.container, todayViewModel: vm)
+            if let checkInHistoryVM {
+                CheckInHistoryView(apiClient: appModel.apiClient, container: appModel.container, historyVM: checkInHistoryVM)
             }
         }
         .fullScreenCover(isPresented: $showUpToSpeed, onDismiss: {
@@ -115,6 +140,11 @@ struct TodayView: View {
                 .environment(appModel)
         }
         .task(id: date) {
+            checkInHistoryVM = CheckInHistoryViewModel(
+                apiClient: appModel.apiClient,
+                container: appModel.container,
+                endDate: date
+            )
             if viewModel == nil {
                 viewModel = TodayViewModel(
                     date: date,
@@ -122,7 +152,9 @@ struct TodayView: View {
                     container: appModel.container
                 )
             }
-            await viewModel?.load()
+            async let dayLoad: Void = viewModel?.load() ?? ()
+            async let historyLoad: Void = checkInHistoryVM?.load() ?? ()
+            _ = await (dayLoad, historyLoad)
         }
         .task {
             if upToSpeedViewModel == nil {
@@ -171,7 +203,7 @@ struct TodayView: View {
     private func heroTitleWithAction(titleLines: [String], unreadCount: Int) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: SparkSpacing.md) {
+                HStack(alignment: .center, spacing: SparkSpacing.md) {
                     if let firstLine = titleLines.first {
                         heroTitleText(firstLine, index: 0)
                     }
@@ -215,7 +247,7 @@ struct TodayView: View {
     private func heroTitleText(_ line: String, index: Int) -> some View {
         Text(line)
             .font(heroTitleFont)
-            .foregroundStyle(index == 0 ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
+            .foregroundStyle(index == 0 ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
             .lineLimit(1)
             .minimumScaleFactor(0.88)
     }
@@ -238,12 +270,6 @@ struct TodayView: View {
         }
     }
 
-    private var deviceSafeAreaBottom: CGFloat {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }.first?
-            .keyWindow?.safeAreaInsets.bottom ?? 34
-    }
-
     private var firstName: String {
         let name = appModel.profile?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return name.split(separator: " ").first.map(String.init) ?? "Your"
@@ -255,22 +281,45 @@ struct TodayView: View {
         return f
     }()
 
-    // MARK: - Anomaly pill
+    // MARK: - Anomaly summary
 
     @ViewBuilder
-    private func anomalyPill(for snapshot: TodaySnapshot) -> some View {
+    private func anomalySummary(for snapshot: TodaySnapshot) -> some View {
         if snapshot.anomalies.isEmpty {
-            StatusPill(.ok, message: "Baselines holding", trailing: "0 anomalies")
+            anomalySummaryRow(message: "Baselines holding", count: nil, tint: .sparkSuccess)
         } else {
-            StatusPill(
-                .warning,
+            anomalySummaryRow(
                 message: snapshot.anomalies.first?.displayName
                     ?? snapshot.anomalies.first?.metric
                     ?? "Anomaly detected",
-                trailing: "\(snapshot.anomalies.count) anomal\(snapshot.anomalies.count == 1 ? "y" : "ies")"
+                count: "\(snapshot.anomalies.count) anomal\(snapshot.anomalies.count == 1 ? "y" : "ies")",
+                tint: .sparkWarning
             )
             .sparkAppEntityIdentifier(type: "anomaly", identifier: snapshot.anomalies.first?.id)
         }
+    }
+
+    private func anomalySummaryRow(message: String, count: String?, tint: Color) -> some View {
+        HStack(spacing: SparkSpacing.sm) {
+            Circle()
+                .fill(tint)
+                .frame(width: 7, height: 7)
+                .accessibilityHidden(true)
+            Text(message)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+            if let count {
+                Spacer(minLength: SparkSpacing.sm)
+                Text(count)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.vertical, SparkSpacing.xs)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(count.map { "\(message), \($0)" } ?? message)
     }
 
     // MARK: - Loading / empty
@@ -334,12 +383,12 @@ private struct GetUpToSpeedButton: View {
                     .background(Self.darkInk.opacity(0.12), in: .capsule)
 
                 Text("Get Up to Speed")
-                    .font(.system(size: 12.5, weight: .semibold))
+                    .font(SparkTypography.captionStrong)
                     .foregroundStyle(Self.darkInk)
             }
             .padding(.leading, 4)
             .padding(.trailing, 10)
-            .frame(height: 32)
+            .frame(minHeight: 44)
             .background(Color.sparkAccent, in: .capsule)
             .shadow(color: Color.sparkAccent.opacity(0.22), radius: 7, x: 0, y: 6)
         }

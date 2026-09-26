@@ -284,8 +284,9 @@ struct DayMetrics: Sendable {
         }
 
         // An open-ended quantity: scaled so today and a typical day both fit.
-        // No baseline yet leaves the track empty rather than inventing one.
+        // Without a baseline, only an exact zero has a meaningful position.
         let bar = spend?.quantityBar ?? .empty
+        let barFill = spend?.value == 0 ? 0 : bar.fill
 
         // Not flagged. Ember is for a day the server calls anomalous, and the
         // money section does not publish that judgement for spend.
@@ -294,7 +295,7 @@ struct DayMetrics: Sendable {
             label: "Money",
             tint: .domainMoney,
             reading: reading,
-            fill: bar.fill,
+            fill: barFill,
             baseline: bar.baseline,
             isFlagged: false,
             primary: .init(context.pinnedAccountLabel ?? "Balance", context.pinnedAccountBalance),
