@@ -411,3 +411,41 @@ struct SparkAppBackgroundWashTests {
     }
 }
 #endif
+
+@Suite("Spark relative time")
+struct SparkRelativeTimeTests {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }
+
+    private let locale = Locale(identifier: "en_GB")
+
+    private func date(_ iso: String) -> Date {
+        ISO8601DateFormatter().date(from: iso)!
+    }
+
+    @Test("within a day it is relative and not absolute")
+    func relativeWithinADay() {
+        let now = date("2026-09-26T12:00:00Z")
+        let earlier = date("2026-09-26T11:38:00Z")
+        #expect(!SparkRelativeTime.isAbsolute(earlier, relativeTo: now))
+        #expect(SparkRelativeTime.string(for: earlier, relativeTo: now, calendar: calendar, locale: locale).contains("22 minutes"))
+    }
+
+    @Test("within a week it is a weekday and time")
+    func weekdayWithinAWeek() {
+        let now = date("2026-09-26T12:00:00Z")
+        let tuesday = date("2026-09-22T14:05:00Z")
+        #expect(SparkRelativeTime.isAbsolute(tuesday, relativeTo: now))
+        #expect(SparkRelativeTime.string(for: tuesday, relativeTo: now, calendar: calendar, locale: locale) == "Tue 14:05")
+    }
+
+    @Test("beyond a week it is a date, with the year only when it differs")
+    func dateBeyondAWeek() {
+        let now = date("2026-09-26T12:00:00Z")
+        #expect(SparkRelativeTime.string(for: date("2026-08-12T09:00:00Z"), relativeTo: now, calendar: calendar, locale: locale) == "12 Aug")
+        #expect(SparkRelativeTime.string(for: date("2025-08-12T09:00:00Z"), relativeTo: now, calendar: calendar, locale: locale) == "12 Aug 2025")
+    }
+}
