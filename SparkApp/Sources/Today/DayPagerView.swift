@@ -11,55 +11,46 @@ struct DayPagerView: View {
 
     var body: some View {
         @Bindable var appModel = appModel
-        ZStack {
-            SparkResolvedAppBackground()
+        NavigationStack(path: $path) {
+            ZStack {
+                SparkResolvedAppBackground()
 
-            NavigationStack(path: $path) {
-                ZStack {
-                    SparkResolvedAppBackground()
-
-                    TabView(selection: $selectedOffset) {
-                        ForEach(dates) { key in
-                            TodayView(
-                                date: key.date,
-                                showsToolbar: key.offset == selectedOffset
-                            )
-                            .tag(key.offset)
-                        }
+                TabView(selection: $selectedOffset) {
+                    ForEach(dates) { key in
+                        TodayView(
+                            date: key.date,
+                            showsToolbar: key.offset == selectedOffset
+                        )
+                        .tag(key.offset)
                     }
-                    .tabViewStyle(.page(indexDisplayMode: .never))
-                    .ignoresSafeArea()
                 }
-                .ignoresSafeArea()
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbarBackground(.hidden, for: .navigationBar)
-                    .navigationDestination(for: DetailRoute.self) { route in
-                        switch route {
-                        case .event(let id):
-                            EventDetailView(eventId: id)
-                        case .object(let id):
-                            ObjectDetailView(objectId: id)
-                        case .block(let id):
-                            BlockDetailView(blockId: id)
-                        case .metric(let identifier):
-                            MetricDetailView(identifier: identifier)
-                        case .place(let id):
-                            PlaceDetailView(placeId: id)
-                        case .anomaly(let id):
-                            AnomalyDetailView(anomalyId: id)
-                        case .integration(let service):
-                            IntegrationDetailView(integrationId: service)
-                        case .account(let id):
-                            AccountDetailView(accountId: id)
-                        case .tag(let id, let name, let type):
-                            TagDetailView(tagID: id, tagName: name, tagType: type)
-                        }
-                    }
+                .tabViewStyle(.page(indexDisplayMode: .never))
             }
-            .scrollContentBackground(.hidden)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .navigationDestination(for: DetailRoute.self) { route in
+                switch route {
+                case .event(let id):
+                    EventDetailView(eventId: id)
+                case .object(let id):
+                    ObjectDetailView(objectId: id)
+                case .block(let id):
+                    BlockDetailView(blockId: id)
+                case .metric(let identifier):
+                    MetricDetailView(identifier: identifier)
+                case .place(let id):
+                    PlaceDetailView(placeId: id)
+                case .anomaly(let id):
+                    AnomalyDetailView(anomalyId: id)
+                case .integration(let service):
+                    IntegrationDetailView(integrationId: service)
+                case .account(let id):
+                    AccountDetailView(accountId: id)
+                case .tag(let id, let name, let type):
+                    TagDetailView(tagID: id, tagName: name, tagType: type)
+                }
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .ignoresSafeArea()
         .onChange(of: appModel.pendingRoute) { _, route in
             apply(route: route)
         }

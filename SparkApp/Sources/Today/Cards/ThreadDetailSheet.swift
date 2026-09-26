@@ -67,12 +67,12 @@ struct ThreadDetailSheet: View {
             HStack(spacing: SparkSpacing.sm) {
                 if let kind = topic.kind {
                     Text(kind.rawValue)
-                        .font(SparkTypography.monoSmall)
+                        .font(SparkTypography.caption)
                         .foregroundStyle(.secondary)
                 }
                 if let status = topic.status {
                     Text(status.rawValue)
-                        .font(SparkTypography.monoSmall)
+                        .font(SparkTypography.caption)
                         .foregroundStyle(.secondary)
                 }
             }

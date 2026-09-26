@@ -14,13 +14,17 @@ struct FlintQuestionStack: View {
     let questions: [FlintQuestion]
     let onAnswer: (FlintQuestion, String) -> Void
     let onOpen: () -> Void
+    @State private var visibleQuestionID: String?
 
     private var isPaged: Bool { questions.count > 1 }
+    private var visibleIndex: Int {
+        questions.firstIndex { $0.id == visibleQuestionID } ?? 0
+    }
 
     var body: some View {
         if !questions.isEmpty {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                SectionLabel("For you")
+                SectionLabel("For you", style: .dayHeading)
 
                 ScrollView(.horizontal) {
                     LazyHStack(spacing: SparkSpacing.md) {
@@ -33,52 +37,39 @@ struct FlintQuestionStack: View {
                             .containerRelativeFrame(.horizontal) { width, _ in
                                 // The next card peeks when there is one to
                                 // peek, which is the whole swipe affordance.
-                                isPaged ? width - SparkSpacing.xxl : width
+                                isPaged ? width - SparkSpacing.xl : width
                             }
                             .id(question.id)
                         }
                     }
+                    .padding(.vertical, SparkSpacing.sm)
                     .scrollTargetLayout()
                 }
                 .scrollTargetBehavior(.viewAligned)
+                .scrollPosition(id: $visibleQuestionID)
                 .scrollIndicators(.hidden)
+                // Glass shadows and the next-card peek should not end at the
+                // scroll view's rectangular content bounds.
+                .scrollClipDisabled()
                 .scrollDisabled(!isPaged)
 
                 if isPaged {
-                    legend
+                    pageIndicator
                 }
             }
         }
     }
 
-    /// One mark per question, amber for the ones still wanting an answer and
-    /// green for the ones already given. Deliberately not a position
-    /// indicator: the peeking card says there is more to swipe to, and reading
-    /// scroll position back needs API that is deprecated on this deployment
-    /// target.
-    private var legend: some View {
+    private var pageIndicator: some View {
         HStack(spacing: 5) {
-            ForEach(questions) { question in
+            ForEach(Array(questions.enumerated()), id: \.element.id) { index, _ in
                 Capsule()
-                    .fill(
-                        question.status == .answered
-                            ? Color.sparkSuccess.opacity(0.7)
-                            : Color.sparkAccent
-                    )
+                    .fill(index == visibleIndex ? Color.sparkAccent : Color.primary.opacity(0.25))
                     .frame(width: 6, height: 6)
             }
         }
         .frame(maxWidth: .infinity)
-        .accessibilityLabel(legendLabel)
-    }
-
-    private var legendLabel: String {
-        let open = questions.filter { $0.status != .answered }.count
-        let answered = questions.count - open
-        var parts: [String] = []
-        if open > 0 { parts.append("\(open) waiting on you") }
-        if answered > 0 { parts.append("\(answered) answered") }
-        return parts.joined(separator: ", ")
+        .accessibilityLabel("Question \(visibleIndex + 1) of \(questions.count)")
     }
 }
 
@@ -102,7 +93,7 @@ private struct FlintQuestionCard: View {
 
             if let asked = question.askedAt {
                 Text(Self.relative.localizedString(for: asked, relativeTo: .now))
-                    .font(SparkTypography.monoSmall)
+                    .font(SparkTypography.caption)
                     .foregroundStyle(.tertiary)
             }
 
@@ -164,8 +155,8 @@ private struct FlintQuestionCard: View {
                         Text(option)
                             .font(SparkTypography.captionStrong)
                             .foregroundStyle(.primary)
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, minHeight: 38)
+                            .lineLimit(2)
+                            .frame(maxWidth: .infinity, minHeight: 44)
                             .padding(.horizontal, SparkSpacing.md)
                             .background(Color.sparkElevated.opacity(0.88), in: .capsule)
                             .overlay {
@@ -182,7 +173,7 @@ private struct FlintQuestionCard: View {
                 Text("Answer")
                     .font(SparkTypography.captionStrong)
                     .foregroundStyle(.primary)
-                    .frame(minHeight: 38)
+                    .frame(minHeight: 44)
                     .padding(.horizontal, SparkSpacing.lg)
                     .background(Color.sparkElevated.opacity(0.88), in: .capsule)
                     .overlay {

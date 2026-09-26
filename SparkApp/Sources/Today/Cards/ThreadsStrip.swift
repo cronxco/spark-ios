@@ -36,7 +36,7 @@ struct ThreadsStrip: View {
     var body: some View {
         if !active.isEmpty || !dormant.isEmpty {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                SectionLabel("Threads")
+                SectionLabel("Threads", style: .dayHeading)
 
                 if !active.isEmpty {
                     ScrollView(.horizontal) {
@@ -46,12 +46,20 @@ struct ThreadsStrip: View {
                                     ThreadCard(topic: topic)
                                 }
                                 .buttonStyle(.plain)
+                                .containerRelativeFrame(.horizontal) { width, _ in
+                                    active.count > 1 ? width - SparkSpacing.xl : width
+                                }
                             }
                         }
+                        .padding(.vertical, SparkSpacing.sm)
                         .scrollTargetLayout()
                     }
                     .scrollTargetBehavior(.viewAligned)
                     .scrollIndicators(.hidden)
+                    // Keep the card corners, shadows and adjacent-card peek
+                    // visible beyond the horizontal scroll viewport.
+                    .scrollClipDisabled()
+                    .scrollDisabled(active.count <= 1)
                 }
 
                 if !dormant.isEmpty {
@@ -106,7 +114,7 @@ private struct ThreadCard: View {
                     .fill(Self.tint(for: topic.kind))
                     .frame(width: 6, height: 6)
                 Text(topic.kind?.rawValue ?? "thread")
-                    .font(SparkTypography.monoSmall)
+                    .font(SparkTypography.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -126,7 +134,7 @@ private struct ThreadCard: View {
             }
         }
         .padding(SparkSpacing.md)
-        .frame(width: 262, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .sparkGlass(.roundedRect(SparkRadii.md))
         .accessibilityElement(children: .combine)
         .accessibilityHint("Opens the thread")

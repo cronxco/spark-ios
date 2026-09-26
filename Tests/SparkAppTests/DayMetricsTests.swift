@@ -337,6 +337,8 @@ struct DayMetricsTests {
         }
         #expect(text == "£0.00")
         #expect(delta == nil)
+        #expect(money.fill == 0)
+        #expect(money.baseline == nil)
     }
 
     @Test("Apple Health whose day is complete reads even if called stale")

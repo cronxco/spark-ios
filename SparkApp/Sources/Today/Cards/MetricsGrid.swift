@@ -4,23 +4,27 @@ import SwiftUI
 
 /// Sleep, activity, readiness and money, in one grammar.
 ///
-/// Two columns at ordinary type sizes; one at accessibility sizes, where two
-/// 173pt cards cannot hold a figure and its two supporting values without
-/// wrapping into a ragged grid.
+/// Two columns when each card has room for its supporting values; one on a
+/// narrow layout or at larger Dynamic Type sizes.
 struct MetricsGrid: View {
     let metrics: DayMetrics
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var isNarrow = false
+
+    // Two cards need at least 192 points each for their supporting rows,
+    // plus the gap between them. Below that, keep the values in one column.
+    private nonisolated static let minimumTwoColumnWidth: CGFloat = 400
 
     private var columns: [GridItem] {
-        let count = dynamicTypeSize.isAccessibilitySize ? 1 : 2
-        return Array(repeating: GridItem(.flexible(), spacing: SparkSpacing.md), count: count)
+        let count = isNarrow || dynamicTypeSize >= .xxxLarge ? 1 : 2
+        return Array(repeating: GridItem(.flexible(), spacing: SparkSpacing.lg), count: count)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-            SectionLabel("Metrics")
+        VStack(alignment: .leading, spacing: SparkSpacing.md) {
+            SectionLabel("Metrics", style: .dayHeading)
 
-            LazyVGrid(columns: columns, spacing: SparkSpacing.md) {
+            LazyVGrid(columns: columns, spacing: SparkSpacing.lg) {
                 ForEach(metrics.cards) { card in
                     BaselineMetricCard(
                         label: card.label,
@@ -34,6 +38,11 @@ struct MetricsGrid: View {
                     )
                 }
             }
+        }
+        .onGeometryChange(for: Bool.self) { geometry in
+            geometry.size.width < Self.minimumTwoColumnWidth
+        } action: { narrow in
+            isNarrow = narrow
         }
     }
 }

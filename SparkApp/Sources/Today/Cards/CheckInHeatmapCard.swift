@@ -1,13 +1,10 @@
 import SparkKit
 import SparkUI
-import SwiftData
 import SwiftUI
 
 struct CheckInHeatmapCard: View {
-    let date: Date
+    let historyVM: CheckInHistoryViewModel?
     @Binding var showHistory: Bool
-    @Environment(\.modelContext) private var modelContext
-    @State private var historyDays: [CheckInHeatmapDay] = []
 
     var body: some View {
         GlassCard {
@@ -16,58 +13,29 @@ struct CheckInHeatmapCard: View {
                     SectionLabel("Last 28 days")
                     Spacer()
                     Text("\(completedDayCount) logged")
-                        .font(SparkTypography.monoSmall)
+                        .font(SparkTypography.caption)
                         .foregroundStyle(.secondary)
                 }
-                CheckInHeatmap(days: historyDays)
+                CheckInHeatmap(days: heatmapDays)
             }
         }
         .contentShape(Rectangle())
         .onTapGesture { showHistory = true }
-        .task(id: Self.isoDate(date)) { await loadHistory() }
     }
 
     private var completedDayCount: Int {
-        historyDays.filter { $0.morningScore != nil || $0.afternoonScore != nil }.count
+        historyVM?.days.filter { $0.morning.completed || $0.afternoon.completed }.count ?? 0
     }
 
-    private func loadHistory() async {
-        let calendar = Calendar.current
-        let endDay = calendar.startOfDay(for: date)
-        var days: [CheckInHeatmapDay] = []
-
-        for offset in stride(from: 27, through: 0, by: -1) {
-            guard let day = calendar.date(byAdding: .day, value: -offset, to: endDay) else { continue }
-            let dateKey = Self.isoDate(day)
-            let label = String(calendar.component(.day, from: day))
-
-            let descriptor = FetchDescriptor<CachedCheckIn>(
-                predicate: #Predicate { $0.date == dateKey }
+    private var heatmapDays: [CheckInHeatmapDay] {
+        (historyVM?.days ?? []).reversed().map { day in
+            CheckInHeatmapDay(
+                id: day.date,
+                date: day.date,
+                label: String(Int(day.date.suffix(2)) ?? 0),
+                morningScore: day.morning.combined,
+                afternoonScore: day.afternoon.combined
             )
-            let rows = (try? modelContext.fetch(descriptor)) ?? []
-            let morning = rows.first(where: { $0.period == "morning" && $0.completed })
-            let afternoon = rows.first(where: { $0.period == "afternoon" && $0.completed })
-
-            days.append(CheckInHeatmapDay(
-                id: dateKey,
-                date: dateKey,
-                label: label,
-                morningScore: combinedScore(for: morning),
-                afternoonScore: combinedScore(for: afternoon)
-            ))
         }
-
-        historyDays = days
-    }
-
-    private func combinedScore(for row: CachedCheckIn?) -> Int? {
-        guard let physical = row?.physical, let mental = row?.mental else { return nil }
-        return physical + mental
-    }
-
-    private static func isoDate(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd"
-        return f.string(from: date)
     }
 }
