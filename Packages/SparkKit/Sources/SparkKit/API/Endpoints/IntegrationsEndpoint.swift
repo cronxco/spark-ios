@@ -15,6 +15,13 @@ public enum IntegrationsEndpoint {
         Endpoint(method: .get, path: "/integrations/\(id)")
     }
 
+    /// GET /integrations/{id} without `If-None-Match`, for reads that need the
+    /// body and a fresh `ETag` — a first load, or the re-read before retrying a
+    /// conditional write — and must never get a 304.
+    public static func detailForWrite(id: String) -> Endpoint<IntegrationDetail> {
+        Endpoint(method: .get, path: "/integrations/\(id)", usesETag: false)
+    }
+
     /// POST /integrations/{id}/sync — the backend requires `If-Match`; pass
     /// the detail read's ETag.
     public static func syncNow(id: String, etag: String? = nil) -> Endpoint<EmptyResponse> {

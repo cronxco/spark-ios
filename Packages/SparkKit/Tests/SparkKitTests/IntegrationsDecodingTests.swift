@@ -170,5 +170,13 @@ struct IntegrationsDecodingTests {
         let body = try JSONSerialization.jsonObject(with: #require(pause.body)) as? [String: Bool]
         #expect(body?["paused"] == true)
     }
-}
 
+    @Test("the conflict re-read bypasses the ETag cache")
+    func detailForWriteBypassesETagCache() {
+        let endpoint = IntegrationsEndpoint.detailForWrite(id: "i1")
+        #expect(endpoint.method == .get)
+        #expect(endpoint.path == "/integrations/i1")
+        #expect(endpoint.usesETag == false)
+        #expect(IntegrationsEndpoint.detail(id: "i1").usesETag)
+    }
+}

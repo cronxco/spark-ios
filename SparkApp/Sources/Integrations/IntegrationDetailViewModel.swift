@@ -32,10 +32,18 @@ final class IntegrationDetailViewModel {
         self.apiClient = apiClient
     }
 
+    /// Keeps a loaded detail on screen while it revalidates. With nothing
+    /// loaded yet there is no body for a 304 to stand for, so that first read
+    /// bypasses the ETag cache rather than risk stranding the shimmer.
     func load() async {
-        state = .loading
+        let hasDetail: Bool
+        if case .loaded = state { hasDetail = true } else { hasDetail = false }
+        if !hasDetail { state = .loading }
         do {
-            let response = try await apiClient.requestWithRawResponse(IntegrationsEndpoint.detail(id: integrationId))
+            let endpoint = hasDetail
+                ? IntegrationsEndpoint.detail(id: integrationId)
+                : IntegrationsEndpoint.detailForWrite(id: integrationId)
+            let response = try await apiClient.requestWithRawResponse(endpoint)
             rawPayload = response.utf8Body
             etag = response.etag
             state = .loaded(response.decoded)
@@ -83,12 +91,17 @@ final class IntegrationDetailViewModel {
     }
 
     /// Runs a conditional write, and if the version was missing or stale,
-    /// re-reads once to pick up the current ETag and tries again.
+    /// re-reads once to pick up the current ETag and tries again. The detail
+    /// stays on screen throughout; if the re-read fails, that error is
+    /// thrown and the write is not retried.
     private func withFreshVersionOnConflict<T: Sendable>(_ write: @MainActor () async throws -> T) async throws -> T {
         do {
             return try await write()
         } catch let error as APIError where error.isPreconditionFailure {
-            await load()
+            let response = try await apiClient.requestWithRawResponse(IntegrationsEndpoint.detailForWrite(id: integrationId))
+            rawPayload = response.utf8Body
+            etag = response.etag
+            state = .loaded(response.decoded)
             return try await write()
         }
     }
