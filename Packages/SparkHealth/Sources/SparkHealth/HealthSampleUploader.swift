@@ -42,12 +42,20 @@ public final class HealthSampleUploader: NSObject, @unchecked Sendable {
         _ = session // Force lazy init to reconnect to the existing background session
     }
 
+    /// Uploads in batches of at most `HealthSample.maxBatchSize`, the most the
+    /// server accepts; a larger request is rejected whole.
     public func upload(samples: [HealthSample]) {
-        guard !samples.isEmpty else { return }
+        for batch in HealthSampleBatch.batches(of: samples) {
+            upload(batch: batch)
+        }
+    }
+
+    // MARK: - Private
+
+    private func upload(batch: HealthSampleBatch) {
         let env = lock.withLock { environment }
         let token = lock.withLock { accessToken }
 
-        let batch = HealthSampleBatch(samples: samples)
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         guard let body = try? encoder.encode(batch) else { return }
@@ -83,8 +91,6 @@ public final class HealthSampleUploader: NSObject, @unchecked Sendable {
         #endif
         task.resume()
     }
-
-    // MARK: - Private
 
     private func cacheURL(for name: String) -> URL {
         let dir = FileManager.default

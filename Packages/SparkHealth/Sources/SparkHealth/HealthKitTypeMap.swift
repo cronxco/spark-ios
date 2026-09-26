@@ -52,6 +52,19 @@ public enum HealthKitTypeMap {
         }
     }
 
+    /// How a day's samples combine into its reading: summed for running
+    /// totals, averaged for measurements. HealthKit's statistics apply this
+    /// across sources, so steps logged by both the iPhone and the Watch count
+    /// once.
+    public static func dailyStatistic(for identifier: HKQuantityTypeIdentifier) -> HKStatisticsOptions {
+        switch identifier {
+        case .stepCount, .activeEnergyBurned, .distanceWalkingRunning, .appleExerciseTime:
+            return .cumulativeSum
+        default:
+            return .discreteAverage
+        }
+    }
+
     public static func backgroundFrequency(for identifier: HKQuantityTypeIdentifier) -> HKUpdateFrequency {
         switch identifier {
         case .heartRate, .activeEnergyBurned:

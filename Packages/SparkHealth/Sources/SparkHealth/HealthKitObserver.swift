@@ -3,8 +3,13 @@ import HealthKit
 import SparkKit
 
 /// Registers HKObserverQuery for each authorised type. On each fire, runs an
-/// HKAnchoredObjectQuery and hands new samples to HealthSampleUploader.
+/// HKAnchoredObjectQuery for what is new and hands it to HealthSampleUploader.
 /// Background delivery is enabled per-type so iOS can wake the app.
+///
+/// Quantity types are uploaded as one reading per local day — HealthKit's own
+/// daily total or average for each day the new samples touch — rather than as
+/// the samples themselves. The server keeps one reading per metric per day, and
+/// HealthKit's statistics count an overlap between iPhone and Watch once.
 ///
 /// Observer queries do not fire on the simulator — test on device.
 public final class HealthKitObserver: @unchecked Sendable {
@@ -66,21 +71,83 @@ public final class HealthKitObserver: @unchecked Sendable {
             anchor: anchor,
             limit: HKObjectQueryNoLimit
         ) { [weak self] _, samples, deleted, newAnchor, error in
-            guard let self, error == nil else { return }
+            guard let self, error == nil, let newAnchor else { return }
+            let samples = samples ?? []
+            guard !samples.isEmpty else { return }
 
-            if let newAnchor {
-                let converted = self.convert(samples: samples ?? [], key: key)
-                if !converted.isEmpty {
-                    let enabled = UserDefaults(suiteName: "group.co.cronx.sparkapp")?
-                        .bool(forKey: Self.uploadEnabledKey) == true
-                    if enabled {
+            let enabled = UserDefaults(suiteName: "group.co.cronx.sparkapp")?
+                .bool(forKey: Self.uploadEnabledKey) == true
+            if enabled {
+                if HealthKitTypeMap.quantityTypes.contains(HKQuantityTypeIdentifier(rawValue: key)) {
+                    self.uploadDailyReadings(key: key, days: Self.localDays(touchedBy: samples))
+                } else {
+                    let converted = self.convert(samples: samples, key: key)
+                    if !converted.isEmpty {
                         self.uploader.upload(samples: converted)
                     }
-                    self.anchorStore.save(newAnchor, for: key)
                 }
             }
+            self.anchorStore.save(newAnchor, for: key)
         }
         store.execute(anchoredQuery)
+    }
+
+    /// The start of each local day a sample covers; one that runs past
+    /// midnight touches both days.
+    private static func localDays(touchedBy samples: [HKSample]) -> Set<Date> {
+        let calendar = Calendar.current
+        var days = Set<Date>()
+        for sample in samples {
+            var day = calendar.startOfDay(for: sample.startDate)
+            let last = calendar.startOfDay(for: sample.endDate)
+            while day <= last {
+                days.insert(day)
+                guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
+                day = next
+            }
+        }
+        return days
+    }
+
+    /// Reads HealthKit's daily statistic for each of `days` and uploads it as
+    /// that day's reading, taken now.
+    private func uploadDailyReadings(key: String, days: Set<Date>) {
+        guard let first = days.min() else { return }
+        let identifier = HKQuantityTypeIdentifier(rawValue: key)
+        let calendar = Calendar.current
+        let asOf = Date()
+
+        let query = HKStatisticsCollectionQuery(
+            quantityType: HKQuantityType(identifier),
+            quantitySamplePredicate: HKQuery.predicateForSamples(withStart: first, end: asOf, options: []),
+            options: HealthKitTypeMap.dailyStatistic(for: identifier),
+            anchorDate: first,
+            intervalComponents: DateComponents(day: 1)
+        )
+        query.initialResultsHandler = { [weak self] _, collection, error in
+            guard let self, error == nil, let collection else { return }
+            let identifier = HKQuantityTypeIdentifier(rawValue: key)
+            let (unit, unitString) = HealthKitTypeMap.unit(for: identifier)
+            let summed = HealthKitTypeMap.dailyStatistic(for: identifier) == .cumulativeSum
+
+            let readings: [HealthSample] = collection.statistics().compactMap { statistics in
+                guard days.contains(calendar.startOfDay(for: statistics.startDate)),
+                      let quantity = summed ? statistics.sumQuantity() : statistics.averageQuantity()
+                else { return nil }
+
+                return HealthSample.dailyReading(
+                    type: HealthKitTypeMap.serverType(for: identifier),
+                    day: statistics.startDate,
+                    value: quantity.doubleValue(for: unit),
+                    unit: unitString,
+                    source: "HealthKit",
+                    asOf: asOf,
+                    calendar: calendar
+                )
+            }
+            self.uploader.upload(samples: readings)
+        }
+        store.execute(query)
     }
 
     private func convert(samples: [HKSample], key: String) -> [HealthSample] {
