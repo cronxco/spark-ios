@@ -63,6 +63,11 @@ public final class HealthKitObserver: @unchecked Sendable {
 
     private func fetchNewSamples(for objectType: HKObjectType, key: String) {
         guard let sampleType = objectType as? HKSampleType else { return }
+        // While uploads are off, nothing is read and the anchor stays put, so
+        // turning them on sends everything since the last delivered upload.
+        let enabled = UserDefaults(suiteName: "group.co.cronx.sparkapp")?
+            .bool(forKey: Self.uploadEnabledKey) == true
+        guard enabled else { return }
         let anchor = anchorStore.anchor(for: key)
 
         let anchoredQuery = HKAnchoredObjectQuery(
@@ -73,23 +78,46 @@ public final class HealthKitObserver: @unchecked Sendable {
         ) { [weak self] _, samples, deleted, newAnchor, error in
             guard let self, error == nil, let newAnchor else { return }
             let samples = samples ?? []
-            guard !samples.isEmpty else { return }
+            let deleted = deleted ?? []
+            guard !samples.isEmpty || !deleted.isEmpty,
+                  let archivedAnchor = self.anchorStore.archive(newAnchor)
+            else { return }
 
-            let enabled = UserDefaults(suiteName: "group.co.cronx.sparkapp")?
-                .bool(forKey: Self.uploadEnabledKey) == true
-            if enabled {
-                if HealthKitTypeMap.quantityTypes.contains(HKQuantityTypeIdentifier(rawValue: key)) {
-                    self.uploadDailyReadings(key: key, days: Self.localDays(touchedBy: samples))
-                } else {
-                    let converted = self.convert(samples: samples, key: key)
-                    if !converted.isEmpty {
-                        self.uploader.upload(samples: converted)
-                    }
-                }
+            // The anchor moves only once the server has accepted everything it
+            // covers. A failed or interrupted upload leaves it where it was, so
+            // the next run re-reads the same samples; the server keeps the
+            // latest reading of a day, so sending one twice is harmless.
+            let anchorStore = self.anchorStore
+            let advanceAnchor: @Sendable (Bool) -> Void = { delivered in
+                if delivered { anchorStore.save(archived: archivedAnchor, for: key) }
             }
-            self.anchorStore.save(newAnchor, for: key)
+
+            if HealthKitTypeMap.quantityTypes.contains(HKQuantityTypeIdentifier(rawValue: key)) {
+                var days = Self.localDays(touchedBy: samples)
+                if !deleted.isEmpty {
+                    // A deletion carries only the sample's UUID, not its date.
+                    days.formUnion(Self.recentLocalDays(Self.deletionRereadDays))
+                }
+                self.uploadDailyReadings(key: key, days: days, completion: advanceAnchor)
+            } else {
+                // Category samples upload as they are; a deletion has nothing
+                // to send.
+                self.uploader.upload(samples: self.convert(samples: samples, key: key), completion: advanceAnchor)
+            }
         }
         store.execute(anchoredQuery)
+    }
+
+    /// How far back a deletion re-reads, since HealthKit does not say which
+    /// day a deleted sample belonged to. Deleting data from further back
+    /// leaves that day's reading as it was.
+    private static let deletionRereadDays = 30
+
+    /// The start of each of the last `count` local days, today included.
+    private static func recentLocalDays(_ count: Int) -> Set<Date> {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        return Set((0 ..< count).compactMap { calendar.date(byAdding: .day, value: -$0, to: today) })
     }
 
     /// The start of each local day a sample covers; one that runs past
@@ -110,9 +138,17 @@ public final class HealthKitObserver: @unchecked Sendable {
     }
 
     /// Reads HealthKit's daily statistic for each of `days` and uploads it as
-    /// that day's reading, taken now.
-    private func uploadDailyReadings(key: String, days: Set<Date>) {
-        guard let first = days.min() else { return }
+    /// that day's reading, taken now. `completion` hears whether every reading
+    /// was delivered.
+    ///
+    /// A day with nothing left to read, such as one whose only samples were
+    /// deleted, sends nothing: the API has no way to clear a day, and a zero
+    /// would invent a reading for a day HealthKit has no data for.
+    private func uploadDailyReadings(key: String, days: Set<Date>, completion: @escaping @Sendable (Bool) -> Void) {
+        guard let first = days.min() else {
+            completion(true)
+            return
+        }
         let identifier = HKQuantityTypeIdentifier(rawValue: key)
         let calendar = Calendar.current
         let asOf = Date()
@@ -125,7 +161,10 @@ public final class HealthKitObserver: @unchecked Sendable {
             intervalComponents: DateComponents(day: 1)
         )
         query.initialResultsHandler = { [weak self] _, collection, error in
-            guard let self, error == nil, let collection else { return }
+            guard let self, error == nil, let collection else {
+                completion(false)
+                return
+            }
             let identifier = HKQuantityTypeIdentifier(rawValue: key)
             let (unit, unitString) = HealthKitTypeMap.unit(for: identifier)
             let summed = HealthKitTypeMap.dailyStatistic(for: identifier) == .cumulativeSum
@@ -145,7 +184,7 @@ public final class HealthKitObserver: @unchecked Sendable {
                     calendar: calendar
                 )
             }
-            self.uploader.upload(samples: readings)
+            self.uploader.upload(samples: readings, completion: completion)
         }
         store.execute(query)
     }
