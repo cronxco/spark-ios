@@ -13,11 +13,15 @@ public struct StoryProgressBar: View {
         public let label: String
         public let segments: Int
         public let accent: Color?
+        /// Draw the chapter as one continuous track instead of a segment per
+        /// screen. For long chapters, where a segment each shrinks to a dot.
+        public let compact: Bool
 
-        public init(label: String, segments: Int, accent: Color? = nil) {
+        public init(label: String, segments: Int, accent: Color? = nil, compact: Bool = false) {
             self.label = label
             self.segments = segments
             self.accent = accent
+            self.compact = compact
         }
     }
 
@@ -43,8 +47,21 @@ public struct StoryProgressBar: View {
         HStack(spacing: 10) {
             ForEach(Array(chapters.enumerated()), id: \.offset) { chapterIndex, chapter in
                 HStack(spacing: 4) {
-                    ForEach(0..<chapter.segments, id: \.self) { segmentInChapter in
-                        segment(for: globalIndex(chapterIndex: chapterIndex, segmentInChapter: segmentInChapter), accent: chapter.accent ?? .sparkAccent)
+                    if chapter.compact {
+                        track(
+                            fraction: Self.compactFillFraction(
+                                start: globalIndex(chapterIndex: chapterIndex, segmentInChapter: 0),
+                                segments: chapter.segments,
+                                currentIndex: currentIndex,
+                                segmentProgress: segmentProgress
+                            ),
+                            isPast: currentIndex >= globalIndex(chapterIndex: chapterIndex, segmentInChapter: chapter.segments),
+                            accent: chapter.accent ?? .sparkAccent
+                        )
+                    } else {
+                        ForEach(0..<chapter.segments, id: \.self) { segmentInChapter in
+                            segment(for: globalIndex(chapterIndex: chapterIndex, segmentInChapter: segmentInChapter), accent: chapter.accent ?? .sparkAccent)
+                        }
                     }
                 }
                 .accessibilityElement(children: .ignore)
@@ -68,16 +85,31 @@ public struct StoryProgressBar: View {
 
     @ViewBuilder
     private func segment(for index: Int, accent: Color) -> some View {
+        track(fraction: fillFraction(for: index), isPast: index < currentIndex, accent: accent)
+    }
+
+    @ViewBuilder
+    private func track(fraction: Double, isPast: Bool, accent: Color) -> some View {
         GeometryReader { geo in
             Capsule()
                 .fill(accent.opacity(0.18))
                 .overlay(alignment: .leading) {
                     Capsule()
-                        .fill(index < currentIndex ? accent.opacity(0.55) : accent)
-                        .frame(width: geo.size.width * fillFraction(for: index))
+                        .fill(isPast ? accent.opacity(0.55) : accent)
+                        .frame(width: geo.size.width * fraction)
                 }
         }
         .frame(height: 3)
+    }
+
+    /// How far through a compact chapter the reader is: whole screens passed
+    /// plus progress on the current one, over the chapter's screen count.
+    public static func compactFillFraction(start: Int, segments: Int, currentIndex: Int, segmentProgress: Double) -> Double {
+        guard segments > 0 else { return 0 }
+        if currentIndex < start { return 0 }
+        if currentIndex >= start + segments { return 1 }
+        let passed = Double(currentIndex - start)
+        return ((passed + segmentProgress.clamped(to: 0...1)) / Double(segments)).clamped(to: 0...1)
     }
 
     private func fillFraction(for index: Int) -> Double {
@@ -103,6 +135,7 @@ extension Comparable {
                 .init(label: "Ask", segments: 1),
                 .init(label: "Day", segments: 1),
                 .init(label: "News", segments: 3),
+                .init(label: "Headlines", segments: 13, compact: true),
                 .init(label: "Wrap", segments: 2)
             ],
             currentIndex: 4

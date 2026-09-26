@@ -71,6 +71,45 @@ struct UpToSpeedBlockParsingTests {
         #expect(section.watching == "The next inflation release.")
     }
 
+    @Test("leads with the block content when it differs from the news summary")
+    func standfirstFromContent() {
+        let block = FlintDigestBlock(
+            id: "story-1",
+            blockType: "flint_news",
+            title: "Rates hold",
+            content: "The Bank held rates at 4%.",
+            news: FlintNewsContent(
+                summary: "The Bank held rates. Two members voted to cut.",
+                sources: [],
+                whyItMatters: nil,
+                whatToWatch: "The next inflation release."
+            )
+        )
+
+        let section = UpToSpeedParsing.newsRoundupSections(blocks: [block], summary: "")[0]
+
+        #expect(section.standfirst == "The Bank held rates at 4%.")
+        #expect(section.body == "The Bank held rates. Two members voted to cut.")
+    }
+
+    @Test("has no standfirst when content would repeat the body")
+    func noStandfirstWithoutStructuredNews() {
+        let plain = block("flint_news", title: "Mocha seizure", content: "The port was taken.")
+        let duplicate = FlintDigestBlock(
+            id: "story-2",
+            blockType: "flint_news",
+            title: "Same text",
+            content: "Identical.",
+            news: FlintNewsContent(summary: "Identical.", sources: [], whyItMatters: nil, whatToWatch: "Next.")
+        )
+
+        let sections = UpToSpeedParsing.newsRoundupSections(blocks: [plain, duplicate], summary: "")
+
+        #expect(sections[0].standfirst == nil)
+        #expect(sections[0].body == "The port was taken.")
+        #expect(sections[1].standfirst == nil)
+    }
+
     @Test("falls back to splitting the summary when there are no news blocks")
     func sectionsFallBackToProse() {
         let summary = """

@@ -11,7 +11,10 @@ struct UpToSpeedChapter: Identifiable {
         /// because the run-length grouping treats unequal keys as a boundary.
         case anomaly(domain: String?)
         case digest(title: String)
+        /// The roundup's few deep stories.
         case news
+        /// Every individual article behind them, as a skimmable second tier.
+        case headlines
         case wrap
         /// Everything already seen today, offered after the flow proper.
         case recap
@@ -22,6 +25,7 @@ struct UpToSpeedChapter: Identifiable {
             case .anomaly(let domain): Self.anomalyLabel(for: domain)
             case .digest: "Briefing"
             case .news: "News"
+            case .headlines: "Headlines"
             case .wrap: "Wrap"
             case .recap: "Earlier"
             }
@@ -33,6 +37,7 @@ struct UpToSpeedChapter: Identifiable {
             case .anomaly(let domain): Self.anomalyAccent(for: domain)
             case .digest: .sparkAccent
             case .news: .sparkOcean
+            case .headlines: .domainKnowledge
             case .wrap: .sparkSuccess
             case .recap: .secondary
             }
@@ -106,6 +111,7 @@ struct UpToSpeedChapter: Identifiable {
         case .anomaly: kind.shortLabel
         case .digest(let title): title
         case .news: "News roundup"
+        case .headlines: "Also in your news"
         case .wrap: "Before you go"
         case .recap: "Already seen today"
         }

@@ -449,3 +449,17 @@ struct SparkRelativeTimeTests {
         #expect(SparkRelativeTime.string(for: date("2025-08-12T09:00:00Z"), relativeTo: now, calendar: calendar, locale: locale) == "12 Aug 2025")
     }
 }
+
+@Suite("Story progress bar")
+struct StoryProgressBarTests {
+    @Test("a compact chapter fills in proportion to the screens passed")
+    func compactFillFraction() {
+        // Chapter spans global screens 4..<8.
+        #expect(StoryProgressBar.compactFillFraction(start: 4, segments: 4, currentIndex: 2, segmentProgress: 1) == 0)
+        #expect(StoryProgressBar.compactFillFraction(start: 4, segments: 4, currentIndex: 4, segmentProgress: 0) == 0)
+        #expect(StoryProgressBar.compactFillFraction(start: 4, segments: 4, currentIndex: 5, segmentProgress: 1) == 0.5)
+        #expect(StoryProgressBar.compactFillFraction(start: 4, segments: 4, currentIndex: 7, segmentProgress: 1) == 1)
+        #expect(StoryProgressBar.compactFillFraction(start: 4, segments: 4, currentIndex: 9, segmentProgress: 0) == 1)
+        #expect(StoryProgressBar.compactFillFraction(start: 0, segments: 0, currentIndex: 0, segmentProgress: 1) == 0)
+    }
+}

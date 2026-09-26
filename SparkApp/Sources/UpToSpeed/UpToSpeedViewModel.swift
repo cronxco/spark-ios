@@ -41,6 +41,12 @@ final class UpToSpeedViewModel {
     /// so something dismissed by accident can be found and restored.
     private(set) var recapItems: [UpToSpeedItem] = []
     private(set) var unmarkingIDs: Set<String> = []
+    /// Article event id → the 1-based roundup story that cited it. Lets a
+    /// Headlines page link back to its story and the index group by it.
+    private(set) var headlineCitations: [String: Int] = [:]
+    /// Articles the reader explicitly marked unread from the toolbar. The
+    /// dwell would otherwise re-mark one a moment after it was unmarked.
+    private(set) var manuallyUnreadIDs: Set<String> = []
     /// Digests whose detail fetch failed on the last load. The flow degrades to
     /// the feed summary for these, so the count exists to say so rather than
     /// present a half-empty story as the whole day.
@@ -262,8 +268,116 @@ final class UpToSpeedViewModel {
             consumed: consumedIndices,
             digestsAwaitingAnswers: digestsAwaitingAnswers
         ) else { return }
+        guard !manuallyUnreadIDs.contains(ref.id) else { return }
 
         enqueueMarkRead(ref)
+    }
+
+    // MARK: - Manual read state (Headlines articles)
+
+    /// Whether the item has been marked caught up in this session, by the
+    /// dwell or by hand. Drives the toolbar's Mark-as-read toggle.
+    func isMarkedRead(_ itemID: String) -> Bool {
+        sessionSeenDates[itemID] != nil && !manuallyUnreadIDs.contains(itemID)
+    }
+
+    /// The toolbar's Mark-as-read button. An extra path on top of the dwell,
+    /// never a replacement for it: it marks an article without scrolling to
+    /// the end, or takes back one the dwell already marked.
+    func toggleRead(_ item: UpToSpeedItem) async {
+        if isMarkedRead(item.id) {
+            await markUnreadManually(item)
+        } else {
+            manuallyUnreadIDs.remove(item.id)
+            enqueueMarkRead(UpToSpeedReadRef(type: item.type, id: item.id))
+        }
+    }
+
+    private func markUnreadManually(_ item: UpToSpeedItem) async {
+        let seenAt = sessionSeenDates[item.id]
+        manuallyUnreadIDs.insert(item.id)
+        sessionSeenDates.removeValue(forKey: item.id)
+        updateRecap()
+
+        // A mark still sitting in the queue never reached the server, so
+        // dropping it is the whole job — unless a flush already has it in
+        // flight, in which case the server may have it and needs telling.
+        let wasPending = pendingReadRefs.contains { $0.id == item.id }
+        pendingReadRefs.removeAll { $0.id == item.id }
+        if wasPending && !isFlushing { return }
+
+        await flushAndWait()
+        let ref = UpToSpeedReadRef(type: item.type, id: item.id)
+        do {
+            _ = try await apiClient.request(UpToSpeedEndpoint.unmark([ref]))
+        } catch {
+            // Put the toggle back rather than show unread over a server that
+            // still has it read.
+            manuallyUnreadIDs.remove(item.id)
+            sessionSeenDates[item.id] = seenAt ?? .now
+            updateRecap()
+        }
+    }
+
+    // MARK: - Story ↔ article links
+
+    /// The screen index of the roundup story numbered `story` (1-based),
+    /// counted across every roundup in the queue — the same numbering
+    /// `citedStories` hands out.
+    func storyScreenIndex(story: Int) -> Int? {
+        let storyIndices = screens.indices.filter {
+            if case .newsStory = screens[$0] { return true }
+            return false
+        }
+        return storyIndices.indices.contains(story - 1) ? storyIndices[story - 1] : nil
+    }
+
+    /// The screen index of the Headlines page for an article.
+    func articleScreenIndex(itemID: String) -> Int? {
+        screens.firstIndex {
+            if case .newsSummary(let item) = $0 { return item.id == itemID }
+            return false
+        }
+    }
+
+    /// The article a story cites from `publication`, when exactly one of its
+    /// referenced articles came from there. Guessing between two would link a
+    /// source's position to the wrong piece.
+    func citedArticle(publication: String, in section: NewsRoundupSection) -> UpToSpeedItem? {
+        let referenced = Set(section.references.map(\.id))
+        let matches = allItems.filter { item in
+            guard referenced.contains(item.id), case .newsSummary(let news) = item.payload else { return false }
+            return NewsSummaryScreen.publication(for: news)
+                .caseInsensitiveCompare(publication) == .orderedSame
+        }
+        return matches.count == 1 ? matches[0] : nil
+    }
+
+    /// Article id → the first story (1-based) that cites it. Numbered by
+    /// position across all the sections, not `section.id`: each roundup
+    /// digest numbers its own sections from zero, so two unread roundups
+    /// would otherwise both have a "story 1".
+    nonisolated static func citedStories(in sections: [NewsRoundupSection]) -> [String: Int] {
+        var result: [String: Int] = [:]
+        for (position, section) in sections.enumerated() {
+            for reference in section.references where result[reference.id] == nil {
+                result[reference.id] = position + 1
+            }
+        }
+        return result
+    }
+
+    /// Cited articles first, in story order, then the rest as the feed sent
+    /// them (newest first).
+    nonisolated static func headlineOrder(
+        _ articles: [UpToSpeedItem],
+        citedStories: [String: Int]
+    ) -> [UpToSpeedItem] {
+        articles.enumerated().sorted { lhs, rhs in
+            let left = citedStories[lhs.element.id] ?? .max
+            let right = citedStories[rhs.element.id] ?? .max
+            return left != right ? left < right : lhs.offset < rhs.offset
+        }.map(\.element)
     }
 
     /// The item that finishing the screen at `index` marks caught up, if any.
@@ -282,7 +396,7 @@ final class UpToSpeedViewModel {
         guard consumed.contains(index) else { return nil }
 
         switch screen {
-        case .opener, .wrap, .recap, .checkIn, .anomaly:
+        case .opener, .headlinesIndex, .wrap, .recap, .checkIn, .anomaly:
             // opener/wrap/recap are derived; check-in and anomaly mark via
             // their own signals. The recap in particular must never mark
             // anything: everything on it is already read, and reading it again
@@ -619,9 +733,23 @@ final class UpToSpeedViewModel {
         if dayContextCandidate?.describesToday(now: .now, calendar: .current) ?? true {
             openerYesterday = primaryDigestSummary.flatMap(UpToSpeedParsing.yesterdayRecap(from:))
         }
+        // Two tiers: the roundup's deep stories, then every individual article
+        // behind them as its own Headlines chapter, led by a contents page.
         built.append(contentsOf: newsScreens)
-        for item in unread where item.type == .newsSummary {
-            built.append((.newsSummary(item), .news))
+        let storySections = newsScreens.compactMap { entry -> NewsRoundupSection? in
+            if case .newsStory(_, let section, _, _) = entry.screen { return section }
+            return nil
+        }
+        headlineCitations = Self.citedStories(in: storySections)
+        let articles = Self.headlineOrder(
+            unread.filter { $0.type == .newsSummary },
+            citedStories: headlineCitations
+        )
+        if !articles.isEmpty {
+            built.append((.headlinesIndex(articles, citedStories: headlineCitations), .headlines))
+            for item in articles {
+                built.append((.newsSummary(item), .headlines))
+            }
         }
 
         // 4 — check-in (incomplete), then wrap

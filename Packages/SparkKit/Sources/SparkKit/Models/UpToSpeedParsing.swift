@@ -13,6 +13,10 @@ public struct NewsRoundupSection: Identifiable, Hashable, Sendable {
     public let watching: String?
     /// The remaining prose (headline / whatsNew / watching removed).
     public let body: String
+    /// The skill's short standalone distillation (`content`), shown as the
+    /// card's lead when the block also carries a longer `news.summary`. Nil
+    /// when the two would be the same text.
+    public var standfirst: String? = nil
     public var fullRoundup: String? = nil
     public var analysis: String? = nil
     public var references: [EntityReference] = []
@@ -70,6 +74,11 @@ public enum UpToSpeedParsing {
                 watching: block.news?.whatToWatch,
                 body: body
             )
+            if block.news?.summary != nil,
+               let content = block.content?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !content.isEmpty, content != body {
+                section.standfirst = content
+            }
             section.sourcePositions = block.news?.sources ?? []
             section.whyItMatters = block.news?.whyItMatters
             section.fullRoundup = summary.isEmpty ? nil : summary

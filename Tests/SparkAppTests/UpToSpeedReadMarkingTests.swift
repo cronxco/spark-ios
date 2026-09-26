@@ -56,6 +56,70 @@ struct UpToSpeedReadMarkingTests {
         #expect(ref?.type == UpToSpeedItemType.newsSummary.rawValue)
     }
 
+    // The Headlines contents page lists articles; reading the list is not
+    // reading any of them.
+    @Test func headlinesIndexNeverMarksAnything() {
+        let item = newsSummary(id: "news-a")
+        let screens: [UpToSpeedScreen] = [
+            .headlinesIndex([item], citedStories: [:]),
+            .newsSummary(item),
+        ]
+
+        #expect(target(at: 0, in: screens, consumed: [0]) == nil)
+        #expect(target(at: 1, in: screens, consumed: [0, 1])?.id == "news-a")
+    }
+
+    // A roundup is read once its final story is, and not before.
+    @Test func roundupIsMarkedReadOnItsLastConsumedStory() {
+        let item = digest(id: "roundup")
+        let screens: [UpToSpeedScreen] = [
+            .newsStory(item, section: section(0), index: 0, total: 2),
+            .newsStory(item, section: section(1), index: 1, total: 2),
+            .headlinesIndex([], citedStories: [:]),
+        ]
+
+        #expect(target(at: 0, in: screens, consumed: [0]) == nil)
+        #expect(target(at: 1, in: screens, consumed: [1]) == nil)
+        let ref = target(at: 1, in: screens, consumed: [0, 1])
+        #expect(ref?.id == "roundup")
+        #expect(ref?.type == UpToSpeedItemType.flintDigest.rawValue)
+    }
+
+    @Test func citedStoriesMapArticlesToTheFirstStoryThatCitesThem() {
+        var first = section(0)
+        first.references = [EntityReference(type: .event, id: "a", title: "A")]
+        var second = section(1)
+        second.references = [
+            EntityReference(type: .event, id: "a", title: "A"),
+            EntityReference(type: .event, id: "b", title: "B"),
+        ]
+
+        let cited = UpToSpeedViewModel.citedStories(in: [first, second])
+
+        #expect(cited == ["a": 1, "b": 2])
+    }
+
+    // Each roundup digest numbers its sections from zero. With two unread,
+    // numbering by `section.id` gave both a "story 1".
+    @Test func citedStoriesNumberAcrossRoundups() {
+        var firstDigest = section(0)
+        firstDigest.references = [EntityReference(type: .event, id: "a", title: "A")]
+        var secondDigest = section(0)
+        secondDigest.references = [EntityReference(type: .event, id: "b", title: "B")]
+
+        let cited = UpToSpeedViewModel.citedStories(in: [firstDigest, secondDigest])
+
+        #expect(cited == ["a": 1, "b": 2])
+    }
+
+    @Test func headlinesListCitedArticlesFirstThenFeedOrder() {
+        let articles = ["x", "b", "y", "a"].map(newsSummary(id:))
+
+        let ordered = UpToSpeedViewModel.headlineOrder(articles, citedStories: ["a": 1, "b": 2])
+
+        #expect(ordered.map(\.id) == ["a", "b", "x", "y"])
+    }
+
     // Consuming one page of a multi-page digest isn't finishing the digest.
     @Test func consumingAnEarlyDigestPageDoesNotMarkTheDigestRead() {
         let item = digest(id: "digest-a")
@@ -139,6 +203,10 @@ struct UpToSpeedReadMarkingTests {
                 keyTakeaways: nil
             ))
         )
+    }
+
+    private func section(_ id: Int) -> NewsRoundupSection {
+        NewsRoundupSection(id: id, heading: "Story \(id)", sources: [], whatsNew: nil, watching: nil, body: "Body")
     }
 
     private func digest(id: String) -> UpToSpeedItem {

@@ -14,6 +14,9 @@ enum UpToSpeedScreen: Identifiable {
     case anomaly(UpToSpeedItem)
     case newsStory(UpToSpeedItem, section: NewsRoundupSection, index: Int, total: Int)
     case newsSummary(UpToSpeedItem)
+    /// The second tier's contents page: every article in the Headlines
+    /// chapter, with the story number that cited it where one did.
+    case headlinesIndex([UpToSpeedItem], citedStories: [String: Int])
     case wrap
     /// Everything already caught up on today, offered after the wrap so an
     /// item dismissed by accident can be found again.
@@ -30,6 +33,7 @@ enum UpToSpeedScreen: Identifiable {
         case .anomaly(let item): item.id
         case .newsStory(let item, _, let index, _): "\(item.id)-news\(index)"
         case .newsSummary(let item): item.id
+        case .headlinesIndex: "headlines-index"
         case .wrap: "wrap"
         case .recap: "recap"
         }
@@ -38,7 +42,7 @@ enum UpToSpeedScreen: Identifiable {
     /// The backing feed item, when the screen has one.
     var item: UpToSpeedItem? {
         switch self {
-        case .opener, .wrap, .recap: nil
+        case .opener, .headlinesIndex, .wrap, .recap: nil
         case .flintHeader(let item, _): item
         case .flintParagraph(let item, _, _): item
         case .flintInsight(let item, _): item
@@ -68,7 +72,7 @@ enum UpToSpeedScreen: Identifiable {
                 return .generic
             }
             return .event(id: eventID, label: "check-in")
-        case .opener, .anomaly, .wrap, .recap:
+        case .opener, .anomaly, .headlinesIndex, .wrap, .recap:
             return .generic
         }
     }

@@ -92,7 +92,7 @@ struct FlintOpenerScreen: View {
                 .font(SparkTypography.body)
                 .foregroundStyle(.primary)
             Spacer(minLength: SparkSpacing.sm)
-            Text(chapter.cardCount == 1 ? "1 card" : "\(chapter.cardCount) cards")
+            Text(cardCountLabel(chapter))
                 .font(SparkTypography.caption)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
@@ -100,6 +100,15 @@ struct FlintOpenerScreen: View {
         .padding(.horizontal, SparkSpacing.lg)
         .padding(.vertical, SparkSpacing.md)
         .contentShape(Rectangle())
+    }
+
+    /// Headlines opens on a contents page, which isn't an article.
+    private func cardCountLabel(_ chapter: UpToSpeedChapter) -> String {
+        if chapter.kind == .headlines {
+            let articles = max(chapter.cardCount - 1, 0)
+            return articles == 1 ? "1 article" : "\(articles) articles"
+        }
+        return chapter.cardCount == 1 ? "1 card" : "\(chapter.cardCount) cards"
     }
 
     private var openerTime: String {

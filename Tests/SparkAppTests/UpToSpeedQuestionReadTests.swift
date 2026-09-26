@@ -123,6 +123,80 @@ struct UpToSpeedQuestionReadTests {
         #expect(vm.screens.map(\.id) == pages)
     }
 
+    // MARK: - Headlines tier
+
+    @Test("articles form their own Headlines chapter behind a contents page")
+    func articlesFormAHeadlinesChapter() async throws {
+        let viewModel = try await loadedViewModel(feed: Self.newsFeedJSON, expectsQuestion: false)
+
+        let kinds = viewModel.chapters.map(\.kind)
+        #expect(kinds.contains(.headlines))
+        #expect(!kinds.contains(.news))
+        let headlines = try #require(viewModel.chapters.first { $0.kind == .headlines })
+        #expect(headlines.cardCount == 2)
+        guard case .headlinesIndex(let listed, _) = viewModel.screens[headlines.range.lowerBound] else {
+            Issue.record("Headlines should open on its contents page")
+            return
+        }
+        #expect(listed.map(\.id) == ["news-a"])
+    }
+
+    @Test("the toolbar can mark an article read without the dwell")
+    func manualMarkRead() async throws {
+        let viewModel = try await loadedViewModel(feed: Self.newsFeedJSON, expectsQuestion: false)
+        let item = try #require(newsItem(in: viewModel))
+
+        #expect(!viewModel.isMarkedRead("news-a"))
+        await viewModel.toggleRead(item)
+
+        #expect(viewModel.isMarkedRead("news-a"))
+        #expect(viewModel.pendingReadRefs.contains { $0.id == "news-a" })
+    }
+
+    @Test("a manually unmarked article is not re-marked by the dwell")
+    func manualUnmarkSticks() async throws {
+        let viewModel = try await loadedViewModel(feed: Self.newsFeedJSON, expectsQuestion: false)
+        let item = try #require(newsItem(in: viewModel))
+        let index = try #require(viewModel.articleScreenIndex(itemID: "news-a"))
+
+        viewModel.markScreenConsumed(at: index)
+        #expect(viewModel.isMarkedRead("news-a"))
+
+        await viewModel.toggleRead(item)
+        #expect(!viewModel.isMarkedRead("news-a"))
+        #expect(!viewModel.pendingReadRefs.contains { $0.id == "news-a" })
+
+        // Swiping on re-runs the read test; it must respect the reader.
+        viewModel.markRead(at: index)
+        #expect(!viewModel.isMarkedRead("news-a"))
+        #expect(!viewModel.pendingReadRefs.contains { $0.id == "news-a" })
+
+        // And the button still works the other way.
+        await viewModel.toggleRead(item)
+        #expect(viewModel.isMarkedRead("news-a"))
+    }
+
+    private func newsItem(in viewModel: UpToSpeedViewModel) -> UpToSpeedItem? {
+        viewModel.screens.lazy.compactMap { screen -> UpToSpeedItem? in
+            if case .newsSummary(let item) = screen { return item }
+            return nil
+        }.first
+    }
+
+    private nonisolated static let newsFeedJSON = """
+    {"items":[{
+      "id":"news-a",
+      "type":"news_summary",
+      "caught_up_at":null,
+      "payload":{
+        "title":"City verdict lands",
+        "publication":"POLITICO London Playbook",
+        "source":"newsletter",
+        "tldr":"The commission found against City."
+      }
+    }]}
+    """
+
     private func loadedViewModel(feed: String = Self.feedJSON, detail: String = Self.digestJSON, expectsQuestion: Bool = true, restoreStatus: Int = 200) async throws -> UpToSpeedViewModel {
         await AppStubURLProtocol.set(host: Self.host) { request in
             let path = request.url?.path ?? ""

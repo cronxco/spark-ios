@@ -31,6 +31,19 @@ struct UpToSpeedChapterTests {
         #expect(chapters[4].range == 7..<9)
     }
 
+    /// The roundup's stories and the individual articles used to share one
+    /// "News" chapter — sixteen 3pt segments behind a "1 / 16" counter. They
+    /// are separate tiers now.
+    @Test func headlinesAreAChapterOfTheirOwn() {
+        let chapters = UpToSpeedChapter.chapters(for: [.intro, .news, .news, .news, .headlines, .headlines, .wrap])
+
+        #expect(chapters.map(\.kind) == [.intro, .news, .headlines, .wrap])
+        #expect(chapters[1].cardCount == 3)
+        #expect(chapters[2].cardCount == 2)
+        #expect(chapters[2].shortLabel == "Headlines")
+        #expect(chapters[2].title == "Also in your news")
+    }
+
     /// The day is a section of the opener now, not a chapter of its own, so the
     /// intro is literally the day rather than an abstract orientation.
     @Test func introChapterIsTheDay() {
