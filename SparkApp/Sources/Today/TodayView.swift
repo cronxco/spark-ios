@@ -128,7 +128,9 @@ struct TodayView: View {
         .sheet(item: $selectedThread) { topic in
             ThreadDetailSheet(topic: topic)
         }
-        .sheet(isPresented: $showHistory) {
+        .sheet(isPresented: $showHistory, onDismiss: {
+            Task { await viewModel?.loadCheckIns() }
+        }) {
             if let checkInHistoryVM {
                 CheckInHistoryView(apiClient: appModel.apiClient, container: appModel.container, historyVM: checkInHistoryVM)
             }

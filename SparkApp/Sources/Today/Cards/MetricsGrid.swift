@@ -11,6 +11,10 @@ struct MetricsGrid: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var isNarrow = false
 
+    // Two cards need at least 192 points each for their supporting rows,
+    // plus the gap between them. Below that, keep the values in one column.
+    private nonisolated static let minimumTwoColumnWidth: CGFloat = 400
+
     private var columns: [GridItem] {
         let count = isNarrow || dynamicTypeSize >= .xxxLarge ? 1 : 2
         return Array(repeating: GridItem(.flexible(), spacing: SparkSpacing.lg), count: count)
@@ -36,7 +40,7 @@ struct MetricsGrid: View {
             }
         }
         .onGeometryChange(for: Bool.self) { geometry in
-            geometry.size.width < 380
+            geometry.size.width < Self.minimumTwoColumnWidth
         } action: { narrow in
             isNarrow = narrow
         }
