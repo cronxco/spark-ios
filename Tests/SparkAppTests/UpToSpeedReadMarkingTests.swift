@@ -142,7 +142,7 @@ struct UpToSpeedReadMarkingTests {
     }
 
     @Test func headlinesListCitedArticlesFirstThenFeedOrder() {
-        let articles = ["x", "b", "y", "a"].map(newsSummary(id:))
+        let articles = ["x", "b", "y", "a"].map { newsSummary(id: $0) }
 
         let ordered = UpToSpeedViewModel.headlineOrder(articles, citedStories: ["a": 1, "b": 2])
 
