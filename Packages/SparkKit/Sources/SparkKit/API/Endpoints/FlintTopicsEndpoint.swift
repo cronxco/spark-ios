@@ -49,6 +49,15 @@ public enum FlintTopicsEndpoint {
         )
     }
 
+    public static func editTask(id: String, taskID: String, request: FlintTopicTaskEditRequest, etag: String) -> Endpoint<FlintTopicTaskResponse> {
+        Endpoint(
+            method: .patch, path: "/flint/topics/\(id)/tasks/\(taskID)",
+            body: try? JSONEncoder().encode(request),
+            contentType: "application/json",
+            headers: ["If-Match": etag]
+        )
+    }
+
     public static func updateTask(id: String, taskID: String, request: FlintTopicTaskUpdate, etag: String) -> Endpoint<FlintTopicTaskResponse> {
         Endpoint(
             method: .patch, path: "/flint/topics/\(id)/tasks/\(taskID)",
