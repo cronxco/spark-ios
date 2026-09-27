@@ -665,6 +665,7 @@ private struct FlintThreadDetailView: View {
     @Environment(AppModel.self) private var appModel
     @State private var showsNoteComposer = false
     @State private var showsTaskComposer = false
+    @State private var editingTask: FlintTopicTask?
     @State private var editError: String?
     @State private var isEditing = false
 
@@ -700,6 +701,10 @@ private struct FlintThreadDetailView: View {
                     VStack(alignment: .leading) { dateFact("First seen", topic.firstSeenAt); dateFact("Last discussed", topic.lastTouchedAt) }
                 }
 
+                if let nextReview = topic.nextReviewAt {
+                    dateFact("Thread review", nextReview)
+                }
+
                 VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                     HStack {
                         FlintSectionHeader("Tasks")
@@ -719,14 +724,19 @@ private struct FlintThreadDetailView: View {
                                 }
                                 .disabled(isEditing)
                                 .accessibilityLabel(task.completedAt == nil ? "Complete \(task.title)" : "Reopen \(task.title)")
-                                VStack(alignment: .leading, spacing: SparkSpacing.xs) {
-                                    Text(task.title).font(SparkTypography.bodyStrong)
-                                    if let content = task.content, !content.isEmpty {
-                                        Text(content).font(SparkTypography.bodySmall).foregroundStyle(.secondary)
+                                Button { editingTask = task } label: {
+                                    VStack(alignment: .leading, spacing: SparkSpacing.xs) {
+                                        Text(task.title).font(SparkTypography.bodyStrong)
+                                        if let content = task.content, !content.isEmpty {
+                                            Text(content).font(SparkTypography.bodySmall).foregroundStyle(.secondary)
+                                        }
+                                        if let due = task.dueOn { Label("Due \(due)", systemImage: "calendar") }
+                                        if let review = task.reviewOn { Label("Review \(review)", systemImage: "arrow.clockwise") }
                                     }
-                                    if let due = task.dueOn { Label("Due \(due)", systemImage: "calendar") }
-                                    if let review = task.reviewOn { Label("Review \(review)", systemImage: "arrow.clockwise") }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
                                 }
+                                .buttonStyle(.plain)
+                                .accessibilityHint("Edit task and dates")
                                 .font(SparkTypography.caption)
                             }
                             .padding(.vertical, SparkSpacing.xs)
@@ -770,6 +780,13 @@ private struct FlintThreadDetailView: View {
         .sheet(isPresented: $showsTaskComposer) {
             FlintTopicTaskComposer { request in
                 try await viewModel.createTopicTask(id: topic.id, request: request)
+            }
+        }
+        .sheet(item: $editingTask) { task in
+            FlintTopicTaskComposer(task: task) { request in
+                try await viewModel.editTopicTask(id: topic.id, task: task, request: FlintTopicTaskEditRequest(
+                    title: request.title, content: request.content, dueOn: request.dueOn, reviewOn: request.reviewOn
+                ))
             }
         }
     }
@@ -825,6 +842,7 @@ private struct FlintThreadDetailView: View {
 }
 
 private struct FlintTopicTaskComposer: View {
+    var task: FlintTopicTask? = nil
     let onSave: (FlintTopicTaskRequest) async throws -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var title = ""
@@ -848,11 +866,24 @@ private struct FlintTopicTaskComposer: View {
                 if hasReviewDate { DatePicker("Review", selection: $reviewDate, displayedComponents: .date) }
                 if let error { Text(error).foregroundStyle(.red) }
             }
-            .navigationTitle("New thread task")
+            .navigationTitle(task == nil ? "New thread task" : "Edit thread task")
+            .onAppear {
+                guard let task else { return }
+                title = task.title
+                content = task.content ?? ""
+                if let due = task.dueOn, let date = parseDate(due) {
+                    hasDueDate = true
+                    dueDate = date
+                }
+                if let review = task.reviewOn, let date = parseDate(review) {
+                    hasReviewDate = true
+                    reviewDate = date
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Add") {
+                    Button(task == nil ? "Add" : "Save") {
                         saving = true
                         Task {
                             do {
@@ -883,6 +914,15 @@ private struct FlintTopicTaskComposer: View {
         formatter.timeZone = .current
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: date)
+    }
+
+    private func parseDate(_ value: String) -> Date? {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.date(from: value)
     }
 }
 
