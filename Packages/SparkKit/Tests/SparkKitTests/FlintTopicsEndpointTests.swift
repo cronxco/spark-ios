@@ -50,5 +50,15 @@ struct FlintTopicsEndpointTests {
         #expect(body?["due_on"] == "2027-08-01")
         #expect(body?["review_on"] == "2027-07-15")
         #expect(body?["client_mutation_id"] == "11111111-1111-4111-8111-111111111111")
+        
+        let clearDate = FlintTopicsEndpoint.editTask(
+            id: "topic-1", taskID: "task-1",
+            request: FlintTopicTaskEditRequest(title: "Book Vancouver night", content: nil, dueOn: nil, reviewOn: nil),
+            etag: "\"task-v1\""
+        )
+        let editBody = try JSONSerialization.jsonObject(with: #require(clearDate.body)) as? [String: Any]
+        #expect(editBody?["due_on"] is NSNull)
+        #expect(editBody?["review_on"] is NSNull)
+        #expect(clearDate.headers["If-Match"] == "\"task-v1\"")
     }
 }
