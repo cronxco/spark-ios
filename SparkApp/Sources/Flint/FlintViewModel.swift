@@ -229,6 +229,14 @@ final class FlintViewModel {
         await loadTopicDetail(id: id)
     }
 
+    func editTopicTask(id: String, task: FlintTopicTask, request: FlintTopicTaskEditRequest) async throws {
+        _ = try await apiClient.request(FlintTopicsEndpoint.editTask(
+            id: id, taskID: task.id, request: request, etag: task.version
+        ))
+        topicDetails[id] = nil
+        await loadTopicDetail(id: id)
+    }
+
     private func currentTopic(id: String) async throws -> FlintTopic {
         if let topic = topicDetails[id] { return topic }
         return try await apiClient.request(FlintTopicsEndpoint.detail(id: id)).data
