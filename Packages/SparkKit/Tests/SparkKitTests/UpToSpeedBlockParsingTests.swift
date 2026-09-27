@@ -92,6 +92,31 @@ struct UpToSpeedBlockParsingTests {
         #expect(section.body == "The Bank held rates. Two members voted to cut.")
     }
 
+    @Test("a key-points story leads with its TL;DR and carries nothing twice")
+    func keyPointsShape() {
+        let block = FlintDigestBlock(
+            id: "story-1",
+            blockType: "flint_news",
+            title: "Trump rejects Iran's seven-day ceasefire",
+            content: "Iran offered a seven-day pause; Trump turned it down.",
+            news: FlintNewsContent(
+                keyPoints: ["Hormuz would have reopened on day seven.", "  ", "The NYT puts the frozen assets at $12bn."],
+                contested: "The Guardian and the NYT differ on strikes after the midterms.",
+                sources: [FlintNewsSource(publication: "The New York Times", position: "Set out the terms.", url: "https://nytimes.com/x", origin: .research)],
+                whatToWatch: "Iran's formal response."
+            )
+        )
+
+        let section = UpToSpeedParsing.newsRoundupSections(blocks: [block], summary: "One line per story.")[0]
+
+        #expect(section.body == "Iran offered a seven-day pause; Trump turned it down.")
+        #expect(section.standfirst == nil)
+        #expect(section.fullRoundup == nil)
+        #expect(section.keyPoints == ["Hormuz would have reopened on day seven.", "The NYT puts the frozen assets at $12bn."])
+        #expect(section.contested == "The Guardian and the NYT differ on strikes after the midterms.")
+        #expect(section.sourcePositions.first?.url == "https://nytimes.com/x")
+    }
+
     @Test("has no standfirst when content would repeat the body")
     func noStandfirstWithoutStructuredNews() {
         let plain = block("flint_news", title: "Mocha seizure", content: "The port was taken.")

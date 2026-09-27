@@ -90,4 +90,49 @@ struct FlintReadingBlockDecodingTests {
         #expect(block.news?.whyItMatters == "Mortgage pricing may remain stable.")
         #expect(block.news?.whatToWatch == "The next inflation release.")
     }
+
+    @Test("decodes key points, a disagreement and linked sources")
+    func keyPointsAndLinkedSources() throws {
+        let json = Data("""
+        {
+          "id": "story-1",
+          "block_type": "flint_news",
+          "title": "Trump rejects Iran's seven-day ceasefire",
+          "content": "Iran offered a seven-day pause; Trump turned it down.",
+          "news": {
+            "key_points": ["Hormuz would have reopened on day seven.", "The NYT puts the frozen assets at $12bn."],
+            "contested": "The Guardian and the NYT differ on strikes after the midterms.",
+            "sources": [
+              {"publication": "The Economist, World in Brief", "position": "Reported the rejection.", "origin": "feed", "event_id": "evt-1"},
+              {"publication": "The New York Times", "position": "Set out the terms.", "origin": "research", "url": "https://www.nytimes.com/2026/09/26/us/politics/trump-iran-hormuz-strait.html"}
+            ],
+            "what_to_watch": "Iran's formal response through mediators."
+          }
+        }
+        """.utf8)
+
+        let block = try Self.decoder.decode(FlintDigestBlock.self, from: json)
+        let news = try #require(block.news)
+
+        #expect(news.summary == nil)
+        #expect(news.keyPoints?.count == 2)
+        #expect(news.contested == "The Guardian and the NYT differ on strikes after the midterms.")
+        #expect(news.sources[0].eventId == "evt-1")
+        #expect(news.sources[0].origin == .feed)
+        #expect(news.sources[0].isResearch == false)
+        #expect(news.sources[1].url == "https://www.nytimes.com/2026/09/26/us/politics/trump-iran-hormuz-strait.html")
+        #expect(news.sources[1].isResearch)
+    }
+
+    @Test("an unknown source origin does not cost the story")
+    func unknownOrigin() throws {
+        let json = Data("""
+        {"publication": "Wire", "position": "Filed first.", "origin": "wire", "url": "https://example.com/story"}
+        """.utf8)
+
+        let source = try Self.decoder.decode(FlintNewsSource.self, from: json)
+
+        #expect(source.origin == nil)
+        #expect(source.isResearch)
+    }
 }

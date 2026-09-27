@@ -3,8 +3,12 @@ import SparkUI
 import SwiftUI
 
 /// One story from the Flint news roundup, ordered by what a reader needs from a
-/// phone screen: what happened, why it matters to them, what to watch, then
-/// who reported what, and the longer write-up only if they want it.
+/// phone screen: the gist, the specifics, where accounts differ, why it
+/// matters to them, what to watch, then the reporting to tap through to.
+///
+/// A roundup written as a TL;DR plus key points says each thing once. Older
+/// roundups carried the same point in the lead, "More detail" and "Read the
+/// whole roundup"; those disclosures remain only for digests of that shape.
 ///
 /// This used to open on the sources and a hedge ("the supplied summaries do
 /// not state…"), then repeat the same point in a grey-serif "Reporting" card,
@@ -21,6 +25,7 @@ struct NewsStoryScreen: View {
     @State private var expanded = false
     @State private var roundupExpanded = false
     @State private var openArticle: UpToSpeedItem?
+    @Environment(\.openURL) private var openURL
     var isActive: Bool = true
     let onReachedBottom: (() -> Void)?
 
@@ -43,6 +48,19 @@ struct NewsStoryScreen: View {
                         foregroundStyle: .primary,
                         lineSpacing: 4
                     )
+                }
+
+                if !section.keyPoints.isEmpty {
+                    keyPoints
+                }
+
+                if let contested = section.contested {
+                    labelled("Where accounts differ") {
+                        Text(contested)
+                            .font(SparkTypography.body)
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
                 if let whyItMatters = section.whyItMatters, !whyItMatters.isEmpty {
@@ -165,32 +183,94 @@ struct NewsStoryScreen: View {
         .background(Color.sparkOcean.opacity(0.08), in: RoundedRectangle(cornerRadius: SparkRadii.md, style: .continuous))
     }
 
-    /// One row per outlet. A row opens that outlet's article when the story
-    /// cites exactly one article from it, so the source is one tap away
-    /// without leaving the app.
-    private var reportedBy: some View {
-        labelled("How it's been reported") {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(section.sourcePositions.enumerated()), id: \.offset) { offset, source in
-                    let article = viewModel?.citedArticle(publication: source.publication, in: section)
-                    Button {
-                        openArticle = article
-                    } label: {
-                        sourceRow(source, opensArticle: article != nil)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(article == nil)
-                    .accessibilityHint(article == nil ? "" : "Opens the article")
-
-                    if offset < section.sourcePositions.count - 1 {
-                        Divider().opacity(0.15)
+    /// The specifics, as a list: each point carries one thing the lead doesn't.
+    private var keyPoints: some View {
+        labelled("What you need to know") {
+            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                ForEach(Array(section.keyPoints.enumerated()), id: \.offset) { _, point in
+                    HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.sm) {
+                        Text("•")
+                            .font(SparkTypography.body)
+                            .foregroundStyle(Color.sparkOcean)
+                            .accessibilityHidden(true)
+                        SparkRichContentText(
+                            text: point,
+                            font: SparkTypography.body,
+                            foregroundStyle: .primary,
+                            lineSpacing: 2
+                        )
                     }
                 }
             }
         }
     }
 
-    private func sourceRow(_ source: FlintNewsSource, opensArticle: Bool) -> some View {
+    private var feedSources: [FlintNewsSource] { section.sourcePositions.filter { !$0.isResearch } }
+    private var researchSources: [FlintNewsSource] { section.sourcePositions.filter(\.isResearch) }
+
+    /// The reporting, one tappable row per outlet: the user's own issues open
+    /// in the app, the roundup's research opens the article itself.
+    private var reportedBy: some View {
+        labelled("How it's been reported") {
+            VStack(alignment: .leading, spacing: SparkSpacing.md) {
+                if !feedSources.isEmpty {
+                    sourceGroup(researchSources.isEmpty ? nil : "From your feeds", feedSources)
+                }
+                if !researchSources.isEmpty {
+                    sourceGroup(feedSources.isEmpty ? nil : "Further reading", researchSources)
+                }
+            }
+        }
+    }
+
+    private func sourceGroup(_ title: String?, _ sources: [FlintNewsSource]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let title {
+                Text(title)
+                    .font(SparkTypography.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityAddTraits(.isHeader)
+            }
+            ForEach(Array(sources.enumerated()), id: \.offset) { offset, source in
+                sourceButton(source)
+                if offset < sources.count - 1 {
+                    Divider().opacity(0.15)
+                }
+            }
+        }
+    }
+
+    private func sourceButton(_ source: FlintNewsSource) -> some View {
+        let article = viewModel?.citedArticle(for: source, in: section)
+        let link = article == nil ? source.url.flatMap(URL.init(string:)) : nil
+        let destination: SourceDestination?
+        if article != nil {
+            destination = .article
+        } else if link != nil {
+            destination = .web
+        } else {
+            destination = nil
+        }
+
+        return Button {
+            if let article {
+                openArticle = article
+            } else if let link {
+                openURL(link)
+            }
+        } label: {
+            sourceRow(source, destination: destination)
+        }
+        .buttonStyle(.plain)
+        .disabled(destination == nil)
+        .accessibilityHint(destination.map { $0 == .web ? "Opens the article in your browser" : "Opens the issue" } ?? "")
+    }
+
+    private enum SourceDestination {
+        case article, web
+    }
+
+    private func sourceRow(_ source: FlintNewsSource, destination: SourceDestination?) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.sm) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(source.publication)
@@ -202,8 +282,8 @@ struct NewsStoryScreen: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
-            if opensArticle {
-                Image(systemName: "chevron.right")
+            if let destination {
+                Image(systemName: destination == .web ? "arrow.up.right" : "chevron.right")
                     .font(SparkTypography.caption)
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)

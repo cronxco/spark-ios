@@ -947,8 +947,20 @@ private struct FlintBlockSurface: View {
                 }
             } else if let news = block.news {
                 VStack(alignment: .leading, spacing: SparkSpacing.md) {
-                    Text(news.summary)
-                        .font(SparkTypography.longFormBodySmall)
+                    if let lead = news.summary ?? block.content, !lead.isEmpty {
+                        Text(lead)
+                            .font(SparkTypography.longFormBodySmall)
+                    }
+                    ForEach(Array((news.keyPoints ?? []).enumerated()), id: \.offset) { _, point in
+                        Label(point, systemImage: "circle.fill")
+                            .labelStyle(.titleAndIcon)
+                            .font(SparkTypography.bodySmall)
+                            .imageScale(.small)
+                    }
+                    if let contested = news.contested {
+                        Label(contested, systemImage: "arrow.left.arrow.right")
+                            .font(SparkTypography.bodySmall)
+                    }
                     ForEach(Array(news.sources.enumerated()), id: \.offset) { _, source in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(source.publication).font(SparkTypography.captionStrong)

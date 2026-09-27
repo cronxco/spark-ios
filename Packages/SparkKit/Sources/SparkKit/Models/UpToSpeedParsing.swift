@@ -23,6 +23,10 @@ public struct NewsRoundupSection: Identifiable, Hashable, Sendable {
     public var sourceURL: String? = nil
     public var sourcePositions: [FlintNewsSource] = []
     public var whyItMatters: String? = nil
+    /// The specifics, when the story was written as a TL;DR plus key points.
+    public var keyPoints: [String] = []
+    /// Where named outlets actually differ, when they do.
+    public var contested: String? = nil
 
     public init(id: Int, heading: String, sources: [String], whatsNew: String?, watching: String?, body: String) {
         self.id = id
@@ -82,6 +86,21 @@ public enum UpToSpeedParsing {
             section.sourcePositions = block.news?.sources ?? []
             section.whyItMatters = block.news?.whyItMatters
             section.fullRoundup = summary.isEmpty ? nil : summary
+            let keyPoints = (block.news?.keyPoints ?? [])
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            if !keyPoints.isEmpty {
+                // The key-points shape says each thing once: the TL;DR is the
+                // lead, the points are the detail, and the digest summary is
+                // only an index of the stories — so there is no longer write-up
+                // to hide behind "More detail" or "Read the whole roundup".
+                section.keyPoints = keyPoints
+                section.standfirst = nil
+                section.fullRoundup = nil
+            }
+            if let contested = block.news?.contested?.trimmingCharacters(in: .whitespacesAndNewlines), !contested.isEmpty {
+                section.contested = contested
+            }
             section.references = block.references ?? []
             section.sourceURL = block.url
             return section

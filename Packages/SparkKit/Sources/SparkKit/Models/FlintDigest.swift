@@ -191,19 +191,34 @@ public struct FlintDigestBlock: Codable, Sendable, Hashable, Identifiable {
 }
 
 public struct FlintNewsContent: Codable, Sendable, Hashable {
-    public let summary: String
+    /// Legacy prose summary. Roundups written with `keyPoints` leave it out.
+    public let summary: String?
+    /// 2–4 specifics the TL;DR (the block's `content`) doesn't carry.
+    public let keyPoints: [String]?
+    /// Where named outlets actually differ, when they do.
+    public let contested: String?
     public let sources: [FlintNewsSource]
     public let whyItMatters: String?
     public let whatToWatch: String
 
     enum CodingKeys: String, CodingKey {
-        case summary, sources
+        case summary, sources, contested
+        case keyPoints = "key_points"
         case whyItMatters = "why_it_matters"
         case whatToWatch = "what_to_watch"
     }
 
-    public init(summary: String, sources: [FlintNewsSource], whyItMatters: String? = nil, whatToWatch: String) {
+    public init(
+        summary: String? = nil,
+        keyPoints: [String]? = nil,
+        contested: String? = nil,
+        sources: [FlintNewsSource],
+        whyItMatters: String? = nil,
+        whatToWatch: String
+    ) {
         self.summary = summary
+        self.keyPoints = keyPoints
+        self.contested = contested
         self.sources = sources
         self.whyItMatters = whyItMatters
         self.whatToWatch = whatToWatch
@@ -211,12 +226,48 @@ public struct FlintNewsContent: Codable, Sendable, Hashable {
 }
 
 public struct FlintNewsSource: Codable, Sendable, Hashable {
+    public enum Origin: String, Codable, Sendable, Hashable {
+        /// One of the user's own newsletters or fetches.
+        case feed
+        /// Found by the roundup's own research.
+        case research
+    }
+
     public let publication: String
     public let position: String
+    /// The article itself — always present on a research source.
+    public let url: String?
+    /// The issue in Spark, for a source from the user's own feeds.
+    public let eventId: String?
+    public let origin: Origin?
 
-    public init(publication: String, position: String) {
+    enum CodingKeys: String, CodingKey {
+        case publication, position, url, origin
+        case eventId = "event_id"
+    }
+
+    public init(publication: String, position: String, url: String? = nil, eventId: String? = nil, origin: Origin? = nil) {
         self.publication = publication
         self.position = position
+        self.url = url
+        self.eventId = eventId
+        self.origin = origin
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        publication = try container.decode(String.self, forKey: .publication)
+        position = try container.decode(String.self, forKey: .position)
+        url = try container.decodeIfPresent(String.self, forKey: .url)
+        eventId = try container.decodeIfPresent(String.self, forKey: .eventId)
+        // An origin this client doesn't know yet shouldn't cost the whole story.
+        origin = (try? container.decodeIfPresent(String.self, forKey: .origin)).flatMap(Origin.init(rawValue:))
+    }
+
+    /// Research, whether or not the skill labelled it: a source with a link
+    /// and no Spark event can only have come from outside the feeds.
+    public var isResearch: Bool {
+        origin == .research || (origin == nil && eventId == nil && url != nil)
     }
 }
 

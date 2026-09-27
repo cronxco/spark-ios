@@ -27,11 +27,6 @@ struct HeadlinesIndexScreen: View {
                     .font(SparkTypography.heroSmall)
                     .foregroundStyle(.primary)
 
-                Text("Everything behind today's stories, and the rest of what arrived. Tap one to read it, or swipe through them all.")
-                    .font(SparkTypography.bodySmall)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
                 if !cited.isEmpty {
                     group("Behind today's stories", cited)
                 }
@@ -105,8 +100,8 @@ struct HeadlinesIndexScreen: View {
                     Text(Self.plain(tldr))
                         .font(SparkTypography.bodySmall)
                         .foregroundStyle(.primary.opacity(0.75))
-                        .lineLimit(2)
                         .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             Spacer(minLength: 0)
