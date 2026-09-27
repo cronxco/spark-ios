@@ -76,6 +76,15 @@ struct FlintTopicsDecodingTests {
             "next_review_at": "2026-09-20",
             "origin": "digest_inference",
             "version": "\\\"topic-v1\\\"",
+            "tasks": [{
+              "id": "task-1",
+              "title": "Book hotel",
+              "content": null,
+              "due_on": "2027-08-01",
+              "review_on": "2027-07-15",
+              "completed_at": null,
+              "version": "\"task-v1\""
+            }],
             "mentions": [{
               "id": "relationship-1",
               "kind": "block",
@@ -99,6 +108,8 @@ struct FlintTopicsDecodingTests {
         let mention = try #require(response.data.mentions?.first)
 
         #expect(response.data.version == "\"topic-v1\"")
+        #expect(response.data.tasks?.first?.dueOn == "2027-08-01")
+        #expect(response.data.tasks?.first?.reviewOn == "2027-07-15")
         #expect(mention.sourceType == "digest_block")
         #expect(mention.blockID == "block-1")
         #expect(mention.deepLink?.absoluteString == "spark://block/block-1")

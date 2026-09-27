@@ -629,6 +629,9 @@ private struct FlintTopicRow: View {
         VStack(alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .trailing, spacing: SparkSpacing.xs) {
             Label(topic.status?.displayName ?? "Unknown", systemImage: topic.status?.icon ?? "questionmark.circle")
                 .font(SparkTypography.captionStrong)
+            if let kind = topic.kind {
+                Text(kind.rawValue.capitalized).font(SparkTypography.caption)
+            }
             if let touched = topic.lastTouchedAt {
                 Text(touched.formatted(.relative(presentation: .named))).font(SparkTypography.caption)
             }
@@ -645,7 +648,7 @@ private struct FlintThreadDestination: View {
     var body: some View {
         Group {
             if let topic = viewModel.topicDetails[id] {
-                FlintThreadDetailView(topic: topic)
+                FlintThreadDetailView(topic: topic, viewModel: viewModel)
             } else if let state = viewModel.topicDetailState[id], case .error(let message) = state {
                 EmptyState(systemImage: "exclamationmark.triangle", title: "Thread unavailable", message: message)
             } else {
@@ -658,14 +661,35 @@ private struct FlintThreadDestination: View {
 
 private struct FlintThreadDetailView: View {
     let topic: FlintTopic
+    let viewModel: FlintViewModel
     @Environment(AppModel.self) private var appModel
     @State private var showsNoteComposer = false
+    @State private var showsTaskComposer = false
+    @State private var editError: String?
+    @State private var isEditing = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: SparkSpacing.xl) {
                 Label(topic.status?.displayName ?? "Unknown status", systemImage: topic.status?.icon ?? "questionmark.circle")
                     .font(SparkTypography.bodyStrong)
+
+                HStack {
+                    Text("Type").font(SparkTypography.bodyStrong)
+                    Spacer()
+                    Menu {
+                        Button("Strategic · a defined long-term goal") { changeKind(.strategic) }
+                        Button("Thematic · an ongoing area of life") { changeKind(.thematic) }
+                        Button("Tactical · a short-term development") { changeKind(.tactical) }
+                    } label: {
+                        Label(topic.kind?.rawValue.capitalized ?? "Choose type", systemImage: "square.and.pencil")
+                    }
+                    .disabled(isEditing)
+                }
+
+                if let editError {
+                    Text(editError).font(SparkTypography.bodySmall).foregroundStyle(.red)
+                }
 
                 if let content = topic.content, !content.isEmpty {
                     SparkLongFormContentView(text: content, paragraphFont: SparkTypography.longFormBody)
@@ -674,6 +698,40 @@ private struct FlintThreadDetailView: View {
                 ViewThatFits(in: .horizontal) {
                     HStack { dateFact("First seen", topic.firstSeenAt); Spacer(); dateFact("Last discussed", topic.lastTouchedAt) }
                     VStack(alignment: .leading) { dateFact("First seen", topic.firstSeenAt); dateFact("Last discussed", topic.lastTouchedAt) }
+                }
+
+                VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                    HStack {
+                        FlintSectionHeader("Tasks")
+                        Spacer()
+                        Button { showsTaskComposer = true } label: {
+                            Label("Add task", systemImage: "plus")
+                        }
+                    }
+                    if topic.tasks?.isEmpty != false {
+                        Text("No tasks for this thread yet.")
+                            .font(SparkTypography.bodySmall).foregroundStyle(.secondary)
+                    } else {
+                        ForEach(topic.tasks ?? []) { task in
+                            HStack(alignment: .top, spacing: SparkSpacing.sm) {
+                                Button { setCompleted(task, completed: task.completedAt == nil) } label: {
+                                    Image(systemName: task.completedAt == nil ? "circle" : "checkmark.circle.fill")
+                                }
+                                .disabled(isEditing)
+                                .accessibilityLabel(task.completedAt == nil ? "Complete \(task.title)" : "Reopen \(task.title)")
+                                VStack(alignment: .leading, spacing: SparkSpacing.xs) {
+                                    Text(task.title).font(SparkTypography.bodyStrong)
+                                    if let content = task.content, !content.isEmpty {
+                                        Text(content).font(SparkTypography.bodySmall).foregroundStyle(.secondary)
+                                    }
+                                    if let due = task.dueOn { Label("Due \(due)", systemImage: "calendar") }
+                                    if let review = task.reviewOn { Label("Review \(review)", systemImage: "arrow.clockwise") }
+                                }
+                                .font(SparkTypography.caption)
+                            }
+                            .padding(.vertical, SparkSpacing.xs)
+                        }
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: SparkSpacing.sm) {
@@ -709,6 +767,31 @@ private struct FlintThreadDetailView: View {
                 apiClient: appModel.apiClient
             )
         }
+        .sheet(isPresented: $showsTaskComposer) {
+            FlintTopicTaskComposer { request in
+                try await viewModel.createTopicTask(id: topic.id, request: request)
+            }
+        }
+    }
+
+    private func changeKind(_ kind: FlintTopicKind) {
+        isEditing = true
+        editError = nil
+        Task {
+            do { try await viewModel.changeTopicKind(id: topic.id, kind: kind) }
+            catch { editError = error.localizedDescription }
+            isEditing = false
+        }
+    }
+
+    private func setCompleted(_ task: FlintTopicTask, completed: Bool) {
+        isEditing = true
+        editError = nil
+        Task {
+            do { try await viewModel.setTopicTaskCompleted(id: topic.id, task: task, completed: completed) }
+            catch { editError = error.localizedDescription }
+            isEditing = false
+        }
     }
 
     private func dateFact(_ label: String, _ date: Date?) -> some View {
@@ -738,6 +821,68 @@ private struct FlintThreadDetailView: View {
         } else {
             NavigationLink(value: FlintRoute.digest(mention.digestID)) { label }.buttonStyle(.plain)
         }
+    }
+}
+
+private struct FlintTopicTaskComposer: View {
+    let onSave: (FlintTopicTaskRequest) async throws -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var title = ""
+    @State private var content = ""
+    @State private var hasDueDate = false
+    @State private var hasReviewDate = false
+    @State private var dueDate = Date.now
+    @State private var reviewDate = Date.now
+    @State private var mutationID = UUID()
+    @State private var saving = false
+    @State private var error: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Task", text: $title)
+                TextField("Details (optional)", text: $content, axis: .vertical)
+                Toggle("Due date", isOn: $hasDueDate)
+                if hasDueDate { DatePicker("Due", selection: $dueDate, displayedComponents: .date) }
+                Toggle("Review date", isOn: $hasReviewDate)
+                if hasReviewDate { DatePicker("Review", selection: $reviewDate, displayedComponents: .date) }
+                if let error { Text(error).foregroundStyle(.red) }
+            }
+            .navigationTitle("New thread task")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        saving = true
+                        Task {
+                            do {
+                                try await onSave(FlintTopicTaskRequest(
+                                    clientMutationID: mutationID,
+                                    title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+                                    content: content.isEmpty ? nil : content,
+                                    dueOn: hasDueDate ? dateString(dueDate) : nil,
+                                    reviewOn: hasReviewDate ? dateString(reviewDate) : nil
+                                ))
+                                dismiss()
+                            } catch {
+                                self.error = error.localizedDescription
+                                saving = false
+                            }
+                        }
+                    }
+                    .disabled(saving || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+
+    private func dateString(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
     }
 }
 

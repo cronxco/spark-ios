@@ -3,6 +3,12 @@ import Observation
 import OSLog
 import SparkKit
 
+enum FlintTopicEditError: LocalizedError {
+    case missingVersion
+
+    var errorDescription: String? { "This thread needs refreshing before it can be edited." }
+}
+
 @MainActor
 @Observable
 final class FlintViewModel {
@@ -197,6 +203,35 @@ final class FlintViewModel {
             logger.error("Flint topic detail load failed: \(String(describing: error))")
             topicDetailState[id] = .error(userFacingError(error))
         }
+    }
+
+    func changeTopicKind(id: String, kind: FlintTopicKind) async throws {
+        let topic = try await currentTopic(id: id)
+        guard let version = topic.version else { throw FlintTopicEditError.missingVersion }
+        let response = try await apiClient.request(FlintTopicsEndpoint.changeKind(id: id, kind: kind, etag: version))
+        topicDetails[id] = response.data
+        await loadTopics()
+    }
+
+    func createTopicTask(id: String, request: FlintTopicTaskRequest) async throws {
+        let topic = try await currentTopic(id: id)
+        guard let version = topic.version else { throw FlintTopicEditError.missingVersion }
+        _ = try await apiClient.request(FlintTopicsEndpoint.createTask(id: id, request: request, etag: version))
+        topicDetails[id] = nil
+        await loadTopicDetail(id: id)
+    }
+
+    func setTopicTaskCompleted(id: String, task: FlintTopicTask, completed: Bool) async throws {
+        _ = try await apiClient.request(FlintTopicsEndpoint.updateTask(
+            id: id, taskID: task.id, request: FlintTopicTaskUpdate(completed: completed), etag: task.version
+        ))
+        topicDetails[id] = nil
+        await loadTopicDetail(id: id)
+    }
+
+    private func currentTopic(id: String) async throws -> FlintTopic {
+        if let topic = topicDetails[id] { return topic }
+        return try await apiClient.request(FlintTopicsEndpoint.detail(id: id)).data
     }
 
     // MARK: - History
