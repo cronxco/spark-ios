@@ -30,4 +30,40 @@ public enum FlintTopicsEndpoint {
     public static func detail(id: String) -> Endpoint<FlintTopicResponse> {
         Endpoint(method: .get, path: "/flint/topics/\(id)")
     }
+
+    public static func changeKind(id: String, kind: FlintTopicKind, etag: String) -> Endpoint<FlintTopicResponse> {
+        Endpoint(
+            method: .patch, path: "/flint/topics/\(id)",
+            body: try? JSONEncoder().encode(["kind": kind.rawValue]),
+            contentType: "application/json",
+            headers: ["If-Match": etag]
+        )
+    }
+
+    public static func createTask(id: String, request: FlintTopicTaskRequest, etag: String) -> Endpoint<FlintTopicTaskResponse> {
+        Endpoint(
+            method: .post, path: "/flint/topics/\(id)/tasks",
+            body: try? JSONEncoder().encode(request),
+            contentType: "application/json",
+            headers: ["If-Match": etag]
+        )
+    }
+
+    public static func editTask(id: String, taskID: String, request: FlintTopicTaskEditRequest, etag: String) -> Endpoint<FlintTopicTaskResponse> {
+        Endpoint(
+            method: .patch, path: "/flint/topics/\(id)/tasks/\(taskID)",
+            body: try? JSONEncoder().encode(request),
+            contentType: "application/json",
+            headers: ["If-Match": etag]
+        )
+    }
+
+    public static func updateTask(id: String, taskID: String, request: FlintTopicTaskUpdate, etag: String) -> Endpoint<FlintTopicTaskResponse> {
+        Endpoint(
+            method: .patch, path: "/flint/topics/\(id)/tasks/\(taskID)",
+            body: try? JSONEncoder().encode(request),
+            contentType: "application/json",
+            headers: ["If-Match": etag]
+        )
+    }
 }
