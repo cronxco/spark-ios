@@ -141,6 +141,25 @@ struct UpToSpeedReadMarkingTests {
         #expect(UpToSpeedViewModel.citedArticle(for: source, in: story, among: articles) == nil)
     }
 
+    @MainActor @Test func aResearchSourceWithAnEventIDStillNeverOpensAFeedArticle() {
+        let articles = [newsSummary(id: "evt-1", publication: "The New York Times")]
+        let source = FlintNewsSource(publication: "The New York Times", position: "Set out the terms.", url: "https://nytimes.com/x", eventId: "evt-1", origin: .research)
+
+        #expect(UpToSpeedViewModel.citedArticle(for: source, in: section(0), among: articles) == nil)
+    }
+
+    @MainActor @Test func aShortenedOutletNameOnlyMatchesAtACommaBoundary() {
+        var story = section(0)
+        story.references = [EntityReference(type: .event, id: "evt-1", title: "A")]
+        let articles = [newsSummary(id: "evt-1", publication: "The Times of India")]
+
+        let times = FlintNewsSource(publication: "The Times", position: "Reported it.")
+        let blank = FlintNewsSource(publication: " ", position: "Reported it.")
+
+        #expect(UpToSpeedViewModel.citedArticle(for: times, in: story, among: articles) == nil)
+        #expect(UpToSpeedViewModel.citedArticle(for: blank, in: story, among: articles) == nil)
+    }
+
     @Test func headlinesListCitedArticlesFirstThenFeedOrder() {
         let articles = ["x", "b", "y", "a"].map { newsSummary(id: $0) }
 

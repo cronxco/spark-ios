@@ -355,20 +355,26 @@ final class UpToSpeedViewModel {
         in section: NewsRoundupSection,
         among allItems: [UpToSpeedItem]
     ) -> UpToSpeedItem? {
+        guard !source.isResearch else { return nil }
+
         if let eventId = source.eventId {
             return allItems.first { item in
                 guard item.id == eventId, case .newsSummary = item.payload else { return false }
                 return true
             }
         }
-        guard !source.isResearch else { return nil }
 
         let referenced = Set(section.references.map(\.id))
-        let wanted = source.publication.lowercased()
+        let wanted = source.publication.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !wanted.isEmpty else { return nil }
         let matches = allItems.filter { item in
             guard referenced.contains(item.id), case .newsSummary(let news) = item.payload else { return false }
             let publication = NewsSummaryScreen.publication(for: news).lowercased()
-            return publication == wanted || wanted.hasPrefix(publication) || publication.hasPrefix(wanted)
+            // A shortened name only counts at a comma: "The Economist, World in
+            // Brief" is The Economist, but "The Times of India" is not The Times.
+            return publication == wanted
+                || wanted.hasPrefix(publication + ",")
+                || publication.hasPrefix(wanted + ",")
         }
         return matches.count == 1 ? matches[0] : nil
     }
