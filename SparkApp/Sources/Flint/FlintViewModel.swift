@@ -217,24 +217,37 @@ final class FlintViewModel {
         let topic = try await currentTopic(id: id)
         guard let version = topic.version else { throw FlintTopicEditError.missingVersion }
         _ = try await apiClient.request(FlintTopicsEndpoint.createTask(id: id, request: request, etag: version))
-        topicDetails[id] = nil
-        await loadTopicDetail(id: id)
+        await reloadTopicDetail(id: id)
     }
 
     func setTopicTaskCompleted(id: String, task: FlintTopicTask, completed: Bool) async throws {
         _ = try await apiClient.request(FlintTopicsEndpoint.updateTask(
             id: id, taskID: task.id, request: FlintTopicTaskUpdate(completed: completed), etag: task.version
         ))
-        topicDetails[id] = nil
-        await loadTopicDetail(id: id)
+        await reloadTopicDetail(id: id)
     }
 
     func editTopicTask(id: String, task: FlintTopicTask, request: FlintTopicTaskEditRequest) async throws {
         _ = try await apiClient.request(FlintTopicsEndpoint.editTask(
             id: id, taskID: task.id, request: request, etag: task.version
         ))
-        topicDetails[id] = nil
-        await loadTopicDetail(id: id)
+        await reloadTopicDetail(id: id)
+    }
+
+    private func reloadTopicDetail(id: String) async {
+        do {
+            let response = try await apiClient.request(FlintTopicsEndpoint.detail(id: id))
+            topicDetails[id] = response.data
+            topicDetailState[id] = .loaded
+        } catch APIError.notModified {
+            topicDetailState[id] = topicDetails[id] == nil ? .idle : .loaded
+        } catch where error.isAPICancellation {
+            topicDetailState[id] = topicDetails[id] == nil ? .idle : .loaded
+        } catch {
+            SparkObservability.captureHandled(error)
+            logger.error("Flint topic detail reload failed: \(String(describing: error))")
+            topicDetailState[id] = topicDetails[id] == nil ? .error(userFacingError(error)) : .loaded
+        }
     }
 
     private func currentTopic(id: String) async throws -> FlintTopic {
