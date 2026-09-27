@@ -890,7 +890,7 @@ private struct FlintTopicTaskComposer: View {
                                 try await onSave(FlintTopicTaskRequest(
                                     clientMutationID: mutationID,
                                     title: title.trimmingCharacters(in: .whitespacesAndNewlines),
-                                    content: content.isEmpty ? nil : content,
+                                    content: content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : content,
                                     dueOn: hasDueDate ? dateString(dueDate) : nil,
                                     reviewOn: hasReviewDate ? dateString(reviewDate) : nil
                                 ))
