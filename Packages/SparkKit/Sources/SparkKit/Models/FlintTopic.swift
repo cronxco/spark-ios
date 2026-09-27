@@ -122,6 +122,37 @@ public struct FlintTopicTask: Codable, Sendable, Hashable, Identifiable {
     }
 }
 
+public struct FlintTopicTaskEditRequest: Encodable, Sendable {
+    public let title: String
+    public let content: String?
+    public let dueOn: String?
+    public let reviewOn: String?
+
+    enum CodingKeys: String, CodingKey {
+        case title, content
+        case dueOn = "due_on"
+        case reviewOn = "review_on"
+    }
+
+    public init(title: String, content: String?, dueOn: String?, reviewOn: String?) {
+        self.title = title
+        self.content = content
+        self.dueOn = dueOn
+        self.reviewOn = reviewOn
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(title, forKey: .title)
+        if let content { try container.encode(content, forKey: .content) }
+        else { try container.encodeNil(forKey: .content) }
+        if let dueOn { try container.encode(dueOn, forKey: .dueOn) }
+        else { try container.encodeNil(forKey: .dueOn) }
+        if let reviewOn { try container.encode(reviewOn, forKey: .reviewOn) }
+        else { try container.encodeNil(forKey: .reviewOn) }
+    }
+}
+
 public struct FlintTopicTaskResponse: Codable, Sendable {
     public let data: FlintTopicTask
 }
