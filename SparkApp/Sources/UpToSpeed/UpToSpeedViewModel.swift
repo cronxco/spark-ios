@@ -340,15 +340,41 @@ final class UpToSpeedViewModel {
         }
     }
 
-    /// The article a story cites from `publication`, when exactly one of its
-    /// referenced articles came from there. Guessing between two would link a
-    /// source's position to the wrong piece.
-    func citedArticle(publication: String, in section: NewsRoundupSection) -> UpToSpeedItem? {
+    /// The article behind one of a story's sources. A source from the user's
+    /// own feeds names its issue by event id, which is exact. Older roundups
+    /// only named the publication, so fall back to the one referenced article
+    /// from that outlet — "The Economist, World in Brief" still finds an
+    /// article credited to "The Economist" — and give up rather than guess
+    /// between two.
+    func citedArticle(for source: FlintNewsSource, in section: NewsRoundupSection) -> UpToSpeedItem? {
+        Self.citedArticle(for: source, in: section, among: allItems)
+    }
+
+    static func citedArticle(
+        for source: FlintNewsSource,
+        in section: NewsRoundupSection,
+        among allItems: [UpToSpeedItem]
+    ) -> UpToSpeedItem? {
+        guard !source.isResearch else { return nil }
+
+        if let eventId = source.eventId {
+            return allItems.first { item in
+                guard item.id == eventId, case .newsSummary = item.payload else { return false }
+                return true
+            }
+        }
+
         let referenced = Set(section.references.map(\.id))
+        let wanted = source.publication.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !wanted.isEmpty else { return nil }
         let matches = allItems.filter { item in
             guard referenced.contains(item.id), case .newsSummary(let news) = item.payload else { return false }
-            return NewsSummaryScreen.publication(for: news)
-                .caseInsensitiveCompare(publication) == .orderedSame
+            let publication = NewsSummaryScreen.publication(for: news).lowercased()
+            // A shortened name only counts at a comma: "The Economist, World in
+            // Brief" is The Economist, but "The Times of India" is not The Times.
+            return publication == wanted
+                || wanted.hasPrefix(publication + ",")
+                || publication.hasPrefix(wanted + ",")
         }
         return matches.count == 1 ? matches[0] : nil
     }

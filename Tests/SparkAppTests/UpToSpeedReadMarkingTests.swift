@@ -112,8 +112,56 @@ struct UpToSpeedReadMarkingTests {
         #expect(cited == ["a": 1, "b": 2])
     }
 
+    @MainActor @Test func aFeedSourceOpensTheIssueItNamesByEventID() {
+        let articles = [newsSummary(id: "evt-1", publication: "The Economist"), newsSummary(id: "evt-2", publication: "The Economist")]
+        let source = FlintNewsSource(publication: "The Economist, World in Brief", position: "Reported it.", eventId: "evt-2", origin: .feed)
+
+        let article = UpToSpeedViewModel.citedArticle(for: source, in: section(0), among: articles)
+
+        #expect(article?.id == "evt-2")
+    }
+
+    // "The Economist, World in Brief" never equalled the article's "The
+    // Economist", so older roundups showed their sources without a link.
+    @MainActor @Test func aSourceWithoutAnEventIDStillFindsItsOutletsOneArticle() {
+        var story = section(0)
+        story.references = [EntityReference(type: .event, id: "evt-1", title: "A")]
+        let articles = [newsSummary(id: "evt-1", publication: "The Economist"), newsSummary(id: "evt-9", publication: "404 Media")]
+        let source = FlintNewsSource(publication: "The Economist, World in Brief", position: "Reported it.")
+
+        #expect(UpToSpeedViewModel.citedArticle(for: source, in: story, among: articles)?.id == "evt-1")
+    }
+
+    @MainActor @Test func aResearchSourceNeverOpensAFeedArticle() {
+        var story = section(0)
+        story.references = [EntityReference(type: .event, id: "evt-1", title: "A")]
+        let articles = [newsSummary(id: "evt-1", publication: "The New York Times")]
+        let source = FlintNewsSource(publication: "The New York Times", position: "Set out the terms.", url: "https://nytimes.com/x", origin: .research)
+
+        #expect(UpToSpeedViewModel.citedArticle(for: source, in: story, among: articles) == nil)
+    }
+
+    @MainActor @Test func aResearchSourceWithAnEventIDStillNeverOpensAFeedArticle() {
+        let articles = [newsSummary(id: "evt-1", publication: "The New York Times")]
+        let source = FlintNewsSource(publication: "The New York Times", position: "Set out the terms.", url: "https://nytimes.com/x", eventId: "evt-1", origin: .research)
+
+        #expect(UpToSpeedViewModel.citedArticle(for: source, in: section(0), among: articles) == nil)
+    }
+
+    @MainActor @Test func aShortenedOutletNameOnlyMatchesAtACommaBoundary() {
+        var story = section(0)
+        story.references = [EntityReference(type: .event, id: "evt-1", title: "A")]
+        let articles = [newsSummary(id: "evt-1", publication: "The Times of India")]
+
+        let times = FlintNewsSource(publication: "The Times", position: "Reported it.")
+        let blank = FlintNewsSource(publication: " ", position: "Reported it.")
+
+        #expect(UpToSpeedViewModel.citedArticle(for: times, in: story, among: articles) == nil)
+        #expect(UpToSpeedViewModel.citedArticle(for: blank, in: story, among: articles) == nil)
+    }
+
     @Test func headlinesListCitedArticlesFirstThenFeedOrder() {
-        let articles = ["x", "b", "y", "a"].map(newsSummary(id:))
+        let articles = ["x", "b", "y", "a"].map { newsSummary(id: $0) }
 
         let ordered = UpToSpeedViewModel.headlineOrder(articles, citedStories: ["a": 1, "b": 2])
 
@@ -188,13 +236,14 @@ struct UpToSpeedReadMarkingTests {
         )
     }
 
-    private func newsSummary(id: String) -> UpToSpeedItem {
+    private func newsSummary(id: String, publication: String? = nil) -> UpToSpeedItem {
         UpToSpeedItem(
             id: id,
             type: .newsSummary,
             caughtUpAt: nil,
             payload: .newsSummary(NewsSummary(
                 title: "A story",
+                publication: publication,
                 source: "newsletter",
                 url: nil,
                 time: nil,
