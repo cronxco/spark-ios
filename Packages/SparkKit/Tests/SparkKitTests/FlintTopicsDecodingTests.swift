@@ -83,7 +83,7 @@ struct FlintTopicsDecodingTests {
               "due_on": "2027-08-01",
               "review_on": "2027-07-15",
               "completed_at": null,
-              "version": "\"task-v1\""
+              "version": "\\\"task-v1\\\""
             }],
             "mentions": [{
               "id": "relationship-1",
