@@ -178,12 +178,8 @@ struct FlintQuestionPage: View {
         max(0, viewModel.openQuestions.filter { $0.block.id != block.id }.count)
     }
 
-    private var labelText: String {
-        if let priority = block.priority, priority == .high {
-            return "Priority Question"
-        }
-        return "Question"
-    }
+    /// Priority orders questions for Flint; it is not shown to the reader.
+    private var labelText: String { "Question" }
 
     private func answeredView(answer: String, note: String?) -> some View {
         GlassCard(tint: Color.sparkSuccess.opacity(0.08)) {

@@ -147,6 +147,27 @@ public enum FlintEndpoint {
         Endpoint(method: .delete, path: "/flint/notes/\(id)")
     }
 
+    /// GET /flint/review — Flint's queue of automated decisions and
+    /// suggestions waiting for a person.
+    public static func review() -> Endpoint<FlintReviewResponse> {
+        Endpoint(method: .get, path: "/flint/review", headers: ["Cache-Control": "no-cache"])
+    }
+
+    /// POST /flint/review/{kind}/{id} — confirm, dismiss, keep or undo one
+    /// item. Returns the remaining queue.
+    public static func reviewAction(
+        kind: FlintReviewKind,
+        id: String,
+        _ request: FlintReviewActionRequest
+    ) -> Endpoint<FlintReviewResponse> {
+        Endpoint(
+            method: .post,
+            path: "/flint/review/\(kind.rawValue)/\(id)",
+            body: try? JSONEncoder().encode(request),
+            contentType: "application/json"
+        )
+    }
+
     private static func digestQuery(
         date: String?,
         period: FlintDigestPeriod?,
