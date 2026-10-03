@@ -65,6 +65,8 @@ final class IntegrationDetailViewModel {
             }
             lastActionMessage = "Update started."
             await load()
+        } catch let error as APIError where error.serverCode == "nothing_to_dispatch" {
+            lastActionMessage = "This integration has nothing Spark can fetch on demand."
         } catch APIError.httpStatus(422, _, _) {
             lastActionMessage = "Resume this integration to update it."
         } catch {

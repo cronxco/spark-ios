@@ -88,6 +88,15 @@ struct PreconditionErrorTests {
 
         #expect(!error.isPreconditionFailure)
     }
+
+    @Test("server code is read from the error body")
+    func serverCode() {
+        let body = Data(#"{"message":"Nothing to fetch.","code":"nothing_to_dispatch"}"#.utf8)
+
+        #expect(APIError.httpStatus(422, body, url).serverCode == "nothing_to_dispatch")
+        #expect(APIError.httpStatus(422, Data(#"{"message":"Integration is paused."}"#.utf8), url).serverCode == nil)
+        #expect(APIError.httpStatus(422, nil, url).serverCode == nil)
+    }
 }
 
 @Suite("Notification endpoints")

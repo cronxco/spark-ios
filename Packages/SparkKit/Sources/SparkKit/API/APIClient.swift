@@ -34,6 +34,15 @@ public extension APIError {
     var isPreconditionFailure: Bool {
         isPreconditionRequired || isPreconditionFailed
     }
+
+    /// The machine-readable `code` the server put in an error body, such as
+    /// `nothing_to_dispatch`, when it sent one.
+    var serverCode: String? {
+        guard case .httpStatus(_, let data?, _) = self,
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        return object["code"] as? String
+    }
 }
 
 extension APIError: LocalizedError {
