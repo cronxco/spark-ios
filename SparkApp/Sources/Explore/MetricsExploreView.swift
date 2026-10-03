@@ -12,7 +12,7 @@ struct MetricsExploreView: View {
     @State private var sortMode: MetricSortMode = .anomalies
     @State private var searchText = ""
     @State private var heroRange: HeroMetricRange = .week
-    @State private var path: [DetailRoute] = []
+    @Binding var path: [DetailRoute]
 
     private var visibleMetrics: [MetricPresentation] {
         let metrics = (viewModel?.metrics ?? []).map { metric in
@@ -55,56 +55,43 @@ struct MetricsExploreView: View {
     }
 
     var body: some View {
-        NavigationStack(path: $path) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-                    pageHeader
-                        .padding(.horizontal, SparkSpacing.lg)
-
-                    HStack(spacing: 8) {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundStyle(.secondary)
-                            .font(.system(size: 14))
-                        TextField("Search service or action", text: $searchText)
-                            .font(SparkTypography.bodySmall)
-                            .foregroundStyle(.primary)
-                            .tint(.primary)
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .sparkGlass(.capsule)
+        ScrollView {
+            VStack(alignment: .leading, spacing: SparkSpacing.lg) {
+                pageHeader
                     .padding(.horizontal, SparkSpacing.lg)
 
-                    sortControls
-                        .padding(.horizontal, SparkSpacing.lg)
-
-                    domainFilter
-                        .padding(.horizontal, SparkSpacing.lg)
-
-                    content
-
-                    if heroMetric != nil {
-                        historySection
-                            .padding(.horizontal, SparkSpacing.lg)
-                    }
-
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                        .font(.system(size: 14))
+                    TextField("Search service or action", text: $searchText)
+                        .font(SparkTypography.bodySmall)
+                        .foregroundStyle(.primary)
+                        .tint(.primary)
                 }
-                .padding(.top, SparkSpacing.md)
-                .padding(.bottom, SparkSpacing.xl)
-            }
-            .sparkAppBackground()
-            .sparkMainNavigationTitle("Metrics")
-            .navigationDestination(for: DetailRoute.self) { route in
-                switch route {
-                case .metric(let identifier):
-                    MetricDetailView(identifier: identifier)
-                default:
-                    EmptyView()
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .sparkGlass(.capsule)
+                .padding(.horizontal, SparkSpacing.lg)
+
+                sortControls
+                    .padding(.horizontal, SparkSpacing.lg)
+
+                domainFilter
+                    .padding(.horizontal, SparkSpacing.lg)
+
+                content
+
+                if heroMetric != nil {
+                    historySection
+                        .padding(.horizontal, SparkSpacing.lg)
                 }
+
             }
-            .refreshable { await viewModel?.refresh() }
-            .sparkMainAppToolbar()
+            .padding(.top, SparkSpacing.md)
+            .padding(.bottom, SparkSpacing.xl)
         }
+        .refreshable { await viewModel?.refresh() }
         .task {
             if viewModel == nil {
                 viewModel = MetricsExploreViewModel(apiClient: appModel.apiClient)
@@ -116,7 +103,7 @@ struct MetricsExploreView: View {
     // MARK: - Page header
 
     private var pageHeader: some View {
-        SparkMainPageHeader(title: "Metrics", subtitle: headerSubtitle)
+        SparkSectionCaption(text: headerSubtitle)
     }
 
     // MARK: - Domain filter
@@ -233,7 +220,7 @@ struct MetricsExploreView: View {
     @ViewBuilder
     private var heroChartCard: some View {
         if let metric = heroMetric {
-            GlassCard(radius: 28, padding: SparkSpacing.xl, tint: metric.tint.opacity(0.08)) {
+            GlassCard(radius: SparkRadii.hero, padding: SparkSpacing.xl, tint: metric.tint.opacity(0.08)) {
                 VStack(alignment: .leading, spacing: SparkSpacing.lg) {
                     HStack(alignment: .top, spacing: SparkSpacing.sm) {
                         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
@@ -276,7 +263,7 @@ struct MetricsExploreView: View {
                 }
                 .frame(minHeight: 236, alignment: .topLeading)
             }
-            .contentShape(RoundedRectangle(cornerRadius: 28))
+            .contentShape(RoundedRectangle(cornerRadius: SparkRadii.hero))
             .onTapGesture {
                 path.append(.metric(identifier: metric.identifier))
             }
@@ -386,30 +373,9 @@ struct MetricsExploreView: View {
     }
 
     private func rangePicker(tint: Color) -> some View {
-        HStack(spacing: 4) {
-            ForEach(HeroMetricRange.allCases, id: \.self) { range in
-                let isSelected = heroRange == range
-                Button {
-                    heroRange = range
-                } label: {
-                    Text(range.label)
-                        .font(SparkTypography.monoSmall)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(isSelected ? Color.sparkTextPrimary : Color.secondary)
-                        .frame(minWidth: 34)
-                        .padding(.vertical, SparkSpacing.xs + 2)
-                        .background {
-                            if isSelected {
-                                Capsule()
-                                    .fill(tint)
-                            }
-                        }
-                }
-                .buttonStyle(.plain)
-            }
+        RangeChipBar(HeroMetricRange.allCases, selected: heroRange, tint: tint, label: \.label) { range in
+            heroRange = range
         }
-        .padding(4)
-        .sparkGlass(.capsule)
     }
 
     private func series(for detail: MetricDetail) -> [MetricDetail.Point] {
@@ -485,7 +451,7 @@ private struct FullBleedMetricRow: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 118)
                     .offset(x: 52, y: 8)
-                    .clipShape(RoundedRectangle(cornerRadius: 20))
+                    .clipShape(RoundedRectangle(cornerRadius: SparkRadii.lg))
 
                 LinearGradient(
                     stops: [
@@ -497,7 +463,7 @@ private struct FullBleedMetricRow: View {
                     endPoint: .trailing
                 )
                 .frame(height: 118)
-                .clipShape(RoundedRectangle(cornerRadius: 20))
+                .clipShape(RoundedRectangle(cornerRadius: SparkRadii.lg))
 
                 LinearGradient(
                     stops: [
@@ -509,7 +475,7 @@ private struct FullBleedMetricRow: View {
                     endPoint: .trailing
                 )
                 .frame(height: 118)
-                .clipShape(RoundedRectangle(cornerRadius: 20))
+                .clipShape(RoundedRectangle(cornerRadius: SparkRadii.lg))
             }
 
             HStack(alignment: .center, spacing: SparkSpacing.md) {
@@ -520,7 +486,7 @@ private struct FullBleedMetricRow: View {
             .padding(.horizontal, SparkSpacing.lg)
         }
         .frame(height: 118)
-        .sparkGlass(.roundedRect(20))
+        .sparkGlass(.roundedRect(SparkRadii.lg))
         .overlay(alignment: .topTrailing) {
             AnomalyDot(active: metric.latestAnomalyAt != nil)
                 .padding(8)
@@ -624,7 +590,7 @@ private enum MetricSortMode: String, CaseIterable {
     var title: String {
         switch self {
         case .anomalies: "Anomalies"
-        case .recent: "Most Recent"
+        case .recent: "Most recent"
         case .name: "Name"
         case .service: "Service"
         }

@@ -6,25 +6,41 @@ import SwiftUI
 struct DayPagerView: View {
     @Environment(AppModel.self) private var appModel
     @State private var selectedOffset: Int = 0
+    @State private var scrolledOffset: Int?
     @State private var dates: [DayKey] = DayKey.defaultWindow()
     @State private var path: [DetailRoute] = []
 
     var body: some View {
         @Bindable var appModel = appModel
         NavigationStack(path: $path) {
-            ZStack {
-                SparkResolvedAppBackground()
-
-                TabView(selection: $selectedOffset) {
+            // A horizontal paging scroll view rather than a page-style
+            // TabView: the TabView laid its pages out inside the safe area,
+            // so each day stopped above the tab bar on a plain band and the
+            // tab bar never minimised. See `SparkSectionPager`.
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: 0) {
                     ForEach(dates) { key in
                         TodayView(
                             date: key.date,
                             showsToolbar: key.offset == selectedOffset
                         )
-                        .tag(key.offset)
+                        .containerRelativeFrame(.horizontal)
+                        .id(key.offset)
                     }
                 }
-                .tabViewStyle(.page(indexDisplayMode: .never))
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.paging)
+            .scrollIndicators(.hidden)
+            .scrollPosition(id: $scrolledOffset)
+            .sparkAppBackground()
+            .onAppear { scrolledOffset = selectedOffset }
+            .onChange(of: scrolledOffset) { _, new in
+                if let new, new != selectedOffset { selectedOffset = new }
+            }
+            .onChange(of: selectedOffset) { _, new in
+                guard scrolledOffset != new else { return }
+                scrolledOffset = new
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)

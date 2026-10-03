@@ -146,13 +146,13 @@ public extension Color {
 
 // MARK: - Tag type tints
 //
-// Colour-codes EventTag.type in chip display. Reuses existing semantic tokens
-// where they fit the semantic (place → success green).
+// Colour-codes EventTag.type in chip display. Values are the design system's
+// tag tokens, not system colours: system orange is not ember-5.
 
 public extension Color {
-    static let sparkTagPerson: Color = .purple
+    static let sparkTagPerson: Color = Color(red: 0.686, green: 0.322, blue: 0.871) // #af52de
     static let sparkTagPlace: Color  = .sparkSuccess
-    static let sparkTagTopic: Color  = .orange
+    static let sparkTagTopic: Color  = .ember5
 }
 
 // MARK: - Surfaces (light/dark adaptive)
@@ -172,6 +172,11 @@ public extension Color {
 
     static let sparkTextPrimary = Color.primary
     static let sparkTextSecondary = Color.secondary
+
+    /// Ink for text and glyphs drawn on an accent or domain-coloured fill.
+    /// Stays dark in both schemes: white on spark-5 or the health green is
+    /// unreadable, and those fills do not change with the scheme.
+    static let sparkOnAccent = Color.slate5
 }
 
 private extension Color {
