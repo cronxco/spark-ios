@@ -59,16 +59,12 @@ final class ObjectDetailViewModel: ETagDetailMutationHandling {
         let response = try await apiClient.requestWithRawResponse(
             try EntityMutationsEndpoint.createRelationship(kind: .objects, id: objectId, request: request, etag: etag)
         )
-        self.etag = response.etag ?? etag
+        try await adoptVersion(after: response.decoded, kind: .objects, id: objectId)
         return response.decoded
     }
 
-    func deleteRelationship(_ relationshipID: String) async throws {
-        guard let etag else { throw TagMutationError.missingETag }
-        let response = try await apiClient.requestWithRawResponse(
-            EntityMutationsEndpoint.deleteRelationship(id: relationshipID, etag: etag)
-        )
-        self.etag = response.etag ?? etag
+    func deleteRelationship(_ relationship: EntityRelationship) async throws {
+        try await deleteRelationship(relationship, kind: .objects, id: objectId)
     }
 
     func update(_ attributes: [String: AnyCodable]) async throws {
@@ -209,9 +205,9 @@ struct ObjectDetailView: View {
                 guard let viewModel else { throw TagMutationError.missingETag }
                 return try await viewModel.createRelationship(request)
             },
-            delete: { relationshipID in
+            delete: { relationship in
                 guard let viewModel else { throw TagMutationError.missingETag }
-                try await viewModel.deleteRelationship(relationshipID)
+                try await viewModel.deleteRelationship(relationship)
             }
         )
 

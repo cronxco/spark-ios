@@ -7,9 +7,12 @@ public enum EventsEndpoint {
     }
 
     /// PATCH /events/{id}/note
-    public static func updateNote(id: String, note: String?) -> Endpoint<EventDetail> {
+    ///
+    /// The route requires the event's current ETag; without it the server
+    /// answers 428 and the note is never saved.
+    public static func updateNote(id: String, note: String?, etag: String) -> Endpoint<EventDetail> {
         let body = try? JSONEncoder().encode(UpdateNoteRequest(note: note))
-        return Endpoint(method: .patch, path: "/events/\(id)/note", body: body)
+        return Endpoint(method: .patch, path: "/events/\(id)/note", body: body, headers: ["If-Match": etag])
     }
 
     /// POST /knowledge/events/{id}/reprocess

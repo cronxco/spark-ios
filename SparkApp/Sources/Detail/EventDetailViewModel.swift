@@ -50,12 +50,21 @@ final class EventDetailViewModel: ETagDetailMutationHandling {
 
     func saveNote(_ note: String) async throws {
         let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
-        let response = try await apiClient.requestWithRawResponse(
-            EventsEndpoint.updateNote(id: eventId, note: trimmed.isEmpty ? nil : trimmed)
-        )
+        let version = try currentETag()
+        let response: RawAPIResponse<EventDetail>
+        do {
+            response = try await apiClient.requestWithRawResponse(
+                EventsEndpoint.updateNote(id: eventId, note: trimmed.isEmpty ? nil : trimmed, etag: version)
+            )
+        } catch APIError.httpStatus(412, _, _) {
+            // Someone changed the event first. Don't overwrite their change:
+            // pick up the current version and let the user save again.
+            try? await refreshVersion(EntityMutationsEndpoint.detailForWrite(kind: .events, id: eventId, response: EventDetail.self))
+            throw NoteSaveError.changedElsewhere
+        }
         let updated = response.decoded
         rawPayload = response.utf8Body
-        etag = response.etag ?? etag
+        etag = response.etag ?? version
         state = .loaded(updated)
         await loadMetricBaselineStatus(for: updated)
     }
@@ -86,16 +95,12 @@ final class EventDetailViewModel: ETagDetailMutationHandling {
         let response = try await apiClient.requestWithRawResponse(
             try EntityMutationsEndpoint.createRelationship(kind: .events, id: eventId, request: request, etag: etag)
         )
-        self.etag = response.etag ?? etag
+        try await adoptVersion(after: response.decoded, kind: .events, id: eventId)
         return response.decoded
     }
 
-    func deleteRelationship(_ relationshipID: String) async throws {
-        guard let etag else { throw TagMutationError.missingETag }
-        let response = try await apiClient.requestWithRawResponse(
-            EntityMutationsEndpoint.deleteRelationship(id: relationshipID, etag: etag)
-        )
-        self.etag = response.etag ?? etag
+    func deleteRelationship(_ relationship: EntityRelationship) async throws {
+        try await deleteRelationship(relationship, kind: .events, id: eventId)
     }
 
     func update(_ attributes: [String: AnyCodable]) async throws {
@@ -138,5 +143,13 @@ enum TagMutationError: LocalizedError {
         case .missingETag: "Refresh this detail before making changes."
         case .missingTagID: "This older tag can't be removed until the detail is refreshed."
         }
+    }
+}
+
+enum NoteSaveError: LocalizedError {
+    case changedElsewhere
+
+    var errorDescription: String? {
+        "This event changed since you opened it, so your note wasn't saved. Check it and save again."
     }
 }

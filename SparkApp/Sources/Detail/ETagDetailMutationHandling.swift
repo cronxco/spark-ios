@@ -24,4 +24,33 @@ extension ETagDetailMutationHandling {
         etag = response.etag ?? currentETag
         state = .loaded(response.decoded)
     }
+
+    /// Re-read the entity after a write that changed its version without
+    /// returning it, so the next conditional write is not made with a stale ETag.
+    func refreshVersion(_ endpoint: Endpoint<Detail>) async throws {
+        let response = try await apiClient.requestWithRawResponse(endpoint)
+        rawPayload = response.utf8Body
+        etag = response.etag
+        state = .loaded(response.decoded)
+    }
+
+    /// Adopt the parent version a relationship create returned, or re-read it.
+    func adoptVersion(after relationship: EntityRelationship, kind: SparkEntityKind, id: String) async throws {
+        if let refreshed = relationship.versions?.etag(for: kind, id: id) {
+            etag = refreshed
+        } else {
+            try await refreshVersion(EntityMutationsEndpoint.detailForWrite(kind: kind, id: id, response: Detail.self))
+        }
+    }
+
+    /// Delete an edge with its own version, then refresh the parent's, which the delete changed.
+    /// A server that predates per-edge ETags lists edges without one; those
+    /// fall back to the parent's version, as deletes did before.
+    func deleteRelationship(_ relationship: EntityRelationship, kind: SparkEntityKind, id: String) async throws {
+        let ifMatch = try relationship.etag ?? currentETag()
+        _ = try await apiClient.requestWithRawResponse(
+            EntityMutationsEndpoint.deleteRelationship(id: relationship.id, etag: ifMatch)
+        )
+        try await refreshVersion(EntityMutationsEndpoint.detailForWrite(kind: kind, id: id, response: Detail.self))
+    }
 }

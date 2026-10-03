@@ -1,6 +1,10 @@
 import Foundation
 
 public enum EntityMutationsEndpoint {
+    /// GET /{kind}/{id} without `If-None-Match`: a re-read after a write that
+    /// changed the entity's version, which must return a body and never a 304.
+    public static func detailForWrite<Response: Decodable & Sendable>(kind: SparkEntityKind, id: String, response: Response.Type) -> Endpoint<Response> { Endpoint(method: .get, path: "/\(kind.rawValue)/\(id)", usesETag: false) }
+    public static func relationshipTypes() -> Endpoint<RelationshipTypesResponse> { Endpoint(method: .get, path: "/relationship-types") }
     public static func relationships(kind: SparkEntityKind, id: String) -> Endpoint<RelationshipListResponse> { Endpoint(method: .get, path: "/\(kind.rawValue)/\(id)/relationships") }
     public static func createRelationship(kind: SparkEntityKind, id: String, request: RelationshipCreateRequest, etag: String) throws -> Endpoint<EntityRelationship> { Endpoint(method: .post, path: "/\(kind.rawValue)/\(id)/relationships", body: try JSONEncoder().encode(request), headers: ["If-Match": etag]) }
     public static func deleteRelationship(id: String, etag: String) -> Endpoint<EmptyResponse> { Endpoint(method: .delete, path: "/relationships/\(id)", headers: ["If-Match": etag]) }
