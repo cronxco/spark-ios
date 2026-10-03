@@ -60,6 +60,8 @@ final class AppModel {
     var onboardingComplete: Bool
     var lastError: String?
     var pendingRoute: AppRoute?
+    /// Query handed over by the Search Spark intent, applied by SearchView.
+    var pendingSearchQuery: String?
     private(set) var lastSyncAt: Date = .distantPast
     private(set) var profile: UserProfile? {
         didSet {
@@ -205,7 +207,12 @@ final class AppModel {
 
     /// Read a route written by an AppIntent (from the extension process) and
     /// navigate to it. Consumed once to prevent stale navigation on re-launch.
-    private func consumePendingIntentRoute() {
+    ///
+    /// Runs at bootstrap and whenever the app becomes active, so an intent that
+    /// opens an already-running app is handled then rather than on the next
+    /// cold launch.
+    func consumePendingIntentRoute() {
+        guard session == .loggedIn else { return }
         let defaults = UserDefaults(suiteName: "group.co.cronx.sparkapp")
         guard let raw = defaults?.string(forKey: "spark.pendingRoute") else { return }
         defaults?.removeObject(forKey: "spark.pendingRoute")
@@ -218,7 +225,8 @@ final class AppModel {
         }
 
         switch kind {
-        case "search":  break   // SearchView picks up the query separately
+        case "search":
+            if parts.count > 1, !parts[1].isEmpty { pendingSearchQuery = parts[1] }
         case "action":
             if parts.last == "startSleep" {
                 Task { await LiveActivityManager.shared.startSleepActivity(bedtime: .now, targetWakeTime: nil) }

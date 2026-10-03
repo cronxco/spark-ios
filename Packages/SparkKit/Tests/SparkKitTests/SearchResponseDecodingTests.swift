@@ -14,6 +14,45 @@ struct SearchResponseDecodingTests {
         #expect(SearchEndpoint.Mode.tags.symbol == "#")
     }
 
+    @Test("every mode sends a mode name the backend accepts")
+    func modesUseBackendQueryValues() {
+        let accepted: Set<String> = ["default", "semantic", "tag", "metric", "integration"]
+        for mode in SearchEndpoint.Mode.allCases {
+            #expect(accepted.contains(mode.queryValue), "\(mode) sends \(mode.queryValue)")
+        }
+    }
+
+    @Test("typed entity search sends query and a boolean semantic flag")
+    func entitySearchParameters() throws {
+        let endpoint = SearchEndpoint.entity(.objects, query: "Tesco", semantic: false)
+
+        #expect(endpoint.path == "/search/objects")
+        #expect(endpoint.query.first { $0.name == "query" }?.value == "Tesco")
+        #expect(endpoint.query.first { $0.name == "q" } == nil)
+        #expect(endpoint.query.first { $0.name == "semantic" }?.value == "0")
+    }
+
+    @Test("decodes typed block search payload")
+    func decodesTypedBlockPayload() throws {
+        let json = """
+        {
+          "blocks": [
+            { "id": "blk_1", "title": "Heart rate", "block_type": "heart_rate" }
+          ],
+          "meta": { "query": "heart", "semantic": false, "count": 1, "limit": 20 }
+        }
+        """
+
+        let response = try JSONDecoder().decode(SearchResponse.self, from: Data(json.utf8))
+        #expect(response.results.count == 1)
+        guard case .block(let hit) = response.results.first else {
+            Issue.record("Expected a block result")
+            return
+        }
+        #expect(hit.id == "blk_1")
+        #expect(hit.blockType == "heart_rate")
+    }
+
     @Test("decodes top-level array payload")
     func decodesArrayPayload() throws {
         let json = """

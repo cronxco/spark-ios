@@ -54,7 +54,19 @@ struct SearchView: View {
             if viewModel == nil {
                 viewModel = SearchViewModel(apiClient: appModel.apiClient)
             }
+            applyPendingSearchQuery()
         }
+        .onChange(of: appModel.pendingSearchQuery) { _, _ in
+            applyPendingSearchQuery()
+        }
+    }
+
+    /// Run the query a Siri / Shortcuts "Search Spark" intent handed over.
+    private func applyPendingSearchQuery() {
+        guard let query = appModel.pendingSearchQuery, let viewModel else { return }
+        appModel.pendingSearchQuery = nil
+        path = []
+        viewModel.query = query
     }
 
     private var queryBinding: Binding<String> {
@@ -187,7 +199,7 @@ struct SearchView: View {
                                 .buttonStyle(.plain)
                             }
                         }
-                        Text("Try `>` actions · `#` tags · `$` metrics · `@` integrations · `~` semantic")
+                        Text("Try `#` tags · `$` metrics · `@` integrations · `~` semantic")
                             .font(SparkTypography.caption)
                             .foregroundStyle(.tertiary)
                     }

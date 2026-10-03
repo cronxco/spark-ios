@@ -24,6 +24,10 @@ struct MainTabView: View {
                 guard new != nil else { return }
                 selection = .day
             }
+            .onChange(of: model.pendingSearchQuery, initial: true) { _, new in
+                guard new != nil else { return }
+                selection = .search
+            }
     }
 
     private var tabs: some View {
