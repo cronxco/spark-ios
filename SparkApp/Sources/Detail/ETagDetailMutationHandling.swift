@@ -44,10 +44,12 @@ extension ETagDetailMutationHandling {
     }
 
     /// Delete an edge with its own version, then refresh the parent's, which the delete changed.
+    /// A server that predates per-edge ETags lists edges without one; those
+    /// fall back to the parent's version, as deletes did before.
     func deleteRelationship(_ relationship: EntityRelationship, kind: SparkEntityKind, id: String) async throws {
-        guard let relationshipETag = relationship.etag else { throw TagMutationError.missingETag }
+        let ifMatch = try relationship.etag ?? currentETag()
         _ = try await apiClient.requestWithRawResponse(
-            EntityMutationsEndpoint.deleteRelationship(id: relationship.id, etag: relationshipETag)
+            EntityMutationsEndpoint.deleteRelationship(id: relationship.id, etag: ifMatch)
         )
         try await refreshVersion(EntityMutationsEndpoint.detailForWrite(kind: kind, id: id, response: Detail.self))
     }
