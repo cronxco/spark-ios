@@ -383,8 +383,13 @@ final class FlintViewModel {
     private func fetchDigests(date: Date) async throws -> [FlintDigest] {
         // Today is left to the server, which resolves it in the effective
         // (acknowledged travel) timezone. The device's own timezone can be a
-        // different day.
-        let dateKey = Calendar.current.isDateInToday(date) ? nil : Self.isoKey(for: date)
+        // different day, so once a digest has told us the effective timezone
+        // the "is this today" check uses it too.
+        var calendar = Calendar.current
+        if let identifier = digests.first?.effectiveTimezone, let timeZone = TimeZone(identifier: identifier) {
+            calendar.timeZone = timeZone
+        }
+        let dateKey = calendar.isDateInToday(date) ? nil : Self.isoKey(for: date)
         let response = try await apiClient.request(FlintEndpoint.digests(date: dateKey, all: true))
         return response.digests
     }
