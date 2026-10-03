@@ -44,7 +44,7 @@ final class TodayViewModel {
     private let defaults: UserDefaults
     private var summaryLineTask: Task<Void, Never>?
 
-    private static let summaryLinePromptVersion = "today-hero-summary-v2"
+    private static let summaryLinePromptVersion = "today-hero-summary-v3"
     private static let summaryLineCachePrefix = "spark.today.heroSummary"
 
     init(
@@ -552,19 +552,21 @@ final class TodayViewModel {
     private func generateSummaryLine(for summary: DaySummary) {
         summaryLineTask?.cancel()
 
-        guard let context = summaryLineContext else {
+        // The greeting's subtitle is written by Apple Intelligence or not
+        // shown at all; there is no static fallback line.
+        let facts = FlintBriefingFacts(summary: summary)
+        guard let context = summaryLineContext, facts.hasSummarySignal else {
             briefingSummaryLine = nil
             return
         }
 
-        let facts = FlintBriefingFacts(summary: summary)
         let cacheKey = summaryLineCacheKey(for: summary, context: context)
         if let cachedLine = defaults.string(forKey: cacheKey), !cachedLine.isEmpty {
             briefingSummaryLine = cachedLine
             return
         }
 
-        briefingSummaryLine = facts.fallbackSummaryLine(context: context)
+        briefingSummaryLine = nil
 
         summaryLineTask = Task {
             do {
@@ -572,13 +574,11 @@ final class TodayViewModel {
                     from: facts,
                     context: context
                 )
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, result.usedAppleIntelligence else { return }
                 let line = sanitizedSummaryLine(result.note.summary)
                 guard !line.isEmpty else { return }
                 briefingSummaryLine = line
-                if result.usedAppleIntelligence {
-                    defaults.set(line, forKey: cacheKey)
-                }
+                defaults.set(line, forKey: cacheKey)
             } catch where error.isAPICancellation {
             } catch {
                 SparkObservability.captureHandled(error)

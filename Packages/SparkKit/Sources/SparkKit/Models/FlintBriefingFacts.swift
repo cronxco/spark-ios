@@ -80,8 +80,14 @@ public struct FlintBriefingFacts: Sendable, Hashable {
         )
     }
 
-    public func fallbackSummaryLine(context: SummaryLineContext) -> String? {
-        let signal = lines.first { line in
+    /// Whether the day has anything worth a sentence: an anomaly or at least
+    /// one section with data. When it doesn't, the Day greeting shows nothing.
+    public var hasSummarySignal: Bool {
+        !anomalies.isEmpty || summarySignal != nil
+    }
+
+    private var summarySignal: String? {
+        lines.first { line in
             !line.hasPrefix("Date:")
                 && !line.hasPrefix("Timezone:")
                 && !line.hasPrefix("Sync status:")
@@ -90,6 +96,10 @@ public struct FlintBriefingFacts: Sendable, Hashable {
                 && !line.hasPrefix("Anomalies:")
                 && !line.hasSuffix(": no data")
         }
+    }
+
+    public func fallbackSummaryLine(context: SummaryLineContext) -> String? {
+        let signal = summarySignal
 
         if let anomaly = anomalies.first {
             return switch context {
