@@ -215,7 +215,7 @@ struct FlintView: View {
                             if index < min(viewModel.digests.count, 3) - 1 { Divider() }
                         }
                     }
-                    .sparkFlintMaterialSurface()
+                    .flintCardSurface()
                 }
             }
         }
@@ -280,7 +280,7 @@ struct FlintView: View {
         case .idle, .loading:
             loadingContent
         case .empty(let message):
-            EmptyState(systemImage: "point.3.connected.trianglepath.dotted", title: "No Threads yet", message: message)
+            EmptyState(systemImage: "point.3.connected.trianglepath.dotted", title: "No threads yet", message: message)
         case .error(let message):
             errorContent(message) { Task { await viewModel.loadTopics() } }
         case .loaded:
@@ -303,7 +303,7 @@ struct FlintView: View {
                         if index < topics.count - 1 { Divider() }
                     }
                 }
-                .sparkFlintMaterialSurface()
+                .flintCardSurface()
             }
         }
     }
@@ -328,7 +328,7 @@ struct FlintView: View {
             }
             .font(SparkTypography.bodyStrong)
             .padding(SparkSpacing.md)
-            .sparkFlintMaterialSurface()
+            .flintCardSurface()
 
             switch viewModel.historyState {
             case .idle, .loading:
@@ -353,7 +353,7 @@ struct FlintView: View {
                                     if index < group.digests.count - 1 { Divider() }
                                 }
                             }
-                            .sparkFlintMaterialSurface()
+                            .flintCardSurface()
                         }
                     }
                 }
@@ -401,7 +401,7 @@ struct FlintView: View {
             LoadingShimmer(cornerRadius: SparkRadii.sm).frame(height: 18).frame(maxWidth: 280)
         }
         .padding(SparkSpacing.md)
-        .sparkFlintMaterialSurface()
+        .flintCardSurface()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Loading Flint")
     }
@@ -430,23 +430,24 @@ private struct FlintNotesOverviewSurface: View {
         }
         .padding(SparkSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .sparkFlintMaterialSurface()
+        .flintCardSurface()
     }
 
     @ViewBuilder
     private var actions: some View {
         Button(action: onCompose) {
             Label("Leave a note", systemImage: "square.and.pencil")
+                .foregroundStyle(Color.sparkOnAccent)
                 .frame(minHeight: 44)
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.glassProminent)
         .tint(.sparkAccent)
 
         Button(action: onViewNotes) {
             Label("View notes", systemImage: "note.text")
                 .frame(minHeight: 44)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.glass)
     }
 }
 
@@ -471,13 +472,10 @@ private struct FlintHistoryGroup {
 }
 
 private extension View {
-    func sparkFlintMaterialSurface() -> some View {
-        background(.thinMaterial, in: RoundedRectangle(cornerRadius: SparkRadii.lg))
-            .overlay {
-                RoundedRectangle(cornerRadius: SparkRadii.lg)
-                    .strokeBorder(Color.primary.opacity(0.10))
-            }
-            .shadow(color: Color.black.opacity(0.05), radius: 12, y: 4)
+    /// Flint's cards use the same Liquid Glass surface as every other tab
+    /// (and inherit its Reduce Transparency and Increase Contrast fallback).
+    func flintCardSurface() -> some View {
+        sparkGlass(.roundedRect(SparkRadii.lg))
     }
 }
 
@@ -515,7 +513,7 @@ private struct FlintFocusSurface: View {
         }
         .padding(SparkSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .sparkFlintMaterialSurface()
+        .flintCardSurface()
     }
 }
 
@@ -1039,7 +1037,7 @@ private struct FlintDigestCheckInPrompt: View {
                     }
 
                     CheckInPeriodSummaryRow(
-                        title: "\(period.rawValue.capitalized) Check-in",
+                        title: "\(period.rawValue.capitalized) check-in",
                         status: status(for: period),
                         onTap: { showCheckIn = true }
                     )
@@ -1181,7 +1179,7 @@ private struct FlintBlockSurface: View {
         }
         .padding(SparkSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .sparkFlintMaterialSurface()
+        .flintCardSurface()
     }
 
     private var icon: String {

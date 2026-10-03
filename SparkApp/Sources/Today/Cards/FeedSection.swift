@@ -414,8 +414,6 @@ private enum TimelineFilter: CaseIterable {
 private struct TimelineFilterPill: View {
     @Binding var filter: TimelineFilter
 
-    private static let darkInk = Color(red: 0.086, green: 0.086, blue: 0.086)
-
     private let items: [(TimelineFilter, String)] = [
         (.home, "house.fill"),
         (.money, "sterlingsign"),
@@ -433,7 +431,7 @@ private struct TimelineFilterPill: View {
                     Image(systemName: icon)
                         .font(.system(size: 13, weight: .semibold))
                         .frame(width: 44, height: 44)
-                        .foregroundStyle(isActive ? Self.darkInk : Color.secondary)
+                        .foregroundStyle(isActive ? Color.sparkOnAccent : Color.secondary)
                         .background(isActive ? Color.sparkAccent : Color.clear, in: .capsule)
                 }
                 .buttonStyle(.plain)

@@ -19,7 +19,7 @@ struct AddBalanceSheet: View {
     private var isValid: Bool { !balanceText.isEmpty && Double(balanceText) != nil }
 
     var body: some View {
-        SparkSheetScaffold("Add Balance") {
+        SparkSheetScaffold("Add balance") {
             VStack(alignment: .leading, spacing: SparkSpacing.xl) {
                 // Balance field
                 VStack(alignment: .leading, spacing: SparkSpacing.sm) {
@@ -74,7 +74,7 @@ struct AddBalanceSheet: View {
                         if isSubmitting {
                             ProgressView().scaleEffect(0.85)
                         }
-                        Text(isSubmitting ? "Saving…" : "Save Balance")
+                        Text(isSubmitting ? "Saving…" : "Save balance")
                             .font(SparkTypography.bodyStrong)
                     }
                     .frame(maxWidth: .infinity)

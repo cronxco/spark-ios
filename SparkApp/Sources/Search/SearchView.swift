@@ -294,21 +294,14 @@ private struct SearchFilterChip: View {
             .lineLimit(1)
             .padding(.horizontal, SparkSpacing.md)
             .padding(.vertical, SparkSpacing.sm)
-            .foregroundStyle(isSelected ? Color.sparkTextPrimary : Color.secondary)
+            .foregroundStyle(isSelected ? Color.sparkOnAccent : Color.secondary)
+            // Same grammar as RangeChipBar and the Day timeline filter: a
+            // solid accent fill when selected, plain glass otherwise.
             .background {
                 if isSelected {
                     Capsule().fill(Color.sparkAccent)
-                } else {
-                    Capsule().fill(Color.sparkElevated.opacity(0.16))
                 }
             }
-            .overlay {
-                Capsule()
-                    .strokeBorder(
-                        isSelected ? Color.clear : Color.primary.opacity(0.12),
-                        lineWidth: 1
-                    )
-            }
-            .sparkGlass(.capsule, tint: isSelected ? Color.sparkAccent.opacity(0.18) : Color.clear)
+            .sparkGlass(.capsule)
     }
 }

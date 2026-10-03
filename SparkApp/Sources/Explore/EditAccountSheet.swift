@@ -53,7 +53,7 @@ struct EditAccountSheet: View {
     }
 
     var body: some View {
-        SparkSheetScaffold("Edit Account") {
+        SparkSheetScaffold("Edit account") {
             VStack(alignment: .leading, spacing: SparkSpacing.xl) {
                 VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                     SectionLabel("Account name")
@@ -65,7 +65,7 @@ struct EditAccountSheet: View {
 
                 VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                     SectionLabel("Type")
-                    Picker("Account Type", selection: $accountType) {
+                    Picker("Account type", selection: $accountType) {
                         ForEach(AccountTypeOption.allCases, id: \.value) { opt in
                             Text(opt.label).tag(opt.value)
                         }
@@ -167,7 +167,7 @@ struct EditAccountSheet: View {
                 } label: {
                     HStack {
                         if isSubmitting { ProgressView().scaleEffect(0.85) }
-                        Text(isSubmitting ? "Saving…" : "Save Changes")
+                        Text(isSubmitting ? "Saving…" : "Save changes")
                             .font(SparkTypography.bodyStrong)
                     }
                     .frame(maxWidth: .infinity)
@@ -238,12 +238,12 @@ private enum AccountTypeOption: CaseIterable {
 
     var label: String {
         switch self {
-        case .currentAccount: "Current Account"
-        case .savingsAccount: "Savings Account"
-        case .creditCard: "Credit Card"
+        case .currentAccount: "Current account"
+        case .savingsAccount: "Savings account"
+        case .creditCard: "Credit card"
         case .mortgage: "Mortgage"
         case .loan: "Loan"
-        case .investmentAccount: "Investment Account"
+        case .investmentAccount: "Investment account"
         case .pension: "Pension"
         case .other: "Other"
         }

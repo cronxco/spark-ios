@@ -182,7 +182,7 @@ private struct KnowledgeItemCard: View {
     let event: Event
     @Environment(\.colorScheme) private var colorScheme
 
-    private let cardRadius: CGFloat = 20
+    private let cardRadius: CGFloat = SparkRadii.lg
 
     private var imageUrl: URL? {
         guard let raw = event.target?.mediaUrl else { return nil }
@@ -200,7 +200,7 @@ private struct KnowledgeItemCard: View {
     private var serviceLabel: String {
         switch event.service {
         case "newsletter": "Newsletter"
-        case "fetch": "Web Digest"
+        case "fetch": "Web digest"
         case "outline": "Outline"
         case "calendar": "Calendar"
         default: event.service.capitalized
@@ -217,22 +217,15 @@ private struct KnowledgeItemCard: View {
         }
     }
 
+    /// Knowledge is the sky domain. Shades of it tell sources apart; other
+    /// domain colours would say "money" or "anomaly" about a newsletter.
     private var accent: Color {
-        let palette: [Color] = [
-            .spark5,
-            .ember5,
-            .sky5,
-            .flame5,
-            .sparkSuccess,
-            .sparkWarning,
-        ]
-        return palette[stablePaletteIndex % palette.count]
-    }
-
-    private var stablePaletteIndex: Int {
-        let seed = event.id + title + event.service
-        return seed.unicodeScalars.reduce(0) { partial, scalar in
-            (partial &* 31 &+ Int(scalar.value)) & 0x7fffffff
+        switch event.service {
+        case "newsletter": .sky5
+        case "fetch": .sky6
+        case "outline": .sky7
+        case "calendar": .sky4
+        default: .domainKnowledge
         }
     }
 
@@ -284,7 +277,7 @@ private struct KnowledgeItemCard: View {
                     HStack {
                         Text(serviceLabel)
                             .font(SparkTypography.monoSmall)
-                            .foregroundStyle(accent)
+                            .foregroundStyle(Color.domainKnowledge)
                             .padding(.horizontal, SparkSpacing.sm)
                             .padding(.vertical, 3)
                             .background(accent.opacity(colorScheme == .dark ? 0.20 : 0.12))
