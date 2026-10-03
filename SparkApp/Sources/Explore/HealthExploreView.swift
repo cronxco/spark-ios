@@ -6,32 +6,26 @@ import SwiftUI
 struct HealthExploreView: View {
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: HealthExploreViewModel?
-    @State private var path: [DetailRoute] = []
+    @Binding var path: [DetailRoute]
 
     var body: some View {
-        NavigationStack(path: $path) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-                    pageHeader
+        ScrollView {
+            VStack(alignment: .leading, spacing: SparkSpacing.lg) {
+                pageHeader
+                    .padding(.horizontal, SparkSpacing.lg)
+
+                if let vm = viewModel {
+                    rangePicker(vm)
                         .padding(.horizontal, SparkSpacing.lg)
-
-                    if let vm = viewModel {
-                        rangePicker(vm)
-                            .padding(.horizontal, SparkSpacing.lg)
-                    }
-
-                    content
                 }
-                .padding(.top, SparkSpacing.md)
-                .padding(.bottom, SparkSpacing.xl)
+
+                content
             }
-            .sparkAppBackground()
-            .sparkMainNavigationTitle("Health")
-            .sparkDetailDestinations()
-            .refreshable {
-                await viewModel?.refresh()
-            }
-            .sparkMainAppToolbar()
+            .padding(.top, SparkSpacing.md)
+            .padding(.bottom, SparkSpacing.xl)
+        }
+        .refreshable {
+            await viewModel?.refresh()
         }
         .task {
             if viewModel == nil {
@@ -42,7 +36,7 @@ struct HealthExploreView: View {
     }
 
     private var pageHeader: some View {
-        SparkMainPageHeader(title: "Health", subtitle: headerSubtitle)
+        SparkSectionCaption(text: headerSubtitle)
     }
 
     @ViewBuilder

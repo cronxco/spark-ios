@@ -8,6 +8,7 @@ struct TodayView: View {
     var showsToolbar = true
     @Environment(AppModel.self) private var appModel
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var colorScheme
     @State private var viewModel: TodayViewModel?
     @State private var checkInSelection: CheckInSheetSelection?
     @State private var showHistory = false
@@ -15,7 +16,6 @@ struct TodayView: View {
     @State private var showUpToSpeed = false
     @State private var upToSpeedViewModel: UpToSpeedViewModel?
     @State private var selectedThread: FlintTopic?
-    @State private var hasScrolledPastTop = false
 
     private var isToday: Bool { Calendar.current.isDateInToday(date) }
 
@@ -93,25 +93,6 @@ struct TodayView: View {
                 .containerRelativeFrame(.horizontal)
             }
             .scrollEdgeEffectStyle(.soft, for: .top)
-            .onScrollGeometryChange(for: Bool.self) { geometry in
-                geometry.contentOffset.y + geometry.contentInsets.top > SparkSpacing.sm
-            } action: { _, hasScrolled in
-                hasScrolledPastTop = hasScrolled
-            }
-            // The page-style TabView stops the scroll view at the navigation
-            // bar. Fade cards before that boundary so their borders do not
-            // appear abruptly sliced beneath the toolbar.
-            .mask(alignment: .top) {
-                if hasScrolledPastTop {
-                    VStack(spacing: 0) {
-                        LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-                            .frame(height: 28)
-                        Color.black
-                    }
-                } else {
-                    Color.black
-                }
-            }
             .refreshable {
                 await viewModel?.refresh()
                 await checkInHistoryVM?.load()
@@ -249,9 +230,15 @@ struct TodayView: View {
     private func heroTitleText(_ line: String, index: Int) -> some View {
         Text(line)
             .font(heroTitleFont)
-            .foregroundStyle(index == 0 ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+            .foregroundStyle(index == 0 ? heroLeadStyle : AnyShapeStyle(.secondary))
             .lineLimit(1)
             .minimumScaleFactor(0.88)
+    }
+
+    /// The hero's first line is the Day tab's title, so it takes the same
+    /// yellow in dark mode as the titles on the other tabs.
+    private var heroLeadStyle: AnyShapeStyle {
+        colorScheme == .dark ? AnyShapeStyle(Color.spark2) : AnyShapeStyle(.primary)
     }
 
     private var heroTitleFont: Font {

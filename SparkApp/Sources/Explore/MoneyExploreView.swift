@@ -36,43 +36,28 @@ enum HistoryRange: String, CaseIterable, Identifiable {
 struct MoneyExploreView: View {
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: MoneyExploreViewModel?
-    @State private var path: [DetailRoute] = []
+    @Binding var path: [DetailRoute]
     @State private var showCreateAccount = false
     @State private var selectedRange: HistoryRange = .oneMonth
     @State private var expandedAccountGroupTypes: Set<String> = []
 
     var body: some View {
-        NavigationStack(path: $path) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-                    pageHeader
-                        .padding(.horizontal, SparkSpacing.lg)
+        ScrollView {
+            VStack(alignment: .leading, spacing: SparkSpacing.lg) {
+                pageHeader
+                    .padding(.horizontal, SparkSpacing.lg)
 
-                    content
-                }
-                .padding(.top, SparkSpacing.md)
-                .padding(.bottom, SparkSpacing.xl)
+                content
             }
-            .sparkAppBackground()
-            .sparkMainNavigationTitle("Money")
-            .navigationDestination(for: DetailRoute.self) { route in
-                switch route {
-                case .event(let id):
-                    EventDetailView(eventId: id)
-                case .account(let id):
-                    AccountDetailView(accountId: id)
-                default:
-                    EmptyView()
-                }
-            }
-            .refreshable {
-                await viewModel?.refresh()
-            }
-            .sparkMainAppToolbar()
-            .sheet(isPresented: $showCreateAccount) {
-                CreateAccountSheet { account in
-                    viewModel?.accountCreated(account)
-                }
+            .padding(.top, SparkSpacing.md)
+            .padding(.bottom, SparkSpacing.xl)
+        }
+        .refreshable {
+            await viewModel?.refresh()
+        }
+        .sheet(isPresented: $showCreateAccount) {
+            CreateAccountSheet { account in
+                viewModel?.accountCreated(account)
             }
         }
         .task {
@@ -84,7 +69,7 @@ struct MoneyExploreView: View {
     }
 
     private var pageHeader: some View {
-        SparkMainPageHeader(title: "Money", subtitle: headerSubtitle)
+        SparkSectionCaption(text: headerSubtitle)
     }
 
     @ViewBuilder

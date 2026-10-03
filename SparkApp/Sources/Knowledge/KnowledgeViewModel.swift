@@ -23,7 +23,9 @@ final class KnowledgeViewModel {
     private var cursor: String?
     private(set) var hasMore: Bool = false
 
-    var filteredItems: [Event] {
+    var filteredItems: [Event] { items(for: filter) }
+
+    func items(for filter: Filter) -> [Event] {
         switch filter {
         case .reading: return allItems.filter { $0.service == "fetch" || $0.service == "newsletter" }
         case .personal: return allItems.filter { $0.service == "outline" || $0.service == "calendar" }
