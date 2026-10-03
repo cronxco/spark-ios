@@ -280,12 +280,17 @@ final class AppModel {
                 let appEnvironment = "production"
             #endif
 
-                if let registered = try? await apiClient.request(DevicesEndpoint.register(
-                    name: name, platform: "ios",
-                    apnsToken: apnsToken, appEnvironment: appEnvironment,
-                    appVersion: appVersion, bundleId: bundleId, osVersion: osVersion
-                )) {
+                // Retried on the next launch or foreground. Reported rather
+                // than swallowed, so a device that never registers is visible.
+                do {
+                    let registered = try await apiClient.request(DevicesEndpoint.register(
+                        name: name, platform: "ios",
+                        apnsToken: apnsToken, appEnvironment: appEnvironment,
+                        appVersion: appVersion, bundleId: bundleId, osVersion: osVersion
+                    ))
                     UserDefaults.sparkAppGroup.set(registered.id, forKey: "spark.apnsDeviceId")
+                } catch {
+                    SparkObservability.captureHandled(error)
                 }
             }
             deviceRegistrationTokenInFlight = apnsToken

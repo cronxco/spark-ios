@@ -13,8 +13,11 @@ final class LiveActivityManager {
     private var sleepActivity: Activity<SleepActivityAttributes>?
     private var dailyActivity: Activity<DailyActivityAttributes>?
     private var tokenTasks: [String: Task<Void, Never>] = [:]
+    /// ActivityKit ids the backend has a record for. The ActivityKit id is
+    /// the public identifier in every `/live-activities/{id}` path; the create
+    /// response's row `id` is internal to the server. Using the row id made
+    /// every token rotation, update and end a 404.
     private var registeredActivityIDs = Set<String>()
-    private var serverActivityIDs: [String: String] = [:]
     private var serverUpdateTimes: [String: [Date]] = [:]
 
     private nonisolated let logger = Logger(subsystem: "co.cronx.sparkapp", category: "LiveActivity")
@@ -166,7 +169,7 @@ final class LiveActivityManager {
                 let tokenString = tokenData.map { String(format: "%02x", $0) }.joined()
                 do {
                     if !self.registeredActivityIDs.contains(activityID) {
-                        let record = try await apiClient.request(
+                        _ = try await apiClient.request(
                             LiveActivitiesEndpoint.create(
                                 activityID: activityID,
                                 token: tokenString,
@@ -174,13 +177,11 @@ final class LiveActivityManager {
                                 contentState: activity.content.state
                             )
                         )
-                        self.serverActivityIDs[activityID] = record.id
                         self.registeredActivityIDs.insert(activityID)
                     } else {
-                        guard let serverID = self.serverActivityIDs[activityID] else { continue }
                         _ = try await apiClient.request(
                             LiveActivitiesEndpoint.registerToken(
-                                activityID: serverID,
+                                activityID: activityID,
                                 token: tokenString
                             )
                         )
@@ -198,7 +199,6 @@ final class LiveActivityManager {
         tokenTasks[activityID]?.cancel()
         tokenTasks.removeValue(forKey: activityID)
         registeredActivityIDs.remove(activityID)
-        serverActivityIDs.removeValue(forKey: activityID)
         serverUpdateTimes.removeValue(forKey: activityID)
     }
 
@@ -206,7 +206,7 @@ final class LiveActivityManager {
         _ state: A.ContentState,
         for activity: Activity<A>
     ) async where A.ContentState: Encodable & Sendable {
-        guard let serverID = serverActivityIDs[activity.id] else { return }
+        guard registeredActivityIDs.contains(activity.id) else { return }
         let now = Date()
         let cutoff = now.addingTimeInterval(-3600)
         let recent = (serverUpdateTimes[activity.id] ?? []).filter { $0 >= cutoff }
@@ -218,7 +218,7 @@ final class LiveActivityManager {
         serverUpdateTimes[activity.id] = recent + [now]
         do {
             _ = try await AppModel.shared.apiClient.request(
-                LiveActivitiesEndpoint.update(activityID: serverID, state: state)
+                LiveActivitiesEndpoint.update(activityID: activity.id, state: state)
             )
         } catch {
             // The local ActivityKit update already succeeded. Server mirroring
@@ -228,9 +228,9 @@ final class LiveActivityManager {
     }
 
     private func endServerActivity(id: String) async {
-        guard let serverID = serverActivityIDs[id] else { return }
+        guard registeredActivityIDs.contains(id) else { return }
         do {
-            _ = try await AppModel.shared.apiClient.request(LiveActivitiesEndpoint.end(activityID: serverID))
+            _ = try await AppModel.shared.apiClient.request(LiveActivitiesEndpoint.end(activityID: id))
         } catch {
             logger.error("Failed to end server Live Activity: \(error)")
         }
