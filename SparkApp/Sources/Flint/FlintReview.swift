@@ -63,7 +63,8 @@ final class FlintReviewModel {
         )
         do {
             items = try await apiClient.request(FlintEndpoint.reviewAction(kind: item.kind, id: item.id, request)).data
-            chosenTransaction[item.id] = nil
+            let remaining = Set(items.map(\.id))
+            chosenTransaction = chosenTransaction.filter { remaining.contains($0.key) }
         } catch where error.isAPICancellation {
             return
         } catch {
@@ -87,7 +88,7 @@ struct FlintReviewSection: View {
                 .foregroundStyle(.secondary)
 
             switch model.state {
-            case .idle, .loading where model.items.isEmpty:
+            case .idle where model.items.isEmpty, .loading where model.items.isEmpty:
                 ProgressView("Loading review…")
                     .frame(maxWidth: .infinity)
             case .error(let message) where model.items.isEmpty:

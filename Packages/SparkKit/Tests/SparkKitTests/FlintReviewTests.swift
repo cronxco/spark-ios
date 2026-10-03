@@ -51,6 +51,37 @@ struct FlintReviewTests {
         #expect(response.data[1].subject.amount == 10)
     }
 
+    @Test("an unknown kind skips only that item and unknown actions are dropped")
+    func decodesUnknownValuesLeniently() throws {
+        let json = """
+        {
+          "data": [
+            {
+              "id": "x-1",
+              "kind": "something_new",
+              "title": "New",
+              "summary": "A kind this build doesn't know.",
+              "subject": {"id": "x-1"},
+              "actions": ["confirm"]
+            },
+            {
+              "id": "l-1",
+              "kind": "auto_link",
+              "title": "Pot",
+              "summary": "Spark linked these transactions by itself.",
+              "subject": {"id": "t-2"},
+              "actions": ["keep", "snooze", "undo"]
+            }
+          ]
+        }
+        """
+
+        let response = try makeDecoder().decode(FlintReviewResponse.self, from: Data(json.utf8))
+
+        #expect(response.data.map(\.id) == ["l-1"])
+        #expect(response.data[0].actions == [.keep, .undo])
+    }
+
     @Test("action endpoint posts the action and chosen transaction")
     func actionEndpoint() throws {
         let endpoint = FlintEndpoint.reviewAction(

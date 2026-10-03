@@ -34,7 +34,9 @@ public struct FlintReviewItem: Codable, Sendable, Hashable, Identifiable {
         subject = try container.decode(FlintReviewEvent.self, forKey: .subject)
         linked = try container.decodeIfPresent(FlintReviewEvent.self, forKey: .linked)
         candidates = try container.decodeIfPresent([FlintReviewEvent].self, forKey: .candidates) ?? []
-        actions = try container.decode([FlintReviewAction].self, forKey: .actions)
+        // An action this build doesn't know is dropped rather than failing the queue.
+        actions = try container.decode([String].self, forKey: .actions)
+            .compactMap(FlintReviewAction.init(rawValue:))
     }
 }
 
@@ -81,6 +83,29 @@ public enum FlintReviewAction: String, Codable, Sendable, Hashable {
 
 public struct FlintReviewResponse: Codable, Sendable {
     public let data: [FlintReviewItem]
+
+    enum CodingKeys: String, CodingKey {
+        case data
+    }
+
+    public init(data: [FlintReviewItem]) {
+        self.data = data
+    }
+
+    /// Skips any item this build can't decode (a new kind, say), so one
+    /// unfamiliar item doesn't empty the whole Review tab.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        data = try container.decode([SkippableItem].self, forKey: .data).compactMap(\.item)
+    }
+
+    private struct SkippableItem: Decodable {
+        let item: FlintReviewItem?
+
+        init(from decoder: Decoder) throws {
+            item = try? FlintReviewItem(from: decoder)
+        }
+    }
 }
 
 public struct FlintReviewActionRequest: Codable, Sendable, Hashable {
