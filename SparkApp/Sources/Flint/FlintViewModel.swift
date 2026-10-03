@@ -25,6 +25,7 @@ final class FlintViewModel {
         case questions
         case threads
         case history
+        case review
 
         var id: String { rawValue }
 
@@ -34,6 +35,7 @@ final class FlintViewModel {
             case .questions: "Questions"
             case .threads: "Threads"
             case .history: "History"
+            case .review: "Review"
             }
         }
     }
