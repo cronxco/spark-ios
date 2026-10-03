@@ -147,9 +147,9 @@ struct EventDetailView: View {
                 guard let viewModel else { throw TagMutationError.missingETag }
                 return try await viewModel.createRelationship(request)
             },
-            delete: { relationshipID in
+            delete: { relationship in
                 guard let viewModel else { throw TagMutationError.missingETag }
-                try await viewModel.deleteRelationship(relationshipID)
+                try await viewModel.deleteRelationship(relationship)
             }
         )
 
