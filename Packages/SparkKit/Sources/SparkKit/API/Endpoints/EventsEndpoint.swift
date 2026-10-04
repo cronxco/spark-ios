@@ -15,6 +15,20 @@ public enum EventsEndpoint {
         return Endpoint(method: .patch, path: "/events/\(id)/note", body: body, headers: ["If-Match": etag])
     }
 
+    /// DELETE /events/{id}
+    ///
+    /// Soft delete, guarded by the event's current ETag. Undo with `restore`.
+    public static func delete(id: String, etag: String) -> Endpoint<DeletedEntity> {
+        Endpoint(method: .delete, path: "/events/\(id)", headers: ["If-Match": etag])
+    }
+
+    /// POST /events/{id}/restore
+    ///
+    /// Undo for `delete`. Idempotent, so it carries no `If-Match`.
+    public static func restore(id: String) -> Endpoint<EventDetail> {
+        Endpoint(method: .post, path: "/events/\(id)/restore")
+    }
+
     /// POST /knowledge/events/{id}/reprocess
     public static func reprocessKnowledgeEvent(id: String) -> Endpoint<EmptyResponse> {
         Endpoint(method: .post, path: "/knowledge/events/\(id)/reprocess")

@@ -9,6 +9,7 @@ final class ObjectDetailViewModel: ETagDetailMutationHandling {
     var state: DetailLoadState<ObjectDetail> = .loading
     var rawPayload: String?
     var etag: String?
+    private(set) var isDeleted = false
 
     let apiClient: APIClient
 
@@ -31,6 +32,25 @@ final class ObjectDetailViewModel: ETagDetailMutationHandling {
             let msg = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
             state = .error(msg)
         }
+    }
+
+    /// Soft delete. Its events are kept, and Undo brings the object back.
+    func delete() async throws {
+        let version = try currentETag()
+        do {
+            _ = try await apiClient.request(ObjectsEndpoint.delete(id: objectId, etag: version))
+        } catch APIError.httpStatus(412, _, _) {
+            try? await refreshVersion(EntityMutationsEndpoint.detailForWrite(kind: .objects, id: objectId, response: ObjectDetail.self))
+            throw EntityDeleteError.changedElsewhere
+        }
+        isDeleted = true
+    }
+
+    /// Undo for `delete`. The restore body has no recent events, so re-read the detail.
+    func restore() async throws {
+        _ = try await apiClient.request(ObjectsEndpoint.restore(id: objectId))
+        try await refreshVersion(EntityMutationsEndpoint.detailForWrite(kind: .objects, id: objectId, response: ObjectDetail.self))
+        isDeleted = false
     }
 
     func attachTag(_ request: TagMutationRequest) async throws {
@@ -89,6 +109,7 @@ struct ObjectDetailView: View {
     @State private var tagMutationError: String?
     @State private var showEditor = false
     @State private var showLocationEditor = false
+    @State private var confirmDelete = false
 
     var body: some View {
         ScrollView {
@@ -122,7 +143,14 @@ struct ObjectDetailView: View {
             feedbackContext: objectFeedbackContext,
             refresh: { await viewModel?.load() }
         )
-        .toolbar { ToolbarItemGroup(placement: .topBarTrailing) { Button("Edit") { showEditor = true }.disabled(!isLoaded); Button { showLocationEditor = true } label: { Image(systemName: "mappin.and.ellipse") }.accessibilityLabel("Edit location").disabled(!isLoaded) } }
+        .toolbar { ToolbarItemGroup(placement: .topBarTrailing) { Button("Edit") { showEditor = true }.disabled(!isLoaded); Button { showLocationEditor = true } label: { Image(systemName: "mappin.and.ellipse") }.accessibilityLabel("Edit location").disabled(!isLoaded); Button(role: .destructive) { confirmDelete = true } label: { Image(systemName: "trash") }.accessibilityLabel("Delete object").disabled(!isLoaded) } }
+        .sparkDeleteWithUndo(
+            noun: "object",
+            isDeleted: viewModel?.isDeleted == true,
+            isConfirming: $confirmDelete,
+            delete: { try await viewModel?.delete() },
+            restore: { try await viewModel?.restore() }
+        )
         .task(id: objectId) {
             if viewModel == nil {
                 viewModel = ObjectDetailViewModel(objectId: objectId, apiClient: appModel.apiClient)
@@ -165,6 +193,7 @@ struct ObjectDetailView: View {
     }
 
     private var isLoaded: Bool {
+        if viewModel?.isDeleted == true { return false }
         if case .loaded = viewModel?.state { return true }
         return false
     }

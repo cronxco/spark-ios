@@ -16,6 +16,7 @@ final class EventDetailViewModel: ETagDetailMutationHandling {
     private(set) var metricBaselineStatus: MetricBaselineStatus?
     var rawPayload: String?
     var etag: String?
+    private(set) var isDeleted = false
 
     let apiClient: APIClient
 
@@ -67,6 +68,27 @@ final class EventDetailViewModel: ETagDetailMutationHandling {
         etag = response.etag ?? version
         state = .loaded(updated)
         await loadMetricBaselineStatus(for: updated)
+    }
+
+    /// Soft delete. The detail stays in memory so Undo can bring it back.
+    func delete() async throws {
+        let version = try currentETag()
+        do {
+            _ = try await apiClient.request(EventsEndpoint.delete(id: eventId, etag: version))
+        } catch APIError.httpStatus(412, _, _) {
+            try? await refreshVersion(EntityMutationsEndpoint.detailForWrite(kind: .events, id: eventId, response: EventDetail.self))
+            throw EntityDeleteError.changedElsewhere
+        }
+        isDeleted = true
+    }
+
+    /// Undo for `delete`.
+    func restore() async throws {
+        let response = try await apiClient.requestWithRawResponse(EventsEndpoint.restore(id: eventId))
+        rawPayload = response.utf8Body
+        etag = response.etag
+        state = .loaded(response.decoded)
+        isDeleted = false
     }
 
     func attachTag(_ request: TagMutationRequest) async throws {

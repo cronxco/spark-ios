@@ -14,6 +14,23 @@ public enum SparkEntityKind: String, Codable, Sendable, CaseIterable {
     }
 }
 
+/// The body of `DELETE /events/{id}` and `DELETE /objects/{id}`: a soft
+/// delete the caller can undo with the matching restore endpoint.
+public struct DeletedEntity: Codable, Sendable, Hashable {
+    public let id: String
+    public let deletedAt: String?
+
+    public init(id: String, deletedAt: String? = nil) {
+        self.id = id
+        self.deletedAt = deletedAt
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case deletedAt = "deleted_at"
+    }
+}
+
 /// A resource version a mutation changed, so the caller can replace the ETag it holds.
 public struct ResourceVersionReference: Codable, Sendable, Hashable {
     public let kind: String
