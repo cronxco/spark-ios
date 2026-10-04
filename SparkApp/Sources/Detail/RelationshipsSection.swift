@@ -159,8 +159,15 @@ private struct RelationshipEditorSheet: View {
     }
 
     private func loadTypes() async {
-        do { typeOptions = try await apiClient.request(EntityMutationsEndpoint.relationshipTypes()).data }
-        catch { typeOptions = [] }
+        do {
+            let options = try await apiClient.request(EntityMutationsEndpoint.relationshipTypes()).data
+            typeOptions = options
+            if let first = options.first, !options.contains(where: { $0.type == relationshipType }) {
+                relationshipType = first.type
+            }
+        } catch {
+            typeOptions = []
+        }
     }
 
     private func search(query: String) async {
