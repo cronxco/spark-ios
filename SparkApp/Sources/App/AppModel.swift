@@ -425,7 +425,7 @@ final class AppModel {
         }
 
         // Recent searches live in standard defaults rather than the App Group.
-        UserDefaults.standard.removeObject(forKey: "spark.search.recents")
+        RecentSearchStore().clear()
 
         await authService.signOut()
         await etagCache.clearAll()
