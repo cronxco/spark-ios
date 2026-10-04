@@ -6,6 +6,15 @@ public enum EventsEndpoint {
         Endpoint(method: .get, path: "/events/\(id)")
     }
 
+    /// GET /events/{id}/route
+    ///
+    /// Read-only GPS route. Only call it when the detail has `hasRoute`; the
+    /// server answers 404 for events without one. The caller keeps no local
+    /// copy, so it skips the ETag cache (a 304 would leave nothing to draw).
+    public static func route(id: String) -> Endpoint<EventRoute> {
+        Endpoint(method: .get, path: "/events/\(id)/route", usesETag: false)
+    }
+
     /// PATCH /events/{id}/note
     ///
     /// The route requires the event's current ETag; without it the server

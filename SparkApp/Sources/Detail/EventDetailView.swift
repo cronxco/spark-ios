@@ -142,7 +142,9 @@ struct EventDetailView: View {
 
         metricBaselineStatusRow()
 
-        if let loc = detail.location {
+        if detail.hasRoute {
+            EventRouteSection(eventID: detail.id, apiClient: appModel.apiClient)
+        } else if let loc = detail.location {
             eventMapCard(loc)
         }
 
