@@ -1,3 +1,4 @@
+import SparkKit
 @preconcurrency import UserNotifications
 
 final class NotificationService: UNNotificationServiceExtension, @unchecked Sendable {
@@ -9,6 +10,7 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
         withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void
     ) {
         self.handler = contentHandler
+        Self.queueShownReceipt(for: request)
         guard let mutable = request.content.mutableCopy() as? UNMutableNotificationContent else {
             contentHandler(request.content)
             return
@@ -43,6 +45,19 @@ final class NotificationService: UNNotificationServiceExtension, @unchecked Send
         if let handler, let bestAttempt {
             handler(bestAttempt)
         }
+    }
+
+    // MARK: - Receipts
+
+    /// Queues a "shown" receipt (decision N-8) for the app to send. Only
+    /// queued here: a synchronous App Group write that cannot delay
+    /// presentation, and no network call that would refresh the rotating
+    /// token from a second process.
+    private static func queueShownReceipt(for request: UNNotificationRequest) {
+        guard let id = NotificationReceipt.notificationID(from: request.content.userInfo),
+              let receipt = NotificationReceipt(notificationID: id, event: .shown)
+        else { return }
+        NotificationReceiptReporter.shared.enqueue([receipt])
     }
 
     // MARK: - Attachment download

@@ -2,16 +2,13 @@ import SparkKit
 import SparkUI
 import SwiftUI
 
-private let recentSearchesKey = "spark.search.recents"
-private let maxRecents = 8
-
 struct SearchView: View {
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: SearchViewModel?
     @State private var path: [DetailRoute] = []
-    @State private var recentSearches: [String] = {
-        UserDefaults.standard.stringArray(forKey: recentSearchesKey) ?? []
-    }()
+    /// Recents stay on this device and expire after 30 days; see `RecentSearchStore`.
+    private let recentSearchStore = RecentSearchStore()
+    @State private var recentSearches: [String] = RecentSearchStore().load()
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -49,10 +46,23 @@ struct SearchView: View {
         )
         .searchToolbarBehavior(.minimize)
         .task {
+            recentSearches = recentSearchStore.load()
             if viewModel == nil {
                 viewModel = SearchViewModel(apiClient: appModel.apiClient)
             }
+            applyPendingSearchQuery()
         }
+        .onChange(of: appModel.pendingSearchQuery) { _, _ in
+            applyPendingSearchQuery()
+        }
+    }
+
+    /// Run the query a Siri / Shortcuts "Search Spark" intent handed over.
+    private func applyPendingSearchQuery() {
+        guard let query = appModel.pendingSearchQuery, let viewModel else { return }
+        appModel.pendingSearchQuery = nil
+        path = []
+        viewModel.query = query
     }
 
     private var queryBinding: Binding<String> {
@@ -195,7 +205,7 @@ struct SearchView: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    Text("Try `>` actions · `#` tags · `$` metrics · `@` integrations · `~` semantic")
+                    Text("Try `#` tags · `$` metrics · `@` integrations · `~` semantic")
                         .font(SparkTypography.caption)
                         .foregroundStyle(.tertiary)
                 }
@@ -253,18 +263,12 @@ struct SearchView: View {
     }
 
     private func saveRecent(_ query: String) {
-        let clean = query.trimmingCharacters(in: .whitespaces)
-        guard !clean.isEmpty else { return }
-        var updated = recentSearches.filter { $0 != clean }
-        updated.insert(clean, at: 0)
-        if updated.count > maxRecents { updated = Array(updated.prefix(maxRecents)) }
-        recentSearches = updated
-        UserDefaults.standard.set(updated, forKey: recentSearchesKey)
+        recentSearches = recentSearchStore.record(query)
     }
 
     private func clearRecents() {
+        recentSearchStore.clear()
         recentSearches = []
-        UserDefaults.standard.removeObject(forKey: recentSearchesKey)
     }
 
     private func handleTap(_ result: SearchResult) {

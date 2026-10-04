@@ -40,3 +40,27 @@ public struct EventObject: Codable, Sendable, Hashable, Identifiable {
         self.location = location
     }
 }
+
+extension EventObject {
+    /// The object concept the backend gives people (Immich faces, household members).
+    public static let personConcept = "person"
+
+    /// People are objects with the `person` concept and get the person detail screen.
+    public var isPerson: Bool { concept == Self.personConcept }
+
+    /// `media_url` as a URL, used as a person's avatar.
+    public var mediaURL: URL? {
+        guard let mediaUrl, !mediaUrl.isEmpty else { return nil }
+        return URL(string: mediaUrl)
+    }
+}
+
+extension EventDetail.ActorTarget {
+    /// Whether this actor or target is a person.
+    public var isPerson: Bool { concept == EventObject.personConcept }
+}
+
+extension Event.ActorTarget {
+    /// Whether this actor or target is a person.
+    public var isPerson: Bool { concept == EventObject.personConcept }
+}

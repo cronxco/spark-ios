@@ -13,6 +13,7 @@ struct EventDetailView: View {
     @State private var tagMutationError: String?
     @State private var showEditor = false
     @State private var showLocationEditor = false
+    @State private var confirmDelete = false
 
     private func aggregatedReferences(for detail: EventDetail) -> [EntityReference] {
         var seen = Set<String>()
@@ -67,7 +68,14 @@ struct EventDetailView: View {
             refresh: { await viewModel?.retry() },
             flintNoteContext: .event(id: eventId, label: onscreenTitle)
         )
-        .toolbar { ToolbarItemGroup(placement: .topBarTrailing) { Button("Edit") { showEditor = true }.disabled(!isLoaded); Button { showLocationEditor = true } label: { Image(systemName: "mappin.and.ellipse") }.accessibilityLabel("Edit location").disabled(!isLoaded) } }
+        .toolbar { ToolbarItemGroup(placement: .topBarTrailing) { Button("Edit") { showEditor = true }.disabled(!isLoaded); Button { showLocationEditor = true } label: { Image(systemName: "mappin.and.ellipse") }.accessibilityLabel("Edit location").disabled(!isLoaded); Button(role: .destructive) { confirmDelete = true } label: { Image(systemName: "trash") }.accessibilityLabel("Delete event").disabled(!isLoaded) } }
+        .sparkDeleteWithUndo(
+            noun: "event",
+            isDeleted: viewModel?.isDeleted == true,
+            isConfirming: $confirmDelete,
+            delete: { try await viewModel?.delete() },
+            restore: { try await viewModel?.restore() }
+        )
         .task(id: eventId) {
             if viewModel == nil {
                 viewModel = EventDetailViewModel(eventId: eventId, apiClient: appModel.apiClient)
@@ -110,6 +118,7 @@ struct EventDetailView: View {
     }
 
     private var isLoaded: Bool {
+        if viewModel?.isDeleted == true { return false }
         if case .loaded = viewModel?.state { return true }
         return false
     }
@@ -133,7 +142,9 @@ struct EventDetailView: View {
 
         metricBaselineStatusRow()
 
-        if let loc = detail.location {
+        if detail.hasRoute {
+            EventRouteSection(eventID: detail.id, apiClient: appModel.apiClient)
+        } else if let loc = detail.location {
             eventMapCard(loc)
         }
 
@@ -147,9 +158,9 @@ struct EventDetailView: View {
                 guard let viewModel else { throw TagMutationError.missingETag }
                 return try await viewModel.createRelationship(request)
             },
-            delete: { relationshipID in
+            delete: { relationship in
                 guard let viewModel else { throw TagMutationError.missingETag }
-                try await viewModel.deleteRelationship(relationshipID)
+                try await viewModel.deleteRelationship(relationship)
             }
         )
 
