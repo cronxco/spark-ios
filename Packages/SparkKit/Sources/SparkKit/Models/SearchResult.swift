@@ -198,14 +198,15 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
 }
 
 /// Search payload returned by `/search`.
-/// Backend returns a grouped object: `{ mode, query, events: [...], objects: [...], integrations: [...], metrics: [...] }`.
+/// Backend returns a grouped object: `{ mode, query, events: [...], objects: [...], integrations: [...], metrics: [...] }`,
+/// or `{ blocks: [...], meta }` from typed block search.
 /// Legacy flat-array and wrapped-array formats are also accepted for backwards compatibility.
 public struct SearchResponse: Codable, Sendable, Hashable {
     public let results: [SearchResult]
 
     enum CodingKeys: String, CodingKey {
         // Grouped backend format
-        case events, objects, integrations, metrics, tags
+        case events, objects, blocks, integrations, metrics, tags
         // Legacy wrapped formats
         case results, data, items, hits
     }
@@ -225,7 +226,7 @@ public struct SearchResponse: Codable, Sendable, Hashable {
 
         // 2. Grouped backend format: { events: [...], objects: [...], ... }
         if container.contains(.events) || container.contains(.objects)
-            || container.contains(.integrations) || container.contains(.metrics)
+            || container.contains(.blocks) || container.contains(.integrations) || container.contains(.metrics)
             || container.contains(.tags) {
             var all: [SearchResult] = []
 
@@ -243,6 +244,14 @@ public struct SearchResponse: Codable, Sendable, Hashable {
                     title: o.title ?? o.concept ?? o.id ?? "",
                     subtitle: o.concept,
                     concept: o.concept
+                )))
+            }
+            for b in (try container.decodeIfPresent([BackendBlock].self, forKey: .blocks)) ?? [] {
+                all.append(.block(SearchResult.BlockHit(
+                    id: b.id ?? "",
+                    title: b.title ?? b.blockType ?? b.id ?? "",
+                    subtitle: b.blockType,
+                    blockType: b.blockType
                 )))
             }
             for i in (try container.decodeIfPresent([BackendIntegration].self, forKey: .integrations)) ?? [] {
@@ -313,6 +322,17 @@ private struct BackendObject: Decodable {
     let id: String?
     let title: String?
     let concept: String?
+}
+
+private struct BackendBlock: Decodable {
+    let id: String?
+    let title: String?
+    let blockType: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, title
+        case blockType = "block_type"
+    }
 }
 
 private struct BackendIntegration: Decodable {
