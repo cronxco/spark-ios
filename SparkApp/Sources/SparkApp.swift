@@ -43,6 +43,7 @@ struct SparkApp: App {
             Task { @MainActor in
                 switch phase {
                 case .active:
+                    model.consumePendingIntentRoute()
                     // Sends receipts the service extension queued while the
                     // app was not running (decision N-8).
                     SparkAppDelegate.flushReceipts()
