@@ -6,32 +6,26 @@ import SwiftUI
 struct HealthExploreView: View {
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: HealthExploreViewModel?
-    @State private var path: [DetailRoute] = []
+    @Binding var path: [DetailRoute]
 
     var body: some View {
-        NavigationStack(path: $path) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-                    pageHeader
+        ScrollView {
+            VStack(alignment: .leading, spacing: SparkSpacing.lg) {
+                pageHeader
+                    .padding(.horizontal, SparkSpacing.lg)
+
+                if let vm = viewModel {
+                    rangePicker(vm)
                         .padding(.horizontal, SparkSpacing.lg)
-
-                    if let vm = viewModel {
-                        rangePicker(vm)
-                            .padding(.horizontal, SparkSpacing.lg)
-                    }
-
-                    content
                 }
-                .padding(.top, SparkSpacing.md)
-                .padding(.bottom, SparkSpacing.xl)
+
+                content
             }
-            .sparkAppBackground()
-            .sparkMainNavigationTitle("Health")
-            .sparkDetailDestinations()
-            .refreshable {
-                await viewModel?.refresh()
-            }
-            .sparkMainAppToolbar()
+            .padding(.top, SparkSpacing.md)
+            .padding(.bottom, SparkSpacing.xl)
+        }
+        .refreshable {
+            await viewModel?.refresh()
         }
         .task {
             if viewModel == nil {
@@ -42,7 +36,7 @@ struct HealthExploreView: View {
     }
 
     private var pageHeader: some View {
-        SparkMainPageHeader(title: "Health", subtitle: headerSubtitle)
+        SparkSectionCaption(text: headerSubtitle)
     }
 
     @ViewBuilder
@@ -118,38 +112,21 @@ struct HealthExploreView: View {
     }
 
     private func rangePicker(_ vm: HealthExploreViewModel) -> some View {
-        HStack(spacing: 4) {
-            ForEach(HealthExploreViewModel.DashboardRange.allCases, id: \.self) { range in
-                let isSelected = vm.selectedRange == range
-                Button {
-                    Task { await vm.selectRange(range) }
-                } label: {
-                    Text(range.label)
-                        .font(SparkTypography.monoSmall)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(isSelected ? Color.sparkTextPrimary : .secondary)
-                        .frame(minWidth: 42)
-                        .padding(.vertical, SparkSpacing.xs + 2)
-                        .background {
-                            if isSelected {
-                                Capsule()
-                                    .fill(Color.domainHealth)
-                            }
-                        }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(range.label) range")
-            }
+        RangeChipBar(
+            HealthExploreViewModel.DashboardRange.allCases,
+            selected: vm.selectedRange,
+            tint: Color.domainHealth,
+            label: \.label
+        ) { range in
+            Task { await vm.selectRange(range) }
         }
-        .padding(4)
-        .sparkGlass(.capsule)
     }
 
     @ViewBuilder
     private func heroSection(_ dashboard: HealthDashboard) -> some View {
         if let hero = dashboard.hero {
             let tint = Color.domainHealth
-            GlassCard(radius: 28, padding: SparkSpacing.xl, tint: tint.opacity(0.08)) {
+            GlassCard(radius: SparkRadii.hero, padding: SparkSpacing.xl, tint: tint.opacity(0.08)) {
                 VStack(alignment: .leading, spacing: SparkSpacing.xl) {
                     HStack(alignment: .top, spacing: SparkSpacing.md) {
                         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
@@ -203,7 +180,7 @@ struct HealthExploreView: View {
                     }
                 }
                 .frame(minHeight: 198, alignment: .topLeading)
-                .contentShape(RoundedRectangle(cornerRadius: 28))
+                .contentShape(RoundedRectangle(cornerRadius: SparkRadii.hero))
             }
             .onTapGesture {
                 if let id = hero.primaryEventId {
@@ -211,7 +188,7 @@ struct HealthExploreView: View {
                 }
             }
         } else {
-            GlassCard(radius: 28, padding: SparkSpacing.xl, tint: Color.domainHealth.opacity(0.08)) {
+            GlassCard(radius: SparkRadii.hero, padding: SparkSpacing.xl, tint: Color.domainHealth.opacity(0.08)) {
                 HStack(spacing: SparkSpacing.md) {
                     Image(systemName: "heart.text.square.fill")
                         .font(.system(size: 28, weight: .semibold))
@@ -342,7 +319,7 @@ struct HealthExploreView: View {
         }
         .frame(maxWidth: .infinity, minHeight: 90, alignment: .topLeading)
         .padding(SparkSpacing.md)
-        .sparkGlass(.roundedRect(18), tint: tint.opacity(0.08))
+        .sparkGlass(.roundedRect(SparkRadii.md), tint: tint.opacity(0.08))
     }
 
     private func workoutsSection(_ workouts: [HealthDashboard.Workout]) -> some View {
@@ -363,7 +340,7 @@ struct HealthExploreView: View {
     }
 
     private func workoutRow(_ workout: HealthDashboard.Workout) -> some View {
-        GlassCard(radius: 18, padding: SparkSpacing.md) {
+        GlassCard(radius: SparkRadii.lg, padding: SparkSpacing.md) {
             HStack(spacing: SparkSpacing.md) {
                 DomainGlyph(icon: workout.kind == "strength" ? "dumbbell.fill" : "figure.run", tint: workoutTint(workout), size: 42)
 
@@ -460,7 +437,7 @@ struct HealthExploreView: View {
 
     private func bodyMetricsSection(_ metrics: [HealthDashboard.BodyMetric]) -> some View {
         VStack(alignment: .leading, spacing: SparkSpacing.md) {
-            sectionHeader("Body Metrics", icon: "waveform.path.ecg", tint: Color.domainHealth)
+            sectionHeader("Body metrics", icon: "waveform.path.ecg", tint: Color.domainHealth)
 
             LazyVGrid(columns: metricColumns, spacing: SparkSpacing.sm) {
                 ForEach(metrics) { metric in
@@ -506,7 +483,7 @@ struct HealthExploreView: View {
         }
         .frame(maxWidth: .infinity, minHeight: 90, alignment: .topLeading)
         .padding(SparkSpacing.md)
-        .sparkGlass(.roundedRect(18))
+        .sparkGlass(.roundedRect(SparkRadii.md))
         .overlay(alignment: .topTrailing) {
             AnomalyDot(active: metric.status == "critical")
                 .padding(8)
@@ -564,7 +541,7 @@ struct HealthExploreView: View {
 
     private func insightsSection(_ insights: [HealthDashboard.Insight]) -> some View {
         VStack(alignment: .leading, spacing: SparkSpacing.md) {
-            sectionHeader("Flint Insights", icon: "sparkles", tint: Color.sparkAccent)
+            sectionHeader("Flint insights", icon: "sparkles", tint: Color.sparkAccent)
 
             VStack(spacing: SparkSpacing.sm) {
                 ForEach(insights) { insight in

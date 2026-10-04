@@ -47,41 +47,48 @@ struct TagsExploreView: View {
     @State private var query = ""
 
     var body: some View {
-        NavigationStack {
-            List {
-                if let error = viewModel?.error {
-                    Section { Text(error).foregroundStyle(Color.sparkError) }
+        List {
+            // An inline field rather than `.searchable`: the tab's one
+            // navigation stack is shared by every Explore section, so a
+            // search bar attached to it would show on all of them.
+            Section {
+                HStack(spacing: SparkSpacing.sm) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    TextField("Find tags", text: $query)
+                        .font(SparkTypography.bodySmall)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
                 }
-                ForEach(viewModel?.tags ?? []) { tag in
-                    NavigationLink(value: DetailRoute.tag(id: tag.id, name: tag.name, type: tag.type)) {
-                        HStack {
-                            TagChip(tag.eventTag)
-                            Spacer()
-                            Text("\(tag.totalCount)")
-                                .font(SparkTypography.monoSmall)
-                                .foregroundStyle(.secondary)
-                        }
+            }
+            if let error = viewModel?.error {
+                Section { Text(error).foregroundStyle(Color.sparkError) }
+            }
+            ForEach(viewModel?.tags ?? []) { tag in
+                NavigationLink(value: DetailRoute.tag(id: tag.id, name: tag.name, type: tag.type)) {
+                    HStack {
+                        TagChip(tag.eventTag)
+                        Spacer()
+                        Text("\(tag.totalCount)")
+                            .font(SparkTypography.monoSmall)
+                            .foregroundStyle(.secondary)
                     }
                 }
-                if viewModel?.hasMore == true {
-                    Button(viewModel?.isLoading == true ? "Loading…" : "Load more") {
-                        Task { await viewModel?.load(query: query.nilIfEmpty, reset: false) }
-                    }
-                    .disabled(viewModel?.isLoading == true)
+            }
+            if viewModel?.hasMore == true {
+                Button(viewModel?.isLoading == true ? "Loading…" : "Load more") {
+                    Task { await viewModel?.load(query: query.nilIfEmpty, reset: false) }
                 }
+                .disabled(viewModel?.isLoading == true)
             }
-            .scrollContentBackground(.hidden)
-            .sparkAppBackground()
-            .navigationTitle("Tags")
-            .searchable(text: $query, prompt: "Find tags")
-            .onChange(of: query) { _, value in
-                Task { await viewModel?.load(query: value.nilIfEmpty) }
-            }
-            .sparkDetailDestinations()
-            .task {
-                if viewModel == nil { viewModel = TagsExploreViewModel(apiClient: appModel.apiClient) }
-                await viewModel?.load()
-            }
+        }
+        .scrollContentBackground(.hidden)
+        .onChange(of: query) { _, value in
+            Task { await viewModel?.load(query: value.nilIfEmpty) }
+        }
+        .task {
+            if viewModel == nil { viewModel = TagsExploreViewModel(apiClient: appModel.apiClient) }
+            await viewModel?.load()
         }
     }
 }

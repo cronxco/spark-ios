@@ -146,9 +146,10 @@ enum FlintGenerationService {
         from facts: FlintBriefingFacts,
         context: FlintBriefingFacts.SummaryLineContext
     ) async throws -> FlintGenerationResult {
+        // No model, no line: the Day greeting never shows a raw fact line.
         let fallback = FlintDailyNote(
             title: "",
-            summary: facts.fallbackSummaryLine(context: context) ?? "",
+            summary: "",
             highlights: [],
             watchouts: [],
             suggestedActions: []
@@ -172,6 +173,7 @@ enum FlintGenerationService {
         Avoid percentage changes; they are not meaningful in this header.
         Write one warm, plain-English sentence.
         Keep it ideally 80-140 characters and never more than 180 characters.
+        If nothing in the facts is worth a sentence, return empty text rather than a generic line.
         """
 
         let resolved = FlintModelProvider.resolve(reasoning: .light, instructions: instructions)

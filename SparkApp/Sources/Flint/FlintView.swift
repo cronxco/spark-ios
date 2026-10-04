@@ -4,8 +4,6 @@ import SwiftUI
 
 struct FlintView: View {
     @Environment(AppModel.self) private var appModel
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.tabAccessoryCoordinator) private var tabAccessoryCoordinator
     @State private var viewModel: FlintViewModel?
     @State private var path = NavigationPath()
     @State private var noteComposerContext: FlintNoteContext?
@@ -13,9 +11,7 @@ struct FlintView: View {
     var body: some View {
         NavigationStack(path: $path) {
             page
-                .navigationTitle("Flint")
-                .navigationBarTitleDisplayMode(.large)
-                .sparkAppBackground()
+                .sparkMainNavigationTitle("Flint")
                 .sparkMainAppToolbar()
                 .sparkDetailDestinations()
                 .navigationDestination(for: FlintRoute.self, destination: destination)
@@ -26,7 +22,6 @@ struct FlintView: View {
                     }
                     return .systemAction
                 })
-                .onAppear { tabAccessoryCoordinator?.clear(owner: .flint) }
         }
         .task {
             if viewModel == nil {
@@ -45,14 +40,18 @@ struct FlintView: View {
                 sectionPager(viewModel)
             } else {
                 ScrollView {
-                    loadingContent
-                        .frame(maxWidth: 720, alignment: .leading)
-                        .frame(maxWidth: .infinity)
-                        .padding(.horizontal, SparkSpacing.lg)
-                        .padding(.top, SparkSpacing.sm)
-                        .padding(.bottom, SparkSpacing.xxl * 2)
+                    VStack(alignment: .leading, spacing: SparkSpacing.lg) {
+                        SparkMainPageHeader(title: "Flint")
+                        loadingContent
+                    }
+                    .frame(maxWidth: 720, alignment: .leading)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, SparkSpacing.lg)
+                    .padding(.top, SparkSpacing.sm)
+                    .padding(.bottom, SparkSpacing.xxl * 2)
                 }
                 .scrollDismissesKeyboard(.interactively)
+                .sparkAppBackground()
             }
         }
     }
@@ -60,53 +59,15 @@ struct FlintView: View {
     private func sectionPager(_ viewModel: FlintViewModel) -> some View {
         @Bindable var viewModel = viewModel
 
-        return VStack(spacing: 0) {
-            sectionPicker(viewModel)
-                .frame(maxWidth: 720, alignment: .leading)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, SparkSpacing.lg)
-                .padding(.top, SparkSpacing.sm)
-
-            TabView(selection: $viewModel.selectedTab) {
-                ForEach(FlintViewModel.FlintTab.allCases) { tab in
-                    sectionPage(tab, viewModel: viewModel)
-                        .tag(tab)
-                }
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
+        return SparkSectionPager(
+            title: "Flint",
+            sections: FlintViewModel.FlintTab.allCases.map { SparkPagerSection(id: $0, title: $0.title) },
+            selection: $viewModel.selectedTab
+        ) { tab in
+            sectionPage(tab, viewModel: viewModel)
         }
         .onChange(of: viewModel.selectedTab) { _, tab in
             sectionChanged(to: tab, viewModel: viewModel)
-        }
-    }
-
-    @ViewBuilder
-    private func sectionPicker(_ viewModel: FlintViewModel) -> some View {
-        @Bindable var viewModel = viewModel
-
-        if dynamicTypeSize.isAccessibilitySize {
-            Menu {
-                Picker("Flint section", selection: $viewModel.selectedTab) {
-                    ForEach(FlintViewModel.FlintTab.allCases) { tab in
-                        Text(tab.title).tag(tab)
-                    }
-                }
-            } label: {
-                Label(viewModel.selectedTab.title, systemImage: "chevron.up.chevron.down")
-                    .font(SparkTypography.bodyStrong)
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            }
-            .buttonStyle(.glass)
-            .accessibilityLabel("Flint section")
-            .accessibilityValue(viewModel.selectedTab.title)
-        } else {
-            Picker("Flint section", selection: $viewModel.selectedTab) {
-                ForEach(FlintViewModel.FlintTab.allCases) { tab in
-                    Text(tab.title).tag(tab)
-                }
-            }
-            .pickerStyle(.segmented)
-            .accessibilityLabel("Flint section")
         }
     }
 
@@ -215,7 +176,7 @@ struct FlintView: View {
                             if index < min(viewModel.digests.count, 3) - 1 { Divider() }
                         }
                     }
-                    .sparkFlintMaterialSurface()
+                    .flintCardSurface()
                 }
             }
         }
@@ -280,7 +241,7 @@ struct FlintView: View {
         case .idle, .loading:
             loadingContent
         case .empty(let message):
-            EmptyState(systemImage: "point.3.connected.trianglepath.dotted", title: "No Threads yet", message: message)
+            EmptyState(systemImage: "point.3.connected.trianglepath.dotted", title: "No threads yet", message: message)
         case .error(let message):
             errorContent(message) { Task { await viewModel.loadTopics() } }
         case .loaded:
@@ -303,7 +264,7 @@ struct FlintView: View {
                         if index < topics.count - 1 { Divider() }
                     }
                 }
-                .sparkFlintMaterialSurface()
+                .flintCardSurface()
             }
         }
     }
@@ -328,7 +289,7 @@ struct FlintView: View {
             }
             .font(SparkTypography.bodyStrong)
             .padding(SparkSpacing.md)
-            .sparkFlintMaterialSurface()
+            .flintCardSurface()
 
             switch viewModel.historyState {
             case .idle, .loading:
@@ -344,16 +305,14 @@ struct FlintView: View {
                 } else {
                     ForEach(groups, id: \.date) { group in
                         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                            Text(group.label)
-                                .font(SparkTypography.title)
-                                .accessibilityAddTraits(.isHeader)
+                            SectionLabel(group.label, style: .dayHeading)
                             VStack(spacing: 0) {
                                 ForEach(Array(group.digests.enumerated()), id: \.element.id) { index, digest in
                                     FlintDigestLink(summary: digest)
                                     if index < group.digests.count - 1 { Divider() }
                                 }
                             }
-                            .sparkFlintMaterialSurface()
+                            .flintCardSurface()
                         }
                     }
                 }
@@ -401,7 +360,7 @@ struct FlintView: View {
             LoadingShimmer(cornerRadius: SparkRadii.sm).frame(height: 18).frame(maxWidth: 280)
         }
         .padding(SparkSpacing.md)
-        .sparkFlintMaterialSurface()
+        .flintCardSurface()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Loading Flint")
     }
@@ -430,23 +389,24 @@ private struct FlintNotesOverviewSurface: View {
         }
         .padding(SparkSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .sparkFlintMaterialSurface()
+        .flintCardSurface()
     }
 
     @ViewBuilder
     private var actions: some View {
         Button(action: onCompose) {
             Label("Leave a note", systemImage: "square.and.pencil")
+                .foregroundStyle(Color.sparkOnAccent)
                 .frame(minHeight: 44)
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.glassProminent)
         .tint(.sparkAccent)
 
         Button(action: onViewNotes) {
             Label("View notes", systemImage: "note.text")
                 .frame(minHeight: 44)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.glass)
     }
 }
 
@@ -471,13 +431,10 @@ private struct FlintHistoryGroup {
 }
 
 private extension View {
-    func sparkFlintMaterialSurface() -> some View {
-        background(.thinMaterial, in: RoundedRectangle(cornerRadius: SparkRadii.lg))
-            .overlay {
-                RoundedRectangle(cornerRadius: SparkRadii.lg)
-                    .strokeBorder(Color.primary.opacity(0.10))
-            }
-            .shadow(color: Color.black.opacity(0.05), radius: 12, y: 4)
+    /// Flint's cards use the same Liquid Glass surface as every other tab
+    /// (and inherit its Reduce Transparency and Increase Contrast fallback).
+    func flintCardSurface() -> some View {
+        sparkGlass(.roundedRect(SparkRadii.lg))
     }
 }
 
@@ -488,11 +445,9 @@ private struct FlintSectionHeader: View {
         self.title = title
     }
 
+    /// Same Comfortaa heading as the Day sections.
     var body: some View {
-        Text(title)
-            .font(SparkTypography.captionStrong)
-            .foregroundStyle(.secondary)
-            .accessibilityAddTraits(.isHeader)
+        SectionLabel(title, style: .dayHeading)
     }
 }
 
@@ -515,7 +470,7 @@ private struct FlintFocusSurface: View {
         }
         .padding(SparkSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .sparkFlintMaterialSurface()
+        .flintCardSurface()
     }
 }
 
@@ -1039,7 +994,7 @@ private struct FlintDigestCheckInPrompt: View {
                     }
 
                     CheckInPeriodSummaryRow(
-                        title: "\(period.rawValue.capitalized) Check-in",
+                        title: "\(period.rawValue.capitalized) check-in",
                         status: status(for: period),
                         onTap: { showCheckIn = true }
                     )
@@ -1181,7 +1136,7 @@ private struct FlintBlockSurface: View {
         }
         .padding(SparkSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .sparkFlintMaterialSurface()
+        .flintCardSurface()
     }
 
     private var icon: String {
