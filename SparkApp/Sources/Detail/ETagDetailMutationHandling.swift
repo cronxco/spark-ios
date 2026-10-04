@@ -1,3 +1,4 @@
+import Foundation
 import SparkKit
 
 /// Shared conditional-mutation handling for entity detail view models.
@@ -34,6 +35,19 @@ extension ETagDetailMutationHandling {
         state = .loaded(response.decoded)
     }
 
+    /// A completed write must stay successful even if its follow-up read fails.
+    /// Hide stale detail and invalidate its version until Retry reloads it.
+    func refreshAfterCompletedMutation(_ endpoint: Endpoint<Detail>) async {
+        do {
+            try await refreshVersion(endpoint)
+        } catch {
+            etag = nil
+            SparkObservability.captureHandled(error)
+            let message = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+            state = .error(message)
+        }
+    }
+
     /// Adopt the parent version a relationship create returned, or re-read it.
     func adoptVersion(after relationship: EntityRelationship, kind: SparkEntityKind, id: String) async throws {
         if let refreshed = relationship.versions?.etag(for: kind, id: id) {
@@ -51,6 +65,6 @@ extension ETagDetailMutationHandling {
         _ = try await apiClient.requestWithRawResponse(
             EntityMutationsEndpoint.deleteRelationship(id: relationship.id, etag: ifMatch)
         )
-        try await refreshVersion(EntityMutationsEndpoint.detailForWrite(kind: kind, id: id, response: Detail.self))
+        await refreshAfterCompletedMutation(EntityMutationsEndpoint.detailForWrite(kind: kind, id: id, response: Detail.self))
     }
 }

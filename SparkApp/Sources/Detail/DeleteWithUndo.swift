@@ -46,7 +46,7 @@ struct DeleteWithUndoModifier: ViewModifier {
                 try? await Task.sleep(for: Self.toastDuration)
                 guard !Task.isCancelled, showToast else { return }
                 withAnimation { showToast = false }
-                if !voiceOverEnabled {
+                if !voiceOverEnabled, errorMessage == nil {
                     dismiss()
                 }
             }

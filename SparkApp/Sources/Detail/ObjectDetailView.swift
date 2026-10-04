@@ -49,8 +49,8 @@ final class ObjectDetailViewModel: ETagDetailMutationHandling {
     /// Undo for `delete`. The restore body has no recent events, so re-read the detail.
     func restore() async throws {
         _ = try await apiClient.request(ObjectsEndpoint.restore(id: objectId))
-        try await refreshVersion(EntityMutationsEndpoint.detailForWrite(kind: .objects, id: objectId, response: ObjectDetail.self))
         isDeleted = false
+        await refreshAfterCompletedMutation(EntityMutationsEndpoint.detailForWrite(kind: .objects, id: objectId, response: ObjectDetail.self))
     }
 
     func attachTag(_ request: TagMutationRequest) async throws {
