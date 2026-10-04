@@ -97,10 +97,10 @@ struct NotificationReceiptTests {
 
     @Test("the queue keeps one receipt per notification and event, and is bounded")
     func queueDeduplicatesAndCaps() throws {
-        let suite = "NotificationReceiptTests.\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let reporter = NotificationReceiptReporter(defaults: defaults)
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("NotificationReceiptTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let reporter = NotificationReceiptReporter(directory: directory)
 
         let first = try #require(NotificationReceipt(notificationID: id, event: .shown, occurredAt: occurredAt))
         let repeated = try #require(NotificationReceipt(notificationID: id, event: .shown, occurredAt: occurredAt.addingTimeInterval(60)))
@@ -116,6 +116,23 @@ struct NotificationReceiptTests {
         #expect(pending.count == NotificationReceiptReporter.maxPending)
         #expect(pending.last == many.last)
         #expect(!pending.contains(first))
+    }
+
+    @Test("two reporters sharing the queue, like the app and the extension, keep each other's receipts")
+    func sharedQueueAcrossReporters() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("NotificationReceiptTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let app = NotificationReceiptReporter(directory: directory)
+        let extensionReporter = NotificationReceiptReporter(directory: directory)
+
+        let shown = try #require(NotificationReceipt(notificationID: id, event: .shown, occurredAt: occurredAt))
+        let tapped = try #require(NotificationReceipt(notificationID: id, event: .tapped, occurredAt: occurredAt))
+        extensionReporter.enqueue([shown])
+        app.enqueue([tapped])
+
+        #expect(Set(app.pending()) == [shown, tapped])
+        #expect(Set(extensionReporter.pending()) == [shown, tapped])
     }
 
     @Test("only definite client errors drop queued receipts")
