@@ -168,6 +168,39 @@ public enum FlintEndpoint {
         )
     }
 
+    public static func unmatchedReceipts(page: Int = 1) -> Endpoint<ReceiptMatchListResponse> {
+        Endpoint(method: .get, path: "/flint/receipts/unmatched", query: [URLQueryItem(name: "page", value: String(page))])
+    }
+
+    public static func receiptMatch(id: String) -> Endpoint<ReceiptMatchResponse> {
+        Endpoint(method: .get, path: "/flint/receipts/\(id)/match", headers: ["Cache-Control": "no-cache"])
+    }
+
+    public static func receiptTransactions(id: String, query: String) -> Endpoint<ReceiptTransactionListResponse> {
+        Endpoint(method: .get, path: "/flint/receipts/\(id)/transactions", query: [URLQueryItem(name: "q", value: query)])
+    }
+
+    public static func retryReceiptMatch(id: String) -> Endpoint<ReceiptMatchResponse> {
+        Endpoint(method: .post, path: "/flint/receipts/\(id)/retry")
+    }
+
+    public static func linkReceipt(id: String, transactionID: String) -> Endpoint<ReceiptMatchResponse> {
+        Endpoint(
+            method: .post,
+            path: "/flint/receipts/\(id)/link",
+            body: try? JSONEncoder().encode(ReceiptLinkRequest(transactionID: transactionID)),
+            contentType: "application/json"
+        )
+    }
+
+    public static func markReceiptUnmatched(id: String) -> Endpoint<ReceiptMatchResponse> {
+        Endpoint(method: .post, path: "/flint/receipts/\(id)/no-match")
+    }
+
+    public static func unlinkReceipt(id: String) -> Endpoint<ReceiptMatchResponse> {
+        Endpoint(method: .delete, path: "/flint/receipts/\(id)/match")
+    }
+
     private static func digestQuery(
         date: String?,
         period: FlintDigestPeriod?,
