@@ -3,6 +3,7 @@
 import json, os, pathlib, datetime
 
 import s_onboarding, s_day, s_uts, s_explore, s_browse, s_detail, s_settings, s_sheets
+import s_day_options, s_day_hybrid
 
 ROOT = pathlib.Path(__file__).parent
 OUT = ROOT / "project"
@@ -46,6 +47,22 @@ ROWS = [
     ("Shared sheets",
      "Presented from the sub-view toolbar and the detail screens.",
      s_sheets.SCREENS),
+    ("Day tab — four redesign options",
+     "Not the shipping design. Four different answers to what a personal "
+     "assistant's home screen is for, drawn on Will's real data for Sunday "
+     "20 September 2026, in iOS 27 glass (less transparent, darkened edge, "
+     "brighter specular). A leads with Flint's judgement; B makes time the "
+     "spine; C shows only deviation; D treats the day as an inbox and shows "
+     "the assistant's working.",
+     s_day_options.SCREENS),
+    ("Day tab — the hybrid",
+     "Where the options landed. The shipping greeting and Up-to-Speed header, "
+     "then the most recent digest's opener (last night's, if this morning's "
+     "has not run), four scored metric cards drawn against their own "
+     "baselines, 48 hours of Flint questions as a swipeable stack, what each "
+     "Thread is waiting for, and the timeline rebuilt on the web's spine. Two "
+     "real moments plus the metric block on its own.",
+     s_day_hybrid.SCREENS),
 ]
 
 _seq = [0]
@@ -118,6 +135,15 @@ index = {
     }],
 }
 (OUT / "canvas.json").write_text(json.dumps(index, indent=1), encoding="utf-8")
+
+# Board numbers follow canvas order, so inserting a row renames everything
+# after it and leaves the old names behind as duplicates. Drop any artboard
+# the index no longer lists.
+stale = sorted(p.name for p in OUT.glob("*.dc.html") if p.name not in boards)
+for name in stale:
+    (OUT / name).unlink()
+if stale:
+    print(f"removed {len(stale)} renumbered artboard(s): {', '.join(stale)}")
 
 print(f"{len(order)} artboards")
 print("total canvas height:", y + 900)
