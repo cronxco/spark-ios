@@ -50,6 +50,21 @@ public enum NotificationsEndpoint {
         Endpoint(method: .post, path: "/notifications/\(id)/archive")
     }
 
+    /// POST /notifications/receipts — report that notifications were shown,
+    /// opened or tapped (decision N-8).
+    ///
+    /// The body carries only each receipt's id, event, time and action
+    /// identifier. Idempotent on the server: the first time per event wins.
+    public static func recordReceipts(_ receipts: [NotificationReceipt]) -> Endpoint<NotificationReceiptsResult> {
+        Endpoint(
+            method: .post,
+            path: "/notifications/receipts",
+            body: try? receiptEncoder.encode(ReceiptsRequest(receipts: receipts)),
+            contentType: "application/json",
+            usesETag: false
+        )
+    }
+
     /// POST /notifications/read-all
     ///
     /// Idempotent, so the server requires no precondition.
@@ -63,5 +78,16 @@ public enum NotificationsEndpoint {
     /// without one. Pass the `version` from the item in `GET /notifications`.
     public static func delete(id: String, version: String?) -> Endpoint<EmptyResponse> {
         Endpoint(method: .delete, path: "/notifications/\(id)").withIfMatch(version)
+    }
+
+    private struct ReceiptsRequest: Encodable {
+        let receipts: [NotificationReceipt]
+    }
+
+    private static var receiptEncoder: JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = .sortedKeys
+        return encoder
     }
 }

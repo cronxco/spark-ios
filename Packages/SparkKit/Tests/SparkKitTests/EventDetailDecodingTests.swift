@@ -6,11 +6,26 @@ import Testing
 struct EventDetailDecodingTests {
     @Test("knowledge reprocess endpoint posts to knowledge event path")
     func knowledgeReprocessEndpoint() {
-        let endpoint = EventsEndpoint.reprocessKnowledgeEvent(id: "evt_article")
+        let endpoint = EventsEndpoint.reprocessKnowledgeEvent(id: "evt_article", etag: "\"v1\"")
 
         #expect(endpoint.method == .post)
         #expect(endpoint.path == "/knowledge/events/evt_article/reprocess")
         #expect(endpoint.query.isEmpty)
+        #expect(endpoint.headers["If-Match"] == "\"v1\"")
+    }
+
+    @Test("detail for write never sends If-None-Match")
+    func detailForWriteSkipsETagCache() {
+        #expect(EventsEndpoint.detailForWrite(id: "evt_article").usesETag == false)
+        #expect(EventsEndpoint.detail(id: "evt_article").usesETag)
+    }
+
+    @Test("decodes the 202 reprocess body")
+    func decodesReprocessResponse() throws {
+        let json = Data(#"{"event_id":"evt_article","service":"fetch","status":"queued","mode":"auto"}"#.utf8)
+        let response = try JSONDecoder().decode(KnowledgeReprocessResponse.self, from: json)
+
+        #expect(response == KnowledgeReprocessResponse(eventId: "evt_article", service: "fetch", status: "queued", mode: "auto"))
     }
 
     @Test("decodes wrapped detail payload")

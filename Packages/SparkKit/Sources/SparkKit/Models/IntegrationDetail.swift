@@ -67,7 +67,7 @@ public struct IntegrationDetail: Codable, Sendable, Hashable, Identifiable {
 
     public var status: IntegrationStatus {
         switch integration.statusKind {
-        case .error: .error(statusMessage ?? integration.statusValue)
+        case .error(let message): .error(statusMessage ?? message)
         case let known: known
         }
     }

@@ -60,6 +60,8 @@ final class AppModel {
     var onboardingComplete: Bool
     var lastError: String?
     var pendingRoute: AppRoute?
+    /// Query handed over by the Search Spark intent, applied by SearchView.
+    var pendingSearchQuery: String?
     private(set) var lastSyncAt: Date = .distantPast
     private(set) var profile: UserProfile? {
         didSet {
@@ -205,7 +207,12 @@ final class AppModel {
 
     /// Read a route written by an AppIntent (from the extension process) and
     /// navigate to it. Consumed once to prevent stale navigation on re-launch.
-    private func consumePendingIntentRoute() {
+    ///
+    /// Runs at bootstrap and whenever the app becomes active, so an intent that
+    /// opens an already-running app is handled then rather than on the next
+    /// cold launch.
+    func consumePendingIntentRoute() {
+        guard session == .loggedIn else { return }
         let defaults = UserDefaults(suiteName: "group.co.cronx.sparkapp")
         guard let raw = defaults?.string(forKey: "spark.pendingRoute") else { return }
         defaults?.removeObject(forKey: "spark.pendingRoute")
@@ -218,7 +225,8 @@ final class AppModel {
         }
 
         switch kind {
-        case "search":  break   // SearchView picks up the query separately
+        case "search":
+            if parts.count > 1, !parts[1].isEmpty { pendingSearchQuery = parts[1] }
         case "action":
             if parts.last == "startSleep" {
                 Task { await LiveActivityManager.shared.startSleepActivity(bedtime: .now, targetWakeTime: nil) }
@@ -280,12 +288,17 @@ final class AppModel {
                 let appEnvironment = "production"
             #endif
 
-                if let registered = try? await apiClient.request(DevicesEndpoint.register(
-                    name: name, platform: "ios",
-                    apnsToken: apnsToken, appEnvironment: appEnvironment,
-                    appVersion: appVersion, bundleId: bundleId, osVersion: osVersion
-                )) {
+                // Retried on the next launch or foreground. Reported rather
+                // than swallowed, so a device that never registers is visible.
+                do {
+                    let registered = try await apiClient.request(DevicesEndpoint.register(
+                        name: name, platform: "ios",
+                        apnsToken: apnsToken, appEnvironment: appEnvironment,
+                        appVersion: appVersion, bundleId: bundleId, osVersion: osVersion
+                    ))
                     UserDefaults.sparkAppGroup.set(registered.id, forKey: "spark.apnsDeviceId")
+                } catch {
+                    SparkObservability.captureHandled(error)
                 }
             }
             deviceRegistrationTokenInFlight = apnsToken
@@ -417,7 +430,7 @@ final class AppModel {
         }
 
         // Recent searches live in standard defaults rather than the App Group.
-        UserDefaults.standard.removeObject(forKey: "spark.search.recents")
+        RecentSearchStore().clear()
 
         await authService.signOut()
         await etagCache.clearAll()
