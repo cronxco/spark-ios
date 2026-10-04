@@ -153,8 +153,8 @@ public enum FlintEndpoint {
         Endpoint(method: .get, path: "/flint/review", headers: ["Cache-Control": "no-cache"])
     }
 
-    /// POST /flint/review/{kind}/{id} — confirm, dismiss, keep or undo one
-    /// item. Returns the remaining queue.
+    /// POST /flint/review/{kind}/{id} — confirm, dismiss or undo one item.
+    /// The server still accepts `keep` from older app versions.
     public static func reviewAction(
         kind: FlintReviewKind,
         id: String,
