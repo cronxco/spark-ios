@@ -9,6 +9,8 @@ struct KnowledgeItemDetailView: View {
     @State private var detailState: KnowledgeDetailState = .loading
     @State private var rawPayload: String?
     @State private var reprocessError: String?
+    @State private var reprocessQueued = false
+    @State private var etag: String?
 
     private var title: String { event.target?.title ?? event.displayName ?? event.action }
 
@@ -81,6 +83,11 @@ struct KnowledgeItemDetailView: View {
             refresh: { await loadDetail() },
             reprocess: { await reprocessKnowledgeEvent() }
         )
+        .alert("Reprocessing started", isPresented: $reprocessQueued) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Spark is fetching and summarising this again. Pull to refresh in a minute to see the result.")
+        }
         .alert("Couldn't reprocess", isPresented: reprocessErrorBinding) {
             Button("OK", role: .cancel) {
                 reprocessError = nil
@@ -419,6 +426,7 @@ struct KnowledgeItemDetailView: View {
             let response = try await appModel.apiClient.requestWithRawResponse(EventsEndpoint.detail(id: event.id))
             let detail = response.decoded
             rawPayload = response.utf8Body
+            etag = response.etag ?? etag
             let objectID = detail.target?.id ?? event.target?.id
             let objectDetail: ObjectDetail?
             if let objectID {
@@ -437,12 +445,29 @@ struct KnowledgeItemDetailView: View {
 
     private func reprocessKnowledgeEvent() async {
         do {
-            _ = try await appModel.apiClient.request(EventsEndpoint.reprocessKnowledgeEvent(id: event.id))
-            await loadDetail()
+            do {
+                let version = try await currentETag()
+                _ = try await appModel.apiClient.request(EventsEndpoint.reprocessKnowledgeEvent(id: event.id, etag: version))
+            } catch let error as APIError where error.isPreconditionFailure {
+                etag = nil
+                let version = try await currentETag()
+                _ = try await appModel.apiClient.request(EventsEndpoint.reprocessKnowledgeEvent(id: event.id, etag: version))
+            }
+            reprocessQueued = true
         } catch {
             SparkObservability.captureHandled(error)
             reprocessError = (error as? LocalizedError)?.errorDescription ?? "The item couldn't be reprocessed."
         }
+    }
+
+    /// The event's version for `If-Match`, re-reading it when the detail load
+    /// didn't supply one (a 304, or a version invalidated by a 412/428).
+    private func currentETag() async throws -> String {
+        if let etag { return etag }
+        let response = try await appModel.apiClient.requestWithRawResponse(EventsEndpoint.detailForWrite(id: event.id))
+        guard let fresh = response.etag else { throw APIError.noData }
+        etag = fresh
+        return fresh
     }
 
     private func mainImageURL(event: Event) -> URL? {
