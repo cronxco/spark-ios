@@ -98,6 +98,8 @@ struct DeleteWithUndoModifier: ViewModifier {
 
     private func performRestore() async {
         guard !isWorking else { return }
+        showToast = false
+        toastGeneration += 1
         isWorking = true
         defer { isWorking = false }
         do {
@@ -107,6 +109,8 @@ struct DeleteWithUndoModifier: ViewModifier {
         } catch {
             SparkObservability.captureHandled(error)
             errorMessage = (error as? LocalizedError)?.errorDescription ?? "Couldn't bring this \(noun) back."
+            showToast = true
+            toastGeneration += 1
         }
     }
 }
