@@ -43,6 +43,7 @@ struct SparkApp: App {
             Task { @MainActor in
                 switch phase {
                 case .active:
+                    model.consumePendingIntentRoute()
                     await model.reverbConnect()
                 case .background, .inactive:
                     await model.reverbDisconnect()
