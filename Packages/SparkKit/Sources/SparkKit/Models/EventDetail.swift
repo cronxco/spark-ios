@@ -16,6 +16,8 @@ public struct EventDetail: Codable, Sendable, Hashable, Identifiable {
     public let location: Location?
     public let note: String?
     public let metadata: [AnyCodable]?
+    /// The event carries a GPS route; fetch it with `EventsEndpoint.route(id:)`.
+    public let hasRoute: Bool
 
     public var id: String { event.id }
 
@@ -71,6 +73,7 @@ public struct EventDetail: Codable, Sendable, Hashable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case event, actor, target, blocks, related, tags, location, note, metadata
         case aiSummary = "summary_ai"
+        case hasRoute = "has_route"
     }
 
     enum NoteAliasCodingKeys: String, CodingKey {
@@ -87,7 +90,8 @@ public struct EventDetail: Codable, Sendable, Hashable, Identifiable {
         aiSummary: String? = nil,
         location: Location? = nil,
         note: String? = nil,
-        metadata: [AnyCodable]? = nil
+        metadata: [AnyCodable]? = nil,
+        hasRoute: Bool = false
     ) {
         self.event = event
         self.actor = actor
@@ -99,6 +103,7 @@ public struct EventDetail: Codable, Sendable, Hashable, Identifiable {
         self.location = location
         self.note = note
         self.metadata = metadata
+        self.hasRoute = hasRoute
     }
 
     public init(from decoder: Decoder) throws {
@@ -125,5 +130,6 @@ public struct EventDetail: Codable, Sendable, Hashable, Identifiable {
         note = try container.decodeIfPresent(String.self, forKey: .note)
             ?? noteAliases.decodeIfPresent(String.self, forKey: .notes)
         metadata = try container.decodeIfPresent([AnyCodable].self, forKey: .metadata)
+        hasRoute = try container.decodeIfPresent(Bool.self, forKey: .hasRoute) ?? false
     }
 }
