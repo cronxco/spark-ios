@@ -43,6 +43,9 @@ struct SparkApp: App {
             Task { @MainActor in
                 switch phase {
                 case .active:
+                    // Sends receipts the service extension queued while the
+                    // app was not running (decision N-8).
+                    SparkAppDelegate.flushReceipts()
                     await model.reverbConnect()
                 case .background, .inactive:
                     await model.reverbDisconnect()
@@ -102,6 +105,9 @@ final class SparkAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
         didReceiveRemoteNotification userInfo: [AnyHashable: Any],
         fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
+        // Every alert is followed by a silent companion push, which wakes the
+        // app to send the "shown" receipt the service extension queued.
+        Self.flushReceipts()
         Task { @MainActor in
             SilentPushHandler.handle(
                 userInfo: userInfo,
@@ -128,6 +134,12 @@ final class SparkAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         completionHandler([.banner, .sound, .badge, .list])
+
+        // Reported after presentation, fire-and-forget (decision N-8).
+        if let id = NotificationReceipt.notificationID(from: notification.request.content.userInfo),
+           let receipt = NotificationReceipt(notificationID: id, event: .shown) {
+            Self.report([receipt])
+        }
     }
 
     nonisolated func userNotificationCenter(
@@ -150,6 +162,10 @@ final class SparkAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
         let entityType = envelope?["entity_type"] as? String
         let entityId = envelope?["entity_id"] as? String
 
+        if let id = NotificationReceipt.notificationID(from: userInfo) {
+            Self.report(NotificationReceipt.receipts(for: Self.receiptResponse(for: actionIdentifier), notificationID: id))
+        }
+
         Task { @MainActor in
             Self.handleNotificationAction(
                 actionIdentifier: actionIdentifier,
@@ -160,6 +176,39 @@ final class SparkAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
         }
 
         completionHandler()
+    }
+
+    /// Queues notification receipts and sends them in the background, so
+    /// reporting never delays presentation or routing (decision N-8).
+    nonisolated static func report(_ receipts: [NotificationReceipt]) {
+        guard !receipts.isEmpty else { return }
+        NotificationReceiptReporter.shared.enqueue(receipts)
+        flushReceipts()
+    }
+
+    /// Sends queued receipts from the app process, including those the
+    /// service extension queued. The extension only queues: refreshing the
+    /// rotating token from a second process could race the app's refresh.
+    nonisolated static func flushReceipts() {
+        Task { @MainActor in
+            let client = AppModel.shared.apiClient
+            Task.detached(priority: .utility) {
+                await NotificationReceiptReporter.shared.flush(using: client)
+            }
+        }
+    }
+
+    /// Every action the app registers is `.foreground`, so any action button
+    /// brings the app forward.
+    nonisolated static func receiptResponse(for actionIdentifier: String) -> NotificationReceipt.Response {
+        switch actionIdentifier {
+        case UNNotificationDefaultActionIdentifier:
+            return .defaultAction
+        case UNNotificationDismissActionIdentifier:
+            return .dismiss
+        default:
+            return .action(identifier: actionIdentifier, opensApp: true)
+        }
     }
 
     /// Routes a notification tap or action button.
