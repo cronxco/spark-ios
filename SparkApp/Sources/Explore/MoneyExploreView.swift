@@ -52,6 +52,9 @@ struct MoneyExploreView: View {
             .padding(.top, SparkSpacing.md)
             .padding(.bottom, SparkSpacing.xl)
         }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("spark.integrationReauthorised"))) { _ in
+            Task { await viewModel?.refresh() }
+        }
         .refreshable {
             await viewModel?.refresh()
         }

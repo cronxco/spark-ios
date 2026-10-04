@@ -4,6 +4,8 @@ import Foundation
 public enum IntegrationReauthError: Error, Sendable {
     case cancelled
     case invalidCallback
+    case providerRejected
+    case couldNotStart
     case underlying(Error)
 }
 
@@ -21,9 +23,10 @@ public final class IntegrationReauthService: NSObject, Sendable {
     @MainActor
     public func reauthorise(
         startURL: URL,
+        expectedAttemptID: String? = nil,
         presentationAnchor: ASPresentationAnchor
     ) async throws {
-        let _: URL = try await withCheckedThrowingContinuation { continuation in
+        let callback: URL = try await withCheckedThrowingContinuation { continuation in
             let session = ASWebAuthenticationSession(
                 url: startURL,
                 callbackURLScheme: callbackScheme
@@ -49,7 +52,35 @@ public final class IntegrationReauthService: NSObject, Sendable {
             session.prefersEphemeralWebBrowserSession = false
             activeAnchorProvider = anchorProvider
             activeSession = session
-            session.start()
+            guard session.start() else {
+                activeSession = nil
+                activeAnchorProvider = nil
+                continuation.resume(throwing: IntegrationReauthError.couldNotStart)
+                return
+            }
+        }
+        try Self.validateCallback(callback, expectedAttemptID: expectedAttemptID)
+    }
+
+    public static func validateCallback(_ url: URL, expectedAttemptID: String? = nil) throws {
+        guard url.scheme == "spark", url.host == "integrations", url.path == "/reauth-complete",
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            throw IntegrationReauthError.invalidCallback
+        }
+        let items = components.queryItems ?? []
+        let statuses = items.filter { $0.name == "status" }
+        guard statuses.count == 1, let status = statuses.first?.value else {
+            throw IntegrationReauthError.invalidCallback
+        }
+        if let expectedAttemptID {
+            let attempts = items.filter { $0.name == "attempt_id" }
+            guard attempts.count == 1, attempts.first?.value == expectedAttemptID else {
+                throw IntegrationReauthError.invalidCallback
+            }
+        }
+        guard status == "success" else {
+            if status == "error" { throw IntegrationReauthError.providerRejected }
+            throw IntegrationReauthError.invalidCallback
         }
     }
 }

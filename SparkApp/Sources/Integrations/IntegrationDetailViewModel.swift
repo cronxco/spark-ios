@@ -115,10 +115,12 @@ final class IntegrationDetailViewModel {
             let response = try await apiClient.request(IntegrationsEndpoint.oauthStart(id: integrationId))
             try await reauthService.reauthorise(
                 startURL: response.url,
+                expectedAttemptID: response.attemptID,
                 presentationAnchor: presentationAnchor.value
             )
-            lastActionMessage = "Reauthorised."
             await load()
+            lastActionMessage = "Reauthorised."
+            NotificationCenter.default.post(name: Notification.Name("spark.integrationReauthorised"), object: nil)
         } catch IntegrationReauthError.cancelled {
             // No-op — user closed the sheet.
         } catch {
