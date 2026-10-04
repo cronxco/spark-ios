@@ -7,6 +7,7 @@ struct FlintView: View {
     @State private var viewModel: FlintViewModel?
     @State private var path = NavigationPath()
     @State private var noteComposerContext: FlintNoteContext?
+    @State private var reviewModel: FlintReviewModel?
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -26,6 +27,9 @@ struct FlintView: View {
         .task {
             if viewModel == nil {
                 viewModel = FlintViewModel(apiClient: appModel.apiClient)
+            }
+            if reviewModel == nil {
+                reviewModel = FlintReviewModel(apiClient: appModel.apiClient)
             }
             await viewModel?.load()
         }
@@ -80,6 +84,8 @@ struct FlintView: View {
                 await viewModel.loadQuestionsIfNeeded()
             case .history:
                 await viewModel.loadHistoryIfNeeded()
+            case .review:
+                await reviewModel?.loadIfNeeded()
             }
         }
     }
@@ -95,6 +101,8 @@ struct FlintView: View {
             await viewModel.loadTopics()
         case .history:
             await viewModel.loadHistory()
+        case .review:
+            await reviewModel?.load()
         }
     }
 
@@ -119,6 +127,10 @@ struct FlintView: View {
         case .questions: questions(viewModel)
         case .threads: threads(viewModel)
         case .history: history(viewModel)
+        case .review:
+            if let reviewModel {
+                FlintReviewSection(model: reviewModel)
+            }
         }
     }
 
