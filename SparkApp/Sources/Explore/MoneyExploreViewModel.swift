@@ -38,8 +38,10 @@ final class MoneyExploreViewModel {
         guard case .idle = loadState else { return }
         loadState = .loading
         do {
-                            let response = try await apiClient.request(MoneyEndpoint.accounts())
-                accounts = response.data
+            // Accounts are cursor-paged now; the first page is not every account.
+            accounts = try await apiClient.collectAllPages { cursor in
+                MoneyEndpoint.accounts(cursor: cursor)
+            }
 
             loadState = .loaded
             await buildNetWorthHistory()

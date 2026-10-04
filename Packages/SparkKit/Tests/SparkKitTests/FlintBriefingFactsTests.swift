@@ -37,6 +37,31 @@ struct FlintBriefingFactsTests {
         #expect(facts.promptText.contains("Anomalies: none reported"))
     }
 
+    @Test("last synced event is rendered in the summary's timezone, not UTC")
+    func lastSyncedEventIsLocal() throws {
+        let instant = try #require(ISO8601DateFormatter().date(from: "2026-09-25T00:06:53Z"))
+        let summary = DaySummary(
+            date: "2026-09-25",
+            timezone: "Europe/London",
+            syncStatus: .init(upToDate: true, stale: [], lastEventAt: instant),
+            sections: .init(health: nil, activity: nil, money: nil, media: nil, knowledge: nil),
+            anomalies: []
+        )
+
+        let facts = FlintBriefingFacts(summary: summary)
+
+        #expect(facts.promptText.contains("Last synced event: 2026-09-25T01:06:53+01:00"))
+        #expect(!facts.promptText.contains("00:06:53Z"))
+    }
+
+    @Test("local timestamps follow the travel timezone and fall back to UTC")
+    func localTimestampZones() throws {
+        let instant = try #require(ISO8601DateFormatter().date(from: "2026-09-25T19:00:00Z"))
+
+        #expect(FlintBriefingFacts.localTimestamp(instant, timezone: "America/Vancouver") == "2026-09-25T12:00:00-07:00")
+        #expect(FlintBriefingFacts.localTimestamp(instant, timezone: "Not/AZone") == "2026-09-25T19:00:00Z")
+    }
+
     @Test("fallback note includes anomalies as watchouts")
     func fallbackUsesAnomalies() {
         let summary = DaySummary(

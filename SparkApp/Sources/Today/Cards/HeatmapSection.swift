@@ -8,11 +8,11 @@ struct HeatmapSection: View {
         VStack(alignment: .leading, spacing: SparkSpacing.md) {
             HStack {
                 Text("Last 45 days")
-                    .font(SparkTypography.monoSmall)
+                    .font(SparkTypography.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text("← older")
-                    .font(SparkTypography.monoSmall)
+                    .font(SparkTypography.caption)
                     .foregroundStyle(.secondary)
             }
 

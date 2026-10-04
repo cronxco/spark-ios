@@ -12,14 +12,14 @@ struct CheckInCard: View {
         GlassCard {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                 CheckInPeriodSummaryRow(
-                    title: "Morning Check-in",
+                    title: "Morning check-in",
                     status: status.morning,
                     onTap: onTapMorning
                 )
                 if showsAfternoonRow {
                     Divider()
                     CheckInPeriodSummaryRow(
-                        title: "Afternoon Check-in",
+                        title: "Afternoon check-in",
                         status: status.afternoon,
                         onTap: onTapAfternoon
                     )

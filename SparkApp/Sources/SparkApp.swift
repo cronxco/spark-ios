@@ -24,6 +24,7 @@ struct SparkApp: App {
         WindowGroup {
             ZStack {
                 SparkResolvedAppBackground()
+                    .ignoresSafeArea()
 
                 RootView()
                     .environment(model)
@@ -36,11 +37,7 @@ struct SparkApp: App {
                     }
                     .onContinueUserActivity(CSSearchableItemActionType, perform: handle(spotlightActivity:))
             }
-            .overlay(alignment: .top) {
-                SparkResolvedStatusBarBackground()
-            }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .ignoresSafeArea()
         }
         .onChange(of: scenePhase) { _, phase in
             Task { @MainActor in

@@ -78,6 +78,18 @@ struct NewsSummaryScreen: View {
 
                     fullArticleDisclosure
 
+                    if let story = viewModel?.headlineCitations[item.id],
+                       let storyIndex = viewModel?.storyScreenIndex(story: story) {
+                        Button {
+                            viewModel?.jump(to: storyIndex)
+                        } label: {
+                            Label("Covered in story \(story) of today's news", systemImage: "arrow.uturn.backward")
+                                .font(SparkTypography.bodySmall)
+                                .foregroundStyle(Color.sparkOcean)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
                     if let urlString = news.url, let url = URL(string: urlString) {
                         Link(destination: url) {
                             Label("Open source", systemImage: "arrow.up.right.square")
@@ -93,6 +105,9 @@ struct NewsSummaryScreen: View {
     // MARK: - Meta
 
     static func publication(for news: NewsSummary) -> String {
+        if let publication = news.publication?.trimmingCharacters(in: .whitespacesAndNewlines), !publication.isEmpty {
+            return publication
+        }
         if let host = news.url.flatMap({ URL(string: $0)?.host() })?.lowercased() {
             let names = ["economist.com": "The Economist", "ft.com": "Financial Times", "noemamag.com": "Noema"]
             for (domain, name) in names where host == domain || host.hasSuffix("." + domain) {

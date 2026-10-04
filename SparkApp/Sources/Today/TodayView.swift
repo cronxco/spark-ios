@@ -2,18 +2,22 @@ import SparkKit
 import SparkUI
 import SwiftData
 import SwiftUI
-import UIKit
 
 struct TodayView: View {
     let date: Date
     var showsToolbar = true
     @Environment(AppModel.self) private var appModel
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var colorScheme
     @State private var viewModel: TodayViewModel?
     @State private var checkInSelection: CheckInSheetSelection?
     @State private var showHistory = false
+    @State private var checkInHistoryVM: CheckInHistoryViewModel?
     @State private var showUpToSpeed = false
     @State private var upToSpeedViewModel: UpToSpeedViewModel?
+    @State private var selectedThread: FlintTopic?
+
+    private var isToday: Bool { Calendar.current.isDateInToday(date) }
 
     var body: some View {
         let snapshot = TodaySnapshot(
@@ -30,9 +34,29 @@ struct TodayView: View {
                     hero(snapshot: snapshot, unreadCount: unreadCount)
                         .sparkAppEntityIdentifier(type: "day", identifier: TodayViewModel.isoKey(for: date))
 
-                    StatStripView(snapshot: snapshot)
+                    // Flint's own words first: the numbers below are what it
+                    // is talking about, not a dashboard the digest happens to
+                    // sit near.
+                    // The digest, questions and threads are "now", not this
+                    // date's; the view model only loads them for today, and a
+                    // page that was today before midnight stops showing them.
+                    if isToday, let digest = viewModel?.latestDigest {
+                        DigestOpenerCard(digest: digest) { showUpToSpeed = true }
+                    }
 
-                    anomalyPill(for: snapshot)
+                    MetricsGrid(metrics: viewModel?.metrics ?? DayMetrics(summary: nil))
+
+                    anomalySummary(for: snapshot)
+
+                    if isToday, let vm = viewModel, !vm.recentQuestions.isEmpty {
+                        FlintQuestionStack(
+                            questions: vm.recentQuestions,
+                            onAnswer: { question, option in
+                                Task { await vm.answer(question: question, with: option) }
+                            },
+                            onOpen: { showUpToSpeed = true }
+                        )
+                    }
 
                     CheckInCard(
                         date: date,
@@ -45,7 +69,11 @@ struct TodayView: View {
                         }
                     )
 
-                    CheckInHeatmapCard(date: date, showHistory: $showHistory)
+                    if isToday, let vm = viewModel, !vm.topics.isEmpty {
+                        ThreadsStrip(topics: vm.topics) { selectedThread = $0 }
+                    }
+
+                    CheckInHeatmapCard(historyVM: checkInHistoryVM, showHistory: $showHistory)
 
                     FeedSection(date: date)
 
@@ -60,22 +88,32 @@ struct TodayView: View {
                     #endif
                 }
                 .padding(.horizontal, SparkSpacing.lg)
-                .padding(.top, SparkSpacing.xl + 72)
-                .padding(.bottom, deviceSafeAreaBottom + 66)
+                .padding(.top, SparkSpacing.sm)
+                .padding(.bottom, SparkSpacing.xl)
                 .containerRelativeFrame(.horizontal)
             }
-            .sparkAppBackground()
-            .refreshable { await viewModel?.refresh() }
+            .scrollEdgeEffectStyle(.soft, for: .top)
+            .refreshable {
+                await viewModel?.refresh()
+                await checkInHistoryVM?.load()
+            }
         }
         .sparkMainAppToolbar(isVisible: showsToolbar)
-        .sheet(item: $checkInSelection) { selection in
+        .sheet(item: $checkInSelection, onDismiss: {
+            Task { await checkInHistoryVM?.load() }
+        }) { selection in
             if let vm = viewModel {
                 CheckInModalView(viewModel: vm, date: selection.date, initialPeriod: selection.period)
             }
         }
-        .sheet(isPresented: $showHistory) {
-            if let vm = viewModel {
-                CheckInHistoryView(apiClient: appModel.apiClient, container: appModel.container, todayViewModel: vm)
+        .sheet(item: $selectedThread) { topic in
+            ThreadDetailSheet(topic: topic)
+        }
+        .sheet(isPresented: $showHistory, onDismiss: {
+            Task { await viewModel?.loadCheckIns() }
+        }) {
+            if let checkInHistoryVM {
+                CheckInHistoryView(apiClient: appModel.apiClient, container: appModel.container, historyVM: checkInHistoryVM)
             }
         }
         .fullScreenCover(isPresented: $showUpToSpeed, onDismiss: {
@@ -85,6 +123,11 @@ struct TodayView: View {
                 .environment(appModel)
         }
         .task(id: date) {
+            checkInHistoryVM = CheckInHistoryViewModel(
+                apiClient: appModel.apiClient,
+                container: appModel.container,
+                endDate: date
+            )
             if viewModel == nil {
                 viewModel = TodayViewModel(
                     date: date,
@@ -92,7 +135,9 @@ struct TodayView: View {
                     container: appModel.container
                 )
             }
-            await viewModel?.load()
+            async let dayLoad: Void = viewModel?.load() ?? ()
+            async let historyLoad: Void = checkInHistoryVM?.load() ?? ()
+            _ = await (dayLoad, historyLoad)
         }
         .task {
             if upToSpeedViewModel == nil {
@@ -141,7 +186,7 @@ struct TodayView: View {
     private func heroTitleWithAction(titleLines: [String], unreadCount: Int) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: SparkSpacing.md) {
+                HStack(alignment: .center, spacing: SparkSpacing.md) {
                     if let firstLine = titleLines.first {
                         heroTitleText(firstLine, index: 0)
                     }
@@ -185,9 +230,15 @@ struct TodayView: View {
     private func heroTitleText(_ line: String, index: Int) -> some View {
         Text(line)
             .font(heroTitleFont)
-            .foregroundStyle(index == 0 ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
+            .foregroundStyle(index == 0 ? heroLeadStyle : AnyShapeStyle(.secondary))
             .lineLimit(1)
             .minimumScaleFactor(0.88)
+    }
+
+    /// The hero's first line is the Day tab's title, so it takes the same
+    /// yellow in dark mode as the titles on the other tabs.
+    private var heroLeadStyle: AnyShapeStyle {
+        colorScheme == .dark ? AnyShapeStyle(Color.spark2) : AnyShapeStyle(.primary)
     }
 
     private var heroTitleFont: Font {
@@ -208,12 +259,6 @@ struct TodayView: View {
         }
     }
 
-    private var deviceSafeAreaBottom: CGFloat {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }.first?
-            .keyWindow?.safeAreaInsets.bottom ?? 34
-    }
-
     private var firstName: String {
         let name = appModel.profile?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return name.split(separator: " ").first.map(String.init) ?? "Your"
@@ -225,22 +270,45 @@ struct TodayView: View {
         return f
     }()
 
-    // MARK: - Anomaly pill
+    // MARK: - Anomaly summary
 
     @ViewBuilder
-    private func anomalyPill(for snapshot: TodaySnapshot) -> some View {
+    private func anomalySummary(for snapshot: TodaySnapshot) -> some View {
         if snapshot.anomalies.isEmpty {
-            StatusPill(.ok, message: "Baselines holding", trailing: "0 anomalies")
+            anomalySummaryRow(message: "Baselines holding", count: nil, tint: .sparkSuccess)
         } else {
-            StatusPill(
-                .warning,
+            anomalySummaryRow(
                 message: snapshot.anomalies.first?.displayName
                     ?? snapshot.anomalies.first?.metric
                     ?? "Anomaly detected",
-                trailing: "\(snapshot.anomalies.count) anomal\(snapshot.anomalies.count == 1 ? "y" : "ies")"
+                count: "\(snapshot.anomalies.count) anomal\(snapshot.anomalies.count == 1 ? "y" : "ies")",
+                tint: .sparkWarning
             )
             .sparkAppEntityIdentifier(type: "anomaly", identifier: snapshot.anomalies.first?.id)
         }
+    }
+
+    private func anomalySummaryRow(message: String, count: String?, tint: Color) -> some View {
+        HStack(spacing: SparkSpacing.sm) {
+            Circle()
+                .fill(tint)
+                .frame(width: 7, height: 7)
+                .accessibilityHidden(true)
+            Text(message)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+            if let count {
+                Spacer(minLength: SparkSpacing.sm)
+                Text(count)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.vertical, SparkSpacing.xs)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(count.map { "\(message), \($0)" } ?? message)
     }
 
     // MARK: - Loading / empty
@@ -291,27 +359,24 @@ private struct GetUpToSpeedButton: View {
     let unreadCount: Int
     let onTap: () -> Void
 
-    private static let darkInk = Color(red: 0.086, green: 0.086, blue: 0.086)
-
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 6) {
                 Text("\(unreadCount)")
                     .font(Font.custom(SparkFonts.displayPostScriptName, size: 12).bold())
-                    .foregroundStyle(Self.darkInk)
+                    .foregroundStyle(Color.sparkOnAccent)
                     .padding(.horizontal, 6)
                     .frame(minWidth: 24, minHeight: 24)
-                    .background(Self.darkInk.opacity(0.12), in: .capsule)
+                    .background(Color.sparkOnAccent.opacity(0.12), in: .capsule)
 
                 Text("Get Up to Speed")
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(Self.darkInk)
+                    .font(SparkTypography.captionStrong)
+                    .foregroundStyle(Color.sparkOnAccent)
             }
             .padding(.leading, 4)
             .padding(.trailing, 10)
-            .frame(height: 32)
+            .frame(minHeight: 44)
             .background(Color.sparkAccent, in: .capsule)
-            .shadow(color: Color.sparkAccent.opacity(0.22), radius: 7, x: 0, y: 6)
         }
         .buttonStyle(.plain)
     }

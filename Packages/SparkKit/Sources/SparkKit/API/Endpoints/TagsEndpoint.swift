@@ -27,13 +27,14 @@ public enum TagsEndpoint {
         id: String,
         request: TagMutationRequest,
         etag: String,
-        response: Response.Type
+        response: Response.Type,
+        idempotencyKey: UUID = UUID()
     ) -> Endpoint<Response> {
         Endpoint(
             method: .post,
             path: "/\(kind.rawValue)/\(id)/tags",
             body: try? JSONEncoder().encode(request),
-            headers: ["If-Match": etag]
+            headers: ["If-Match": etag, "Idempotency-Key": idempotencyKey.uuidString]
         )
     }
 

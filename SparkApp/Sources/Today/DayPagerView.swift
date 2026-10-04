@@ -6,60 +6,67 @@ import SwiftUI
 struct DayPagerView: View {
     @Environment(AppModel.self) private var appModel
     @State private var selectedOffset: Int = 0
+    @State private var scrolledOffset: Int?
     @State private var dates: [DayKey] = DayKey.defaultWindow()
     @State private var path: [DetailRoute] = []
 
     var body: some View {
         @Bindable var appModel = appModel
-        ZStack {
-            SparkResolvedAppBackground()
-
-            NavigationStack(path: $path) {
-                ZStack {
-                    SparkResolvedAppBackground()
-
-                    TabView(selection: $selectedOffset) {
-                        ForEach(dates) { key in
-                            TodayView(
-                                date: key.date,
-                                showsToolbar: key.offset == selectedOffset
-                            )
-                            .tag(key.offset)
-                        }
+        NavigationStack(path: $path) {
+            // A horizontal paging scroll view rather than a page-style
+            // TabView: the TabView laid its pages out inside the safe area,
+            // so each day stopped above the tab bar on a plain band and the
+            // tab bar never minimised. See `SparkSectionPager`.
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: 0) {
+                    ForEach(dates) { key in
+                        TodayView(
+                            date: key.date,
+                            showsToolbar: key.offset == selectedOffset
+                        )
+                        .containerRelativeFrame(.horizontal)
+                        .id(key.offset)
                     }
-                    .tabViewStyle(.page(indexDisplayMode: .never))
-                    .ignoresSafeArea()
                 }
-                .ignoresSafeArea()
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbarBackground(.hidden, for: .navigationBar)
-                    .navigationDestination(for: DetailRoute.self) { route in
-                        switch route {
-                        case .event(let id):
-                            EventDetailView(eventId: id)
-                        case .object(let id):
-                            ObjectDetailView(objectId: id)
-                        case .block(let id):
-                            BlockDetailView(blockId: id)
-                        case .metric(let identifier):
-                            MetricDetailView(identifier: identifier)
-                        case .place(let id):
-                            PlaceDetailView(placeId: id)
-                        case .anomaly(let id):
-                            AnomalyDetailView(anomalyId: id)
-                        case .integration(let service):
-                            IntegrationDetailView(integrationId: service)
-                        case .account(let id):
-                            AccountDetailView(accountId: id)
-                        case .tag(let id, let name, let type):
-                            TagDetailView(tagID: id, tagName: name, tagType: type)
-                        }
-                    }
+                .scrollTargetLayout()
             }
-            .scrollContentBackground(.hidden)
+            .scrollTargetBehavior(.paging)
+            .scrollIndicators(.hidden)
+            .scrollPosition(id: $scrolledOffset)
+            .sparkAppBackground()
+            .onAppear { scrolledOffset = selectedOffset }
+            .onChange(of: scrolledOffset) { _, new in
+                if let new, new != selectedOffset { selectedOffset = new }
+            }
+            .onChange(of: selectedOffset) { _, new in
+                guard scrolledOffset != new else { return }
+                scrolledOffset = new
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .navigationDestination(for: DetailRoute.self) { route in
+                switch route {
+                case .event(let id):
+                    EventDetailView(eventId: id)
+                case .object(let id):
+                    ObjectDetailView(objectId: id)
+                case .block(let id):
+                    BlockDetailView(blockId: id)
+                case .metric(let identifier):
+                    MetricDetailView(identifier: identifier)
+                case .place(let id):
+                    PlaceDetailView(placeId: id)
+                case .anomaly(let id):
+                    AnomalyDetailView(anomalyId: id)
+                case .integration(let service):
+                    IntegrationDetailView(integrationId: service)
+                case .account(let id):
+                    AccountDetailView(accountId: id)
+                case .tag(let id, let name, let type):
+                    TagDetailView(tagID: id, tagName: name, tagType: type)
+                }
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .ignoresSafeArea()
         .onChange(of: appModel.pendingRoute) { _, route in
             apply(route: route)
         }

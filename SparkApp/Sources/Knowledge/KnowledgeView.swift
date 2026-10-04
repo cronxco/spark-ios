@@ -4,49 +4,53 @@ import SwiftUI
 
 struct KnowledgeView: View {
     @Environment(AppModel.self) private var appModel
-    @Environment(\.tabAccessoryCoordinator) private var tabAccessoryCoordinator
     @State private var viewModel: KnowledgeViewModel?
     @State private var path = NavigationPath()
+    @State private var filter: KnowledgeViewModel.Filter = .reading
 
     var body: some View {
         NavigationStack(path: $path) {
-            content
-                .sparkMainNavigationTitle("Knowledge")
-                .navigationDestination(for: Event.self) { event in
-                    KnowledgeItemDetailView(event: event)
-                }
-                .sparkDetailDestinations()
-                .sparkMainAppToolbar()
-                .onAppear { updateFilterAccessory() }
-                .onChange(of: viewModel?.filter) { _, _ in updateFilterAccessory() }
-                .onChange(of: path.count) { _, _ in updateFilterAccessory() }
-                .onDisappear { tabAccessoryCoordinator?.clear(owner: .knowledge) }
+            SparkSectionPager(
+                title: "Knowledge",
+                sections: KnowledgeViewModel.Filter.allCases.map { SparkPagerSection(id: $0, title: $0.rawValue) },
+                selection: $filter
+            ) { filter in
+                page(filter: filter)
+            }
+            .sparkMainNavigationTitle("Knowledge")
+            .navigationDestination(for: Event.self) { event in
+                KnowledgeItemDetailView(event: event)
+            }
+            .sparkDetailDestinations()
+            .sparkMainAppToolbar()
+        }
+        .onChange(of: filter) { _, filter in
+            viewModel?.filter = filter
         }
         .task {
             if viewModel == nil {
                 viewModel = KnowledgeViewModel(apiClient: appModel.apiClient)
             }
             await viewModel?.initialLoad()
-            updateFilterAccessory()
         }
     }
 
     @ViewBuilder
-    private var content: some View {
+    private func page(filter: KnowledgeViewModel.Filter) -> some View {
         if let viewModel {
-            mainContent(viewModel: viewModel)
+            mainContent(viewModel: viewModel, filter: filter)
         } else {
             loadingPlaceholder
         }
     }
 
-    private func mainContent(viewModel: KnowledgeViewModel) -> some View {
+    private func mainContent(viewModel: KnowledgeViewModel, filter: KnowledgeViewModel.Filter) -> some View {
         ScrollView {
             VStack(spacing: SparkSpacing.lg) {
-                pageHeader(viewModel: viewModel)
+                SparkSectionCaption(text: headerSubtitle(viewModel: viewModel, filter: filter))
                     .padding(.horizontal, SparkSpacing.lg)
 
-                let items = viewModel.filteredItems
+                let items = viewModel.items(for: filter)
                 let isEmpty = viewModel.allItems.isEmpty
 
                 switch viewModel.loadState {
@@ -97,50 +101,9 @@ struct KnowledgeView: View {
             .padding(.bottom, SparkSpacing.xl)
         }
         .refreshable { await viewModel.refresh() }
-        .sparkAppBackground()
     }
 
-    private func updateFilterAccessory() {
-        guard path.isEmpty else {
-            tabAccessoryCoordinator?.clear(owner: .knowledge)
-            return
-        }
-
-        registerFilterAccessory()
-    }
-
-    private func registerFilterAccessory() {
-        guard let viewModel else { return }
-
-        tabAccessoryCoordinator?.set(
-            TabAccessory(
-                owner: .knowledge,
-                title: "Knowledge filter",
-                items: KnowledgeViewModel.Filter.allCases.map {
-                    TabAccessoryItem(id: $0.id, title: $0.rawValue, systemImage: filterIcon($0))
-                },
-                selectedID: viewModel.filter.id,
-                select: { id in
-                    guard let filter = KnowledgeViewModel.Filter(rawValue: id) else { return }
-                    viewModel.filter = filter
-                }
-            )
-        )
-    }
-
-    private func filterIcon(_ filter: KnowledgeViewModel.Filter) -> String {
-        switch filter {
-        case .reading: "newspaper.fill"
-        case .personal: "person.crop.circle.fill"
-        case .all: "square.grid.2x2.fill"
-        }
-    }
-
-    private func pageHeader(viewModel: KnowledgeViewModel) -> some View {
-        SparkMainPageHeader(title: "Knowledge", subtitle: headerSubtitle(viewModel: viewModel))
-    }
-
-    private func headerSubtitle(viewModel: KnowledgeViewModel) -> String {
+    private func headerSubtitle(viewModel: KnowledgeViewModel, filter: KnowledgeViewModel.Filter) -> String {
         switch viewModel.loadState {
         case .idle:
             return "Loading your reading"
@@ -149,9 +112,9 @@ struct KnowledgeView: View {
         case .error where viewModel.allItems.isEmpty:
             return "Knowledge unavailable"
         default:
-            let count = viewModel.filteredItems.count
+            let count = viewModel.items(for: filter).count
             let noun = count == 1 ? "item" : "items"
-            return "\(count) \(noun) in \(viewModel.filter.rawValue)"
+            return "\(count) \(noun) in \(filter.rawValue)"
         }
     }
 
@@ -172,7 +135,6 @@ struct KnowledgeView: View {
             }
             .padding(SparkSpacing.lg)
         }
-        .sparkAppBackground()
     }
 }
 
@@ -182,7 +144,7 @@ private struct KnowledgeItemCard: View {
     let event: Event
     @Environment(\.colorScheme) private var colorScheme
 
-    private let cardRadius: CGFloat = 20
+    private let cardRadius: CGFloat = SparkRadii.lg
 
     private var imageUrl: URL? {
         guard let raw = event.target?.mediaUrl else { return nil }
@@ -200,7 +162,7 @@ private struct KnowledgeItemCard: View {
     private var serviceLabel: String {
         switch event.service {
         case "newsletter": "Newsletter"
-        case "fetch": "Web Digest"
+        case "fetch": "Web digest"
         case "outline": "Outline"
         case "calendar": "Calendar"
         default: event.service.capitalized
@@ -217,22 +179,15 @@ private struct KnowledgeItemCard: View {
         }
     }
 
+    /// Knowledge is the sky domain. Shades of it tell sources apart; other
+    /// domain colours would say "money" or "anomaly" about a newsletter.
     private var accent: Color {
-        let palette: [Color] = [
-            .spark5,
-            .ember5,
-            .sky5,
-            .flame5,
-            .sparkSuccess,
-            .sparkWarning,
-        ]
-        return palette[stablePaletteIndex % palette.count]
-    }
-
-    private var stablePaletteIndex: Int {
-        let seed = event.id + title + event.service
-        return seed.unicodeScalars.reduce(0) { partial, scalar in
-            (partial &* 31 &+ Int(scalar.value)) & 0x7fffffff
+        switch event.service {
+        case "newsletter": .sky5
+        case "fetch": .sky6
+        case "outline": .sky7
+        case "calendar": .sky4
+        default: .domainKnowledge
         }
     }
 
@@ -284,7 +239,7 @@ private struct KnowledgeItemCard: View {
                     HStack {
                         Text(serviceLabel)
                             .font(SparkTypography.monoSmall)
-                            .foregroundStyle(accent)
+                            .foregroundStyle(Color.domainKnowledge)
                             .padding(.horizontal, SparkSpacing.sm)
                             .padding(.vertical, 3)
                             .background(accent.opacity(colorScheme == .dark ? 0.20 : 0.12))

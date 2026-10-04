@@ -67,7 +67,7 @@ struct AccountDetailView: View {
             }
         }
         .confirmationDialog(
-            "Archive Account",
+            "Archive account",
             isPresented: $showArchiveConfirm,
             titleVisibility: .visible
         ) {
@@ -89,7 +89,7 @@ struct AccountDetailView: View {
     // MARK: - Sections
 
     private func balanceHero(account: MoneyAccount, vm: AccountDetailViewModel) -> some View {
-        GlassCard(radius: 22, padding: SparkSpacing.xl, tint: balanceTint(account: account)) {
+        GlassCard(radius: SparkRadii.lg, padding: SparkSpacing.xl, tint: balanceTint(account: account)) {
             VStack(alignment: .leading, spacing: SparkSpacing.md) {
                 HStack(spacing: SparkSpacing.sm) {
                     Image(systemName: accountIcon(kind: account.kind))
@@ -143,29 +143,8 @@ struct AccountDetailView: View {
     }
 
     private var rangeChips: some View {
-        HStack(spacing: SparkSpacing.xs) {
-            ForEach(HistoryRange.allCases) { range in
-                Button {
-                    selectedRange = range
-                } label: {
-                    Text(range.rawValue)
-                        .font(SparkTypography.monoSmall)
-                        .fontWeight(.semibold)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background {
-                            if selectedRange == range {
-                                RoundedRectangle(cornerRadius: SparkRadii.sm)
-                                    .fill(Color.domainMoney)
-                            } else {
-                                RoundedRectangle(cornerRadius: SparkRadii.sm)
-                                    .fill(.primary.opacity(0.06))
-                            }
-                        }
-                        .foregroundStyle(selectedRange == range ? .black : .secondary)
-                }
-                .buttonStyle(.plain)
-            }
+        RangeChipBar(HistoryRange.allCases, selected: selectedRange, tint: Color.domainMoney, label: \.rawValue) { range in
+            selectedRange = range
         }
     }
 
@@ -180,20 +159,47 @@ struct AccountDetailView: View {
     }
 
     private func actionsRow(account: MoneyAccount) -> some View {
-        HStack(spacing: SparkSpacing.sm) {
-            PillButton("Add Balance", systemImage: "plus.circle.fill", tint: Color.domainMoney) {
-                showAddBalance = true
-            }
-
-            if account.kind == "manual_account" {
-                PillButton("Edit", systemImage: "pencil", tint: .secondary) {
-                    showEditAccount = true
+        // Scrolls rather than wraps: pinning applies to every account type,
+        // so a manual account now carries four pills, which do not fit a
+        // phone's width side by side.
+        ScrollView(.horizontal) {
+            HStack(spacing: SparkSpacing.sm) {
+                PillButton("Add Balance", systemImage: "plus.circle.fill", tint: Color.domainMoney) {
+                    showAddBalance = true
                 }
-                PillButton("Archive", systemImage: "archivebox", tint: .orange) {
-                    showArchiveConfirm = true
+
+                PillButton(
+                    account.pinned ? "Pinned" : "Pin",
+                    systemImage: account.pinned ? "pin.fill" : "pin",
+                    tint: account.pinned ? Color.domainMoney : .secondary
+                ) {
+                    let target = !account.pinned
+                    Task {
+                        do {
+                            try await viewModel?.setPinned(target)
+                        } catch {
+                            SparkObservability.captureHandled(error)
+                        }
+                    }
+                }
+                .disabled(viewModel?.isUpdatingPin == true)
+                .accessibilityHint(
+                    account.pinned
+                        ? "Stops showing this account on the Day tab"
+                        : "Shows this account on the Day tab"
+                )
+
+                if account.kind == "manual_account" {
+                    PillButton("Edit", systemImage: "pencil", tint: .secondary) {
+                        showEditAccount = true
+                    }
+                    PillButton("Archive", systemImage: "archivebox", tint: .orange) {
+                        showArchiveConfirm = true
+                    }
                 }
             }
         }
+        .scrollIndicators(.hidden)
     }
 
     private func detailsCard(account: MoneyAccount) -> some View {
@@ -219,7 +225,7 @@ struct AccountDetailView: View {
                     }
                 }
                 if let sortCode = account.sortCode {
-                    InspectorRow("Sort Code") {
+                    InspectorRow("Sort code") {
                         Text(sortCode)
                     }
                 }
@@ -239,7 +245,7 @@ struct AccountDetailView: View {
 
     private func balanceHistorySection(vm: AccountDetailViewModel) -> some View {
         VStack(alignment: .leading, spacing: SparkSpacing.md) {
-            Text("Balance History")
+            Text("Balance history")
                 .font(SparkTypography.monoSmall)
                 .foregroundStyle(.secondary)
 
@@ -297,23 +303,13 @@ struct AccountDetailView: View {
 
     private func balanceTint(account: MoneyAccount) -> Color {
         if let provider = account.provider {
-            return issuerAccentColor(provider: provider).opacity(0.10)
+            return IssuerColors.accent(for: provider).opacity(0.10)
         }
         guard let balance = account.latestBalance?.balance else { return .clear }
         if account.isNegativeBalance {
             return Color.sparkError.opacity(0.08)
         }
         return balance >= 0 ? Color.sparkSuccess.opacity(0.08) : Color.sparkError.opacity(0.08)
-    }
-
-    private func issuerAccentColor(provider: String) -> Color {
-        switch provider.lowercased() {
-        case "monzo":    Color(red: 0.909, green: 0.467, blue: 0.369)
-        case "starling": Color(red: 0.431, green: 0.400, blue: 0.780)
-        case "amex":     Color(red: 0.239, green: 0.435, blue: 0.690)
-        case "halifax":  Color(red: 0.310, green: 0.482, blue: 0.710)
-        default:         Color.domainMoney
-        }
     }
 
     private func balanceColor(balance: Double, isNegative: Bool) -> Color {
@@ -332,11 +328,11 @@ struct AccountDetailView: View {
 
     private func accountTypeLabel(_ type: String?) -> String {
         switch type {
-        case "current_account": "Current Account"
-        case "savings_account": "Savings Account"
+        case "current_account": "Current account"
+        case "savings_account": "Savings account"
         case "mortgage": "Mortgage"
-        case "investment_account": "Investment Account"
-        case "credit_card": "Credit Card"
+        case "investment_account": "Investment account"
+        case "credit_card": "Credit card"
         case "loan": "Loan"
         case "pension": "Pension"
         default: type?.capitalized ?? "Account"

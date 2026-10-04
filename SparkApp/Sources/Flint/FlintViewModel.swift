@@ -3,6 +3,12 @@ import Observation
 import OSLog
 import SparkKit
 
+enum FlintTopicEditError: LocalizedError {
+    case missingVersion
+
+    var errorDescription: String? { "This thread needs refreshing before it can be edited." }
+}
+
 @MainActor
 @Observable
 final class FlintViewModel {
@@ -126,7 +132,10 @@ final class FlintViewModel {
             repeat {
                 let response = try await apiClient.request(FlintEndpoint.questions(cursor: cursor))
                 loaded.append(contentsOf: response.data)
-                cursor = response.meta.nextCursor
+                // The cursor is top-level on this endpoint. This read
+                // `meta.nextCursor`, which the server never sends here, so only
+                // the first page of questions ever loaded.
+                cursor = response.nextCursor
                 if let cursor, !seenCursors.insert(cursor).inserted { break }
             } while cursor != nil
 
@@ -157,8 +166,12 @@ final class FlintViewModel {
     func loadTopics() async {
         topicsState = .loading
         do {
-            let response = try await apiClient.request(FlintTopicsEndpoint.list())
-            topics = response.data.sorted {
+            // Topics are cursor-paged now; follow the cursor rather than
+            // trusting the first page to be every thread.
+            let all = try await apiClient.collectAllPages { cursor in
+                FlintTopicsEndpoint.list(cursor: cursor)
+            }
+            topics = all.sorted {
                 if $0.status?.isActive != $1.status?.isActive {
                     return $0.status?.isActive == true
                 }
@@ -192,6 +205,56 @@ final class FlintViewModel {
         }
     }
 
+    func changeTopicKind(id: String, kind: FlintTopicKind) async throws {
+        let topic = try await currentTopic(id: id)
+        guard let version = topic.version else { throw FlintTopicEditError.missingVersion }
+        let response = try await apiClient.request(FlintTopicsEndpoint.changeKind(id: id, kind: kind, etag: version))
+        topicDetails[id] = response.data
+        await loadTopics()
+    }
+
+    func createTopicTask(id: String, request: FlintTopicTaskRequest) async throws {
+        let topic = try await currentTopic(id: id)
+        guard let version = topic.version else { throw FlintTopicEditError.missingVersion }
+        _ = try await apiClient.request(FlintTopicsEndpoint.createTask(id: id, request: request, etag: version))
+        await reloadTopicDetail(id: id)
+    }
+
+    func setTopicTaskCompleted(id: String, task: FlintTopicTask, completed: Bool) async throws {
+        _ = try await apiClient.request(FlintTopicsEndpoint.updateTask(
+            id: id, taskID: task.id, request: FlintTopicTaskUpdate(completed: completed), etag: task.version
+        ))
+        await reloadTopicDetail(id: id)
+    }
+
+    func editTopicTask(id: String, task: FlintTopicTask, request: FlintTopicTaskEditRequest) async throws {
+        _ = try await apiClient.request(FlintTopicsEndpoint.editTask(
+            id: id, taskID: task.id, request: request, etag: task.version
+        ))
+        await reloadTopicDetail(id: id)
+    }
+
+    private func reloadTopicDetail(id: String) async {
+        do {
+            let response = try await apiClient.request(FlintTopicsEndpoint.detail(id: id))
+            topicDetails[id] = response.data
+            topicDetailState[id] = .loaded
+        } catch APIError.notModified {
+            topicDetailState[id] = topicDetails[id] == nil ? .idle : .loaded
+        } catch where error.isAPICancellation {
+            topicDetailState[id] = topicDetails[id] == nil ? .idle : .loaded
+        } catch {
+            SparkObservability.captureHandled(error)
+            logger.error("Flint topic detail reload failed: \(String(describing: error))")
+            topicDetailState[id] = topicDetails[id] == nil ? .error(userFacingError(error)) : .loaded
+        }
+    }
+
+    private func currentTopic(id: String) async throws -> FlintTopic {
+        if let topic = topicDetails[id] { return topic }
+        return try await apiClient.request(FlintTopicsEndpoint.detail(id: id)).data
+    }
+
     // MARK: - History
 
     func loadHistoryIfNeeded() async {
@@ -217,7 +280,9 @@ final class FlintViewModel {
                     cursor: cursor
                 ))
                 loaded.append(contentsOf: response.data)
-                cursor = response.meta.nextCursor
+                // Top-level on the wire, like the questions cursor; reading it
+                // from `meta` stopped history after the first page.
+                cursor = response.nextCursor
                 if let cursor, !seenCursors.insert(cursor).inserted { break }
             } while cursor != nil
 
@@ -386,6 +451,8 @@ final class FlintViewModel {
             kind: digest.kind,
             title: digest.title,
             summary: digest.summary,
+            opener: digest.opener,
+            effectiveTimezone: digest.effectiveTimezone,
             createdAt: digest.createdAt,
             blockCount: digest.blockCount,
             unansweredQuestionCount: digest.unansweredQuestionCount,

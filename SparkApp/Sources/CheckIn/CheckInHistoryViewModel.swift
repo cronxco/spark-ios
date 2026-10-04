@@ -18,10 +18,12 @@ final class CheckInHistoryViewModel {
 
     private let apiClient: APIClient
     private let container: ModelContainer
+    private let endDate: Date
 
-    init(apiClient: APIClient, container: ModelContainer) {
+    init(apiClient: APIClient, container: ModelContainer, endDate: Date) {
         self.apiClient = apiClient
         self.container = container
+        self.endDate = endDate
     }
 
     func load() async {
@@ -32,23 +34,23 @@ final class CheckInHistoryViewModel {
 
     private func loadFromCache() {
         let context = ModelContext(container)
-        let firstDay = Calendar.current.date(byAdding: .day, value: -27, to: .now) ?? .now
+        let firstDay = Calendar.current.date(byAdding: .day, value: -27, to: endDate) ?? endDate
         let fromKey = Self.isoDate(firstDay)
-        let toKey = Self.isoDate(.now)
+        let toKey = Self.isoDate(endDate)
         let descriptor = FetchDescriptor<CachedCheckIn>(
             predicate: #Predicate { $0.date >= fromKey && $0.date <= toKey },
             sortBy: [SortDescriptor(\.date)]
         )
         let rows = (try? context.fetch(descriptor)) ?? []
-        days = buildHistoryDays(rows: rows, fromKey: fromKey, toKey: toKey)
+        days = buildHistoryDays(rows: rows)
         computeStreak()
         state = .idle
     }
 
     private func fetchFromAPI() async {
-        let firstDay = Calendar.current.date(byAdding: .day, value: -27, to: .now) ?? .now
+        let firstDay = Calendar.current.date(byAdding: .day, value: -27, to: endDate) ?? endDate
         let fromKey = Self.isoDate(firstDay)
-        let toKey = Self.isoDate(.now)
+        let toKey = Self.isoDate(endDate)
         do {
             let response = try await apiClient.request(
                 CheckInsEndpoint.history(from: fromKey, to: toKey)
@@ -82,14 +84,14 @@ final class CheckInHistoryViewModel {
         )
     }
 
-    private func buildHistoryDays(rows: [CachedCheckIn], fromKey: String, toKey: String) -> [CheckInHistoryDay] {
+    private func buildHistoryDays(rows: [CachedCheckIn]) -> [CheckInHistoryDay] {
         var grouped: [String: [CachedCheckIn]] = [:]
         for row in rows {
             grouped[row.date, default: []].append(row)
         }
 
         let calendar = Calendar.current
-        let firstDay = calendar.date(byAdding: .day, value: -27, to: calendar.startOfDay(for: .now)) ?? .now
+        let firstDay = calendar.date(byAdding: .day, value: -27, to: calendar.startOfDay(for: endDate)) ?? endDate
         var result: [CheckInHistoryDay] = []
 
         for offset in 0..<28 {

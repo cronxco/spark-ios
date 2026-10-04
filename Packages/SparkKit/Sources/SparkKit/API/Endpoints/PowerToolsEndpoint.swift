@@ -16,6 +16,11 @@ public enum PowerToolsEndpoint {
             URLQueryItem(name: "service", value: service), URLQueryItem(name: "action", value: action), URLQueryItem(name: "from_date", value: from), URLQueryItem(name: "to_date", value: to), URLQueryItem(name: "limit", value: String(limit)),
         ].compactMap { $0.value == nil ? nil : $0 })
     }
+    // `/context/day` and `/context/service-status` are deprecated server-side
+    // (they send `Deprecation`, a `Sunset` six months out, and a `Link` to
+    // `briefing/today`, whose per-service `sync_status` supersedes
+    // service-status). Not marked `@available(deprecated)` here: warnings are
+    // errors in this project and the debug inspector still calls one.
     public static func dayContext(date: String) -> Endpoint<AnyCodable> { Endpoint(method: .get, path: "/context/day", query: [URLQueryItem(name: "date", value: date)]) }
     public static func serviceStatus(date: String) -> Endpoint<AnyCodable> { Endpoint(method: .get, path: "/context/service-status", query: [URLQueryItem(name: "date", value: date)]) }
     public static func typedSearch(kind: SparkEntityKind, query: String, semantic: Bool = true, limit: Int = 20) -> Endpoint<AnyCodable> {

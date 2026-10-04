@@ -3,59 +3,30 @@ import SparkKit
 import SparkUI
 import SwiftUI
 
-/// Map tab — full-screen MapKit view with a timeline scrubber overlay and a
-/// bottom sheet listing the points in the visible region. Pins are
-/// Spark-tinted and tap-routable to detail screens.
+/// The Explore map — MapKit with a timeline scrubber and a summary of the
+/// points in view. Pins are Spark-tinted and push onto Explore's
+/// navigation stack.
 struct MapView: View {
-    var isEmbedded: Bool = false
+    @Binding var path: [DetailRoute]
 
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: MapViewModel?
-    @State private var path: [DetailRoute] = []
     @State private var cameraPosition: MapCameraPosition = .region(MapViewModel.defaultRegion)
 
     var body: some View {
-        NavigationStack(path: $path) {
-            content
-                .navigationDestination(for: DetailRoute.self) { route in
-                    switch route {
-                    case .place(let id):
-                        PlaceDetailView(placeId: id)
-                    case .event(let id):
-                        EventDetailView(eventId: id)
-                    case .object(let id):
-                        ObjectDetailView(objectId: id)
-                    case .block(let id):
-                        BlockDetailView(blockId: id)
-                    case .metric(let identifier):
-                        MetricDetailView(identifier: identifier)
-                    case .anomaly(let id):
-                        AnomalyDetailView(anomalyId: id)
-                    case .integration(let service):
-                        IntegrationDetailView(integrationId: service)
-                    case .account(let id):
-                        AccountDetailView(accountId: id)
-                    case .tag(let id, let name, let type):
-                        TagDetailView(tagID: id, tagName: name, tagType: type)
-                    }
+        content
+            .task {
+                if viewModel == nil {
+                    viewModel = MapViewModel(apiClient: appModel.apiClient)
+                    await viewModel?.fetch()
                 }
-                .sparkMainNavigationTitle("Map")
-                .toolbar(.visible, for: .navigationBar)
-                .toolbarBackground(.hidden, for: .navigationBar)
-                .sparkMainAppToolbar()
-        }
-        .task {
-            if viewModel == nil {
-                viewModel = MapViewModel(apiClient: appModel.apiClient)
-                await viewModel?.fetch()
             }
-        }
     }
 
     @ViewBuilder
     private var content: some View {
         if let viewModel {
-            MapViewContent(viewModel: viewModel, cameraPosition: $cameraPosition, isEmbedded: isEmbedded) { point in
+            MapViewContent(viewModel: viewModel, cameraPosition: $cameraPosition, isEmbedded: true) { point in
                 handleSelection(point)
             }
         } else {
@@ -137,7 +108,7 @@ private struct MapViewContent: View {
 
     private var timelineBottomPadding: CGFloat {
         let base = SparkSpacing.xxl + SparkSpacing.xxxl
-        return isEmbedded ? base + 24 : base
+        return base
     }
 }
 

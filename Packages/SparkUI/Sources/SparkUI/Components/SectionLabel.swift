@@ -1,21 +1,27 @@
 import SwiftUI
 
-/// Small mono label used as a section heading inside detail views and Today
-/// cards. Sits flush-left above the section content.
+/// Section label that can sit above content or beside a Day filter control.
 ///
 /// Renders the text as given. Spark is sentence case throughout, labels
 /// included, so pass "Recent events", never "RECENT EVENTS".
 public struct SectionLabel: View {
-    public let text: String
+    public enum Style {
+        case compact
+        case dayHeading
+    }
 
-    public init(_ text: String) {
+    public let text: String
+    public let style: Style
+
+    public init(_ text: String, style: Style = .compact) {
         self.text = text
+        self.style = style
     }
 
     public var body: some View {
         Text(text)
-            .font(SparkTypography.monoSmall)
-            .foregroundStyle(.secondary)
+            .font(style == .dayHeading ? SparkTypography.sectionHeading : SparkTypography.captionStrong)
+            .foregroundStyle(.primary)
             .accessibilityAddTraits(.isHeader)
     }
 }

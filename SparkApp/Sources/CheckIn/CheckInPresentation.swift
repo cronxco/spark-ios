@@ -89,7 +89,7 @@ struct CheckInPeriodSummaryRow: View {
             switch status {
             case .pending:
                 Text(isEnabled ? "tap to log" : "not logged")
-                    .font(SparkTypography.monoSmall)
+                    .font(SparkTypography.caption)
                     .foregroundStyle(.secondary)
             case let .completed(physical, mental, _):
                 HStack(spacing: SparkSpacing.sm) {
@@ -131,34 +131,51 @@ struct CheckInHeatmap: View {
     let days: [CheckInHeatmapDay]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.xs) {
-            heatmapRow(label: "AM", score: \.morningScore)
-            heatmapRow(label: "PM", score: \.afternoonScore)
-            dayLabels
+        ViewThatFits(in: .horizontal) {
+            grid(cellSize: 8, spacing: 4)
+            grid(cellSize: 7, spacing: 3)
+            grid(cellSize: 6, spacing: 2)
+            grid(cellSize: 5, spacing: 1)
         }
     }
 
-    private func heatmapRow(label: String, score: KeyPath<CheckInHeatmapDay, Int?>) -> some View {
-        HStack(spacing: 4) {
+    private func grid(cellSize: CGFloat, spacing: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.xs) {
+            heatmapRow(label: "AM", score: \.morningScore, cellSize: cellSize, spacing: spacing)
+            heatmapRow(label: "PM", score: \.afternoonScore, cellSize: cellSize, spacing: spacing)
+            dayLabels(cellSize: cellSize, spacing: spacing)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func heatmapRow(
+        label: String,
+        score: KeyPath<CheckInHeatmapDay, Int?>,
+        cellSize: CGFloat,
+        spacing: CGFloat
+    ) -> some View {
+        HStack(spacing: spacing) {
             Text(label)
-                .font(.system(size: 9, weight: .medium, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(.primary)
                 .frame(width: 18, alignment: .leading)
             ForEach(days) { day in
-                CheckInHeatmapCell(score: day[keyPath: score])
+                CheckInHeatmapCell(score: day[keyPath: score], size: cellSize)
                     .accessibilityLabel("\(label) \(day.label), \(day[keyPath: score].map { "\($0) out of 10" } ?? "not logged")")
             }
         }
     }
 
-    private var dayLabels: some View {
-        HStack(spacing: 4) {
+    private func dayLabels(cellSize: CGFloat, spacing: CGFloat) -> some View {
+        HStack(spacing: spacing) {
             Color.clear.frame(width: 18, height: 1)
             ForEach(Array(days.enumerated()), id: \.element.id) { index, day in
                 Text(index % 7 == 0 || index == days.count - 1 ? day.label : "")
-                    .font(.system(size: 7, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 8)
+                    .font(.system(size: 7))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(width: cellSize)
             }
         }
     }
@@ -166,6 +183,7 @@ struct CheckInHeatmap: View {
 
 struct CheckInHeatmapCell: View {
     let score: Int?
+    let size: CGFloat
 
     var body: some View {
         RoundedRectangle(cornerRadius: 2)
@@ -177,7 +195,7 @@ struct CheckInHeatmapCell: View {
                         lineWidth: 1
                     )
             }
-            .frame(width: 8, height: 8)
+            .frame(width: size, height: size)
     }
 }
 

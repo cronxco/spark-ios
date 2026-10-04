@@ -8,13 +8,13 @@ struct CheckInHistoryView: View {
     let container: ModelContainer
 
     @Environment(\.dismiss) private var dismiss
-    @State private var historyVM: CheckInHistoryViewModel
+    let historyVM: CheckInHistoryViewModel
     @State private var selectedCheckIn: CheckInHistorySelection?
 
-    init(apiClient: APIClient, container: ModelContainer, todayViewModel: TodayViewModel) {
+    init(apiClient: APIClient, container: ModelContainer, historyVM: CheckInHistoryViewModel) {
         self.apiClient = apiClient
         self.container = container
-        _historyVM = State(initialValue: CheckInHistoryViewModel(apiClient: apiClient, container: container))
+        self.historyVM = historyVM
     }
 
     var body: some View {

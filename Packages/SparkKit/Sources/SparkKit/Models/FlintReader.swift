@@ -1,8 +1,32 @@
 import Foundation
 
-public struct FlintDigestHistoryResponse: Codable, Sendable, Hashable {
+/// `GET /flint/digests?from=…&to=…`.
+///
+/// Like the questions list, the cursor is top-level on the wire, not inside
+/// `meta`, and the client read it from `meta` — so the Flint tab's 30-day
+/// history only ever showed the first page. `nextCursor` falls back to
+/// `meta.nextCursor` for tolerance.
+public struct FlintDigestHistoryResponse: Codable, Sendable, Hashable, CursorPaged {
     public let data: [FlintDigestSummary]
     public let meta: FlintDigestHistoryMeta
+    public let nextCursor: String?
+    public let hasMore: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case data, meta
+        case nextCursor = "next_cursor"
+        case hasMore = "has_more"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        data = try c.decode([FlintDigestSummary].self, forKey: .data)
+        let decodedMeta = try c.decode(FlintDigestHistoryMeta.self, forKey: .meta)
+        let cursor = try c.decodeIfPresent(String.self, forKey: .nextCursor) ?? decodedMeta.nextCursor
+        meta = decodedMeta
+        nextCursor = cursor
+        hasMore = try c.decodeIfPresent(Bool.self, forKey: .hasMore) ?? (cursor != nil)
+    }
 }
 
 public struct FlintDigestSummary: Codable, Sendable, Hashable, Identifiable {
@@ -52,9 +76,34 @@ public struct FlintDigestHistoryMeta: Codable, Sendable, Hashable {
     }
 }
 
-public struct FlintQuestionsResponse: Codable, Sendable, Hashable {
+/// `GET /flint/questions`.
+///
+/// The cursor sits at the top level, in the shared envelope — not inside
+/// `meta`. The client used to read `meta.next_cursor`, which the server has
+/// never sent for this endpoint, so the Flint tab only ever loaded the first
+/// page of questions. `meta.nextCursor` is still decoded for tolerance, and
+/// `nextCursor` falls back to it.
+public struct FlintQuestionsResponse: Codable, Sendable, Hashable, CursorPaged {
     public let data: [FlintQuestion]
     public let meta: FlintQuestionsMeta
+    public let nextCursor: String?
+    public let hasMore: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case data, meta
+        case nextCursor = "next_cursor"
+        case hasMore = "has_more"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        data = try c.decode([FlintQuestion].self, forKey: .data)
+        let decodedMeta = try c.decode(FlintQuestionsMeta.self, forKey: .meta)
+        let cursor = try c.decodeIfPresent(String.self, forKey: .nextCursor) ?? decodedMeta.nextCursor
+        meta = decodedMeta
+        nextCursor = cursor
+        hasMore = try c.decodeIfPresent(Bool.self, forKey: .hasMore) ?? (cursor != nil)
+    }
 }
 
 public struct FlintQuestion: Codable, Sendable, Hashable, Identifiable {
@@ -62,6 +111,9 @@ public struct FlintQuestion: Codable, Sendable, Hashable, Identifiable {
     public let digestID: String
     public let sourceDigest: FlintQuestionSourceDigest
     public let status: FlintQuestionStatus
+    /// The short label the question carries as a digest block — "The £2,508
+    /// transfer from Daniel" — where `question` is the full text.
+    public let title: String?
     public let question: String
     public let topic: String?
     public let answerOptions: [String]?
@@ -71,7 +123,7 @@ public struct FlintQuestion: Codable, Sendable, Hashable, Identifiable {
     public let version: String
 
     enum CodingKeys: String, CodingKey {
-        case id, status, question, topic, version
+        case id, status, title, question, topic, version
         case digestID = "digest_id"
         case sourceDigest = "source_digest"
         case answerOptions = "answer_options"
@@ -84,7 +136,7 @@ public struct FlintQuestion: Codable, Sendable, Hashable, Identifiable {
         FlintDigestBlock(
             id: id,
             blockType: "flint_user_question",
-            title: question,
+            title: title ?? question,
             time: askedAt,
             question: question,
             topic: topic,
@@ -98,7 +150,10 @@ public struct FlintQuestion: Codable, Sendable, Hashable, Identifiable {
 }
 
 public struct FlintQuestionSourceDigest: Codable, Sendable, Hashable {
-    public let localDate: String
+    /// Nullable on the wire: the server falls back to the digest event's time
+    /// and has neither for a block whose event is gone. Non-optional here, one
+    /// such question failed the whole page.
+    public let localDate: String?
     public let period: FlintDigestPeriod?
 
     enum CodingKeys: String, CodingKey {

@@ -83,6 +83,7 @@ final class AccountDetailViewModel {
                 interestRate: updated.interestRate,
                 startDate: updated.startDate,
                 integrationId: updated.integrationId,
+                isPinned: updated.isPinned,
                 latestBalance: entry,
                 updatedAt: updated.updatedAt
             )
@@ -92,5 +93,19 @@ final class AccountDetailViewModel {
 
     func accountUpdated(_ updated: MoneyAccount) {
         account = updated
+    }
+
+    private(set) var isUpdatingPin = false
+
+    /// Pins or unpins this account as the one the Day tab shows. Any account
+    /// type can be pinned, and pinning one unpins the previous one server-side
+    /// — at most one per user.
+    func setPinned(_ pinned: Bool) async throws {
+        isUpdatingPin = true
+        defer { isUpdatingPin = false }
+        let response = try await apiClient.request(
+            MoneyEndpoint.updateAccount(id: accountId, UpdateAccountRequest(isPinned: pinned))
+        )
+        account = response.data
     }
 }

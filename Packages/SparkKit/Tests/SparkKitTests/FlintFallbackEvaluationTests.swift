@@ -63,4 +63,24 @@ struct FlintFallbackEvaluationTests {
         // Anomaly signal should surface so the model/fallback can reference it.
         #expect(facts.anomalies.isEmpty == false)
     }
+
+    @Test("A day with data has a summary signal")
+    func summarySignalWithData() throws {
+        #expect(try makeFacts().hasSummarySignal)
+    }
+
+    @Test("An empty day has no summary signal, so the greeting stays hidden")
+    func summarySignalWhenEmpty() throws {
+        let json = """
+        {
+          "date": "2026-06-21",
+          "timezone": "Europe/London",
+          "sync_status": { "up_to_date": true, "stale": [] },
+          "sections": { "health": null, "activity": null, "money": null, "media": null, "knowledge": null },
+          "anomalies": []
+        }
+        """
+        let summary = try JSONDecoder().decode(DaySummary.self, from: Data(json.utf8))
+        #expect(!FlintBriefingFacts(summary: summary).hasSummarySignal)
+    }
 }

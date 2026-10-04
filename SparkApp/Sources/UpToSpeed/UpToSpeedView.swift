@@ -16,6 +16,8 @@ struct UpToSpeedView: View {
     @State private var isKeyboardVisible = false
     @State private var showsRecap = false
     @State private var noteComposerContext: FlintNoteContext?
+    /// Bumped on each Mark-as-read tap to drive its haptic.
+    @State private var readToggleCount = 0
     @State private var headerHeight: CGFloat = 0
     @State private var isCurrentStoryAtTop = true
     @State private var dismissDragStartedAtTop: Bool?
@@ -182,25 +184,7 @@ struct UpToSpeedView: View {
                         .monospacedDigit()
                 }
                 Spacer(minLength: 0)
-                Button {
-                    noteComposerContext = currentScreen(in: vm)?.flintNoteContext ?? .generic
-                } label: {
-                    Image(systemName: "square.and.pencil")
-                        .frame(width: 44, height: 44)
-                        .sparkGlass(.circle)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.primary)
-                .accessibilityLabel("Note to Flint")
-                Button { showsRecap = true } label: {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .frame(width: 44, height: 44)
-                        .sparkGlass(.circle)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.primary)
-                .accessibilityLabel("Recap")
-                closeButton { dismissFlow(vm: vm) }
+                toolbarCapsule(vm: vm)
             }
 
             if vm.newItemsAvailable > 0 {
@@ -225,13 +209,70 @@ struct UpToSpeedView: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
     }
 
+    /// One glass capsule for every control, grouped the way the day page's
+    /// toolbar is, rather than a row of separate circles. Mark-as-read joins
+    /// it only on a Headlines article, the one place it applies.
+    private func toolbarCapsule(vm: UpToSpeedViewModel) -> some View {
+        let article = markableArticle(in: vm)
+        return HStack(spacing: 0) {
+            if let article {
+                let isRead = vm.isMarkedRead(article.id)
+                toolbarButton(
+                    systemImage: isRead ? "checkmark.circle.fill" : "checkmark.circle",
+                    label: isRead ? "Mark as unread" : "Mark as read"
+                ) {
+                    readToggleCount += 1
+                    Task { await vm.toggleRead(article) }
+                }
+                .contentTransition(.symbolEffect(.replace))
+                .transition(.opacity)
+            }
+            toolbarButton(systemImage: "square.and.pencil", label: "Note to Flint") {
+                noteComposerContext = currentScreen(in: vm)?.flintNoteContext ?? .generic
+            }
+            toolbarButton(systemImage: "clock.arrow.circlepath", label: "Recap") {
+                showsRecap = true
+            }
+            toolbarButton(systemImage: "xmark", label: "Close") {
+                dismissFlow(vm: vm)
+            }
+            // The dismiss drag would otherwise compete for the tap.
+            .highPriorityGesture(TapGesture().onEnded { dismissFlow(vm: vm) })
+        }
+        .padding(.horizontal, SparkSpacing.xs)
+        .sparkGlass(.capsule)
+        .animation(reduceMotion ? nil : .snappy, value: article?.id)
+        .sensoryFeedback(.selection, trigger: readToggleCount)
+    }
+
+    private func toolbarButton(systemImage: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(.primary)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
+    /// The article on screen, when it's one the reader can mark by hand.
+    private func markableArticle(in vm: UpToSpeedViewModel) -> UpToSpeedItem? {
+        guard vm.currentChapter?.kind == .headlines,
+              case .newsSummary(let item)? = currentScreen(in: vm) else { return nil }
+        return item
+    }
+
     private func currentScreen(in viewModel: UpToSpeedViewModel) -> UpToSpeedScreen? {
         guard viewModel.screens.indices.contains(viewModel.currentIndex) else { return nil }
         return viewModel.screens[viewModel.currentIndex]
     }
 
     private func progressChapters(vm: UpToSpeedViewModel) -> [StoryProgressBar.ChapterSpec] {
-        vm.chapters.map { .init(label: $0.shortLabel, segments: max($0.cardCount, 1), accent: $0.accent) }
+        vm.chapters.map {
+            .init(label: $0.shortLabel, segments: max($0.cardCount, 1), accent: $0.accent, compact: $0.kind == .headlines)
+        }
     }
 
     private var dismissDragGesture: some Gesture {
@@ -324,6 +365,14 @@ struct UpToSpeedView: View {
             )
         case .newsSummary(let item):
             NewsSummaryScreen(item: item, isActive: isActive, onReachedBottom: consumed, viewModel: vm)
+        case .headlinesIndex(let articles, let citedStories):
+            HeadlinesIndexScreen(
+                articles: articles,
+                citedStories: citedStories,
+                viewModel: vm,
+                isActive: isActive,
+                onReachedBottom: consumed
+            )
         case .wrap:
             WrapScreen(
                 viewModel: vm,

@@ -8,12 +8,16 @@ public enum CheckInsEndpoint {
     }()
 
     /// POST /check-ins — submit or update a morning/afternoon check-in.
-    public static func submit(_ request: CheckInRequest) -> Endpoint<CheckInEvent> {
+    /// The idempotency key is minted with the endpoint, so the client's
+    /// transport retries on a bad connection replay one check-in instead of
+    /// logging two.
+    public static func submit(_ request: CheckInRequest, idempotencyKey: UUID = UUID()) -> Endpoint<CheckInEvent> {
         Endpoint(
             method: .post,
             path: "/check-ins",
             body: try? encoder.encode(request),
-            contentType: "application/json"
+            contentType: "application/json",
+            headers: ["Idempotency-Key": idempotencyKey.uuidString]
         )
     }
 
