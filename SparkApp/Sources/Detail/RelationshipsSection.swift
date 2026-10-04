@@ -4,6 +4,7 @@ import SwiftUI
 
 /// Authoritative relationship list for every owned entity detail.
 struct RelationshipsSection: View {
+    var title = "Relationships"
     let kind: SparkEntityKind
     let entityID: String
     let apiClient: APIClient
@@ -20,7 +21,7 @@ struct RelationshipsSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-            SparkDetailSectionHeader("Relationships", trailing: relationships.isEmpty ? nil : "\(relationships.count)")
+            SparkDetailSectionHeader(title, trailing: relationships.isEmpty ? nil : "\(relationships.count)")
             if isLoading {
                 ProgressView().frame(maxWidth: .infinity)
             } else if let errorMessage {

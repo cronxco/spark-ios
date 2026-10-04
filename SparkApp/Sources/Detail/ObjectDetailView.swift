@@ -134,7 +134,7 @@ struct ObjectDetailView: View {
             .padding(.bottom, SparkSpacing.xl)
         }
         .sparkAppBackground()
-        .navigationTitle("Object")
+        .navigationTitle(isPerson ? "Person" : "Object")
         .navigationBarTitleDisplayMode(.inline)
         .sparkSubViewToolbar(
             shareItems: objectShareItems,
@@ -192,6 +192,12 @@ struct ObjectDetailView: View {
         return ["Spark Object: \(detail.object.title)"]
     }
 
+    /// People get the person layout: avatar header, their events and connections.
+    private var isPerson: Bool {
+        if case .loaded(let detail) = viewModel?.state { return detail.object.isPerson }
+        return false
+    }
+
     private var isLoaded: Bool {
         if viewModel?.isDeleted == true { return false }
         if case .loaded = viewModel?.state { return true }
@@ -218,7 +224,11 @@ struct ObjectDetailView: View {
 
     @ViewBuilder
     private func content(for detail: ObjectDetail) -> some View {
-        heroSection(for: detail)
+        if detail.object.isPerson {
+            PersonHero(person: detail.object, eventCount: detail.recentEvents.count)
+        } else {
+            heroSection(for: detail)
+        }
 
         if let summary = detail.aiSummary, !summary.isEmpty {
             SparkDetailInsightCard(label: "Insight", text: summary)
@@ -227,6 +237,7 @@ struct ObjectDetailView: View {
         tagSection(for: detail)
 
         RelationshipsSection(
+            title: detail.object.isPerson ? "Connections" : "Relationships",
             kind: .objects,
             entityID: detail.id,
             apiClient: appModel.apiClient,
@@ -251,7 +262,10 @@ struct ObjectDetailView: View {
 
         if !detail.recentEvents.isEmpty {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                SparkDetailSectionHeader("Recent events", trailing: "\(detail.recentEvents.count) events")
+                SparkDetailSectionHeader(
+                    detail.object.isPerson ? "With \(detail.object.title)" : "Recent events",
+                    trailing: "\(detail.recentEvents.count) events"
+                )
                 ForEach(detail.recentEvents) { event in
                     NavigationLink {
                         EventDetailView(eventId: event.id)
