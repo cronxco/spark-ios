@@ -4,11 +4,12 @@ import SwiftUI
 
 /// Authoritative relationship list for every owned entity detail.
 struct RelationshipsSection: View {
+    var title = "Relationships"
     let kind: SparkEntityKind
     let entityID: String
     let apiClient: APIClient
     let create: @MainActor (RelationshipCreateRequest) async throws -> EntityRelationship
-    let delete: @MainActor (String) async throws -> Void
+    let delete: @MainActor (EntityRelationship) async throws -> Void
 
     @State private var relationships = [EntityRelationship]()
     @State private var isLoading = true
@@ -20,7 +21,7 @@ struct RelationshipsSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-            SparkDetailSectionHeader("Relationships", trailing: relationships.isEmpty ? nil : "\(relationships.count)")
+            SparkDetailSectionHeader(title, trailing: relationships.isEmpty ? nil : "\(relationships.count)")
             if isLoading {
                 ProgressView().frame(maxWidth: .infinity)
             } else if let errorMessage {
@@ -39,7 +40,7 @@ struct RelationshipsSection: View {
         }
         .task(id: "\(kind.rawValue):\(entityID)") { await load() }
         .sheet(isPresented: $showingAddSheet) {
-            RelationshipEditorSheet(sourceKind: kind, sourceID: entityID) { request in try await add(request) }
+            RelationshipEditorSheet(sourceKind: kind, sourceID: entityID, apiClient: apiClient) { request in try await add(request) }
         }
         .confirmationDialog("Delete relationship?", isPresented: Binding(get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } })) {
             Button("Delete relationship", role: .destructive) {
@@ -93,7 +94,7 @@ struct RelationshipsSection: View {
 
     private func remove(_ relationship: EntityRelationship) async {
         isMutating = true; defer { isMutating = false; pendingDeletion = nil }
-        do { try await delete(relationship.id); relationships.removeAll { $0.id == relationship.id } }
+        do { try await delete(relationship); relationships.removeAll { $0.id == relationship.id } }
         catch { mutationError = (error as? LocalizedError)?.errorDescription ?? "Please try again." }
     }
 }
@@ -101,6 +102,7 @@ struct RelationshipsSection: View {
 private struct RelationshipEditorSheet: View {
     let sourceKind: SparkEntityKind
     let sourceID: String
+    let apiClient: APIClient
     let save: @MainActor (RelationshipCreateRequest) async throws -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(AppModel.self) private var appModel
@@ -114,7 +116,12 @@ private struct RelationshipEditorSheet: View {
     @State private var isSearching = false
     @State private var isSaving = false
     @State private var errorMessage: String?
-    private let relationshipTypes = ["related_to", "references", "part_of", "causes", "follows"]
+    /// Types come from the server's registry, so the app never offers one the API rejects.
+    @State private var typeOptions = [RelationshipTypeOption]()
+
+    private var pickerTypes: [(type: String, name: String)] {
+        typeOptions.isEmpty ? [("related_to", "Related To")] : typeOptions.map { ($0.type, $0.displayName) }
+    }
 
     var body: some View {
         NavigationStack {
@@ -136,17 +143,30 @@ private struct RelationshipEditorSheet: View {
                     }
                 }
                 Section("Relationship") {
-                    Picker("Type", selection: $relationshipType) { ForEach(relationshipTypes, id: \.self) { Text($0.replacingOccurrences(of: "_", with: " ").capitalized).tag($0) } }
+                    Picker("Type", selection: $relationshipType) { ForEach(pickerTypes, id: \.type) { Text($0.name).tag($0.type) } }
                     TextField("Numeric value (optional)", text: $value).keyboardType(.decimalPad)
                     TextField("Unit (optional)", text: $valueUnit)
                 }
                 if let errorMessage { Section { Text(errorMessage).foregroundStyle(.red) } }
             }
             .navigationTitle("Add relationship")
+            .task { await loadTypes() }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) { Button("Add") { Task { await submit() } }.disabled(target == nil || isSaving) }
             }
+        }
+    }
+
+    private func loadTypes() async {
+        do {
+            let options = try await apiClient.request(EntityMutationsEndpoint.relationshipTypes()).data
+            typeOptions = options
+            if let first = options.first, !options.contains(where: { $0.type == relationshipType }) {
+                relationshipType = first.type
+            }
+        } catch {
+            typeOptions = []
         }
     }
 

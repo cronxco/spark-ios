@@ -65,4 +65,24 @@ struct ObjectDetailDecodingTests {
         #expect(detail.tags.map(\.name) == ["reading", "coffee"])
         #expect(detail.tags.last?.tagID == "12")
     }
+
+    @Test("recognises a person and their avatar")
+    func decodesPerson() throws {
+        let detail = try JSONDecoder().decode(ObjectDetail.self, from: Data("""
+        {
+          "id":"obj_p", "concept":"person", "type":"immich_person", "title":"Dan",
+          "media_url":"https://photos.example.com/api/people/p1/thumbnail",
+          "recent_events":[{"id":"evt_1","service":"home_assistant","domain":"media","action":"watched","actor":{"id":"obj_p","title":"Dan","concept":"person"}}]
+        }
+        """.utf8))
+        #expect(detail.object.isPerson)
+        #expect(detail.object.mediaURL?.host() == "photos.example.com")
+        #expect(detail.recentEvents.first?.actor?.isPerson == true)
+
+        let account = try JSONDecoder().decode(ObjectDetail.self, from: Data("""
+        {"id":"obj_a", "concept":"account", "type":"monzo_account", "title":"Current", "media_url":""}
+        """.utf8))
+        #expect(!account.object.isPerson)
+        #expect(account.object.mediaURL == nil)
+    }
 }

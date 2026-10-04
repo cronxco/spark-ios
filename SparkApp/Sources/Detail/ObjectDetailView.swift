@@ -9,6 +9,7 @@ final class ObjectDetailViewModel: ETagDetailMutationHandling {
     var state: DetailLoadState<ObjectDetail> = .loading
     var rawPayload: String?
     var etag: String?
+    private(set) var isDeleted = false
 
     let apiClient: APIClient
 
@@ -31,6 +32,25 @@ final class ObjectDetailViewModel: ETagDetailMutationHandling {
             let msg = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
             state = .error(msg)
         }
+    }
+
+    /// Soft delete. Its events are kept, and Undo brings the object back.
+    func delete() async throws {
+        let version = try currentETag()
+        do {
+            _ = try await apiClient.request(ObjectsEndpoint.delete(id: objectId, etag: version))
+        } catch APIError.httpStatus(412, _, _) {
+            try? await refreshVersion(EntityMutationsEndpoint.detailForWrite(kind: .objects, id: objectId, response: ObjectDetail.self))
+            throw EntityDeleteError.changedElsewhere
+        }
+        isDeleted = true
+    }
+
+    /// Undo for `delete`. The restore body has no recent events, so re-read the detail.
+    func restore() async throws {
+        _ = try await apiClient.request(ObjectsEndpoint.restore(id: objectId))
+        isDeleted = false
+        await refreshAfterCompletedMutation(EntityMutationsEndpoint.detailForWrite(kind: .objects, id: objectId, response: ObjectDetail.self))
     }
 
     func attachTag(_ request: TagMutationRequest) async throws {
@@ -59,16 +79,12 @@ final class ObjectDetailViewModel: ETagDetailMutationHandling {
         let response = try await apiClient.requestWithRawResponse(
             try EntityMutationsEndpoint.createRelationship(kind: .objects, id: objectId, request: request, etag: etag)
         )
-        self.etag = response.etag ?? etag
+        try await adoptVersion(after: response.decoded, kind: .objects, id: objectId)
         return response.decoded
     }
 
-    func deleteRelationship(_ relationshipID: String) async throws {
-        guard let etag else { throw TagMutationError.missingETag }
-        let response = try await apiClient.requestWithRawResponse(
-            EntityMutationsEndpoint.deleteRelationship(id: relationshipID, etag: etag)
-        )
-        self.etag = response.etag ?? etag
+    func deleteRelationship(_ relationship: EntityRelationship) async throws {
+        try await deleteRelationship(relationship, kind: .objects, id: objectId)
     }
 
     func update(_ attributes: [String: AnyCodable]) async throws {
@@ -93,6 +109,7 @@ struct ObjectDetailView: View {
     @State private var tagMutationError: String?
     @State private var showEditor = false
     @State private var showLocationEditor = false
+    @State private var confirmDelete = false
 
     var body: some View {
         ScrollView {
@@ -117,7 +134,7 @@ struct ObjectDetailView: View {
             .padding(.bottom, SparkSpacing.xl)
         }
         .sparkAppBackground()
-        .navigationTitle("Object")
+        .navigationTitle(isPerson ? "Person" : "Object")
         .navigationBarTitleDisplayMode(.inline)
         .sparkSubViewToolbar(
             shareItems: objectShareItems,
@@ -126,7 +143,14 @@ struct ObjectDetailView: View {
             feedbackContext: objectFeedbackContext,
             refresh: { await viewModel?.load() }
         )
-        .toolbar { ToolbarItemGroup(placement: .topBarTrailing) { Button("Edit") { showEditor = true }.disabled(!isLoaded); Button { showLocationEditor = true } label: { Image(systemName: "mappin.and.ellipse") }.accessibilityLabel("Edit location").disabled(!isLoaded) } }
+        .toolbar { ToolbarItemGroup(placement: .topBarTrailing) { Button("Edit") { showEditor = true }.disabled(!isLoaded); Button { showLocationEditor = true } label: { Image(systemName: "mappin.and.ellipse") }.accessibilityLabel("Edit location").disabled(!isLoaded); Button(role: .destructive) { confirmDelete = true } label: { Image(systemName: "trash") }.accessibilityLabel("Delete object").disabled(!isLoaded) } }
+        .sparkDeleteWithUndo(
+            noun: "object",
+            isDeleted: viewModel?.isDeleted == true,
+            isConfirming: $confirmDelete,
+            delete: { try await viewModel?.delete() },
+            restore: { try await viewModel?.restore() }
+        )
         .task(id: objectId) {
             if viewModel == nil {
                 viewModel = ObjectDetailViewModel(objectId: objectId, apiClient: appModel.apiClient)
@@ -168,7 +192,14 @@ struct ObjectDetailView: View {
         return ["Spark Object: \(detail.object.title)"]
     }
 
+    /// People get the person layout: avatar header, their events and connections.
+    private var isPerson: Bool {
+        if case .loaded(let detail) = viewModel?.state { return detail.object.isPerson }
+        return false
+    }
+
     private var isLoaded: Bool {
+        if viewModel?.isDeleted == true { return false }
         if case .loaded = viewModel?.state { return true }
         return false
     }
@@ -193,7 +224,11 @@ struct ObjectDetailView: View {
 
     @ViewBuilder
     private func content(for detail: ObjectDetail) -> some View {
-        heroSection(for: detail)
+        if detail.object.isPerson {
+            PersonHero(person: detail.object, eventCount: detail.recentEvents.count)
+        } else {
+            heroSection(for: detail)
+        }
 
         if let summary = detail.aiSummary, !summary.isEmpty {
             SparkDetailInsightCard(label: "Insight", text: summary)
@@ -202,6 +237,7 @@ struct ObjectDetailView: View {
         tagSection(for: detail)
 
         RelationshipsSection(
+            title: detail.object.isPerson ? "Connections" : "Relationships",
             kind: .objects,
             entityID: detail.id,
             apiClient: appModel.apiClient,
@@ -209,9 +245,9 @@ struct ObjectDetailView: View {
                 guard let viewModel else { throw TagMutationError.missingETag }
                 return try await viewModel.createRelationship(request)
             },
-            delete: { relationshipID in
+            delete: { relationship in
                 guard let viewModel else { throw TagMutationError.missingETag }
-                try await viewModel.deleteRelationship(relationshipID)
+                try await viewModel.deleteRelationship(relationship)
             }
         )
 
@@ -226,7 +262,10 @@ struct ObjectDetailView: View {
 
         if !detail.recentEvents.isEmpty {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                SparkDetailSectionHeader("Recent events", trailing: "\(detail.recentEvents.count) events")
+                SparkDetailSectionHeader(
+                    detail.object.isPerson ? "With \(detail.object.title)" : "Recent events",
+                    trailing: "\(detail.recentEvents.count) events"
+                )
                 ForEach(detail.recentEvents) { event in
                     NavigationLink {
                         EventDetailView(eventId: event.id)
