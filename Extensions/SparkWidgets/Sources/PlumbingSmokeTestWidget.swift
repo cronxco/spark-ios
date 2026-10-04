@@ -1,5 +1,6 @@
 import SparkKit
 import SwiftData
+import SparkUI
 import SwiftUI
 import WidgetKit
 
@@ -7,7 +8,7 @@ import WidgetKit
 /// Keychain are reachable from an extension before we start building real
 /// widget content in Phase 3.
 struct PlumbingSmokeTestWidget: Widget {
-    let kind: String = "co.cronx.spark.widgets.plumbing"
+    let kind: String = "co.cronx.sparkapp.widgets.plumbing"
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: PlumbingProvider()) { entry in
@@ -88,7 +89,7 @@ struct PlumbingSmokeTestView: View {
             }
         }
         .padding(12)
-        .containerBackground(for: .widget) { Color(.systemBackground) }
+        .containerBackground(for: .widget) { Color.sparkSurface }
     }
 
     private func row(label: String, ok: Bool) -> some View {

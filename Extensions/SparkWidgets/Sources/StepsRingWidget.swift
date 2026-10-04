@@ -1,8 +1,9 @@
+import SparkUI
 import SwiftUI
 import WidgetKit
 
 struct StepsRingWidget: Widget {
-    let kind = "co.cronx.spark.widgets.steps"
+    let kind = "co.cronx.sparkapp.widgets.steps"
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: SparkTimelineProvider()) { entry in
@@ -53,6 +54,6 @@ struct StepsRingWidgetView: View {
     private var containerBG: some View {
         ContainerRelativeShape()
             .fill(.green.opacity(0.10))
-            .containerBackground(for: .widget) { Color(.systemBackground) }
+            .containerBackground(for: .widget) { Color.sparkSurface }
     }
 }

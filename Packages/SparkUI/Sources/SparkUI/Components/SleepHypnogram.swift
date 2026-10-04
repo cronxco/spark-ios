@@ -21,7 +21,7 @@ public struct SleepHypnogram: View {
 
     public init(
         stages: [Stage],
-        tint: Color = .ocean300,
+        tint: Color = .sky5,
         height: CGFloat = 36
     ) {
         self.stages = stages

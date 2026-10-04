@@ -8,6 +8,7 @@ import SwiftUI
 struct MapBottomSheet: View {
     let points: [MapDataPoint]
     let onSelect: (MapDataPoint) -> Void
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
@@ -34,6 +35,16 @@ struct MapBottomSheet: View {
             }
             .navigationTitle("In view")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("Close")
+                }
+            }
         }
     }
 }

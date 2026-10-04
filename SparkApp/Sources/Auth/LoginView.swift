@@ -10,11 +10,9 @@ struct LoginView: View {
             Image(systemName: "sparkles")
                 .font(.system(size: 72, weight: .regular, design: .rounded))
                 .foregroundStyle(Color.sparkAccent)
-            Text("Spark")
-                .font(SparkTypography.displayLarge)
-            Text("Your day, unified.")
-                .font(SparkTypography.bodySmall)
-                .foregroundStyle(.secondary)
+            SparkSystemScreenHeader(title: "Spark", subtitle: "Your day, unified.")
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
             Spacer()
             PillButton("Sign in with Spark", systemImage: "arrow.right.circle.fill") {
                 Task {
@@ -32,6 +30,6 @@ struct LoginView: View {
             Spacer().frame(height: SparkSpacing.xxl)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.sparkSurface.ignoresSafeArea())
+        .sparkAppBackground()
     }
 }

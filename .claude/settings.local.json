@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(xcodebuild build *)",
+      "WebFetch(domain:api.anthropic.com)",
+      "Bash(./vendor/bin/sail test *)",
+      "Bash(swift test *)",
+      "Bash(tuist generate *)",
+      "Bash(xcodebuild test *)",
+      "Bash(xcodebuild -workspace Spark.xcworkspace -list)",
+      "mcp__claude_ai_Linear__get_issue",
+      "mcp__claude_ai_Linear__list_comments",
+      "WebSearch"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "context7"
+  ]
+}

@@ -50,66 +50,41 @@ struct HealthKitWaveStep: View {
     private var mgr: HealthKitPermissionManager { appModel.healthPermissions }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: SparkSpacing.xl) {
-                Spacer().frame(height: SparkSpacing.xl)
-
-                Image(systemName: wave.icon)
-                    .font(.system(size: 48, weight: .light))
-                    .foregroundStyle(Color.sparkAccent)
-
-                VStack(spacing: SparkSpacing.sm) {
-                    Text(wave.title)
-                        .font(SparkFonts.display(.title, weight: .bold))
-                    Text(wave.why)
-                        .font(SparkTypography.body)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-
-                GlassCard {
-                    VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                        ForEach(wave.types, id: \.self) { type in
-                            HStack(spacing: SparkSpacing.sm) {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(Color.sparkAccent)
-                                Text(type)
-                                    .font(SparkTypography.body)
-                            }
-                        }
-                    }
-                }
-
-                Spacer()
-
-                VStack(spacing: SparkSpacing.md) {
-                    if currentState == .granted {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(Color.sparkSuccess)
-                            Text("Access granted")
+        SparkOnboardingScaffold(icon: wave.icon, title: wave.title, bodyText: wave.why) {
+            GlassCard {
+                VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                    ForEach(wave.types, id: \.self) { type in
+                        HStack(spacing: SparkSpacing.sm) {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(Color.sparkAccent)
+                            Text(type)
                                 .font(SparkTypography.body)
                         }
-                        PillButton("Continue", systemImage: "arrow.right.circle.fill", action: proceed)
-                    } else {
-                        PillButton("Allow \(wave.title)", systemImage: "heart.fill") {
-                            Task {
-                                await requestAuthorisation()
-                                proceed()
-                            }
-                        }
-                        Button("Skip for now") { proceed() }
-                            .font(SparkTypography.bodySmall)
-                            .foregroundStyle(.secondary)
                     }
                 }
-                .padding(.bottom, SparkSpacing.xxl)
             }
-            .padding(.horizontal, SparkSpacing.xl)
+        } actions: {
+            if currentState == .granted {
+                HStack {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Color.sparkSuccess)
+                    Text("Access granted")
+                        .font(SparkTypography.body)
+                }
+                PillButton("Continue", systemImage: "arrow.right.circle.fill", action: proceed)
+            } else {
+                PillButton("Allow \(wave.title)", systemImage: "heart.fill") {
+                    Task {
+                        await requestAuthorisation()
+                        proceed()
+                    }
+                }
+                Button("Skip for now") { proceed() }
+                    .font(SparkTypography.bodySmall)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .scrollContentBackground(.hidden)
-        .background(Color.sparkSurface.ignoresSafeArea())
     }
 
     private var currentState: HealthKitPermissionManager.AuthState {

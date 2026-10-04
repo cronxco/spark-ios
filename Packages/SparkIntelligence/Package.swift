@@ -1,9 +1,9 @@
-// swift-tools-version: 6.2
+// swift-tools-version: 6.4
 import PackageDescription
 
 let package = Package(
     name: "SparkIntelligence",
-    platforms: [.iOS(.v26)],
+    platforms: [.macOS(.v27), .iOS(.v27)],
     products: [.library(name: "SparkIntelligence", targets: ["SparkIntelligence"])],
     dependencies: [.package(path: "../SparkKit")],
     targets: [
@@ -11,6 +11,11 @@ let package = Package(
             name: "SparkIntelligence",
             dependencies: ["SparkKit"],
             path: "Sources/SparkIntelligence"
+        ),
+        .testTarget(
+            name: "SparkIntelligenceTests",
+            dependencies: ["SparkIntelligence", "SparkKit"],
+            path: "Tests/SparkIntelligenceTests"
         ),
     ]
 )

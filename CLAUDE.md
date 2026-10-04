@@ -16,7 +16,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Tech Stack
 
 - **Language**: Swift 6.2 with strict concurrency enforcement (`SWIFT_STRICT_CONCURRENCY=complete`)
-- **Minimum OS**: iOS 26.0 (also watchOS 26.0 for Phase 5)
+- **Minimum OS**: iOS 27.0 (also watchOS 27.0 for Phase 5)
+- **AI / Siri**: iOS 27 Foundation Models (on-device + Private Cloud Compute), App Intents with `AppEntity`/`IndexedEntity` semantic indexing for the rebuilt Siri
 - **Project generation**: Tuist 4.x (not native Xcode workspace)
 - **Package management**: SPM (Swift Package Manager) with 6 local packages + Sentry remote dependency
 - **Data persistence**: SwiftData with App Group shared container
@@ -69,7 +70,7 @@ Watch/                       # Apple Watch (Phase 5 stubs)
 Tests/SparkAppTests/         # Cross-target app tests
 
 Project.swift                # Tuist project definition
-Tuist.swift                  # Tuist config (Xcode 26, Swift 6.0)
+Tuist.swift                  # Tuist config (Xcode 27, Swift 6.0)
 .github/workflows/ios.yml    # CI: runs tests on push/PR to main/dev
 ```
 
@@ -78,7 +79,7 @@ Tuist.swift                  # Tuist config (Xcode 26, Swift 6.0)
 ### Prerequisites
 
 ```bash
-# Xcode 26 (or Xcode 26 beta at /Applications/Xcode-beta.app)
+# Xcode 27 (or Xcode 27 beta at /Applications/Xcode-beta.app)
 # macOS 15+
 # Tuist 4.x
 brew install tuist
@@ -94,20 +95,16 @@ cd spark-ios
 tuist generate
 ```
 
-This creates `Spark.xcworkspace`. Open in Xcode 26.
+This creates `Spark.xcworkspace`. Open in Xcode 27.
 
-### Provisioning (Personal Team Setup)
+### Provisioning
 
 Each target shares:
-- **App Group**: `group.co.cronx.spark`
+- **App Group**: `group.co.cronx.sparkapp`
 - **Keychain access group**: `$(AppIdentifierPrefix)co.cronx.spark`
 - **Associated domain**: `applinks:spark.cronx.co`
 
-In Xcode, for each target:
-1. Select target → Signing & Capabilities → pick your Team
-2. Xcode auto-registers App Group, Keychain Sharing, Associated Domains, Push Notifications, HealthKit
-
-No Project.swift changes needed; `DEVELOPMENT_TEAM` is auto-read from Xcode user settings.
+The William Scott development team is declared in `Project.swift`, so `tuist generate` preserves signing automatically. Xcode can then auto-register App Group, Keychain Sharing, Associated Domains, Push Notifications, and HealthKit as needed.
 
 ## Build & Test Commands
 
@@ -121,11 +118,11 @@ tuist generate
 xcodebuild build \
   -workspace Spark.xcworkspace \
   -scheme SparkApp \
-  -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' \
+  -destination 'platform=iOS Simulator,name=iPhone 18 Pro Max,OS=27.0' \
   -configuration Debug
 
 # Build from Xcode
-# Select SparkApp scheme → iPhone 16 Pro simulator → ⌘B
+# Select SparkApp scheme → iPhone 18 Pro Max simulator → ⌘B
 ```
 
 ### Test
@@ -134,17 +131,17 @@ xcodebuild build \
 # SparkKit unit tests (SPM layer, fastest)
 cd Packages/SparkKit && swift test
 
-# Full app tests (requires iOS 26 simulator)
+# Full app tests (requires iOS 27 simulator)
 xcodebuild \
   -workspace Spark.xcworkspace \
   -scheme SparkApp \
-  -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' \
+  -destination 'platform=iOS Simulator,name=iPhone 18 Pro Max,OS=27.0' \
   -skipPackagePluginValidation \
   -skipMacroValidation \
   test
 
 # From Xcode
-# Select SparkApp scheme → iPhone 16 Pro simulator → ⌘U
+# Select SparkApp scheme → iPhone 18 Pro Max simulator → ⌘U
 ```
 
 ### Lint & Code Quality
@@ -157,7 +154,7 @@ swiftformat --lint .
 xcodebuild \
   -workspace Spark.xcworkspace \
   -scheme SparkApp \
-  -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' \
+  -destination 'platform=iOS Simulator,name=iPhone 18 Pro Max,OS=27.0' \
   build \
   -skipPackagePluginValidation
 ```
@@ -167,7 +164,7 @@ xcodebuild \
 To point at a local backend instead of `spark.cronx.co`, write to the shared App Group `UserDefaults`:
 
 ```swift
-let defaults = UserDefaults(suiteName: "group.co.cronx.spark")!
+let defaults = UserDefaults(suiteName: "group.co.cronx.sparkapp")!
 defaults.set("http://192.168.1.42:8000/api/v1/mobile", forKey: "spark.env.baseURL")
 defaults.set("http://192.168.1.42:8000/oauth/authorize", forKey: "spark.env.oauthURL")
 defaults.set("lan", forKey: "spark.env.name")
@@ -295,7 +292,7 @@ Tests cover:
 xcodebuild \
   -workspace Spark.xcworkspace \
   -scheme SparkApp \
-  -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' \
+  -destination 'platform=iOS Simulator,name=iPhone 18 Pro Max,OS=27.0' \
   test
 ```
 
@@ -312,7 +309,7 @@ Test every family × size class × light/dark × extreme Dynamic Type before eac
 - Runs on every push to `main` / `dev` and every PR
 - Caches DerivedData + SPM packages
 - Runs `swift test` on SparkKit
-- Runs `xcodebuild test` on SparkApp (iPhone 16 Pro, iOS 26 simulator)
+- Runs `xcodebuild test` on SparkApp (iPhone 18 Pro Max, iOS 27.0 simulator)
 - Uploads xcresult on failure
 
 ## Version & Release
@@ -403,4 +400,3 @@ If backend changes compact resource format:
 - **SwiftData docs**: https://developer.apple.com/swiftdata/
 - **ActivityKit docs**: https://developer.apple.com/activitykit/
 - **Liquid Glass**: iOS 26 Glass Effect (`GlassEffectContainer`, `.glassEffect()`)
-

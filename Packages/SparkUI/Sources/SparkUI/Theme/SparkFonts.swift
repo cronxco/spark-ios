@@ -26,6 +26,11 @@ public enum SparkFonts {
             .weight(weight)
     }
 
+    /// Comfortaa at a fixed point size — for hero numerals where exact sizing matters.
+    public static func display(size: CGFloat, weight: Font.Weight = .bold) -> Font {
+        Font.custom(displayPostScriptName, size: size).weight(weight)
+    }
+
     /// PT Mono at the given style. Good for timestamps, IDs, hex codes.
     public static func mono(_ style: Font.TextStyle = .footnote) -> Font {
         Font.custom(monoPostScriptName, size: pointSize(for: style), relativeTo: style)

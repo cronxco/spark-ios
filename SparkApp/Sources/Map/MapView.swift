@@ -3,52 +3,30 @@ import SparkKit
 import SparkUI
 import SwiftUI
 
-/// Map tab — full-screen MapKit view with a timeline scrubber overlay and a
-/// bottom sheet listing the points in the visible region. Pins are
-/// Spark-tinted and tap-routable to detail screens.
+/// The Explore map — MapKit with a timeline scrubber and a summary of the
+/// points in view. Pins are Spark-tinted and push onto Explore's
+/// navigation stack.
 struct MapView: View {
-    var isEmbedded: Bool = false
+    @Binding var path: [DetailRoute]
 
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: MapViewModel?
-    @State private var path: [DetailRoute] = []
     @State private var cameraPosition: MapCameraPosition = .region(MapViewModel.defaultRegion)
 
     var body: some View {
-        NavigationStack(path: $path) {
-            content
-                .navigationDestination(for: DetailRoute.self) { route in
-                    switch route {
-                    case .place(let id):
-                        PlaceDetailView(placeId: id)
-                    case .event(let id):
-                        EventDetailView(eventId: id)
-                    case .object(let id):
-                        ObjectDetailView(objectId: id)
-                    case .block(let id):
-                        BlockDetailView(blockId: id)
-                    case .metric(let identifier):
-                        MetricDetailView(identifier: identifier)
-                    case .integration(let service):
-                        IntegrationDetailView(integrationId: service)
-                    }
+        content
+            .task {
+                if viewModel == nil {
+                    viewModel = MapViewModel(apiClient: appModel.apiClient)
+                    await viewModel?.fetch()
                 }
-                .navigationTitle("Map")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar(isEmbedded ? .hidden : .visible, for: .navigationBar)
-        }
-        .task {
-            if viewModel == nil {
-                viewModel = MapViewModel(apiClient: appModel.apiClient)
-                await viewModel?.fetch()
             }
-        }
     }
 
     @ViewBuilder
     private var content: some View {
         if let viewModel {
-            MapViewContent(viewModel: viewModel, cameraPosition: $cameraPosition) { point in
+            MapViewContent(viewModel: viewModel, cameraPosition: $cameraPosition, isEmbedded: true) { point in
                 handleSelection(point)
             }
         } else {
@@ -75,6 +53,7 @@ struct MapView: View {
 private struct MapViewContent: View {
     @Bindable var viewModel: MapViewModel
     @Binding var cameraPosition: MapCameraPosition
+    let isEmbedded: Bool
     let onSelectPoint: (MapDataPoint) -> Void
 
     @State private var sheetDetent: PresentationDetent = .height(160)
@@ -101,18 +80,82 @@ private struct MapViewContent: View {
                 anchorDay: viewModel.anchorDay
             )
             .padding(.horizontal, SparkSpacing.lg)
-            .padding(.bottom, SparkSpacing.xxl + SparkSpacing.xxxl)
+            .padding(.bottom, timelineBottomPadding)
+        }
+        .overlay {
+            GeometryReader { proxy in
+                if isEmbedded {
+                    EmbeddedMapSummary(points: viewModel.visiblePoints, onSelect: onSelectPoint)
+                        .frame(width: proxy.size.width * 2 / 3, alignment: .leading)
+                        .padding(.leading, SparkSpacing.lg)
+                        .padding(.top, SparkSpacing.xl)
+                }
+            }
         }
         .onMapCameraChange(frequency: .onEnd) { context in
             viewModel.regionDidChange(context.region)
         }
-        .sheet(isPresented: .constant(true)) {
-            MapBottomSheet(points: viewModel.visiblePoints, onSelect: onSelectPoint)
-                .presentationDetents([.height(160), .medium, .large], selection: $sheetDetent)
-                .presentationBackgroundInteraction(.enabled(upThrough: .medium))
-                .presentationDragIndicator(.visible)
-                .interactiveDismissDisabled()
+        .sheet(isPresented: .constant(!isEmbedded)) {
+            if !isEmbedded {
+                MapBottomSheet(points: viewModel.visiblePoints, onSelect: onSelectPoint)
+                    .presentationDetents([.height(160), .medium, .large], selection: $sheetDetent)
+                    .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+                    .presentationDragIndicator(.visible)
+                    .interactiveDismissDisabled()
+            }
         }
+    }
+
+    private var timelineBottomPadding: CGFloat {
+        let base = SparkSpacing.xxl + SparkSpacing.xxxl
+        return base
+    }
+}
+
+private struct EmbeddedMapSummary: View {
+    let points: [MapDataPoint]
+    let onSelect: (MapDataPoint) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+            HStack {
+                Text("In view")
+                    .font(SparkTypography.bodyStrong)
+                Spacer(minLength: 0)
+                Text("\(points.count)")
+                    .font(SparkTypography.monoSmall)
+                    .foregroundStyle(.secondary)
+            }
+
+            if points.isEmpty {
+                Text("Pan the map to find visits and events.")
+                    .font(SparkTypography.bodySmall)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(points.prefix(3)) { point in
+                    Button {
+                        onSelect(point)
+                    } label: {
+                        HStack(spacing: SparkSpacing.sm) {
+                            Image(systemName: point.kind == .transaction ? "creditcard.fill" : "mappin.and.ellipse")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 18)
+                            Text(point.title)
+                                .font(SparkTypography.bodySmall)
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.right")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(SparkSpacing.md)
+        .sparkGlass(.roundedRect(SparkRadii.lg))
     }
 }
 

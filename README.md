@@ -21,11 +21,9 @@ tuist generate
 
 ### Provisioning
 
-Every target shares the App Group `group.co.cronx.spark`, the Keychain access group `$(AppIdentifierPrefix)co.cronx.spark`, and the associated domain `applinks:spark.cronx.co`. If you're running on a personal team:
+Every target uses the William Scott development team declared in `Project.swift`, and shares the App Group `group.co.cronx.sparkapp`, the Keychain access group `$(AppIdentifierPrefix)co.cronx.spark`, and the associated domain `applinks:spark.cronx.co`.
 
-1. In Xcode, select each target → Signing & Capabilities → pick your Team.
-2. Let Xcode regenerate provisioning profiles. The App Group, Keychain Sharing, Associated Domains, Push Notifications, and HealthKit capabilities are already declared — Xcode will just need to register the group IDs under your team.
-3. `DEVELOPMENT_TEAM` is read from your Xcode user settings; no changes to `Project.swift` required.
+After `tuist generate`, Xcode should keep the team selection automatically. The App Group, Keychain Sharing, Associated Domains, Push Notifications, and HealthKit capabilities are already declared in the generated targets.
 
 ### Environment overrides
 
@@ -46,17 +44,26 @@ Erase the keys to restore production.
 # Tests — SparkKit SPM layer
 cd Packages/SparkKit && swift test
 
-# Tests — full app (requires iOS 26 simulator)
+# Tests — full app (requires iOS 27 simulator)
 xcodebuild \
     -workspace Spark.xcworkspace \
     -scheme SparkApp \
-    -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=26.0' \
+    -destination 'platform=iOS Simulator,name=iPhone 18 Pro Max,OS=27.0' \
     -skipPackagePluginValidation \
     -skipMacroValidation \
     test
 ```
 
-In Xcode: select the `SparkApp` scheme + an iOS 26 simulator + ⌘R.
+In Xcode: select the `SparkApp` scheme + an iOS 27 simulator + ⌘R.
+
+Keep code signing enabled for simulator builds too. `CODE_SIGNING_ALLOWED=NO`
+omits the entitlements needed by Keychain, causing sign-in storage to fail with
+error `-34018`. Simulator builds can use ad-hoc signing (`CODE_SIGN_IDENTITY=-`);
+they do not need a device provisioning profile. Check the generated
+`Spark.app-Simulated.xcent` for `application-identifier` and
+`keychain-access-groups`, and run `AuthenticationStorageTests` in the simulator
+to verify real Keychain access. Simulator entitlements are embedded separately;
+`codesign -d --entitlements -` alone may show an empty dictionary.
 
 ## Layout
 

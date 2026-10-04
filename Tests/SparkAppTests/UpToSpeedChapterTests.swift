@@ -1,0 +1,141 @@
+import Foundation
+import SwiftUI
+import Testing
+
+@testable import Spark
+@testable import SparkUI
+
+@Suite("Up to Speed chapters")
+struct UpToSpeedChapterTests {
+    @Test func groupsConsecutiveScreensBySharedKind() {
+        let keys: [UpToSpeedChapter.Kind] = [
+            .intro,
+            .anomaly(domain: "health"),
+            .digest(title: "Morning Digest"),
+            .digest(title: "Morning Digest"),
+            .news, .news, .news,
+            .wrap, .wrap,
+        ]
+
+        let chapters = UpToSpeedChapter.chapters(for: keys)
+
+        #expect(chapters.map(\.kind) == [
+            .intro,
+            .anomaly(domain: "health"),
+            .digest(title: "Morning Digest"),
+            .news,
+            .wrap,
+        ])
+        #expect(chapters.map(\.cardCount) == [1, 1, 2, 3, 2])
+        #expect(chapters[3].range == 4..<7)
+        #expect(chapters[4].range == 7..<9)
+    }
+
+    /// The roundup's stories and the individual articles used to share one
+    /// "News" chapter — sixteen 3pt segments behind a "1 / 16" counter. They
+    /// are separate tiers now.
+    @Test func headlinesAreAChapterOfTheirOwn() {
+        let chapters = UpToSpeedChapter.chapters(for: [.intro, .news, .news, .news, .headlines, .headlines, .wrap])
+
+        #expect(chapters.map(\.kind) == [.intro, .news, .headlines, .wrap])
+        #expect(chapters[1].cardCount == 3)
+        #expect(chapters[2].cardCount == 2)
+        #expect(chapters[2].shortLabel == "Headlines")
+        #expect(chapters[2].title == "Also in your news")
+    }
+
+    /// The day is a section of the opener now, not a chapter of its own, so the
+    /// intro is literally the day rather than an abstract orientation.
+    @Test func introChapterIsTheDay() {
+        let chapters = UpToSpeedChapter.chapters(for: [.intro])
+
+        #expect(chapters[0].title == "Your day")
+        #expect(chapters[0].shortLabel == "Start")
+    }
+
+    @Test func distinctDigestTitlesStayInSeparateChapters() {
+        let chapters = UpToSpeedChapter.chapters(for: [
+            .digest(title: "Morning Digest"),
+            .digest(title: "Evening Digest"),
+        ])
+
+        #expect(chapters.count == 2)
+        #expect(chapters[0].title == "Morning Digest")
+        #expect(chapters[1].title == "Evening Digest")
+    }
+
+    @Test func emptyInputProducesNoChapters() {
+        #expect(UpToSpeedChapter.chapters(for: []).isEmpty)
+    }
+
+    @Test func chapterAccentsMatchTheirKind() {
+        let chapters = UpToSpeedChapter.chapters(for: [
+            .anomaly(domain: nil), .intro, .news, .wrap,
+        ])
+        #expect(chapters[0].accent == .sparkWarning)
+        #expect(chapters[1].accent == .sparkAccent)
+        #expect(chapters[2].accent == .sparkOcean)
+        #expect(chapters[3].accent == .sparkSuccess)
+    }
+
+    // -------------------------------------------------------------------------
+    // Anomaly domains
+    // -------------------------------------------------------------------------
+
+    /// Every anomaly used to land in a chapter headed "Your body" — so a
+    /// GoCardless balance opened the health chapter, under the title "Your
+    /// readiness dip".
+    @Test func anomalyChaptersAreNamedForTheirDomain() {
+        let chapters = UpToSpeedChapter.chapters(for: [
+            .anomaly(domain: "health"),
+            .anomaly(domain: "money"),
+        ])
+
+        #expect(chapters.count == 2)
+        #expect(chapters[0].shortLabel == "Your body")
+        #expect(chapters[1].shortLabel == "Your money")
+        #expect(chapters[0].title == "Your body")
+        #expect(chapters[1].title == "Your money")
+    }
+
+    @Test func anomaliesOfOneDomainShareAChapter() {
+        let chapters = UpToSpeedChapter.chapters(for: [
+            .anomaly(domain: "health"),
+            .anomaly(domain: "health"),
+            .anomaly(domain: "money"),
+        ])
+
+        #expect(chapters.count == 2)
+        #expect(chapters.map(\.cardCount) == [2, 1])
+    }
+
+    @Test func anomaliesWithNoDomainReadAsUnusual() {
+        let chapters = UpToSpeedChapter.chapters(for: [.anomaly(domain: nil)])
+
+        #expect(chapters[0].shortLabel == "Unusual")
+        #expect(chapters[0].title == "Unusual")
+    }
+
+    @Test func anomalyAccentsFollowTheirDomain() {
+        let chapters = UpToSpeedChapter.chapters(for: [
+            .anomaly(domain: "health"),
+            .anomaly(domain: "money"),
+        ])
+
+        #expect(chapters[0].accent == .domainHealth)
+        #expect(chapters[1].accent == .domainMoney)
+    }
+
+    // -------------------------------------------------------------------------
+    // Recap
+    // -------------------------------------------------------------------------
+
+    @Test func recapIsItsOwnQuietChapter() {
+        let chapters = UpToSpeedChapter.chapters(for: [.wrap, .recap])
+
+        #expect(chapters.count == 2)
+        #expect(chapters[1].shortLabel == "Earlier")
+        #expect(chapters[1].title == "Already seen today")
+        #expect(chapters[1].accent == .secondary)
+    }
+}

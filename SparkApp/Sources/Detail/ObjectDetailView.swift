@@ -4,11 +4,14 @@ import SwiftUI
 
 @MainActor
 @Observable
-final class ObjectDetailViewModel {
+final class ObjectDetailViewModel: ETagDetailMutationHandling {
     let objectId: String
-    private(set) var state: DetailLoadState<ObjectDetail> = .loading
+    var state: DetailLoadState<ObjectDetail> = .loading
+    var rawPayload: String?
+    var etag: String?
+    private(set) var isDeleted = false
 
-    private let apiClient: APIClient
+    let apiClient: APIClient
 
     init(objectId: String, apiClient: APIClient) {
         self.objectId = objectId
@@ -18,8 +21,10 @@ final class ObjectDetailViewModel {
     func load() async {
         state = .loading
         do {
-            let detail = try await apiClient.request(ObjectsEndpoint.detail(id: objectId))
-            state = .loaded(detail)
+            let response = try await apiClient.requestWithRawResponse(ObjectsEndpoint.detail(id: objectId))
+            rawPayload = response.utf8Body
+            etag = response.etag
+            state = .loaded(response.decoded)
         } catch APIError.notModified {
             return
         } catch {
@@ -28,12 +33,83 @@ final class ObjectDetailViewModel {
             state = .error(msg)
         }
     }
+
+    /// Soft delete. Its events are kept, and Undo brings the object back.
+    func delete() async throws {
+        let version = try currentETag()
+        do {
+            _ = try await apiClient.request(ObjectsEndpoint.delete(id: objectId, etag: version))
+        } catch APIError.httpStatus(412, _, _) {
+            try? await refreshVersion(EntityMutationsEndpoint.detailForWrite(kind: .objects, id: objectId, response: ObjectDetail.self))
+            throw EntityDeleteError.changedElsewhere
+        }
+        isDeleted = true
+    }
+
+    /// Undo for `delete`. The restore body has no recent events, so re-read the detail.
+    func restore() async throws {
+        _ = try await apiClient.request(ObjectsEndpoint.restore(id: objectId))
+        isDeleted = false
+        await refreshAfterCompletedMutation(EntityMutationsEndpoint.detailForWrite(kind: .objects, id: objectId, response: ObjectDetail.self))
+    }
+
+    func attachTag(_ request: TagMutationRequest) async throws {
+        guard let etag else { throw TagMutationError.missingETag }
+        let response = try await apiClient.requestWithRawResponse(
+            TagsEndpoint.attach(kind: .objects, id: objectId, request: request, etag: etag, response: ObjectDetail.self)
+        )
+        rawPayload = response.utf8Body
+        self.etag = response.etag ?? etag
+        state = .loaded(response.decoded)
+    }
+
+    func detachTag(_ tag: EventTag) async throws {
+        guard let tagID = tag.tagID else { throw TagMutationError.missingTagID }
+        guard let etag else { throw TagMutationError.missingETag }
+        let response = try await apiClient.requestWithRawResponse(
+            TagsEndpoint.detach(kind: .objects, id: objectId, tagID: tagID, etag: etag, response: ObjectDetail.self)
+        )
+        rawPayload = response.utf8Body
+        self.etag = response.etag ?? etag
+        state = .loaded(response.decoded)
+    }
+
+    func createRelationship(_ request: RelationshipCreateRequest) async throws -> EntityRelationship {
+        guard let etag else { throw TagMutationError.missingETag }
+        let response = try await apiClient.requestWithRawResponse(
+            try EntityMutationsEndpoint.createRelationship(kind: .objects, id: objectId, request: request, etag: etag)
+        )
+        try await adoptVersion(after: response.decoded, kind: .objects, id: objectId)
+        return response.decoded
+    }
+
+    func deleteRelationship(_ relationship: EntityRelationship) async throws {
+        try await deleteRelationship(relationship, kind: .objects, id: objectId)
+    }
+
+    func update(_ attributes: [String: AnyCodable]) async throws {
+        guard let etag else { throw TagMutationError.missingETag }
+        try await applyMutation(
+            try EntityMutationsEndpoint.update(kind: .objects, id: objectId, attributes: attributes, etag: etag, response: ObjectDetail.self)
+        )
+    }
+
+    func geocode(address: String) async throws { try await applyMutation(try EntityMutationsEndpoint.geocode(kind: .objects, id: objectId, address: address, etag: currentETag(), response: ObjectDetail.self)) }
+    func setLocation(_ location: LocationRequest) async throws { try await applyMutation(try EntityMutationsEndpoint.setLocation(kind: .objects, id: objectId, location: location, etag: currentETag(), response: ObjectDetail.self)) }
+    func clearLocation() async throws { try await applyMutation(EntityMutationsEndpoint.clearLocation(kind: .objects, id: objectId, etag: currentETag(), response: ObjectDetail.self)) }
+
 }
 
 struct ObjectDetailView: View {
     let objectId: String
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: ObjectDetailViewModel?
+    @State private var showTagPicker = false
+    @State private var tagPendingRemoval: EventTag?
+    @State private var tagMutationError: String?
+    @State private var showEditor = false
+    @State private var showLocationEditor = false
+    @State private var confirmDelete = false
 
     var body: some View {
         ScrollView {
@@ -53,64 +129,131 @@ struct ObjectDetailView: View {
                     LoadingShimmerCard()
                 }
             }
-            .padding(SparkSpacing.lg)
+            .padding(.horizontal, SparkSpacing.lg)
+            .padding(.top, SparkSpacing.xxl)
+            .padding(.bottom, SparkSpacing.xl)
         }
-        .background(Color.sparkSurface.ignoresSafeArea())
-        .navigationTitle("Object")
+        .sparkAppBackground()
+        .navigationTitle(isPerson ? "Person" : "Object")
         .navigationBarTitleDisplayMode(.inline)
+        .sparkSubViewToolbar(
+            shareItems: objectShareItems,
+            rawTitle: "Raw object",
+            rawPayload: objectRawPayload,
+            feedbackContext: objectFeedbackContext,
+            refresh: { await viewModel?.load() }
+        )
+        .toolbar { ToolbarItemGroup(placement: .topBarTrailing) { Button("Edit") { showEditor = true }.disabled(!isLoaded); Button { showLocationEditor = true } label: { Image(systemName: "mappin.and.ellipse") }.accessibilityLabel("Edit location").disabled(!isLoaded); Button(role: .destructive) { confirmDelete = true } label: { Image(systemName: "trash") }.accessibilityLabel("Delete object").disabled(!isLoaded) } }
+        .sparkDeleteWithUndo(
+            noun: "object",
+            isDeleted: viewModel?.isDeleted == true,
+            isConfirming: $confirmDelete,
+            delete: { try await viewModel?.delete() },
+            restore: { try await viewModel?.restore() }
+        )
         .task(id: objectId) {
             if viewModel == nil {
                 viewModel = ObjectDetailViewModel(objectId: objectId, apiClient: appModel.apiClient)
             }
             await viewModel?.load()
         }
+        .sheet(isPresented: $showTagPicker) {
+            TagPickerSheet { request in
+                try await viewModel?.attachTag(request)
+            }
+        }
+        .sheet(isPresented: $showEditor) { if case .loaded(let detail) = viewModel?.state { EntityEditorSheet(title: "Object", initial: ["title": detail.object.title, "type": detail.object.type, "concept": detail.object.concept, "url": detail.object.url ?? ""]) { try await viewModel?.update($0) } } }
+        .sheet(isPresented: $showLocationEditor) { LocationEditorSheet(hasLocation: { if case .loaded(let detail) = viewModel?.state { return detail.location != nil }; return false }(), geocode: { try await viewModel?.geocode(address: $0) }, coordinates: { try await viewModel?.setLocation($0) }, clear: { try await viewModel?.clearLocation() }) }
+        .confirmationDialog(
+            "Remove tag?",
+            isPresented: Binding(get: { tagPendingRemoval != nil }, set: { if !$0 { tagPendingRemoval = nil } })
+        ) {
+            Button("Remove tag", role: .destructive) {
+                guard let tag = tagPendingRemoval else { return }
+                Task { await detach(tag) }
+            }
+        } message: {
+            Text("This removes the tag from this object.")
+        }
+        .alert("Couldn't update tags", isPresented: Binding(get: { tagMutationError != nil }, set: { if !$0 { tagMutationError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(tagMutationError ?? "Please try again.")
+        }
+    }
+
+    private var objectShareItems: [Any] {
+        guard case .loaded(let detail) = viewModel?.state else {
+            return ["Spark Object: \(objectId)"]
+        }
+        if let url = detail.object.url.flatMap(URL.init) {
+            return [url]
+        }
+        return ["Spark Object: \(detail.object.title)"]
+    }
+
+    /// People get the person layout: avatar header, their events and connections.
+    private var isPerson: Bool {
+        if case .loaded(let detail) = viewModel?.state { return detail.object.isPerson }
+        return false
+    }
+
+    private var isLoaded: Bool {
+        if viewModel?.isDeleted == true { return false }
+        if case .loaded = viewModel?.state { return true }
+        return false
+    }
+
+    private var objectRawPayload: String? {
+        guard case .loaded(let detail) = viewModel?.state else { return nil }
+        if let rawPayload = viewModel?.rawPayload { return rawPayload }
+        return SparkPrettyJSON.string(for: detail)
+            ?? SparkPrettyJSON.fallback(entity: "object", id: detail.object.id, title: detail.object.title)
+    }
+
+    private var objectFeedbackContext: SparkFeedbackContext {
+        if case .loaded(let detail) = viewModel?.state {
+            return SparkFeedbackContext(
+                entityType: "object",
+                entityId: detail.object.id,
+                title: detail.object.title
+            )
+        }
+        return SparkFeedbackContext(entityType: "object", entityId: objectId, title: objectId)
     }
 
     @ViewBuilder
     private func content(for detail: ObjectDetail) -> some View {
-        heroCard(for: detail)
+        if detail.object.isPerson {
+            PersonHero(person: detail.object, eventCount: detail.recentEvents.count)
+        } else {
+            heroSection(for: detail)
+        }
 
         if let summary = detail.aiSummary, !summary.isEmpty {
-            GlassCard {
-                HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.sm) {
-                    Image(systemName: "sparkles")
-                        .font(.caption)
-                        .foregroundStyle(Color.sparkAccent)
-                    Text(summary)
-                        .font(SparkTypography.bodySmall)
-                        .italic()
-                        .foregroundStyle(.secondary)
-                }
-            }
+            SparkDetailInsightCard(label: "Insight", text: summary)
         }
 
-        GlassCard(radius: SparkRadii.md, padding: 0) {
-            VStack(spacing: 0) {
-                InspectorRow("Concept") { Text(detail.object.concept) }
-                InspectorRow("Type") { Text(detail.object.type) }
-                if let url = detail.object.url, let parsed = URL(string: url) {
-                    InspectorRow("URL", isMono: true) {
-                        Link(parsed.host ?? url, destination: parsed)
-                    }
-                }
-                if let time = detail.object.time {
-                    InspectorRow("Created", isMono: true) {
-                        Text(Self.fullTimeFormatter.string(from: time))
-                    }
-                }
-            }
-        }
+        tagSection(for: detail)
 
-        if !detail.tags.isEmpty {
-            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                SectionLabel("Tags")
-                TagChipRow(detail.tags)
+        RelationshipsSection(
+            title: detail.object.isPerson ? "Connections" : "Relationships",
+            kind: .objects,
+            entityID: detail.id,
+            apiClient: appModel.apiClient,
+            create: { request in
+                guard let viewModel else { throw TagMutationError.missingETag }
+                return try await viewModel.createRelationship(request)
+            },
+            delete: { relationship in
+                guard let viewModel else { throw TagMutationError.missingETag }
+                try await viewModel.deleteRelationship(relationship)
             }
-        }
+        )
 
         if !detail.relatedObjects.isEmpty {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                SectionLabel("Related")
+                SparkDetailSectionHeader("Related", trailing: "\(detail.relatedObjects.count) objects")
                 ForEach(detail.relatedObjects) { rel in
                     relatedObjectRow(rel)
                 }
@@ -119,85 +262,110 @@ struct ObjectDetailView: View {
 
         if !detail.recentEvents.isEmpty {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                SectionLabel("Recent events")
+                SparkDetailSectionHeader(
+                    detail.object.isPerson ? "With \(detail.object.title)" : "Recent events",
+                    trailing: "\(detail.recentEvents.count) events"
+                )
                 ForEach(detail.recentEvents) { event in
-                    eventRowSummary(event)
+                    NavigationLink {
+                        EventDetailView(eventId: event.id)
+                    } label: {
+                        eventRowSummary(event)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }
     }
 
-    private func heroCard(for detail: ObjectDetail) -> some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                HStack(spacing: SparkSpacing.sm) {
-                    DomainGlyph(icon: "shippingbox", tint: .sparkAccent, size: 28)
-                    Text(detail.object.concept.uppercased())
-                        .font(SparkTypography.monoSmall)
-                        .foregroundStyle(.secondary)
+    private func tagSection(for detail: ObjectDetail) -> some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+            SectionLabel("Tags")
+            FlowLayout(spacing: SparkSpacing.xs + 2) {
+                ForEach(detail.tags) { tag in
+                    NavigationLink(value: DetailRoute.tag(id: tag.tagID, name: tag.name, type: tag.type)) {
+                        TagChip(tag)
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        Button(role: .destructive) { tagPendingRemoval = tag } label: {
+                            Label("Remove tag", systemImage: "trash")
+                        }
+                    }
                 }
-                Text(detail.object.title)
-                    .font(SparkFonts.display(.title2, weight: .bold))
-                    .accessibilityAddTraits(.isHeader)
-                if let content = detail.object.content {
-                    Text(content)
-                        .font(SparkTypography.bodySmall)
-                        .foregroundStyle(.secondary)
-                }
+                Button { showTagPicker = true } label: { TagChip("+", isGhost: true) }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Add tag")
             }
         }
+    }
+
+    private func detach(_ tag: EventTag) async {
+        do {
+            try await viewModel?.detachTag(tag)
+        } catch {
+            tagMutationError = (error as? LocalizedError)?.errorDescription ?? "Please try again."
+        }
+        tagPendingRemoval = nil
+    }
+
+    private func heroSection(for detail: ObjectDetail) -> some View {
+        SparkDetailHero(
+            eyebrow: objectEyebrow(for: detail.object),
+            status: detail.object.type.humanisedAction,
+            title: detail.object.title,
+            subtitle: objectSubtitle(for: detail.object),
+            value: nil
+        )
+    }
+
+    private func objectEyebrow(for object: EventObject) -> String {
+        var parts = [
+            object.concept.sparkSentenceCase,
+            object.type.sparkSentenceCase
+        ]
+        if let time = object.time {
+            parts.append(SparkDetailFormatters.shortDate.string(from: time))
+            parts.append(SparkDetailFormatters.shortTime.string(from: time))
+        }
+        return parts.joined(separator: " — ")
+    }
+
+    private func objectSubtitle(for object: EventObject) -> String? {
+        if let content = object.content, !content.isEmpty {
+            return content
+        }
+        if let url = object.url, let parsed = URL(string: url) {
+            return parsed.host ?? url
+        }
+        return nil
     }
 
     private func relatedObjectRow(_ rel: ObjectDetail.Related) -> some View {
-        GlassCard(radius: SparkRadii.md, padding: SparkSpacing.md) {
-            HStack {
-                Text(rel.title)
-                    .font(SparkTypography.bodySmall)
-                Spacer(minLength: 0)
-                Text(rel.relationship ?? rel.concept)
-                    .font(SparkTypography.monoSmall)
-                    .foregroundStyle(.secondary)
-                Image(systemName: "chevron.right")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        }
+        SparkDetailLinkedRow(
+            title: rel.title,
+            subtitle: rel.concept,
+            trailing: rel.relationship
+        )
     }
 
     private func eventRowSummary(_ event: Event) -> some View {
-        GlassCard(radius: SparkRadii.md, padding: SparkSpacing.md) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(event.action)
-                        .font(SparkTypography.bodySmall)
-                    if let time = event.time {
-                        Text(Self.shortTimeFormatter.string(from: time))
-                            .font(SparkTypography.monoSmall)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                Spacer(minLength: 0)
-                if let value = event.value {
-                    Text(value)
-                        .font(SparkTypography.bodyStrong)
-                        .foregroundStyle(Color.domainTint(for: event.domain))
-                }
-                Image(systemName: "chevron.right")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        }
+        SparkDetailLinkedRow(
+            title: eventTitle(for: event),
+            subtitle: event.time.map { SparkDetailFormatters.compactDateTime.string(from: $0) },
+            trailing: event.displayValue?.sparkPlainTextFromHTMLFragment ?? event.value?.sparkPlainTextFromHTMLFragment,
+            tint: Color.domainTint(for: event.domain)
+        )
     }
 
-    private static let shortTimeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "d MMM, HH:mm"
-        return f
-    }()
-
-    private static let fullTimeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd  HH:mm:ss"
-        return f
-    }()
+    private func eventTitle(for event: Event) -> String {
+        let action = event.action.sparkActionTitle
+        guard event.displayWithObject,
+              let target = event.target?.title.trimmingCharacters(in: .whitespacesAndNewlines),
+              !target.isEmpty
+        else {
+            return action
+        }
+        return "\(action) \(target)"
+    }
 }

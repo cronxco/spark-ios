@@ -35,6 +35,15 @@ struct NotificationsPreferencesView: View {
     private func prefsForm(_ prefs: NotificationPreferences) -> some View {
         @Bindable var vm = viewModel!
         return Form {
+            Section {
+                SparkSystemScreenHeader(
+                    title: "Notifications",
+                    subtitle: "Choose what Spark can interrupt you for and when."
+                )
+                .padding(.vertical, SparkSpacing.sm)
+            }
+            .listRowBackground(Color.clear)
+
             Section("Categories") {
                 ForEach(NotificationPreferences.Category.allCases, id: \.self) { category in
                     categoryRow(category, prefs: prefs)

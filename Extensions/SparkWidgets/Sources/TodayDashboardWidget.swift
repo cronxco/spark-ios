@@ -1,11 +1,12 @@
 import AppIntents
 import SparkIntelligence
 import SparkKit
+import SparkUI
 import SwiftUI
 import WidgetKit
 
 struct TodayDashboardWidget: Widget {
-    let kind = "co.cronx.spark.widgets.today-dashboard"
+    let kind = "co.cronx.sparkapp.widgets.today-dashboard"
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: SparkTimelineProvider()) { entry in
@@ -34,7 +35,7 @@ struct TodayDashboardWidgetView: View {
             Spacer(minLength: 0)
         }
         .padding(16)
-        .containerBackground(for: .widget) { Color(.systemBackground) }
+        .containerBackground(for: .widget) { Color.sparkSurface }
         .widgetURL(URL(string: "https://spark.cronx.co/today"))
     }
 
@@ -87,17 +88,19 @@ struct TodayDashboardWidgetView: View {
     }
 
     private func metricTile(icon: String, color: Color, value: String, sub: String, url: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Label(value, systemImage: icon)
-                .font(.system(size: 15, weight: .bold, design: .rounded))
-                .foregroundStyle(color)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-            Text(sub)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+        Link(destination: URL(string: url)!) {
+            VStack(alignment: .leading, spacing: 2) {
+                Label(value, systemImage: icon)
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(color)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Text(sub)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func anomalyList(_ anomalies: [Anomaly]) -> some View {
@@ -116,7 +119,7 @@ struct TodayDashboardWidgetView: View {
                     Spacer()
                     // Interactive acknowledge button (iOS 17+)
                     Button(
-                        intent: AcknowledgeAnomalyIntent(anomalyID: anomaly.id)
+                        intent: AcknowledgeAnomalyIntent(anomaly: AnomalyEntity(model: anomaly))
                     ) {
                         Image(systemName: "checkmark.circle")
                             .font(.caption)

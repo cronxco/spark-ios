@@ -15,7 +15,9 @@ public enum DeepLink: Sendable, Equatable {
     case block(id: String)
     case metric(identifier: String)
     case place(id: String)
+    case anomaly(id: String)
     case integration(service: String)
+    case tag(name: String)
 
     /// Parse an incoming URL. Returns nil when the URL doesn't match any
     /// route — caller can fall through to default handling (e.g. opening
@@ -52,14 +54,20 @@ public enum DeepLink: Sendable, Equatable {
             return .block(id: parts[1])
         case "metrics", "metric":
             guard parts.count >= 2 else { return nil }
-            return .metric(identifier: parts[1])
+            return .metric(identifier: MetricsEndpoint.canonicalIdentifier(parts[1]))
         case "places", "place":
             guard parts.count >= 2 else { return nil }
             return .place(id: parts[1])
+        case "anomalies", "anomaly":
+            guard parts.count >= 2 else { return nil }
+            return .anomaly(id: parts[1])
         case "integrations":
             // /integrations/{service}/details
             guard parts.count >= 3, parts[2] == "details" else { return nil }
             return .integration(service: parts[1])
+        case "tags", "tag":
+            guard parts.count >= 2 else { return nil }
+            return .tag(name: parts[1])
         default:
             return nil
         }

@@ -10,7 +10,7 @@ struct SparkWatchWidgetsBundle: WidgetBundle {
 
 struct PlaceholderWatchWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "co.cronx.spark.watch.widgets.placeholder", provider: Provider()) { _ in
+        StaticConfiguration(kind: "co.cronx.sparkapp.watch.widgets.placeholder", provider: Provider()) { _ in
             Text("Spark")
                 .containerBackground(for: .widget) { Color.black }
         }

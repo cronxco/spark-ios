@@ -12,6 +12,11 @@ public enum ApiTokensEndpoint {
         return Endpoint(method: .post, path: "/api-tokens", body: body, contentType: "application/json")
     }
 
+    /// DELETE /api-tokens/{id}
+    public static func revoke(id: String) -> Endpoint<EmptyResponse> {
+        Endpoint(method: .delete, path: "/api-tokens/\(id)")
+    }
+
     private struct CreateRequest: Encodable {
         let name: String
         let abilities: [String]

@@ -10,7 +10,7 @@ import SparkKit
 @Observable
 final class MapViewModel {
     private let apiClient: APIClient
-    private let logger = Logger(subsystem: "co.cronx.spark", category: "MapViewModel")
+    private let logger = Logger(subsystem: "co.cronx.sparkapp", category: "MapViewModel")
 
     // 0...1 fraction of the day — the timeline scrubber binds to this.
     var dayFraction: Double = 1.0
@@ -74,7 +74,7 @@ final class MapViewModel {
             let response = try await apiClient.request(
                 MapEndpoint.points(bbox: bbox, date: anchorDay)
             )
-            points = response
+            points = response.allPoints
             lastError = nil
         } catch is CancellationError {
             return

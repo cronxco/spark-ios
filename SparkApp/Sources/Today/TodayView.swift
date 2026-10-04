@@ -2,64 +2,78 @@ import SparkKit
 import SparkUI
 import SwiftData
 import SwiftUI
-import UIKit
 
 struct TodayView: View {
     let date: Date
+    var showsToolbar = true
     @Environment(AppModel.self) private var appModel
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var colorScheme
     @State private var viewModel: TodayViewModel?
-    @State private var showCheckIn = false
-    @State private var showSettings = false
-    @State private var showNotifications = false
+    @State private var checkInSelection: CheckInSheetSelection?
+    @State private var showHistory = false
+    @State private var checkInHistoryVM: CheckInHistoryViewModel?
+    @State private var showUpToSpeed = false
+    @State private var upToSpeedViewModel: UpToSpeedViewModel?
+    @State private var selectedThread: FlintTopic?
 
-    @Query(filter: #Predicate<CachedNotification> { !$0.isRead })
-    private var unreadNotifications: [CachedNotification]
-    @Query private var allIntegrations: [CachedIntegration]
-
-    private var errorIntegrations: [CachedIntegration] {
-        let healthy: Set<String> = ["up_to_date", "ok", "active", "syncing", "running"]
-        return allIntegrations.filter { !healthy.contains($0.status) }
-    }
+    private var isToday: Bool { Calendar.current.isDateInToday(date) }
 
     var body: some View {
-        let snapshot = TodaySnapshot(summary: viewModel?.cached, date: date)
+        let snapshot = TodaySnapshot(
+            summary: viewModel?.cached,
+            date: date,
+            checkInStatus: viewModel?.checkInDayStatus ?? .allPending
+        )
 
         ZStack {
-            TodayBackground(snapshot.timeOfDay)
-                .ignoresSafeArea()
-
             ScrollView {
                 VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-                    hero(snapshot: snapshot)
+                    let unreadCount = upToSpeedViewModel?.unreadCount ?? 0
 
-                    anomalyPill(for: snapshot)
+                    hero(snapshot: snapshot, unreadCount: unreadCount)
+                        .sparkAppEntityIdentifier(type: "day", identifier: TodayViewModel.isoKey(for: date))
 
-                    if let health = snapshot.health, health.hasSleep {
-                        SleepCard(health: health)
+                    // Flint's own words first: the numbers below are what it
+                    // is talking about, not a dashboard the digest happens to
+                    // sit near.
+                    // The digest, questions and threads are "now", not this
+                    // date's; the view model only loads them for today, and a
+                    // page that was today before midnight stops showing them.
+                    if isToday, let digest = viewModel?.latestDigest {
+                        DigestOpenerCard(digest: digest) { showUpToSpeed = true }
                     }
 
-                    if shouldShowActivityMoneyRow(snapshot) {
-                        HStack(alignment: .top, spacing: SparkSpacing.md) {
-                            if let activity = snapshot.activity, activity.hasAny {
-                                ActivityCard(activity: activity)
-                            }
-                            if let money = snapshot.money, money.hasAny {
-                                MoneyCard(money: money)
-                            }
+                    MetricsGrid(metrics: viewModel?.metrics ?? DayMetrics(summary: nil))
+
+                    anomalySummary(for: snapshot)
+
+                    if isToday, let vm = viewModel, !vm.recentQuestions.isEmpty {
+                        FlintQuestionStack(
+                            questions: vm.recentQuestions,
+                            onAnswer: { question, option in
+                                Task { await vm.answer(question: question, with: option) }
+                            },
+                            onOpen: { showUpToSpeed = true }
+                        )
+                    }
+
+                    CheckInCard(
+                        date: date,
+                        status: snapshot.checkInStatus,
+                        onTapMorning: {
+                            checkInSelection = CheckInSheetSelection(date: date, period: .morning)
+                        },
+                        onTapAfternoon: {
+                            checkInSelection = CheckInSheetSelection(date: date, period: .afternoon)
                         }
+                    )
+
+                    if isToday, let vm = viewModel, !vm.topics.isEmpty {
+                        ThreadsStrip(topics: vm.topics) { selectedThread = $0 }
                     }
 
-                    if let media = snapshot.media, media.hasAny {
-                        MediaCard(media: media)
-                    }
-
-                    if let next = snapshot.knowledge?.nextCalendarEvent {
-                        UpNextCard(event: next)
-                    }
-
-                    CheckInCard(status: snapshot.checkInStatus) {
-                        showCheckIn = true
-                    }
+                    CheckInHeatmapCard(historyVM: checkInHistoryVM, showHistory: $showHistory)
 
                     FeedSection(date: date)
 
@@ -67,34 +81,53 @@ struct TodayView: View {
                         loadingOrEmptyState
                     }
 
-                    HeatmapSection(rows: snapshot.heatmapRows)
-                        .padding(.top, SparkSpacing.md)
+                    #if DEBUG
+                        if let vm = viewModel, !vm.rawAPIEntries.isEmpty {
+                            RawFeedJSONView(title: "Raw API response", entries: vm.rawAPIEntries)
+                        }
+                    #endif
                 }
                 .padding(.horizontal, SparkSpacing.lg)
-                .padding(.top, deviceSafeAreaTop + SparkSpacing.xl)
-                .padding(.bottom, deviceSafeAreaBottom + 66)
+                .padding(.top, SparkSpacing.sm)
+                .padding(.bottom, SparkSpacing.xl)
+                .containerRelativeFrame(.horizontal)
             }
-            .scrollContentBackground(.hidden)
-            .refreshable { await viewModel?.refresh() }
-
-            headerButtons
-        }
-        .environment(\.colorScheme, snapshot.timeOfDay.prefersDarkTreatment ? .dark : .light)
-        .sheet(isPresented: $showCheckIn) {
-            let snapshot = TodaySnapshot(summary: viewModel?.cached, date: date)
-            if case .pending(let slot) = snapshot.checkInStatus {
-                CheckInModalView(slot: slot.rawValue, date: date)
-            } else {
-                CheckInModalView(slot: SparkTimeOfDay.from(date: .now).rawValue, date: date)
+            .scrollEdgeEffectStyle(.soft, for: .top)
+            .refreshable {
+                await viewModel?.refresh()
+                await checkInHistoryVM?.load()
             }
         }
-        .sheet(isPresented: $showSettings) {
-            SettingsRootView()
+        .sparkMainAppToolbar(isVisible: showsToolbar)
+        .sheet(item: $checkInSelection, onDismiss: {
+            Task { await checkInHistoryVM?.load() }
+        }) { selection in
+            if let vm = viewModel {
+                CheckInModalView(viewModel: vm, date: selection.date, initialPeriod: selection.period)
+            }
         }
-        .sheet(isPresented: $showNotifications) {
-            NotificationsInboxView()
+        .sheet(item: $selectedThread) { topic in
+            ThreadDetailSheet(topic: topic)
+        }
+        .sheet(isPresented: $showHistory, onDismiss: {
+            Task { await viewModel?.loadCheckIns() }
+        }) {
+            if let checkInHistoryVM {
+                CheckInHistoryView(apiClient: appModel.apiClient, container: appModel.container, historyVM: checkInHistoryVM)
+            }
+        }
+        .fullScreenCover(isPresented: $showUpToSpeed, onDismiss: {
+            Task { await upToSpeedViewModel?.load() }
+        }) {
+            UpToSpeedView(isPresented: $showUpToSpeed, viewModel: upToSpeedViewModel)
+                .environment(appModel)
         }
         .task(id: date) {
+            checkInHistoryVM = CheckInHistoryViewModel(
+                apiClient: appModel.apiClient,
+                container: appModel.container,
+                endDate: date
+            )
             if viewModel == nil {
                 viewModel = TodayViewModel(
                     date: date,
@@ -102,151 +135,180 @@ struct TodayView: View {
                     container: appModel.container
                 )
             }
-            await viewModel?.load()
+            async let dayLoad: Void = viewModel?.load() ?? ()
+            async let historyLoad: Void = checkInHistoryVM?.load() ?? ()
+            _ = await (dayLoad, historyLoad)
         }
-    }
-
-    // MARK: - Header buttons
-
-    private var headerButtons: some View {
-        SparkGlassStack(spacing: 0) {
-            HStack(spacing: 0) {
-                Button {
-                    showSettings = true
-                } label: {
-                    Image(systemName: "gearshape")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(errorIntegrations.isEmpty ? Color.primary : Color.sparkError)
-                        .frame(width: 36, height: 36)
-                        .sparkGlass(.circle)
-                }
-                .accessibilityLabel("Settings")
-
-                Rectangle()
-                    .fill(Color.primary.opacity(0.12))
-                    .frame(width: 1, height: 22)
-
-                Button {
-                    showNotifications = true
-                } label: {
-                    ZStack(alignment: .topTrailing) {
-                        Image(systemName: "bell")
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(unreadNotifications.isEmpty ? Color.primary : Color.sparkAccent)
-                            .frame(width: 36, height: 36)
-                            .sparkGlass(.circle)
-                        if !unreadNotifications.isEmpty {
-                            Circle()
-                                .fill(Color.sparkError)
-                                .frame(width: 9, height: 9)
-                                .offset(x: 3, y: -3)
-                        }
-                    }
-                }
-                .accessibilityLabel(
-                    unreadNotifications.isEmpty
-                        ? "Notifications"
-                        : "Notifications, \(unreadNotifications.count) unread"
+        .task {
+            if upToSpeedViewModel == nil {
+                upToSpeedViewModel = UpToSpeedViewModel(
+                    apiClient: appModel.apiClient,
+                    profileName: appModel.profile?.name
                 )
             }
+            await upToSpeedViewModel?.load()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-        .padding(.top, deviceSafeAreaTop + SparkSpacing.xl)
-        .padding(.trailing, SparkSpacing.lg)
+        .onChange(of: appModel.lastSyncAt) {
+            Task { await viewModel?.backgroundRevalidate() }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                Task { await viewModel?.backgroundRevalidate() }
+            }
+        }
     }
 
     // MARK: - Hero
 
-    private func hero(snapshot: TodaySnapshot) -> some View {
-        let isDark = snapshot.timeOfDay.prefersDarkTreatment
-        return VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-            Text(heroTitle(snapshot: snapshot))
-                .font(SparkFonts.display(.title, weight: .bold))
-                .lineLimit(3)
-                .fixedSize(horizontal: false, vertical: true)
-                .foregroundStyle(isDark ? Color.white : Color.primary)
-                .accessibilityAddTraits(.isHeader)
+    private func hero(snapshot: TodaySnapshot, unreadCount: Int) -> some View {
+        let title = heroTitle(snapshot: snapshot)
+        let titleLines = title.components(separatedBy: "\n")
 
-            if let subtitle = heroSubtitle(snapshot: snapshot) {
+        return VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+            if unreadCount > 0 {
+                heroTitleWithAction(titleLines: titleLines, unreadCount: unreadCount)
+            } else {
+                heroTitleStack(titleLines: titleLines)
+            }
+
+            if let subtitle = viewModel?.briefingSummaryLine {
                 Text(subtitle)
                     .font(SparkTypography.body)
-                    .foregroundStyle(isDark ? Color.white.opacity(0.7) : Color.secondary)
+                    .foregroundStyle(Color.secondary)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+    }
+
+    private func heroTitleWithAction(titleLines: [String], unreadCount: Int) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: SparkSpacing.md) {
+                    if let firstLine = titleLines.first {
+                        heroTitleText(firstLine, index: 0)
+                    }
+
+                    Spacer(minLength: SparkSpacing.md)
+
+                    GetUpToSpeedButton(
+                        unreadCount: unreadCount,
+                        onTap: { showUpToSpeed = true }
+                    )
+                }
+                VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                    if let firstLine = titleLines.first {
+                        heroTitleText(firstLine, index: 0)
+                    }
+                    GetUpToSpeedButton(unreadCount: unreadCount, onTap: { showUpToSpeed = true })
+                }
+            }
+
+            if titleLines.count > 1 {
+                ForEach(Array(titleLines.dropFirst().enumerated()), id: \.offset) { offset, line in
+                    heroTitleText(line, index: offset + 1)
+                }
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func heroTitleStack(titleLines: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(titleLines.enumerated()), id: \.offset) { index, line in
+                heroTitleText(line, index: index)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(titleLines.joined(separator: " "))
+        .accessibilityAddTraits(.isHeader)
+    }
+
+    private func heroTitleText(_ line: String, index: Int) -> some View {
+        Text(line)
+            .font(heroTitleFont)
+            .foregroundStyle(index == 0 ? heroLeadStyle : AnyShapeStyle(.secondary))
+            .lineLimit(1)
+            .minimumScaleFactor(0.88)
+    }
+
+    /// The hero's first line is the Day tab's title, so it takes the same
+    /// yellow in dark mode as the titles on the other tabs.
+    private var heroLeadStyle: AnyShapeStyle {
+        colorScheme == .dark ? AnyShapeStyle(Color.spark2) : AnyShapeStyle(.primary)
+    }
+
+    private var heroTitleFont: Font {
+        Font.custom(SparkFonts.displayPostScriptName, size: 32, relativeTo: .largeTitle)
+            .weight(.bold)
     }
 
     private func heroTitle(snapshot: TodaySnapshot) -> String {
         if Calendar.current.isDateInToday(date) {
-            return "\(snapshot.timeOfDay.greeting),\n\(firstName)."
+            return "\(firstName),\nyour day so far."
         } else if Calendar.current.isDateInYesterday(date) {
-            return "Yesterday."
+            return "Yesterday\nin review"
         } else if let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: .now),
                   Calendar.current.isDate(date, inSameDayAs: tomorrow) {
-            return "Tomorrow."
+            return "Looking ahead"
         } else {
-            return snapshot.dateLabel
+            return Self.dayTitleFormatter.string(from: date)
         }
-    }
-
-    private var deviceSafeAreaTop: CGFloat {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }.first?
-            .keyWindow?.safeAreaInsets.top ?? 59
-    }
-
-    private var deviceSafeAreaBottom: CGFloat {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }.first?
-            .keyWindow?.safeAreaInsets.bottom ?? 34
     }
 
     private var firstName: String {
-        // TODO: source from /me endpoint when Settings → Profile lands.
-        "Will"
+        let name = appModel.profile?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return name.split(separator: " ").first.map(String.init) ?? "Your"
     }
 
-    private func heroSubtitle(snapshot: TodaySnapshot) -> String? {
-        var parts: [String] = []
-        if let dur = snapshot.health?.sleepDurationMinutes {
-            parts.append("slept \(dur / 60)h \(dur % 60)m")
-        }
-        if let steps = snapshot.activity?.steps {
-            parts.append("walked \(formatSteps(steps)) steps")
-        }
-        if let display = snapshot.money?.spentTodayDisplay {
-            parts.append("spent \(display)")
-        }
-        guard !parts.isEmpty else { return nil }
-        return "You " + parts.joined(separator: ", ") + " so far."
-    }
+    private static let dayTitleFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "EEEE\nd MMMM yyyy"
+        return f
+    }()
 
-    private func formatSteps(_ count: Int) -> String {
-        if count >= 1_000 {
-            return String(format: "%.1fk", Double(count) / 1_000)
-        }
-        return String(count)
-    }
-
-    // MARK: - Anomaly pill
+    // MARK: - Anomaly summary
 
     @ViewBuilder
-    private func anomalyPill(for snapshot: TodaySnapshot) -> some View {
+    private func anomalySummary(for snapshot: TodaySnapshot) -> some View {
         if snapshot.anomalies.isEmpty {
-            StatusPill(.ok, message: "Baselines holding", trailing: "0 anomalies")
+            anomalySummaryRow(message: "Baselines holding", count: nil, tint: .sparkSuccess)
         } else {
-            StatusPill(
-                .warning,
+            anomalySummaryRow(
                 message: snapshot.anomalies.first?.displayName
                     ?? snapshot.anomalies.first?.metric
                     ?? "Anomaly detected",
-                trailing: "\(snapshot.anomalies.count) anomal\(snapshot.anomalies.count == 1 ? "y" : "ies")"
+                count: "\(snapshot.anomalies.count) anomal\(snapshot.anomalies.count == 1 ? "y" : "ies")",
+                tint: .sparkWarning
             )
+            .sparkAppEntityIdentifier(type: "anomaly", identifier: snapshot.anomalies.first?.id)
         }
     }
 
-    private func shouldShowActivityMoneyRow(_ snapshot: TodaySnapshot) -> Bool {
-        (snapshot.activity?.hasAny ?? false) || (snapshot.money?.hasAny ?? false)
+    private func anomalySummaryRow(message: String, count: String?, tint: Color) -> some View {
+        HStack(spacing: SparkSpacing.sm) {
+            Circle()
+                .fill(tint)
+                .frame(width: 7, height: 7)
+                .accessibilityHidden(true)
+            Text(message)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+            if let count {
+                Spacer(minLength: SparkSpacing.sm)
+                Text(count)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.vertical, SparkSpacing.xs)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(count.map { "\(message), \($0)" } ?? message)
     }
 
     // MARK: - Loading / empty
@@ -273,6 +335,50 @@ struct TodayView: View {
                 message: "We'll fill this in as integrations sync."
             )
         }
+    }
+}
+
+private struct CheckInSheetSelection: Identifiable {
+    let date: Date
+    let period: CheckInPeriod
+
+    var id: String {
+        "\(Self.formatter.string(from: date))-\(period.rawValue)"
+    }
+
+    private static let formatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+}
+
+// MARK: - GetUpToSpeedButton
+
+private struct GetUpToSpeedButton: View {
+    let unreadCount: Int
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 6) {
+                Text("\(unreadCount)")
+                    .font(Font.custom(SparkFonts.displayPostScriptName, size: 12).bold())
+                    .foregroundStyle(Color.sparkOnAccent)
+                    .padding(.horizontal, 6)
+                    .frame(minWidth: 24, minHeight: 24)
+                    .background(Color.sparkOnAccent.opacity(0.12), in: .capsule)
+
+                Text("Get Up to Speed")
+                    .font(SparkTypography.captionStrong)
+                    .foregroundStyle(Color.sparkOnAccent)
+            }
+            .padding(.leading, 4)
+            .padding(.trailing, 10)
+            .frame(minHeight: 44)
+            .background(Color.sparkAccent, in: .capsule)
+        }
+        .buttonStyle(.plain)
     }
 }
 

@@ -1,8 +1,9 @@
+import SparkUI
 import SwiftUI
 import WidgetKit
 
 struct SleepScoreWidget: Widget {
-    let kind = "co.cronx.spark.widgets.sleep"
+    let kind = "co.cronx.sparkapp.widgets.sleep"
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: SparkTimelineProvider()) { entry in
@@ -67,7 +68,7 @@ struct SleepScoreWidgetView: View {
     private var containerBG: some View {
         ContainerRelativeShape()
             .fill(.indigo.opacity(0.12))
-            .containerBackground(for: .widget) { Color(.systemBackground) }
+            .containerBackground(for: .widget) { Color.sparkSurface }
     }
 
     private func sleepProgress(_ snap: WidgetDataSnapshot) -> Double {

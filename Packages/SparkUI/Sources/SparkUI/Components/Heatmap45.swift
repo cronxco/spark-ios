@@ -37,7 +37,7 @@ public struct Heatmap45: View {
         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
             ForEach(rows) { row in
                 HStack(spacing: SparkSpacing.sm) {
-                    Text(row.label.uppercased())
+                    Text(row.label)
                         .font(SparkTypography.monoSmall)
                         .foregroundStyle(.secondary)
                         .frame(width: labelWidth, alignment: .leading)

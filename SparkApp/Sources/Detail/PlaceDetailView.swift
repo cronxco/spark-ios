@@ -9,6 +9,7 @@ import SwiftUI
 final class PlaceDetailViewModel {
     let placeId: String
     private(set) var state: DetailLoadState<PlaceDetail> = .loading
+    private(set) var rawPayload: String?
 
     private let apiClient: APIClient
 
@@ -20,8 +21,9 @@ final class PlaceDetailViewModel {
     func load() async {
         state = .loading
         do {
-            let detail = try await apiClient.request(PlacesEndpoint.detail(id: placeId))
-            state = .loaded(detail)
+            let response = try await apiClient.requestWithRawResponse(PlacesEndpoint.detail(id: placeId))
+            rawPayload = response.utf8Body
+            state = .loaded(response.decoded)
         } catch APIError.notModified {
             return
         } catch {
@@ -57,15 +59,57 @@ struct PlaceDetailView: View {
             }
             .padding(SparkSpacing.lg)
         }
-        .background(Color.sparkSurface.ignoresSafeArea())
+        .sparkAppBackground()
+        .sparkOnscreenEntity(
+            type: "place",
+            identifier: placeId,
+            title: placeOnscreenTitle
+        )
         .navigationTitle("Place")
         .navigationBarTitleDisplayMode(.inline)
+        .sparkSubViewToolbar(
+            shareItems: placeShareItems,
+            rawTitle: "Raw place",
+            rawPayload: placeRawPayload,
+            feedbackContext: placeFeedbackContext,
+            refresh: { await viewModel?.load() }
+        )
         .task(id: placeId) {
             if viewModel == nil {
                 viewModel = PlaceDetailViewModel(placeId: placeId, apiClient: appModel.apiClient)
             }
             await viewModel?.load()
         }
+    }
+
+    private var placeOnscreenTitle: String {
+        if case .loaded(let detail) = viewModel?.state { return detail.place.title }
+        return "Place"
+    }
+
+    private var placeShareItems: [Any] {
+        guard case .loaded(let detail) = viewModel?.state else {
+            return ["Spark Place: \(placeId)"]
+        }
+        return ["Spark Place: \(detail.place.title)"]
+    }
+
+    private var placeRawPayload: String? {
+        guard case .loaded(let detail) = viewModel?.state else { return nil }
+        if let rawPayload = viewModel?.rawPayload { return rawPayload }
+        return SparkPrettyJSON.string(for: detail)
+            ?? SparkPrettyJSON.fallback(entity: "place", id: detail.place.id, title: detail.place.title)
+    }
+
+    private var placeFeedbackContext: SparkFeedbackContext {
+        if case .loaded(let detail) = viewModel?.state {
+            return SparkFeedbackContext(
+                entityType: "place",
+                entityId: detail.place.id,
+                title: detail.place.title
+            )
+        }
+        return SparkFeedbackContext(entityType: "place", entityId: placeId, title: placeId)
     }
 
     @ViewBuilder
@@ -99,7 +143,7 @@ struct PlaceDetailView: View {
                 HStack(spacing: SparkSpacing.sm) {
                     DomainGlyph(icon: "mappin.and.ellipse", tint: .sparkAccent, size: 28)
                     if let category = detail.place.category {
-                        Text(category.uppercased())
+                        Text(category.sparkSentenceCase)
                             .font(SparkTypography.monoSmall)
                             .foregroundStyle(.secondary)
                     }

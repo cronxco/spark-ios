@@ -22,16 +22,16 @@ public enum SparkTypography {
     public static let caption = Font.system(.caption)
     public static let captionStrong = Font.system(.caption).weight(.semibold)
 
+    // Section headings — Comfortaa, sized to stand beside the Day filter.
+    public static let sectionHeading = SparkFonts.display(.title3, weight: .semibold)
+
+    // Long-form reading — New York-style system serif for article/digest prose.
+    public static let longFormBody = Font.system(.title3, design: .serif)
+    public static let longFormBodySmall = Font.system(.body, design: .serif)
+    public static let longFormQuote = Font.system(.title3, design: .serif).italic()
+
     // Technical — PT Mono. Used for timestamps, IDs, all-caps section labels.
     public static let mono = SparkFonts.mono(.footnote)
     public static let monoSmall = SparkFonts.mono(.caption2)
     public static let monoBody = SparkFonts.mono(.body)
-}
-
-public extension View {
-    /// Clamp Dynamic Type to a3 so hero glyphs don't overflow the iPhone
-    /// frame. Apply at the app root.
-    func sparkDynamicTypeClamp() -> some View {
-        self.dynamicTypeSize(...DynamicTypeSize.accessibility3)
-    }
 }

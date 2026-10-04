@@ -1,5 +1,4 @@
 import SparkKit
-import SparkUI
 import SwiftUI
 
 struct MainTabView: View {
@@ -8,6 +7,20 @@ struct MainTabView: View {
 
     var body: some View {
         @Bindable var model = model
+
+        tabs
+            .tabBarMinimizeBehavior(.onScrollDown)
+            .onChange(of: model.pendingRoute) { _, new in
+                guard new != nil else { return }
+                selection = .day
+            }
+            .onChange(of: model.pendingSearchQuery, initial: true) { _, new in
+                guard new != nil else { return }
+                selection = .search
+            }
+    }
+
+    private var tabs: some View {
         TabView(selection: $selection) {
             Tab("Day", systemImage: "sun.max.fill", value: AppTab.day) {
                 DayPagerView()
@@ -24,10 +37,6 @@ struct MainTabView: View {
             Tab(value: AppTab.search, role: .search) {
                 SearchView()
             }
-        }
-        .onChange(of: model.pendingRoute) { _, new in
-            guard new != nil else { return }
-            selection = .day
         }
     }
 }

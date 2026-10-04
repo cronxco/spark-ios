@@ -83,10 +83,27 @@ struct DeepLinkTests {
         #expect(DeepLink.parse(url) == .metric(identifier: "sleep_score"))
     }
 
+    @Test("canonicalizes legacy metric deeplink aliases")
+    func canonicalizesLegacyMetricAliases() throws {
+        let sleep = try #require(URL(string: "https://spark.cronx.co/metrics/sleep.score"))
+        let steps = try #require(URL(string: "https://spark.cronx.co/metrics/health.steps"))
+
+        #expect(DeepLink.parse(sleep) == .metric(identifier: "oura.sleep_score"))
+        #expect(DeepLink.parse(steps) == .metric(identifier: "oura.steps"))
+    }
+
     @Test("parses /places/:id")
     func place() throws {
         let url = try #require(URL(string: "https://spark.cronx.co/places/plc_42"))
         #expect(DeepLink.parse(url) == .place(id: "plc_42"))
+    }
+
+    @Test("parses /anomalies/:id")
+    func anomaly() throws {
+        let plural = try #require(URL(string: "https://spark.cronx.co/anomalies/anom_123"))
+        let singular = try #require(URL(string: "https://spark.cronx.co/anomaly/anom_456"))
+        #expect(DeepLink.parse(plural) == .anomaly(id: "anom_123"))
+        #expect(DeepLink.parse(singular) == .anomaly(id: "anom_456"))
     }
 
     @Test("parses /integrations/:service/details")
@@ -99,5 +116,17 @@ struct DeepLinkTests {
     func integrationWithoutDetails() throws {
         let url = try #require(URL(string: "https://spark.cronx.co/integrations/monzo"))
         #expect(DeepLink.parse(url) == nil)
+    }
+
+    @Test("parses /tags/:name")
+    func tagPlural() throws {
+        let url = try #require(URL(string: "https://spark.cronx.co/tags/Alice"))
+        #expect(DeepLink.parse(url) == .tag(name: "Alice"))
+    }
+
+    @Test("parses /tag/:name (singular)")
+    func tagSingular() throws {
+        let url = try #require(URL(string: "https://spark.cronx.co/tag/coffee"))
+        #expect(DeepLink.parse(url) == .tag(name: "coffee"))
     }
 }

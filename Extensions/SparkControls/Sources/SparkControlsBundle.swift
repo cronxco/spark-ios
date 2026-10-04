@@ -15,7 +15,7 @@ struct SparkControlsBundle: WidgetBundle {
 
 struct QuickCheckInControl: ControlWidget {
     var body: some ControlWidgetConfiguration {
-        StaticControlConfiguration(kind: "co.cronx.spark.controls.checkin") {
+        StaticControlConfiguration(kind: "co.cronx.sparkapp.controls.checkin") {
             ControlWidgetButton(action: QuickCheckInAction()) {
                 Label("Check In", systemImage: "plus.circle.fill")
             }
@@ -39,7 +39,7 @@ struct QuickCheckInAction: AppIntent {
 
 struct OpenTodayControl: ControlWidget {
     var body: some ControlWidgetConfiguration {
-        StaticControlConfiguration(kind: "co.cronx.spark.controls.open-today") {
+        StaticControlConfiguration(kind: "co.cronx.sparkapp.controls.open-today") {
             ControlWidgetButton(action: OpenTodayAction()) {
                 Label("Open Spark", systemImage: "sparkles")
             }
@@ -60,7 +60,7 @@ struct OpenTodayAction: AppIntent {
 
 struct FocusDomainControl: ControlWidget {
     var body: some ControlWidgetConfiguration {
-        StaticControlConfiguration(kind: "co.cronx.spark.controls.focus-domain") {
+        StaticControlConfiguration(kind: "co.cronx.sparkapp.controls.focus-domain") {
             ControlWidgetButton(action: FocusDomainAction()) {
                 Label("Focus", systemImage: "scope")
             }

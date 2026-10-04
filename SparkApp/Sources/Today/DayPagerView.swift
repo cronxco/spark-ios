@@ -6,21 +6,43 @@ import SwiftUI
 struct DayPagerView: View {
     @Environment(AppModel.self) private var appModel
     @State private var selectedOffset: Int = 0
+    @State private var scrolledOffset: Int?
     @State private var dates: [DayKey] = DayKey.defaultWindow()
     @State private var path: [DetailRoute] = []
 
     var body: some View {
         @Bindable var appModel = appModel
         NavigationStack(path: $path) {
-            TabView(selection: $selectedOffset) {
-                ForEach(dates) { key in
-                    TodayView(date: key.date)
-                        .tag(key.offset)
+            // A horizontal paging scroll view rather than a page-style
+            // TabView: the TabView laid its pages out inside the safe area,
+            // so each day stopped above the tab bar on a plain band and the
+            // tab bar never minimised. See `SparkSectionPager`.
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: 0) {
+                    ForEach(dates) { key in
+                        TodayView(
+                            date: key.date,
+                            showsToolbar: key.offset == selectedOffset
+                        )
+                        .containerRelativeFrame(.horizontal)
+                        .id(key.offset)
+                    }
                 }
+                .scrollTargetLayout()
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .ignoresSafeArea()
-            .toolbar(.hidden, for: .navigationBar)
+            .scrollTargetBehavior(.paging)
+            .scrollIndicators(.hidden)
+            .scrollPosition(id: $scrolledOffset)
+            .sparkAppBackground()
+            .onAppear { scrolledOffset = selectedOffset }
+            .onChange(of: scrolledOffset) { _, new in
+                if let new, new != selectedOffset { selectedOffset = new }
+            }
+            .onChange(of: selectedOffset) { _, new in
+                guard scrolledOffset != new else { return }
+                scrolledOffset = new
+            }
+            .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
             .navigationDestination(for: DetailRoute.self) { route in
                 switch route {
@@ -34,8 +56,14 @@ struct DayPagerView: View {
                     MetricDetailView(identifier: identifier)
                 case .place(let id):
                     PlaceDetailView(placeId: id)
+                case .anomaly(let id):
+                    AnomalyDetailView(anomalyId: id)
                 case .integration(let service):
                     IntegrationDetailView(integrationId: service)
+                case .account(let id):
+                    AccountDetailView(accountId: id)
+                case .tag(let id, let name, let type):
+                    TagDetailView(tagID: id, tagName: name, tagType: type)
                 }
             }
         }
@@ -64,8 +92,14 @@ struct DayPagerView: View {
             push(.metric(identifier: identifier))
         case .place(let id):
             push(.place(id: id))
+        case .anomaly(let id):
+            push(.anomaly(id: id))
         case .integration(let service):
             push(.integration(service: service))
+        case .account(let id):
+            push(.account(id: id))
+        case .tag(let name, let type):
+            push(.tag(name: name, type: type))
         }
         appModel.pendingRoute = nil
     }
@@ -92,20 +126,33 @@ enum DetailRoute: Hashable {
     case block(id: String)
     case metric(identifier: String)
     case place(id: String)
+    case anomaly(id: String)
     case integration(service: String)
+    case account(id: String)
+    case tag(id: String?, name: String, type: String?)
+
+    static func tag(name: String, type: String?) -> Self {
+        .tag(id: nil, name: name, type: type)
+    }
 }
 
 private struct DayKey: Identifiable, Hashable {
-    let offset: Int
     let date: Date
+    let offset: Int
     let label: String
 
     var id: Int { offset }
 
+    init(date: Date, offset: Int, label: String? = nil) {
+        self.date = date
+        self.offset = offset
+        self.label = label ?? Self.label(for: date, offset: offset)
+    }
+
     static func defaultWindow(anchor: Date = .now, calendar: Calendar = .current) -> [DayKey] {
         (-7 ... 1).compactMap { offset in
             guard let date = calendar.date(byAdding: .day, value: offset, to: anchor) else { return nil }
-            return DayKey(offset: offset, date: date, label: Self.label(for: date, offset: offset))
+            return DayKey(date: date, offset: offset)
         }
     }
 
@@ -113,7 +160,7 @@ private struct DayKey: Identifiable, Hashable {
         (0 ..< 8).compactMap { i in
             let offset = -i
             guard let date = calendar.date(byAdding: .day, value: offset, to: anchor) else { return nil }
-            return DayKey(offset: offset, date: date, label: Self.label(for: date, offset: offset))
+            return DayKey(date: date, offset: offset)
         }.sorted(by: { $0.offset < $1.offset })
     }
 

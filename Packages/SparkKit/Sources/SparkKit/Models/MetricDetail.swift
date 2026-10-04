@@ -96,6 +96,8 @@ extension MetricDetail: Codable {
         let metric: String
         let service: String
         let action: String
+        let displayName: String?
+        let domain: String?
         let unit: String?
         let dailyValues: [DailyValue]
         let summary: Summary?
@@ -103,7 +105,7 @@ extension MetricDetail: Codable {
 
         struct DailyValue: Codable {
             let date: String
-            let value: Double
+            let value: Double?
             let isAnomaly: Bool
 
             enum CodingKeys: String, CodingKey {
@@ -127,8 +129,22 @@ extension MetricDetail: Codable {
         }
 
         enum CodingKeys: String, CodingKey {
-            case metric, service, action, unit, summary, baseline
+            case metric, service, action, domain, unit, summary, baseline
+            case displayName = "display_name"
             case dailyValues = "daily_values"
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            metric = try container.decode(String.self, forKey: .metric)
+            service = try container.decode(String.self, forKey: .service)
+            action = try container.decode(String.self, forKey: .action)
+            displayName = try container.decodeIfPresent(String.self, forKey: .displayName)
+            domain = try container.decodeIfPresent(String.self, forKey: .domain)
+            unit = try container.decodeIfPresent(String.self, forKey: .unit)
+            dailyValues = try container.decode([DailyValue].self, forKey: .dailyValues)
+            summary = try? container.decodeIfPresent(Summary.self, forKey: .summary)
+            baseline = try container.decodeIfPresent(APIBaseline.self, forKey: .baseline)
         }
     }
 
@@ -144,7 +160,7 @@ extension MetricDetail: Codable {
         let api = try APIResponse(from: decoder)
 
         id = api.metric
-        domain = api.service
+        domain = api.domain ?? api.service
         unit = api.unit
         average30d = api.summary?.mean
         compares = nil
@@ -152,7 +168,7 @@ extension MetricDetail: Codable {
         // Derive a human-readable title from the action field.
         // e.g. "had_sleep_score" → "Sleep Score", "had_heart_rate" → "Heart Rate"
         let stripped = api.action.hasPrefix("had_") ? String(api.action.dropFirst(4)) : api.action
-        title = stripped.split(separator: "_").map { $0.capitalized }.joined(separator: " ")
+        title = api.displayName ?? stripped.split(separator: "_").map { $0.capitalized }.joined(separator: " ")
 
         if let lo = api.baseline?.normalLower, let hi = api.baseline?.normalUpper {
             baseline = Baseline(low: lo, high: hi)
@@ -162,8 +178,8 @@ extension MetricDetail: Codable {
 
         let fmt = Self.dateFormatter
         series = api.dailyValues.compactMap { dv in
-            guard let date = fmt.date(from: dv.date) else { return nil }
-            return Point(date: date, value: dv.value)
+            guard let date = fmt.date(from: dv.date), let value = dv.value else { return nil }
+            return Point(date: date, value: value)
         }
 
         today = series.last?.value

@@ -2,21 +2,18 @@ import SparkKit
 import SparkUI
 import SwiftUI
 
-private let recentSearchesKey = "spark.search.recents"
-private let maxRecents = 8
-
 struct SearchView: View {
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: SearchViewModel?
     @State private var path: [DetailRoute] = []
-    @State private var recentSearches: [String] = {
-        UserDefaults.standard.stringArray(forKey: recentSearchesKey) ?? []
-    }()
+    /// Recents stay on this device and expire after 30 days; see `RecentSearchStore`.
+    private let recentSearchStore = RecentSearchStore()
+    @State private var recentSearches: [String] = RecentSearchStore().load()
 
     var body: some View {
         NavigationStack(path: $path) {
             content
-                .navigationTitle("Search")
+                .sparkAppBackground()
                 .navigationDestination(for: DetailRoute.self) { route in
                     switch route {
                     case .event(let id):
@@ -29,10 +26,18 @@ struct SearchView: View {
                         MetricDetailView(identifier: identifier)
                     case .place(let id):
                         PlaceDetailView(placeId: id)
+                    case .anomaly(let id):
+                        AnomalyDetailView(anomalyId: id)
                     case .integration(let service):
                         IntegrationDetailView(integrationId: service)
+                    case .account(let id):
+                        AccountDetailView(accountId: id)
+                    case .tag(let id, let name, let type):
+                        TagDetailView(tagID: id, tagName: name, tagType: type)
                     }
                 }
+                .sparkMainNavigationTitle("Search")
+                .sparkMainAppToolbar()
         }
         .searchable(
             text: queryBinding,
@@ -41,10 +46,23 @@ struct SearchView: View {
         )
         .searchToolbarBehavior(.minimize)
         .task {
+            recentSearches = recentSearchStore.load()
             if viewModel == nil {
                 viewModel = SearchViewModel(apiClient: appModel.apiClient)
             }
+            applyPendingSearchQuery()
         }
+        .onChange(of: appModel.pendingSearchQuery) { _, _ in
+            applyPendingSearchQuery()
+        }
+    }
+
+    /// Run the query a Siri / Shortcuts "Search Spark" intent handed over.
+    private func applyPendingSearchQuery() {
+        guard let query = appModel.pendingSearchQuery, let viewModel else { return }
+        appModel.pendingSearchQuery = nil
+        path = []
+        viewModel.query = query
     }
 
     private var queryBinding: Binding<String> {
@@ -54,15 +72,33 @@ struct SearchView: View {
         )
     }
 
-    @ViewBuilder
+    /// The header and mode pills scroll away with the results, like the
+    /// titles on the other tabs, instead of pinning above them.
     private var content: some View {
-        VStack(spacing: 0) {
-            modePills
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                SparkMainPageHeader(
+                    title: "Search",
+                    subtitle: "Find events, entities, metrics, integrations, and tags"
+                )
                 .padding(.horizontal, SparkSpacing.lg)
-                .padding(.bottom, SparkSpacing.sm)
-            Divider()
-            results
+                .padding(.top, SparkSpacing.md)
+                .padding(.bottom, SparkSpacing.md)
+
+                modePills
+                    .padding(.horizontal, SparkSpacing.lg)
+                    .padding(.bottom, SparkSpacing.sm)
+
+                results
+            }
         }
+        .scrollDismissesKeyboard(.interactively)
+    }
+
+    private var loadingState: some View {
+        ProgressView()
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, SparkSpacing.xxxl)
     }
 
     private var modePills: some View {
@@ -73,7 +109,7 @@ struct SearchView: View {
                     Button {
                         viewModel?.setMode(mode)
                     } label: {
-                        TagChip(pillLabel(for: mode), isGhost: !isActive)
+                        SearchFilterChip(pillLabel(for: mode), isSelected: isActive)
                     }
                     .buttonStyle(.plain)
                 }
@@ -95,117 +131,126 @@ struct SearchView: View {
             case .idle:
                 idleState(viewModel: viewModel)
             case .searching:
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                loadingState
             case .results(let items) where items.isEmpty:
                 EmptyState(
                     systemImage: "magnifyingglass",
                     title: "No results for \u{201C}\(viewModel.query)\u{201D}",
                     message: "Try a shorter search or switch mode."
                 )
+                .padding(.top, SparkSpacing.xl)
             case .results:
-                List {
+                LazyVStack(alignment: .leading, spacing: SparkSpacing.lg) {
                     ForEach(viewModel.grouped, id: \.0) { group in
-                        Section(group.0) {
-                            ForEach(group.1) { result in
-                                Button {
-                                    saveRecent(viewModel.query)
-                                    handleTap(result)
-                                } label: {
-                                    SearchResultRow(result: result)
+                        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                            Text(group.0)
+                                .font(SparkTypography.monoSmall)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, SparkSpacing.xs)
+
+                            VStack(spacing: SparkSpacing.sm) {
+                                ForEach(group.1) { result in
+                                    Button {
+                                        saveRecent(viewModel.query)
+                                        handleTap(result)
+                                    } label: {
+                                        SearchResultRow(result: result)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
-                                .buttonStyle(.plain)
                             }
                         }
                     }
                 }
-                .listStyle(.plain)
+                .padding(.horizontal, SparkSpacing.lg)
+                .padding(.top, SparkSpacing.lg)
+                .padding(.bottom, SparkSpacing.xxxl)
             case .error(let msg):
                 EmptyState(
                     systemImage: "exclamationmark.triangle.fill",
                     title: "Couldn't search",
                     message: msg
                 )
+                .padding(.top, SparkSpacing.xl)
             }
         } else {
-            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            loadingState
         }
     }
 
     @ViewBuilder
     private func idleState(viewModel: SearchViewModel) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: SparkSpacing.xl) {
-                // Suggestion chips
-                GlassCard {
-                    VStack(alignment: .leading, spacing: SparkSpacing.md) {
-                        Text("Suggestions")
-                            .font(SparkTypography.captionStrong)
-                            .foregroundStyle(.secondary)
-                        HStack(spacing: SparkSpacing.sm) {
-                            ForEach(suggestions, id: \.label) { suggestion in
-                                Button {
-                                    viewModel.setMode(suggestion.mode)
-                                    viewModel.query = suggestion.prefix
-                                } label: {
-                                    HStack(spacing: SparkSpacing.xs) {
-                                        Image(systemName: suggestion.icon)
-                                        Text(suggestion.label)
-                                    }
-                                    .font(SparkTypography.captionStrong)
-                                    .padding(.horizontal, SparkSpacing.md)
-                                    .padding(.vertical, SparkSpacing.sm)
-                                    .sparkGlass(.capsule, tint: Color.sparkAccent.opacity(0.1))
+        VStack(alignment: .leading, spacing: SparkSpacing.xl) {
+            // Suggestion chips
+            GlassCard {
+                VStack(alignment: .leading, spacing: SparkSpacing.md) {
+                    Text("Suggestions")
+                        .font(SparkTypography.captionStrong)
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: SparkSpacing.sm) {
+                        ForEach(suggestions, id: \.label) { suggestion in
+                            Button {
+                                viewModel.setMode(suggestion.mode)
+                                viewModel.query = suggestion.prefix
+                            } label: {
+                                HStack(spacing: SparkSpacing.xs) {
+                                    Image(systemName: suggestion.icon)
+                                    Text(suggestion.label)
                                 }
-                                .buttonStyle(.plain)
+                                .font(SparkTypography.captionStrong)
+                                .padding(.horizontal, SparkSpacing.md)
+                                .padding(.vertical, SparkSpacing.sm)
+                                .sparkGlass(.capsule, tint: Color.sparkAccent.opacity(0.1))
                             }
+                            .buttonStyle(.plain)
                         }
-                        Text("Try `>` actions · `#` tags · `$` metrics · `@` integrations · `~` semantic")
-                            .font(SparkTypography.caption)
-                            .foregroundStyle(.tertiary)
                     }
+                    Text("Try `#` tags · `$` metrics · `@` integrations · `~` semantic")
+                        .font(SparkTypography.caption)
+                        .foregroundStyle(.tertiary)
                 }
+            }
 
-                // Recent searches
-                if !recentSearches.isEmpty {
-                    GlassCard {
-                        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                            HStack {
-                                Text("Recent")
-                                    .font(SparkTypography.captionStrong)
-                                    .foregroundStyle(.secondary)
-                                Spacer(minLength: 0)
-                                Button("Clear") { clearRecents() }
-                                    .font(SparkTypography.caption)
-                                    .foregroundStyle(Color.sparkAccent)
-                            }
-                            ForEach(recentSearches, id: \.self) { query in
-                                Button {
-                                    viewModel.query = query
-                                } label: {
-                                    HStack(spacing: SparkSpacing.md) {
-                                        Image(systemName: "clock")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                        Text(query)
-                                            .font(SparkTypography.body)
-                                            .foregroundStyle(.primary)
-                                        Spacer(minLength: 0)
-                                        Image(systemName: "arrow.up.left")
-                                            .font(.caption2)
-                                            .foregroundStyle(.tertiary)
-                                    }
-                                    .padding(.vertical, SparkSpacing.xs)
-                                    .contentShape(Rectangle())
+            // Recent searches
+            if !recentSearches.isEmpty {
+                GlassCard {
+                    VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                        HStack {
+                            Text("Recent")
+                                .font(SparkTypography.captionStrong)
+                                .foregroundStyle(.secondary)
+                            Spacer(minLength: 0)
+                            Button("Clear") { clearRecents() }
+                                .font(SparkTypography.caption)
+                                .foregroundStyle(Color.sparkAccent)
+                        }
+                        ForEach(recentSearches, id: \.self) { query in
+                            Button {
+                                viewModel.query = query
+                            } label: {
+                                HStack(spacing: SparkSpacing.md) {
+                                    Image(systemName: "clock")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    Text(query)
+                                        .font(SparkTypography.body)
+                                        .foregroundStyle(.primary)
+                                    Spacer(minLength: 0)
+                                    Image(systemName: "arrow.up.left")
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
                                 }
-                                .buttonStyle(.plain)
+                                .padding(.vertical, SparkSpacing.xs)
+                                .contentShape(Rectangle())
                             }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
             }
-            .padding(.horizontal, SparkSpacing.lg)
-            .padding(.vertical, SparkSpacing.lg)
         }
+        .padding(.horizontal, SparkSpacing.lg)
+        .padding(.vertical, SparkSpacing.lg)
     }
 
     private var suggestions: [(label: String, icon: String, mode: SearchEndpoint.Mode, prefix: String)] {
@@ -218,18 +263,12 @@ struct SearchView: View {
     }
 
     private func saveRecent(_ query: String) {
-        let clean = query.trimmingCharacters(in: .whitespaces)
-        guard !clean.isEmpty else { return }
-        var updated = recentSearches.filter { $0 != clean }
-        updated.insert(clean, at: 0)
-        if updated.count > maxRecents { updated = Array(updated.prefix(maxRecents)) }
-        recentSearches = updated
-        UserDefaults.standard.set(updated, forKey: recentSearchesKey)
+        recentSearches = recentSearchStore.record(query)
     }
 
     private func clearRecents() {
+        recentSearchStore.clear()
         recentSearches = []
-        UserDefaults.standard.removeObject(forKey: recentSearchesKey)
     }
 
     private func handleTap(_ result: SearchResult) {
@@ -240,6 +279,7 @@ struct SearchView: View {
         case .metric(let h): .metric(identifier: h.identifier)
         case .integration(let h): .integration(service: h.id)
         case .place(let h): .place(id: h.id)
+        case .tag(let h): .tag(name: h.name, type: h.type)
         case .intent: nil  // Actions ride the App Intents pipeline (Phase 3).
         }
         if let route, path.last != route {
@@ -248,53 +288,31 @@ struct SearchView: View {
     }
 }
 
-private struct SearchResultRow: View {
-    let result: SearchResult
+// SearchResultRow is defined in SearchResultRow.swift
+
+private struct SearchFilterChip: View {
+    let label: String
+    let isSelected: Bool
+
+    init(_ label: String, isSelected: Bool) {
+        self.label = label
+        self.isSelected = isSelected
+    }
 
     var body: some View {
-        HStack(spacing: SparkSpacing.md) {
-            DomainGlyph(icon: glyph, tint: tint, size: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(result.title)
-                    .font(SparkTypography.body)
-                    .lineLimit(1)
-                if let sub = result.subtitle {
-                    Text(sub)
-                        .font(SparkTypography.bodySmall)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+        Text(label)
+            .font(SparkTypography.captionStrong)
+            .lineLimit(1)
+            .padding(.horizontal, SparkSpacing.md)
+            .padding(.vertical, SparkSpacing.sm)
+            .foregroundStyle(isSelected ? Color.sparkOnAccent : Color.secondary)
+            // Same grammar as RangeChipBar and the Day timeline filter: a
+            // solid accent fill when selected, plain glass otherwise.
+            .background {
+                if isSelected {
+                    Capsule().fill(Color.sparkAccent)
                 }
             }
-            Spacer(minLength: 0)
-            Image(systemName: "chevron.right")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.vertical, SparkSpacing.xs)
-        .contentShape(Rectangle())
-    }
-
-    private var glyph: String {
-        switch result {
-        case .event: "circle.dotted"
-        case .object: "shippingbox"
-        case .block: "square.stack.3d.up"
-        case .metric: "chart.line.uptrend.xyaxis"
-        case .integration: "link"
-        case .place: "mappin.circle.fill"
-        case .intent(let h): h.symbol ?? "sparkles"
-        }
-    }
-
-    private var tint: Color {
-        switch result {
-        case .event(let h): h.domain.map(Color.domainTint(for:)) ?? .sparkAccent
-        case .object: .sparkAccent
-        case .block: .domainKnowledge
-        case .metric(let h): h.domain.map(Color.domainTint(for:)) ?? .sparkAccent
-        case .integration: .sparkOcean
-        case .place: .sparkAccent
-        case .intent: .sparkAccent
-        }
+            .sparkGlass(.capsule)
     }
 }

@@ -4,6 +4,55 @@ import Testing
 
 @Suite("Search response decoding")
 struct SearchResponseDecodingTests {
+    @Test("tag search mode uses backend singular query value")
+    func tagSearchModeQueryValue() throws {
+        let endpoint = SearchEndpoint.query(text: "Hannah Waddingham", mode: .tags)
+
+        let mode = try #require(endpoint.query.first { $0.name == "mode" })
+        #expect(mode.value == "tag")
+        #expect(SearchEndpoint.Mode.tags.label == "Tags")
+        #expect(SearchEndpoint.Mode.tags.symbol == "#")
+    }
+
+    @Test("every mode sends a mode name the backend accepts")
+    func modesUseBackendQueryValues() {
+        let accepted: Set<String> = ["default", "semantic", "tag", "metric", "integration"]
+        for mode in SearchEndpoint.Mode.allCases {
+            #expect(accepted.contains(mode.queryValue), "\(mode) sends \(mode.queryValue)")
+        }
+    }
+
+    @Test("typed entity search sends query and a boolean semantic flag")
+    func entitySearchParameters() throws {
+        let endpoint = SearchEndpoint.entity(.objects, query: "Tesco", semantic: false)
+
+        #expect(endpoint.path == "/search/objects")
+        #expect(endpoint.query.first { $0.name == "query" }?.value == "Tesco")
+        #expect(endpoint.query.first { $0.name == "q" } == nil)
+        #expect(endpoint.query.first { $0.name == "semantic" }?.value == "0")
+    }
+
+    @Test("decodes typed block search payload")
+    func decodesTypedBlockPayload() throws {
+        let json = """
+        {
+          "blocks": [
+            { "id": "blk_1", "title": "Heart rate", "block_type": "heart_rate" }
+          ],
+          "meta": { "query": "heart", "semantic": false, "count": 1, "limit": 20 }
+        }
+        """
+
+        let response = try JSONDecoder().decode(SearchResponse.self, from: Data(json.utf8))
+        #expect(response.results.count == 1)
+        guard case .block(let hit) = response.results.first else {
+            Issue.record("Expected a block result")
+            return
+        }
+        #expect(hit.id == "blk_1")
+        #expect(hit.blockType == "heart_rate")
+    }
+
     @Test("decodes top-level array payload")
     func decodesArrayPayload() throws {
         let json = """
@@ -33,6 +82,126 @@ struct SearchResponseDecodingTests {
             #expect(hit.title == "Monzo")
         } else {
             Issue.record("Expected an integration hit.")
+        }
+    }
+
+    @Test("decodes grouped backend format")
+    func decodesGroupedBackendPayload() throws {
+        let json = """
+        {
+          "mode": "default",
+          "query": "Test",
+          "events": [
+            {
+              "id": "evt_1",
+              "service": "monzo",
+              "domain": "money",
+              "action": "purchase",
+              "target": { "id": "obj_1", "title": "Costa Coffee", "concept": "merchant" }
+            }
+          ],
+          "objects": [
+            {
+              "id": "obj_2",
+              "concept": "article",
+              "type": "knowledge",
+              "title": "Testing in Swift"
+            }
+          ],
+          "integrations": [
+            {
+              "id": "int_1",
+              "service": "monzo",
+              "name": "Monzo",
+              "instance_type": "bank",
+              "status": "active"
+            }
+          ],
+          "metrics": [
+            {
+              "id": "met_1",
+              "identifier": "oura.sleep_score",
+              "display_name": "Sleep Score",
+              "service": "oura",
+              "domain": "health",
+              "action": "sleep_score",
+              "unit": "points",
+              "event_count": 30,
+              "mean": 82.5,
+              "last_event_at": "2026-05-03T00:00:00Z"
+            }
+          ]
+        }
+        """
+
+        let response = try JSONDecoder().decode(SearchResponse.self, from: Data(json.utf8))
+        #expect(response.results.count == 4)
+
+        if case .event(let hit) = response.results[0] {
+            #expect(hit.title == "Costa Coffee")
+            #expect(hit.domain == "money")
+        } else {
+            Issue.record("Expected an event hit at index 0.")
+        }
+
+        if case .object(let hit) = response.results[1] {
+            #expect(hit.title == "Testing in Swift")
+            #expect(hit.concept == "article")
+        } else {
+            Issue.record("Expected an object hit at index 1.")
+        }
+
+        if case .integration(let hit) = response.results[2] {
+            #expect(hit.title == "Monzo")
+            #expect(hit.service == "monzo")
+        } else {
+            Issue.record("Expected an integration hit at index 2.")
+        }
+
+        if case .metric(let hit) = response.results[3] {
+            #expect(hit.identifier == "oura.sleep_score")
+            #expect(hit.title == "Sleep Score")
+            #expect(hit.subtitle == "points")
+            #expect(hit.domain == "health")
+        } else {
+            Issue.record("Expected a metric hit at index 3.")
+        }
+    }
+
+    @Test("decodes tag hits from flat and grouped search payloads")
+    func decodesTagHits() throws {
+        let flatJSON = """
+        [
+          { "kind": "tag", "name": "Alice", "type": "spark_person", "title": "Alice", "count": 3 }
+        ]
+        """
+
+        let flat = try JSONDecoder().decode(SearchResponse.self, from: Data(flatJSON.utf8))
+        if case .tag(let hit) = try #require(flat.results.first) {
+            #expect(hit.name == "Alice")
+            #expect(hit.type == "spark_person")
+            #expect(hit.subtitle == "3 items")
+        } else {
+            Issue.record("Expected a tag hit.")
+        }
+
+        let groupedJSON = """
+        {
+          "mode": "tags",
+          "query": "coffee",
+          "tags": [
+            { "name": "coffee", "type": "merchant_category", "results_count": 1 }
+          ]
+        }
+        """
+
+        let grouped = try JSONDecoder().decode(SearchResponse.self, from: Data(groupedJSON.utf8))
+        if case .tag(let hit) = try #require(grouped.results.first) {
+            #expect(hit.name == "coffee")
+            #expect(hit.title == "coffee")
+            #expect(hit.subtitle == "1 item")
+        } else {
+            Issue.record("Expected a grouped tag hit.")
         }
     }
 }

@@ -1,9 +1,9 @@
-// swift-tools-version: 6.2
+// swift-tools-version: 6.4
 import PackageDescription
 
 let package = Package(
     name: "SparkLocation",
-    platforms: [.iOS(.v26)],
+    platforms: [.iOS(.v27)],
     products: [.library(name: "SparkLocation", targets: ["SparkLocation"])],
     dependencies: [.package(path: "../SparkKit")],
     targets: [

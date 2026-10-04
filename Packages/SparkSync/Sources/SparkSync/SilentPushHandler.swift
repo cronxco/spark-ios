@@ -16,7 +16,7 @@ import UIKit
 ///
 /// Wire in `SparkAppDelegate.application(_:didReceiveRemoteNotification:fetchCompletionHandler:)`.
 public enum SilentPushHandler {
-    private static let logger = Logger(subsystem: "co.cronx.spark", category: "SilentPush")
+    private static let logger = Logger(subsystem: "co.cronx.sparkapp", category: "SilentPush")
     private static let signposter = OSSignposter(logger: logger)
 
     /// All mutable handler state lives on the MainActor — both tasks are

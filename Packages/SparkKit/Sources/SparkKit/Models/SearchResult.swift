@@ -9,6 +9,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
     case metric(MetricHit)
     case integration(IntegrationHit)
     case place(PlaceHit)
+    case tag(TagHit)
     case intent(IntentHit)
 
     public var id: String {
@@ -19,6 +20,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         case .metric(let h): "metric:\(h.identifier)"
         case .integration(let h): "integration:\(h.id)"
         case .place(let h): "place:\(h.id)"
+        case .tag(let h): "tag:\(h.type ?? ""):\(h.name)"
         case .intent(let h): "intent:\(h.id)"
         }
     }
@@ -31,6 +33,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         case .metric(let h): h.title
         case .integration(let h): h.title
         case .place(let h): h.title
+        case .tag(let h): h.title
         case .intent(let h): h.title
         }
     }
@@ -43,6 +46,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         case .metric(let h): h.subtitle
         case .integration(let h): h.subtitle
         case .place(let h): h.subtitle
+        case .tag(let h): h.subtitle
         case .intent(let h): h.subtitle
         }
     }
@@ -55,6 +59,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         case .metric: "Metrics"
         case .integration: "Integrations"
         case .place: "Places"
+        case .tag: "Tags"
         case .intent: "Actions"
         }
     }
@@ -74,6 +79,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         case "metric": self = .metric(try single.decode(MetricHit.self))
         case "integration": self = .integration(try single.decode(IntegrationHit.self))
         case "place": self = .place(try single.decode(PlaceHit.self))
+        case "tag": self = .tag(try single.decode(TagHit.self))
         case "intent": self = .intent(try single.decode(IntentHit.self))
         default:
             throw DecodingError.dataCorruptedError(
@@ -93,6 +99,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         case .metric(let h): try single.encode(h)
         case .integration(let h): try single.encode(h)
         case .place(let h): try single.encode(h)
+        case .tag(let h): try single.encode(h)
         case .intent(let h): try single.encode(h)
         }
     }
@@ -145,6 +152,43 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         public let subtitle: String?
     }
 
+    public struct TagHit: Codable, Sendable, Hashable {
+        public let name: String
+        public let type: String?
+        public let title: String
+        public let subtitle: String?
+
+        enum CodingKeys: String, CodingKey {
+            case id, name, type, title, subtitle, count, resultsCount = "results_count"
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            name = try container.decodeIfPresent(String.self, forKey: .name)
+                ?? container.decodeIfPresent(String.self, forKey: .id)
+                ?? container.decode(String.self, forKey: .title)
+            type = try container.decodeIfPresent(String.self, forKey: .type)
+            title = try container.decodeIfPresent(String.self, forKey: .title) ?? name
+
+            if let subtitle = try container.decodeIfPresent(String.self, forKey: .subtitle) {
+                self.subtitle = subtitle
+            } else if let count = try container.decodeIfPresent(Int.self, forKey: .count)
+                ?? container.decodeIfPresent(Int.self, forKey: .resultsCount) {
+                self.subtitle = "\(count) item\(count == 1 ? "" : "s")"
+            } else {
+                self.subtitle = type
+            }
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(name, forKey: .name)
+            try container.encodeIfPresent(type, forKey: .type)
+            try container.encode(title, forKey: .title)
+            try container.encodeIfPresent(subtitle, forKey: .subtitle)
+        }
+    }
+
     public struct IntentHit: Codable, Sendable, Hashable {
         public let id: String
         public let title: String
@@ -154,16 +198,17 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
 }
 
 /// Search payload returned by `/search`.
-/// Backend can return either a raw array (`[SearchResult]`) or an envelope
-/// containing the array under a known key.
+/// Backend returns a grouped object: `{ mode, query, events: [...], objects: [...], integrations: [...], metrics: [...] }`,
+/// or `{ blocks: [...], meta }` from typed block search.
+/// Legacy flat-array and wrapped-array formats are also accepted for backwards compatibility.
 public struct SearchResponse: Codable, Sendable, Hashable {
     public let results: [SearchResult]
 
     enum CodingKeys: String, CodingKey {
-        case results
-        case data
-        case items
-        case hits
+        // Grouped backend format
+        case events, objects, blocks, integrations, metrics, tags
+        // Legacy wrapped formats
+        case results, data, items, hits
     }
 
     public init(results: [SearchResult]) {
@@ -171,34 +216,87 @@ public struct SearchResponse: Codable, Sendable, Hashable {
     }
 
     public init(from decoder: Decoder) throws {
+        // 1. Raw array (must be checked before requesting a keyed container)
         if let direct = try? [SearchResult](from: decoder) {
             results = direct
             return
         }
 
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        if let wrapped = try container.decodeIfPresent([SearchResult].self, forKey: .results) {
-            results = wrapped
+
+        // 2. Grouped backend format: { events: [...], objects: [...], ... }
+        if container.contains(.events) || container.contains(.objects)
+            || container.contains(.blocks) || container.contains(.integrations) || container.contains(.metrics)
+            || container.contains(.tags) {
+            var all: [SearchResult] = []
+
+            for e in (try container.decodeIfPresent([BackendEvent].self, forKey: .events)) ?? [] {
+                all.append(.event(SearchResult.EventHit(
+                    id: e.id ?? "",
+                    title: e.target?.title ?? e.action ?? e.service ?? e.id ?? "",
+                    subtitle: e.domain,
+                    domain: e.domain
+                )))
+            }
+            for o in (try container.decodeIfPresent([BackendObject].self, forKey: .objects)) ?? [] {
+                all.append(.object(SearchResult.ObjectHit(
+                    id: o.id ?? "",
+                    title: o.title ?? o.concept ?? o.id ?? "",
+                    subtitle: o.concept,
+                    concept: o.concept
+                )))
+            }
+            for b in (try container.decodeIfPresent([BackendBlock].self, forKey: .blocks)) ?? [] {
+                all.append(.block(SearchResult.BlockHit(
+                    id: b.id ?? "",
+                    title: b.title ?? b.blockType ?? b.id ?? "",
+                    subtitle: b.blockType,
+                    blockType: b.blockType
+                )))
+            }
+            for i in (try container.decodeIfPresent([BackendIntegration].self, forKey: .integrations)) ?? [] {
+                all.append(.integration(SearchResult.IntegrationHit(
+                    id: i.id ?? "",
+                    title: i.name ?? i.service ?? i.id ?? "",
+                    subtitle: i.service,
+                    service: i.service
+                )))
+            }
+            for m in (try container.decodeIfPresent([BackendMetric].self, forKey: .metrics)) ?? [] {
+                all.append(.metric(SearchResult.MetricHit(
+                    identifier: m.identifier ?? "",
+                    title: m.displayName ?? m.identifier ?? "",
+                    subtitle: m.unit,
+                    domain: m.domain
+                )))
+            }
+            for tag in (try container.decodeIfPresent([SearchResult.TagHit].self, forKey: .tags)) ?? [] {
+                all.append(.tag(tag))
+            }
+
+            results = all
             return
+        }
+
+        // 3. Legacy wrapped formats
+        if let wrapped = try container.decodeIfPresent([SearchResult].self, forKey: .results) {
+            results = wrapped; return
         }
         if let wrapped = try container.decodeIfPresent([SearchResult].self, forKey: .data) {
-            results = wrapped
-            return
+            results = wrapped; return
         }
         if let wrapped = try container.decodeIfPresent([SearchResult].self, forKey: .items) {
-            results = wrapped
-            return
+            results = wrapped; return
         }
         if let wrapped = try container.decodeIfPresent([SearchResult].self, forKey: .hits) {
-            results = wrapped
-            return
+            results = wrapped; return
         }
 
         throw DecodingError.typeMismatch(
             [SearchResult].self,
             DecodingError.Context(
                 codingPath: decoder.codingPath,
-                debugDescription: "Expected search payload as array or wrapped array under results/data/items/hits."
+                debugDescription: "Expected search payload as grouped object, array, or wrapped array."
             )
         )
     }
@@ -206,5 +304,53 @@ public struct SearchResponse: Codable, Sendable, Hashable {
     public func encode(to encoder: Encoder) throws {
         var single = encoder.singleValueContainer()
         try single.encode(results)
+    }
+}
+
+// MARK: - Private backend compact types
+
+private struct BackendEvent: Decodable {
+    let id: String?
+    let service: String?
+    let domain: String?
+    let action: String?
+    let target: TargetRef?
+    struct TargetRef: Decodable { let title: String? }
+}
+
+private struct BackendObject: Decodable {
+    let id: String?
+    let title: String?
+    let concept: String?
+}
+
+private struct BackendBlock: Decodable {
+    let id: String?
+    let title: String?
+    let blockType: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, title
+        case blockType = "block_type"
+    }
+}
+
+private struct BackendIntegration: Decodable {
+    let id: String?
+    let name: String?
+    let service: String?
+}
+
+private struct BackendMetric: Decodable {
+    let identifier: String?
+    let displayName: String?
+    let unit: String?
+    let domain: String?
+
+    enum CodingKeys: String, CodingKey {
+        case identifier
+        case displayName = "display_name"
+        case unit
+        case domain
     }
 }

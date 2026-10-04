@@ -1,8 +1,9 @@
+import SparkUI
 import SwiftUI
 import WidgetKit
 
 struct NextEventWidget: Widget {
-    let kind = "co.cronx.spark.widgets.nextevent"
+    let kind = "co.cronx.sparkapp.widgets.nextevent"
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: SparkTimelineProvider()) { entry in
@@ -64,6 +65,6 @@ struct NextEventWidgetView: View {
     private var containerBG: some View {
         ContainerRelativeShape()
             .fill(.blue.opacity(0.08))
-            .containerBackground(for: .widget) { Color(.systemBackground) }
+            .containerBackground(for: .widget) { Color.sparkSurface }
     }
 }

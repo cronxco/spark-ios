@@ -19,55 +19,41 @@ struct SignInStep: View {
     ]
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: SparkSpacing.xl) {
-                Spacer().frame(height: SparkSpacing.xl)
-
-                Text("Sign in")
-                    .font(SparkFonts.display(.largeTitle, weight: .bold))
-
-                VStack(spacing: SparkSpacing.md) {
-                    ForEach(rows) { row in
-                        HStack(alignment: .top, spacing: SparkSpacing.md) {
-                            Text(row.number)
-                                .font(SparkTypography.monoSmall)
-                                .foregroundStyle(Color.sparkAccent)
-                                .frame(width: 28, alignment: .leading)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(row.title)
-                                    .font(SparkTypography.bodyStrong)
-                                Text(row.detail)
-                                    .font(SparkTypography.bodySmall)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer(minLength: 0)
+        SparkOnboardingScaffold(icon: "sparkles", title: "Sign in") {
+            VStack(spacing: SparkSpacing.md) {
+                ForEach(rows) { row in
+                    HStack(alignment: .top, spacing: SparkSpacing.md) {
+                        Text(row.number)
+                            .font(SparkTypography.monoSmall)
+                            .foregroundStyle(Color.sparkAccent)
+                            .frame(width: 28, alignment: .leading)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(row.title)
+                                .font(SparkTypography.bodyStrong)
+                            Text(row.detail)
+                                .font(SparkTypography.bodySmall)
+                                .foregroundStyle(.secondary)
                         }
+                        Spacer(minLength: 0)
                     }
                 }
-                .padding(.horizontal, SparkSpacing.lg)
-
-                Spacer()
-
-                if let err = model.lastError {
-                    Text(err)
-                        .font(SparkTypography.caption)
-                        .foregroundStyle(Color.sparkError)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, SparkSpacing.xl)
-                }
-
-                PillButton("Continue with Spark", systemImage: "arrow.right.circle.fill") {
-                    Task {
-                        guard let anchor = ASPresentationAnchorHandle.current() else { return }
-                        await model.signIn(anchor: anchor)
-                        // proceed() is called by OnboardingFlow via onChange(of: model.session)
-                    }
-                }
-                .padding(.bottom, SparkSpacing.xxl)
             }
-            .padding(.horizontal, SparkSpacing.xl)
+            .padding(.horizontal, SparkSpacing.lg)
+        } actions: {
+            if let err = model.lastError {
+                Text(err)
+                    .font(SparkTypography.caption)
+                    .foregroundStyle(Color.sparkError)
+                    .multilineTextAlignment(.center)
+            }
+
+            PillButton("Continue with Spark", systemImage: "arrow.right.circle.fill") {
+                Task {
+                    guard let anchor = ASPresentationAnchorHandle.current() else { return }
+                    await model.signIn(anchor: anchor)
+                    // proceed() is called by OnboardingFlow via onChange(of: model.session)
+                }
+            }
         }
-        .scrollContentBackground(.hidden)
-        .background(Color.sparkSurface.ignoresSafeArea())
     }
 }

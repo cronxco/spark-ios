@@ -1,5 +1,26 @@
 import Foundation
 
+/// Which way a money event moved money, as the server classifies it.
+///
+/// Resolved server-side so the client never guesses from an action-name
+/// suffix — a vocabulary that grows with every integration. An unrecognised
+/// value decodes as `.unknown` rather than failing the event.
+public enum MoneyDirection: String, Codable, Sendable, Hashable {
+    /// To a third party. What "spend" means.
+    case out
+    case `in`
+    /// Between the user's own accounts and pots. Not spend.
+    case `internal`
+    /// Deliberately left out of the day's totals.
+    case excluded
+    case unknown
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = MoneyDirection(rawValue: raw) ?? .unknown
+    }
+}
+
 /// Mirrors `CompactEventResource` on the backend.
 public struct Event: Codable, Sendable, Hashable, Identifiable {
     public let id: String
@@ -10,29 +31,48 @@ public struct Event: Codable, Sendable, Hashable, Identifiable {
     public let value: String?
     public let unit: String?
     public let url: String?
+    public let displayName: String?
+    public let hidden: Bool
+    public let displayWithObject: Bool
+    public let displayValue: String?
+    public let tags: [EventTag]
     public let tldr: String?
+    public let blocksCount: Int?
     public let actor: ActorTarget?
     public let target: ActorTarget?
+    /// `service:action:actor_id`. Consecutive events sharing it are one run —
+    /// twenty Spotify plays are one timeline row saying twenty — decided by
+    /// the server so the web and the app group identically.
+    public let groupKey: String?
+    /// Money events only.
+    public let direction: MoneyDirection?
 
     enum CodingKeys: String, CodingKey {
-        case id, time, service, domain, action, value, unit, url, tldr, actor, target
+        case id, time, service, domain, action, value, unit, url, hidden, tags, tldr, actor, target, direction
+        case displayName = "display_name"
+        case displayWithObject = "display_with_object"
+        case displayValue = "display_value"
+        case blocksCount = "blocks_count"
+        case groupKey = "group_key"
     }
 
     public struct ActorTarget: Codable, Sendable, Hashable {
         public let id: String
         public let title: String
         public let concept: String
+        public let type: String?
         public let mediaUrl: String?
 
         enum CodingKeys: String, CodingKey {
-            case id, title, concept
+            case id, title, concept, type
             case mediaUrl = "media_url"
         }
 
-        public init(id: String, title: String, concept: String, mediaUrl: String? = nil) {
+        public init(id: String, title: String, concept: String, type: String? = nil, mediaUrl: String? = nil) {
             self.id = id
             self.title = title
             self.concept = concept
+            self.type = type
             self.mediaUrl = mediaUrl
         }
     }
@@ -46,9 +86,17 @@ public struct Event: Codable, Sendable, Hashable, Identifiable {
         value: String? = nil,
         unit: String? = nil,
         url: String? = nil,
+        displayName: String? = nil,
+        hidden: Bool = false,
+        displayWithObject: Bool = false,
+        displayValue: String? = nil,
+        tags: [EventTag] = [],
         tldr: String? = nil,
+        blocksCount: Int? = nil,
         actor: ActorTarget? = nil,
-        target: ActorTarget? = nil
+        target: ActorTarget? = nil,
+        groupKey: String? = nil,
+        direction: MoneyDirection? = nil
     ) {
         self.id = id
         self.time = time
@@ -58,9 +106,17 @@ public struct Event: Codable, Sendable, Hashable, Identifiable {
         self.value = value
         self.unit = unit
         self.url = url
+        self.displayName = displayName
+        self.hidden = hidden
+        self.displayWithObject = displayWithObject
+        self.displayValue = displayValue
+        self.tags = tags
         self.tldr = tldr
+        self.blocksCount = blocksCount
         self.actor = actor
         self.target = target
+        self.groupKey = groupKey
+        self.direction = direction
     }
 
     public init(from decoder: Decoder) throws {
@@ -72,9 +128,17 @@ public struct Event: Codable, Sendable, Hashable, Identifiable {
         action = try container.decode(String.self, forKey: .action)
         unit = try container.decodeIfPresent(String.self, forKey: .unit)
         url = try container.decodeIfPresent(String.self, forKey: .url)
+        displayName = try container.decodeIfPresent(String.self, forKey: .displayName)
+        hidden = try container.decodeIfPresent(Bool.self, forKey: .hidden) ?? false
+        displayWithObject = try container.decodeIfPresent(Bool.self, forKey: .displayWithObject) ?? false
+        displayValue = try container.decodeIfPresent(String.self, forKey: .displayValue)
+        tags = try container.decodeIfPresent([EventTag].self, forKey: .tags) ?? []
         tldr = try container.decodeIfPresent(String.self, forKey: .tldr)
+        blocksCount = try container.decodeIfPresent(Int.self, forKey: .blocksCount)
         actor = try container.decodeIfPresent(ActorTarget.self, forKey: .actor)
         target = try container.decodeIfPresent(ActorTarget.self, forKey: .target)
+        groupKey = try container.decodeIfPresent(String.self, forKey: .groupKey)
+        direction = try container.decodeIfPresent(MoneyDirection.self, forKey: .direction)
 
         if let stringValue = try? container.decodeIfPresent(String.self, forKey: .value) {
             value = stringValue

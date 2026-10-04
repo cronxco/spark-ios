@@ -4,7 +4,7 @@ import WidgetKit
 // MARK: - Circular (sleep ring + steps ring)
 
 struct SleepCircularWidget: Widget {
-    let kind = "co.cronx.spark.widgets.sleep-circular"
+    let kind = "co.cronx.sparkapp.widgets.sleep-circular"
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: SparkTimelineProvider()) { entry in
@@ -45,7 +45,7 @@ struct SleepCircularView: View {
 }
 
 struct StepsCircularWidget: Widget {
-    let kind = "co.cronx.spark.widgets.steps-circular"
+    let kind = "co.cronx.sparkapp.widgets.steps-circular"
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: SparkTimelineProvider()) { entry in
@@ -84,7 +84,7 @@ struct StepsCircularView: View {
 // MARK: - Rectangular (top metric)
 
 struct TopMetricRectangularWidget: Widget {
-    let kind = "co.cronx.spark.widgets.top-metric-rect"
+    let kind = "co.cronx.sparkapp.widgets.top-metric-rect"
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: SparkTimelineProvider()) { entry in
@@ -130,7 +130,7 @@ struct TopMetricRectangularView: View {
 // MARK: - Inline (next event)
 
 struct NextEventInlineWidget: Widget {
-    let kind = "co.cronx.spark.widgets.next-event-inline"
+    let kind = "co.cronx.sparkapp.widgets.next-event-inline"
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: SparkTimelineProvider()) { entry in
@@ -147,11 +147,14 @@ struct NextEventInlineView: View {
 
     var body: some View {
         let snap = entry.snapshot
-        if let title = snap.nextEventTitle {
-            let time = snap.nextEventStart.map { " · \($0)" } ?? ""
-            Label("\(title)\(time)", systemImage: "calendar")
-        } else {
-            Label("No upcoming events", systemImage: "calendar")
+        Group {
+            if let title = snap.nextEventTitle {
+                let time = snap.nextEventStart.map { " · \($0)" } ?? ""
+                Label("\(title)\(time)", systemImage: "calendar")
+            } else {
+                Label("No upcoming events", systemImage: "calendar")
+            }
         }
+        .widgetURL(URL(string: "https://spark.cronx.co/today"))
     }
 }

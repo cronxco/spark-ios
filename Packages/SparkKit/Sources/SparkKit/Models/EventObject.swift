@@ -10,10 +10,12 @@ public struct EventObject: Codable, Sendable, Hashable, Identifiable {
     public let content: String?
     public let url: String?
     public let mediaUrl: String?
+    public let location: EventDetail.Location?
 
     enum CodingKeys: String, CodingKey {
         case id, concept, type, title, time, content, url
         case mediaUrl = "media_url"
+        case location
     }
 
     public init(
@@ -24,7 +26,8 @@ public struct EventObject: Codable, Sendable, Hashable, Identifiable {
         time: Date? = nil,
         content: String? = nil,
         url: String? = nil,
-        mediaUrl: String? = nil
+        mediaUrl: String? = nil,
+        location: EventDetail.Location? = nil
     ) {
         self.id = id
         self.concept = concept
@@ -34,5 +37,30 @@ public struct EventObject: Codable, Sendable, Hashable, Identifiable {
         self.content = content
         self.url = url
         self.mediaUrl = mediaUrl
+        self.location = location
     }
+}
+
+extension EventObject {
+    /// The object concept the backend gives people (Immich faces, household members).
+    public static let personConcept = "person"
+
+    /// People are objects with the `person` concept and get the person detail screen.
+    public var isPerson: Bool { concept == Self.personConcept }
+
+    /// `media_url` as a URL, used as a person's avatar.
+    public var mediaURL: URL? {
+        guard let mediaUrl, !mediaUrl.isEmpty else { return nil }
+        return URL(string: mediaUrl)
+    }
+}
+
+extension EventDetail.ActorTarget {
+    /// Whether this actor or target is a person.
+    public var isPerson: Bool { concept == EventObject.personConcept }
+}
+
+extension Event.ActorTarget {
+    /// Whether this actor or target is a person.
+    public var isPerson: Bool { concept == EventObject.personConcept }
 }

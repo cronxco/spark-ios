@@ -2,7 +2,7 @@ import Foundation
 
 public enum MapEndpoint {
     /// GET /map/data?bbox=lat1,lng1,lat2,lng2[&date=YYYY-MM-DD]
-    public static func points(bbox: BoundingBox, date: Date? = nil) -> Endpoint<[MapDataPoint]> {
+    public static func points(bbox: BoundingBox, date: Date? = nil) -> Endpoint<MapDataResponse> {
         var query: [URLQueryItem] = [
             URLQueryItem(name: "bbox", value: bbox.queryValue)
         ]

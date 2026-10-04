@@ -4,10 +4,19 @@ import SwiftUI
 
 struct SettingsRootView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    Text("Manage your account, preferences, connections, and app diagnostics.")
+                        .font(SparkTypography.bodySmall)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, SparkSpacing.sm)
+                }
+                .listRowBackground(Color.clear)
+
                 Section("Account") {
                     NavigationLink {
                         ProfileView()
@@ -67,6 +76,12 @@ struct SettingsRootView: View {
 
                     #if DEBUG
                     NavigationLink {
+                        APISessionSettingsView()
+                    } label: {
+                        Label("API Session", systemImage: "network")
+                    }
+
+                    NavigationLink {
                         DebugView()
                     } label: {
                         Label("Debug", systemImage: "ladybug")
@@ -75,6 +90,16 @@ struct SettingsRootView: View {
                 }
             }
             .navigationTitle("Settings")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("Close")
+                }
+            }
         }
     }
 }

@@ -1,60 +1,77 @@
+import CoreLocation
 import SparkKit
 import SparkUI
 import SwiftUI
 
 struct CheckInModalView: View {
-    @Environment(AppModel.self) private var appModel
+    let viewModel: TodayViewModel
+    let date: Date
+    let initialPeriod: CheckInPeriod
+    let allowsPeriodSelection: Bool
+
     @Environment(\.dismiss) private var dismiss
 
-    let slot: String
-    let date: Date
+    @State private var period: CheckInPeriod
+    @State private var physical: Int? = nil
+    @State private var mental: Int? = nil
+    @State private var notes: String = ""
+    @State private var locationState: LocationState = .idle
+    @State private var isSubmitting = false
+    @State private var submitError: String? = nil
 
-    @State private var selectedMood: String?
-    @State private var selectedTags: Set<String> = []
-    @State private var note: String = ""
-    @State private var isLogging = false
-    @State private var logError: String?
+    init(
+        viewModel: TodayViewModel,
+        date: Date,
+        initialPeriod: CheckInPeriod,
+        allowsPeriodSelection: Bool = false
+    ) {
+        self.viewModel = viewModel
+        self.date = date
+        self.initialPeriod = initialPeriod
+        self.allowsPeriodSelection = allowsPeriodSelection
+        _period = State(initialValue: initialPeriod)
+    }
 
-    private let moods: [(String, Color)] = [
-        ("exhausted", Color.sparkError),
-        ("tired",     Color.sparkWarning),
-        ("ok",        Color(red: 0.6, green: 0.6, blue: 0.65)),
-        ("rested",    Color.sparkSuccess),
-        ("great",     Color.sparkAccent),
-    ]
-
-    private let defaultTags = ["restless", "dreams", "headache", "energised", "stressed", "calm"]
+    private var otherPeriodAlsoPending: Bool {
+        guard allowsPeriodSelection else { return false }
+        switch initialPeriod {
+        case .morning:
+            if case .pending = viewModel.checkInDayStatus.afternoon { return true }
+        case .afternoon:
+            if case .pending = viewModel.checkInDayStatus.morning { return true }
+        }
+        return false
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: SparkSpacing.xl) {
-                    moodSection
-                    tagsSection
-                    noteSection
-                    if let err = logError {
+                    if otherPeriodAlsoPending {
+                        periodPicker
+                    }
+                    physicalSection
+                    mentalSection
+                    notesSection
+                    locationSection
+                    if let err = submitError {
                         Text(err)
                             .font(SparkTypography.bodySmall)
                             .foregroundStyle(Color.sparkError)
                     }
+                    logButton
                 }
                 .padding(.horizontal, SparkSpacing.lg)
                 .padding(.vertical, SparkSpacing.xl)
             }
             .scrollContentBackground(.hidden)
-            .background(Color.sparkSurface.ignoresSafeArea())
-            .navigationTitle("\(slot.capitalized) check-in")
+            .background(SparkResolvedAppBackground().ignoresSafeArea())
+            .navigationTitle("\(period.rawValue.capitalized) check-in")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { dismiss() }
-                }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Log it") {
-                        Task { await logCheckIn() }
-                    }
-                    .disabled(selectedMood == nil || isLogging)
-                    .bold()
+                    Button { dismiss() } label: { Image(systemName: "xmark") }
+                        .accessibilityLabel("Close")
                 }
             }
         }
@@ -62,151 +79,158 @@ struct CheckInModalView: View {
 
     // MARK: - Sections
 
-    private var moodSection: some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.md) {
-            SectionLabel("MOOD")
-            HStack(spacing: SparkSpacing.sm) {
-                ForEach(moods, id: \.0) { mood, color in
-                    MoodChip(
-                        label: mood,
-                        color: color,
-                        isSelected: selectedMood == mood
-                    ) {
-                        selectedMood = selectedMood == mood ? nil : mood
-                    }
-                }
-            }
-        }
-    }
-
-    private var tagsSection: some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.md) {
-            SectionLabel("CONTEXT")
-            FlowLayout(spacing: SparkSpacing.sm) {
-                ForEach(defaultTags, id: \.self) { tag in
-                    SelectableTagChip(tag: tag, isSelected: selectedTags.contains(tag)) {
-                        if selectedTags.contains(tag) {
-                            selectedTags.remove(tag)
-                        } else {
-                            selectedTags.insert(tag)
+    private var periodPicker: some View {
+        HStack(spacing: SparkSpacing.sm) {
+            ForEach(CheckInPeriod.allCases, id: \.self) { p in
+                Button {
+                    period = p
+                } label: {
+                    Text(p.rawValue.capitalized)
+                        .font(SparkTypography.monoSmall)
+                        .foregroundStyle(period == p ? Color.sparkAccent : .primary)
+                        .padding(.horizontal, SparkSpacing.md)
+                        .padding(.vertical, SparkSpacing.sm)
+                        .background(
+                            period == p
+                                ? Color.sparkAccent.opacity(0.15)
+                                : Color.primary.opacity(0.06)
+                        )
+                        .clipShape(.capsule)
+                        .overlay {
+                            if period == p {
+                                Capsule().strokeBorder(Color.sparkAccent.opacity(0.5), lineWidth: 1)
+                            }
                         }
-                    }
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(p.rawValue.capitalized)\(period == p ? ", selected" : "")")
+                .accessibilityAddTraits(period == p ? .isSelected : [])
             }
         }
     }
 
-    private var noteSection: some View {
+    private var physicalSection: some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.md) {
+            SectionLabel("How's your body?")
+            EmojiRatingRow(
+                selected: $physical,
+                emojis: CheckInPresentation.physicalEmojis,
+                labels: CheckInPresentation.physicalLabels
+            )
+        }
+    }
+
+    private var mentalSection: some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.md) {
+            SectionLabel("How's your mind?")
+            EmojiRatingRow(
+                selected: $mental,
+                emojis: CheckInPresentation.mentalEmojis,
+                labels: CheckInPresentation.mentalLabels
+            )
+        }
+    }
+
+    private var notesSection: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.md) {
             HStack {
-                SectionLabel("NOTE")
+                SectionLabel("Note")
                 Spacer()
-                Text("\(note.count) / 500")
+                Text("\(notes.count) / 1000")
                     .font(SparkTypography.monoSmall)
                     .foregroundStyle(.secondary)
             }
             TextEditor(text: Binding(
-                get: { note },
-                set: { note = String($0.prefix(500)) }
+                get: { notes },
+                set: { notes = String($0.prefix(1000)) }
             ))
             .font(SparkTypography.body)
-            .frame(minHeight: 100, maxHeight: 200)
+            .frame(minHeight: 80, maxHeight: 160)
             .scrollContentBackground(.hidden)
             .padding(SparkSpacing.md)
             .sparkGlass(.roundedRect(SparkRadii.md))
         }
     }
 
-    // MARK: - Actions
-
-    private func logCheckIn() async {
-        guard let mood = selectedMood else { return }
-        isLogging = true
-        defer { isLogging = false }
-
-        let entry = CheckIn(
-            slot: slot,
-            mood: mood,
-            tags: Array(selectedTags),
-            note: note.isEmpty ? nil : note,
-            loggedAt: .now
-        )
-
-        // Persist locally first (optimistic)
-        persistLocally(entry)
-
-        // POST to backend (best-effort)
-        _ = try? await appModel.apiClient.request(CheckInsEndpoint.create(entry))
-
-        dismiss()
+    private var logButton: some View {
+        Button {
+            Task { await logCheckIn() }
+        } label: {
+            HStack(spacing: SparkSpacing.sm) {
+                if isSubmitting {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                        .tint(.white)
+                }
+                Text("Log it")
+                    .font(SparkTypography.body)
+                    .bold()
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, SparkSpacing.md)
+            .background(physical != nil && mental != nil ? Color.sparkAccent : Color.secondary.opacity(0.25))
+            .foregroundStyle(physical != nil && mental != nil ? Color.white : Color.secondary)
+            .clipShape(.rect(cornerRadius: SparkRadii.md))
+        }
+        .disabled(physical == nil || mental == nil || isSubmitting)
+        .animation(.easeInOut(duration: 0.15), value: physical == nil || mental == nil)
     }
 
-    private func persistLocally(_ entry: CheckIn) {
-        let defaults = UserDefaults(suiteName: "group.co.cronx.spark")
-        let dateKey = Self.dateKey(date)
-        let storageKey = "checkin_\(dateKey)_\(slot)"
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        if let data = try? encoder.encode(entry) {
-            defaults?.set(data, forKey: storageKey)
+    private var locationSection: some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.md) {
+            SectionLabel("Location")
+            LocationChip(state: locationState) {
+                Task { await fetchLocation() }
+            } onClear: {
+                locationState = .idle
+            }
         }
     }
 
-    private static func dateKey(_ date: Date) -> String {
+    // MARK: - Actions
+
+    private func logCheckIn() async {
+        guard let phy = physical, let men = mental else { return }
+        isSubmitting = true
+        defer { isSubmitting = false }
+
+        let dateKey = Self.isoDate(date)
+        let (lat, lng, addr): (Double?, Double?, String?) = {
+            if case let .resolved(address, lat, lng) = locationState {
+                return (lat, lng, address)
+            }
+            return (nil, nil, nil)
+        }()
+
+        let request = CheckInRequest(
+            period: period,
+            physical: phy,
+            mental: men,
+            date: dateKey,
+            occurredAt: CheckInPresentation.occurredAtOverride(for: date, period: period),
+            latitude: lat,
+            longitude: lng,
+            address: addr,
+            notes: notes.isEmpty ? nil : notes
+        )
+
+        do {
+            try await viewModel.submitCheckIn(request: request)
+            dismiss()
+        } catch {
+            submitError = (error as? LocalizedError)?.errorDescription ?? "Something went wrong. Please try again."
+        }
+    }
+
+    private func fetchLocation() async {
+        locationState = .fetching
+        locationState = await fetchLocationState(current: locationState)
+    }
+
+    private static func isoDate(_ date: Date) -> String {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
         return f.string(from: date)
     }
 }
 
-// MARK: - Components
-
-private struct MoodChip: View {
-    let label: String
-    let color: Color
-    let isSelected: Bool
-    let onTap: () -> Void
-
-    var body: some View {
-        Button(action: onTap) {
-            Text(label)
-                .font(SparkTypography.monoSmall)
-                .foregroundStyle(isSelected ? .white : .primary)
-                .padding(.horizontal, SparkSpacing.md)
-                .padding(.vertical, SparkSpacing.sm)
-                .background(isSelected ? color : color.opacity(0.12))
-                .clipShape(.capsule)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Mood: \(label)\(isSelected ? ", selected" : "")")
-    }
-}
-
-private struct SelectableTagChip: View {
-    let tag: String
-    let isSelected: Bool
-    let onTap: () -> Void
-
-    var body: some View {
-        Button(action: onTap) {
-            Text("#\(tag)")
-                .font(SparkTypography.monoSmall)
-                .foregroundStyle(isSelected ? Color.sparkAccent : .primary)
-                .padding(.horizontal, SparkSpacing.md - 2)
-                .padding(.vertical, SparkSpacing.xs + 1)
-                .background(
-                    isSelected
-                        ? Color.sparkAccent.opacity(0.15)
-                        : Color.primary.opacity(0.06)
-                )
-                .clipShape(.capsule)
-                .overlay {
-                    if isSelected {
-                        Capsule().strokeBorder(Color.sparkAccent.opacity(0.5), lineWidth: 1)
-                    }
-                }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Tag \(tag)\(isSelected ? ", selected" : "")")
-    }
-}

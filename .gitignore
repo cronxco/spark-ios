@@ -25,6 +25,7 @@ Package.resolved
 .env.local
 docs/plans
 docs/schema
+docs/ui
 
 # macOS
 .DS_Store
@@ -40,3 +41,6 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/
 fastlane/test_output/
+
+# wireframe generator bytecode
+docs/wireframes/__pycache__/

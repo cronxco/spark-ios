@@ -21,7 +21,7 @@ final class SearchViewModel {
     private(set) var state: State = .idle
 
     private let apiClient: APIClient
-    private let logger = Logger(subsystem: "co.cronx.spark", category: "Search")
+    private let logger = Logger(subsystem: "co.cronx.sparkapp", category: "Search")
     private var pendingQuery: Task<Void, Never>?
 
     init(apiClient: APIClient) {
@@ -44,13 +44,12 @@ final class SearchViewModel {
     private func handleQueryChange(oldQuery: String) {
         // Detect prefix shortcuts and translate to a `Mode` change.
         let trimmed = query.trimmingCharacters(in: .whitespaces)
-        if let first = trimmed.first {
-            for candidate in SearchEndpoint.Mode.allCases {
-                if let symbol = candidate.symbol, String(first) == symbol {
-                    if mode != candidate { mode = candidate }
-                    return
-                }
-            }
+        // Switching mode must still run the search: returning here meant a
+        // prefixed query like `#travel` changed the pill but never searched.
+        if let first = trimmed.first,
+           let candidate = SearchEndpoint.Mode.allCases.first(where: { $0.symbol == String(first) }),
+           mode != candidate {
+            mode = candidate
         }
         scheduleSearch()
     }

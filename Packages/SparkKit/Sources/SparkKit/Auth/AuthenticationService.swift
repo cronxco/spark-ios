@@ -80,7 +80,7 @@ public final class AuthenticationService: NSObject, Sendable {
         let tokens = try await apiClient.requestSiteRoot(
             AuthEndpoint.exchange(code: code, verifier: verifier)
         )
-        await tokenStore.store(
+        try await tokenStore.store(
             access: tokens.accessToken,
             refresh: tokens.refreshToken,
             expiresIn: tokens.expiresIn
