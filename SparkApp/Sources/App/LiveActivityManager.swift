@@ -168,24 +168,11 @@ final class LiveActivityManager {
             for await tokenData in activity.pushTokenUpdates {
                 let tokenString = tokenData.map { String(format: "%02x", $0) }.joined()
                 do {
-                    if !self.registeredActivityIDs.contains(activityID) {
-                        _ = try await apiClient.request(
-                            LiveActivitiesEndpoint.create(
-                                activityID: activityID,
-                                token: tokenString,
-                                type: activityType,
-                                contentState: activity.content.state
-                            )
-                        )
-                        self.registeredActivityIDs.insert(activityID)
-                    } else {
-                        _ = try await apiClient.request(
-                            LiveActivitiesEndpoint.registerToken(
-                                activityID: activityID,
-                                token: tokenString
-                            )
-                        )
-                    }
+                    try await self.registerPushToken(
+                        activityID: activityID, token: tokenString,
+                        type: activityType, contentState: activity.content.state,
+                        using: apiClient
+                    )
                     log.info("Registered LA push token for \(activityID)")
                 } catch {
                     log.error("Failed to register LA token: \(error)")
@@ -193,6 +180,24 @@ final class LiveActivityManager {
             }
         }
         tokenTasks[activityID] = task
+    }
+
+    /// The server row ID is distinct from ActivityKit's identifier. Keep all
+    /// lifecycle requests on the identifier supplied by ActivityKit.
+    func registerPushToken<State: Encodable>(
+        activityID: String, token: String, type: String,
+        contentState: State, using apiClient: APIClient
+    ) async throws {
+        if !registeredActivityIDs.contains(activityID) {
+            _ = try await apiClient.request(
+                LiveActivitiesEndpoint.create(activityID: activityID, token: token, type: type, contentState: contentState)
+            )
+            registeredActivityIDs.insert(activityID)
+        } else {
+            _ = try await apiClient.request(
+                LiveActivitiesEndpoint.registerToken(activityID: activityID, token: token)
+            )
+        }
     }
 
     private func cancelTokenTask(for activityID: String) {
@@ -206,19 +211,25 @@ final class LiveActivityManager {
         _ state: A.ContentState,
         for activity: Activity<A>
     ) async where A.ContentState: Encodable & Sendable {
-        guard registeredActivityIDs.contains(activity.id) else { return }
+        await mirrorUpdate(state, activityID: activity.id, using: AppModel.shared.apiClient)
+    }
+
+    func mirrorUpdate<State: Encodable & Sendable>(
+        _ state: State, activityID: String, using apiClient: APIClient
+    ) async {
+        guard registeredActivityIDs.contains(activityID) else { return }
         let now = Date()
         let cutoff = now.addingTimeInterval(-3600)
-        let recent = (serverUpdateTimes[activity.id] ?? []).filter { $0 >= cutoff }
+        let recent = (serverUpdateTimes[activityID] ?? []).filter { $0 >= cutoff }
         guard recent.count < 16 else {
             logger.notice("Skipping server Live Activity update; hourly limit reached")
-            serverUpdateTimes[activity.id] = recent
+            serverUpdateTimes[activityID] = recent
             return
         }
-        serverUpdateTimes[activity.id] = recent + [now]
+        serverUpdateTimes[activityID] = recent + [now]
         do {
-            _ = try await AppModel.shared.apiClient.request(
-                LiveActivitiesEndpoint.update(activityID: activity.id, state: state)
+            _ = try await apiClient.request(
+                LiveActivitiesEndpoint.update(activityID: activityID, state: state)
             )
         } catch {
             // The local ActivityKit update already succeeded. Server mirroring
@@ -228,9 +239,13 @@ final class LiveActivityManager {
     }
 
     private func endServerActivity(id: String) async {
+        await endServerActivity(id: id, using: AppModel.shared.apiClient)
+    }
+
+    func endServerActivity(id: String, using apiClient: APIClient) async {
         guard registeredActivityIDs.contains(id) else { return }
         do {
-            _ = try await AppModel.shared.apiClient.request(LiveActivitiesEndpoint.end(activityID: id))
+            _ = try await apiClient.request(LiveActivitiesEndpoint.end(activityID: id))
         } catch {
             logger.error("Failed to end server Live Activity: \(error)")
         }
