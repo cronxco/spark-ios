@@ -17,6 +17,25 @@ public struct ReceiptMatch: Decodable, Sendable, Identifiable {
         case id, title, amount, unit, time, service, status, reason, matched, candidates
         case attemptedAt = "attempted_at"
     }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        title = try c.decodeIfPresent(String.self, forKey: .title)
+        amount = try c.decodeIfPresent(Double.self, forKey: .amount)
+        unit = try c.decodeIfPresent(String.self, forKey: .unit)
+        time = try c.decodeIfPresent(Date.self, forKey: .time)
+        service = try c.decodeIfPresent(String.self, forKey: .service)
+        status = try c.decode(String.self, forKey: .status)
+        reason = try c.decodeIfPresent(String.self, forKey: .reason)
+        attemptedAt = try c.decodeIfPresent(Date.self, forKey: .attemptedAt)
+        matched = try c.decodeIfPresent(FlintReviewEvent.self, forKey: .matched)
+        candidates = try c.decodeIfPresent([FlintReviewEvent].self, forKey: .candidates) ?? []
+    }
+
+    public func canRetry(at now: Date = .now) -> Bool {
+        status != "searching" || (attemptedAt.map { now.timeIntervalSince($0) >= 600 } ?? true)
+    }
 }
 
 public struct ReceiptMatchResponse: Decodable, Sendable {

@@ -20,10 +20,13 @@ final class ReceiptMatchingModel {
     }
 
     func load() async {
+        guard !busy else { return }
         loading = true
         defer { loading = false }
         do {
-            receipt = try await apiClient.request(FlintEndpoint.receiptMatch(id: receiptID)).data
+            let response = try await apiClient.request(FlintEndpoint.receiptMatch(id: receiptID)).data
+            guard !Task.isCancelled, !busy else { return }
+            receipt = response
         } catch where error.isAPICancellation {
             return
         } catch {
@@ -31,11 +34,17 @@ final class ReceiptMatchingModel {
         }
     }
 
+    func clearTransactions() {
+        transactions = []
+    }
+
     func search(_ query: String) async {
         do {
-            transactions = try await apiClient.request(
+            let response = try await apiClient.request(
                 FlintEndpoint.receiptTransactions(id: receiptID, query: query)
             ).data
+            guard !Task.isCancelled, receipt?.status != "matched" else { return }
+            transactions = response
         } catch where error.isAPICancellation {
             return
         } catch {
@@ -107,7 +116,7 @@ struct ReceiptMatchingView: View {
                             .disabled(model.busy)
                     } else {
                         Button("Find match again") { Task { await model.retry() } }
-                            .disabled(model.busy || receipt.status == "searching")
+                            .disabled(model.busy || !receipt.canRetry())
                         if receipt.status == "searching" {
                             Text("Searching for a transaction…").foregroundStyle(.secondary)
                         }
@@ -140,10 +149,20 @@ struct ReceiptMatchingView: View {
         .navigationTitle("Receipt matching")
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.load() }
+        .task(id: model.receipt?.status) {
+            guard model.receipt?.status == "searching" else { return }
+            while !Task.isCancelled && model.receipt?.status == "searching" {
+                do { try await Task.sleep(for: .seconds(3)) } catch { return }
+                await model.load()
+            }
+        }
         .task(id: searchText) {
-            try? await Task.sleep(for: .milliseconds(300))
+            model.clearTransactions()
+            let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !query.isEmpty else { return }
+            do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
             guard !Task.isCancelled else { return }
-            await model.search(searchText)
+            await model.search(query)
         }
         .refreshable { await model.load() }
         .alert("Couldn’t update receipt", isPresented: Binding(

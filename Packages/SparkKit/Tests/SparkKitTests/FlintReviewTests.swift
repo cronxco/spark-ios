@@ -135,6 +135,26 @@ struct FlintReviewTests {
         #expect(object == ["transaction_id": "t-1"])
     }
 
+    @Test("receipt candidates tolerate omitted and null fields", arguments: [
+        #"{"id":"r-1","status":"unmatched"}"#,
+        #"{"id":"r-1","status":"unmatched","candidates":null}"#
+    ])
+    func missingReceiptCandidates(_ json: String) throws {
+        let receipt = try makeDecoder().decode(ReceiptMatch.self, from: Data(json.utf8))
+        #expect(receipt.candidates.isEmpty)
+    }
+
+    @Test("searching receipts can retry after the server cooldown")
+    func staleReceiptRetry() throws {
+        let json = #"{"id":"r-1","status":"searching","attempted_at":"2026-10-04T09:00:00+00:00"}"#
+        let receipt = try makeDecoder().decode(ReceiptMatch.self, from: Data(json.utf8))
+        let attempted = try #require(receipt.attemptedAt)
+        #expect(!receipt.canRetry(at: attempted.addingTimeInterval(599)))
+        #expect(receipt.canRetry(at: attempted.addingTimeInterval(600)))
+        let undated = try makeDecoder().decode(ReceiptMatch.self, from: Data(#"{"id":"r-2","status":"searching"}"#.utf8))
+        #expect(undated.canRetry(at: attempted))
+    }
+
     private func makeDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
