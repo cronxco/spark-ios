@@ -35,10 +35,13 @@ public enum MoneyEndpoint {
     }
 
     /// GET /money/accounts/{id}/balances — cursor-paginated balance history.
-    public static func balances(accountId: String, cursor: String? = nil) -> Endpoint<Page<BalanceEntry>> {
+    public static func balances(accountId: String, cursor: String? = nil, limit: Int? = nil) -> Endpoint<Page<BalanceEntry>> {
         var query: [URLQueryItem] = []
         if let cursor {
             query.append(URLQueryItem(name: "cursor", value: cursor))
+        }
+        if let limit {
+            query.append(URLQueryItem(name: "limit", value: String(limit)))
         }
         return Endpoint(method: .get, path: "/money/accounts/\(accountId)/balances", query: query)
     }
