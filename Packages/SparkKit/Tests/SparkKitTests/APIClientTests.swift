@@ -43,6 +43,24 @@ struct APIClientTests {
         return (client, tokenStore)
     }
 
+    @Test("generic pages can be completely collected across balance-style cursors")
+    func collectsGenericPages() async throws {
+        let (client, _) = makeClient()
+        await StubURLProtocol.set { request in
+            let cursor = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "cursor" }?.value
+            let json = cursor == nil
+                ? #"{"data":[1],"has_more":true,"next_cursor":"older"}"#
+                : #"{"data":[2],"has_more":false,"next_cursor":null}"#
+            return (Data(json.utf8), 200, [:])
+        }
+        let items = try await client.collectAllPages(requireComplete: true) { cursor in
+            Endpoint<Page<Int>>(method: .get, path: "/pages", query: cursor.map {
+                [URLQueryItem(name: "cursor", value: $0)]
+            } ?? [], requiresAuth: false)
+        }
+        #expect(items == [1, 2])
+    }
+
     @Test("200 decodes response body + records ETag + sends Bearer")
     func happyPath() async throws {
         let (client, tokenStore) = makeClient()
