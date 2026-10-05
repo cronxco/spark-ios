@@ -50,6 +50,16 @@ public struct FlintReviewEvent: Codable, Sendable, Hashable, Identifiable {
     public let service: String?
     /// Set on a receipt suggestion's candidates only.
     public let confidence: Double?
+
+    public init(id: String, title: String?, amount: Double?, unit: String?, time: Date?, service: String?, confidence: Double? = nil) {
+        self.id = id
+        self.title = title
+        self.amount = amount
+        self.unit = unit
+        self.time = time
+        self.service = service
+        self.confidence = confidence
+    }
 }
 
 public enum FlintReviewKind: String, Codable, Sendable, Hashable {

@@ -20,7 +20,7 @@ final class FlintReviewModel {
     /// The candidate transaction picked for each receipt suggestion.
     var chosenTransaction: [String: String] = [:]
 
-    private let apiClient: APIClient
+    let apiClient: APIClient
 
     init(apiClient: APIClient) {
         self.apiClient = apiClient
@@ -84,12 +84,21 @@ final class FlintReviewModel {
 
 struct FlintReviewSection: View {
     let model: FlintReviewModel
+    @State private var showingUnmatched = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.md) {
             Text("Decide on suggestions first. Spark’s automatic links remain available to undo for 30 days.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+            Button("Browse unmatched receipts") { showingUnmatched = true }
+                .buttonStyle(.bordered)
+                .sheet(isPresented: $showingUnmatched) {
+                    NavigationStack {
+                        ReceiptUnmatchedView(apiClient: model.apiClient)
+                            .sparkDetailDestinations()
+                    }
+                }
 
             switch model.state {
             case .idle where model.items.isEmpty, .loading where model.items.isEmpty:
@@ -140,6 +149,7 @@ private struct FlintReviewCard: View {
     let item: FlintReviewItem
     @Bindable var model: FlintReviewModel
     @State private var showingUndoConfirmation = false
+    @State private var showingReceiptMatch = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
@@ -222,6 +232,10 @@ private struct FlintReviewCard: View {
                     .disabled(!model.canPerform(action, on: item))
                 }
             }
+            if item.kind == .receiptSuggestion || item.kind == .receiptAutoMatch {
+                Button("Open receipt matching") { showingReceiptMatch = true }
+                    .buttonStyle(.bordered)
+            }
         }
         .padding(SparkSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -233,10 +247,18 @@ private struct FlintReviewCard: View {
         } message: {
             Text("The two events will be unlinked.")
         }
+        .sheet(isPresented: $showingReceiptMatch, onDismiss: {
+            Task { await model.load() }
+        }) {
+            NavigationStack {
+                ReceiptMatchingView(receiptID: item.subject.id, apiClient: model.apiClient)
+                    .sparkDetailDestinations()
+            }
+        }
     }
 }
 
-private struct FlintReviewEventCard: View {
+struct FlintReviewEventCard: View {
     let event: FlintReviewEvent
     let role: String
 
