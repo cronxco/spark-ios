@@ -12,6 +12,7 @@ final class ReceiptMatchingModel {
     private(set) var transactions: [FlintReviewEvent] = []
     private(set) var loading = false
     private(set) var busy = false
+    private var actionGeneration = 0
     var error: String?
 
     init(receiptID: String, apiClient: APIClient) {
@@ -21,11 +22,12 @@ final class ReceiptMatchingModel {
 
     func load() async {
         guard !busy else { return }
+        let generation = actionGeneration
         loading = true
         defer { loading = false }
         do {
             let response = try await apiClient.request(FlintEndpoint.receiptMatch(id: receiptID)).data
-            guard !Task.isCancelled, !busy else { return }
+            guard !Task.isCancelled, !busy, generation == actionGeneration else { return }
             receipt = response
         } catch where error.isAPICancellation {
             return
@@ -72,6 +74,7 @@ final class ReceiptMatchingModel {
 
     private func perform(_ action: () async throws -> ReceiptMatch) async {
         guard !busy else { return }
+        actionGeneration += 1
         busy = true
         defer { busy = false }
         do {
@@ -81,6 +84,7 @@ final class ReceiptMatchingModel {
             return
         } catch {
             self.error = (error as? LocalizedError)?.errorDescription ?? "Couldn’t update the match."
+            busy = false
             await load()
         }
     }
