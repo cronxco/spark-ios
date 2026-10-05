@@ -106,6 +106,55 @@ struct FlintReviewTests {
         #expect(endpoint.headers["Cache-Control"] == "no-cache")
     }
 
+    @Test("receipt matching decodes per-receipt status and candidate events")
+    func receiptMatchResponse() throws {
+        let json = """
+        {"data":{"id":"r-1","title":"Coffee House","amount":4.5,"unit":"GBP",
+          "time":"2026-10-03T08:00:00+00:00","service":"receipt","status":"suggestions",
+          "reason":null,"attempted_at":"2026-10-04T09:00:00+00:00","matched":null,
+          "candidates":[{"id":"t-1","title":"Coffee House","amount":4.5,"unit":"GBP",
+            "time":"2026-10-03T08:05:00+00:00","service":"monzo","confidence":0.7}]}}
+        """
+
+        let response = try makeDecoder().decode(ReceiptMatchResponse.self, from: Data(json.utf8))
+
+        #expect(response.data.status == "suggestions")
+        #expect(response.data.candidates.first?.id == "t-1")
+        #expect(response.data.attemptedAt != nil)
+        #expect(response.data.matched == nil)
+    }
+
+    @Test("manual receipt link sends the chosen transaction")
+    func receiptLinkEndpoint() throws {
+        let endpoint = FlintEndpoint.linkReceipt(id: "r-1", transactionID: "t-1")
+
+        #expect(endpoint.method == .post)
+        #expect(endpoint.path == "/flint/receipts/r-1/link")
+        let body = try #require(endpoint.body)
+        let object = try #require(try JSONSerialization.jsonObject(with: body) as? [String: String])
+        #expect(object == ["transaction_id": "t-1"])
+    }
+
+    @Test("receipt candidates tolerate omitted and null fields", arguments: [
+        #"{"id":"r-1","status":"unmatched"}"#,
+        #"{"id":"r-1","status":"unmatched","candidates":null}"#
+    ])
+    func missingReceiptCandidates(_ json: String) throws {
+        let receipt = try makeDecoder().decode(ReceiptMatch.self, from: Data(json.utf8))
+        #expect(receipt.candidates.isEmpty)
+    }
+
+    @Test("searching receipts can retry after the server cooldown")
+    func staleReceiptRetry() throws {
+        let json = #"{"id":"r-1","status":"searching","attempted_at":"2026-10-04T09:00:00+00:00"}"#
+        let receipt = try makeDecoder().decode(ReceiptMatch.self, from: Data(json.utf8))
+        let attempted = try #require(receipt.attemptedAt)
+        #expect(!receipt.canRetry(at: attempted.addingTimeInterval(599)))
+        #expect(receipt.canRetry(at: attempted.addingTimeInterval(600)))
+        let undated = try makeDecoder().decode(ReceiptMatch.self, from: Data(#"{"id":"r-2","status":"searching"}"#.utf8))
+        #expect(undated.canRetry(at: attempted))
+    }
+
     private func makeDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
