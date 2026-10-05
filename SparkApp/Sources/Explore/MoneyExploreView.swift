@@ -166,6 +166,10 @@ struct MoneyExploreView: View {
     private func chartBody(history: [BalanceAreaChart.Point], tint: Color) -> some View {
         if case .loading = viewModel?.historyState {
             LoadingShimmerCard()
+        } else if case .error(let message) = viewModel?.historyState {
+            Text(message)
+                .font(SparkTypography.monoSmall)
+                .foregroundStyle(.secondary)
         } else if history.count >= 2 {
             BalanceAreaChart(data: history, tint: tint, showMidline: true, showEndpoint: true)
         } else {
@@ -183,7 +187,7 @@ struct MoneyExploreView: View {
 
     @ViewBuilder
     private func compositionCard(vm: MoneyExploreViewModel) -> some View {
-        let segments = compositionSegments(vm.accounts)
+        let segments = compositionSegments(vm.accounts.filter { $0.currency == "GBP" })
         if !segments.isEmpty {
             GlassCard {
                 VStack(alignment: .leading, spacing: 0) {
@@ -392,10 +396,9 @@ struct MoneyExploreView: View {
 
     private func filteredHistory(vm: MoneyExploreViewModel) -> [BalanceAreaChart.Point] {
         let cutoff: Date? = selectedRange.days.map {
-            Calendar.current.date(byAdding: .day, value: -$0, to: .now)!
+            Calendar.current.startOfDay(for: Calendar.current.date(byAdding: .day, value: -$0, to: .now)!)
         }
-        return vm.netWorthHistory
-            .filter { point in cutoff.map { point.date >= $0 } ?? true }
+        return vm.history(since: cutoff)
             .map { BalanceAreaChart.Point(date: $0.date, value: $0.total) }
     }
 

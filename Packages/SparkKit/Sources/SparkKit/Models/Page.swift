@@ -2,7 +2,7 @@ import Foundation
 
 /// Cursor-paginated response wrapper used by paginated mobile endpoints.
 /// Mirrors the backend's `{ "data": [...], "next_cursor": "...", "has_more": true }` shape.
-public struct Page<Item: Codable & Sendable>: Codable, Sendable {
+public struct Page<Item: Codable & Sendable>: Codable, Sendable, CursorPaged {
     public let data: [Item]
     public let nextCursor: String?
     public let hasMore: Bool

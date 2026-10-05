@@ -16,6 +16,10 @@ public protocol CursorPaged: Decodable, Sendable {
     var hasMore: Bool { get }
 }
 
+public enum CursorPagingError: Error, Sendable {
+    case incompleteHistory
+}
+
 public extension APIClient {
     /// Follows `next_cursor` until the server says there is no more.
     ///
@@ -24,11 +28,16 @@ public extension APIClient {
     /// misbehaving backend, on a phone, possibly inside a 25-second background
     /// budget.
     ///
+    /// With `requireComplete`, malformed cursors and exhausted page budgets
+    /// throw instead of returning a partial collection suitable for a false
+    /// financial total.
+    ///
     /// `endpoint` is `@Sendable` because it runs on this actor while the
     /// caller — usually a `@MainActor` view model — awaits. Build it from
     /// values, not from the caller's isolated state.
     func collectAllPages<Page: CursorPaged>(
         maxPages: Int = 20,
+        requireComplete: Bool = false,
         _ endpoint: @Sendable (_ cursor: String?) -> Endpoint<Page>
     ) async throws -> [Page.Item] {
         var items: [Page.Item] = []
@@ -39,10 +48,15 @@ public extension APIClient {
             let page = try await request(endpoint(cursor))
             items.append(contentsOf: page.data)
 
-            guard page.hasMore, let next = page.nextCursor, !seen.contains(next) else { break }
+            guard page.hasMore else { return items }
+            guard let next = page.nextCursor, !seen.contains(next) else {
+                if requireComplete { throw CursorPagingError.incompleteHistory }
+                return items
+            }
             seen.insert(next)
             cursor = next
         }
+        if requireComplete { throw CursorPagingError.incompleteHistory }
         return items
     }
 }
