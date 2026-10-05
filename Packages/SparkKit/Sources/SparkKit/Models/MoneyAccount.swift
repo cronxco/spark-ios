@@ -60,6 +60,8 @@ public struct BalanceEntry: Codable, Sendable, Identifiable {
     public let currency: String
     public let time: Date
     public let notes: String?
+    /// UTC snapshot date, independent of the phone’s time zone.
+    public let date: String?
 }
 
 public struct MoneyAccountsResponse: Codable, Sendable, CursorPaged {
