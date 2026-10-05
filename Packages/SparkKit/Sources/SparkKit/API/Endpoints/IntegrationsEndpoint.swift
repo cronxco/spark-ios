@@ -46,6 +46,12 @@ public enum IntegrationsEndpoint {
 
     public struct OAuthStartResponse: Decodable, Sendable {
         public let url: URL
+        public let attemptID: String?
+
+        enum CodingKeys: String, CodingKey {
+            case url
+            case attemptID = "attempt_id"
+        }
     }
 
     /// POST /integrations/{id}/oauth/start — returns the URL to open in
