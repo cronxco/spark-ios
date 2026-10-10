@@ -104,6 +104,7 @@ struct FlintReviewTests {
         #expect(endpoint.method == .get)
         #expect(endpoint.path == "/flint/review")
         #expect(endpoint.headers["Cache-Control"] == "no-cache")
+        #expect(endpoint.usesETag == false)
     }
 
     @Test("receipt matching decodes per-receipt status and candidate events")
@@ -153,6 +154,58 @@ struct FlintReviewTests {
         #expect(receipt.canRetry(at: attempted.addingTimeInterval(600)))
         let undated = try makeDecoder().decode(ReceiptMatch.self, from: Data(#"{"id":"r-2","status":"searching"}"#.utf8))
         #expect(undated.canRetry(at: attempted))
+    }
+
+    @Test("a receipt suggestion pairs with its best candidate and accepts by confirming it")
+    func receiptSuggestionDecision() throws {
+        let item = try decodeItem("""
+        {"id":"r-1","kind":"receipt_suggestion","title":"Wingstop","summary":"","confidence":0.6,
+          "subject":{"id":"r-1","title":"Wingstop"},
+          "candidates":[
+            {"id":"t-1","title":"Deliveroo","confidence":0.67},
+            {"id":"t-2","title":"Wingstop","confidence":0.82},
+            {"id":"t-3","title":"Wingstop again","confidence":0.82}
+          ],
+          "actions":["confirm","dismiss"]}
+        """)
+
+        #expect(item.needsDecision)
+        #expect(item.counterpart?.id == "t-2")
+        #expect(item.counterpartConfidence == 0.82)
+        #expect(item.acceptAction == .confirm)
+        #expect(item.rejectAction == .dismiss)
+    }
+
+    @Test("a receipt suggestion with no candidates can only be dismissed")
+    func receiptSuggestionWithoutCandidates() throws {
+        let item = try decodeItem("""
+        {"id":"r-1","kind":"receipt_suggestion","title":"Wingstop","summary":"","confidence":0.6,
+          "subject":{"id":"r-1"},"actions":["confirm","dismiss"]}
+        """)
+
+        #expect(item.counterpart == nil)
+        #expect(item.counterpartConfidence == 0.6)
+        #expect(item.acceptAction == nil)
+        #expect(item.rejectAction == .dismiss)
+    }
+
+    @Test("an automatic link is kept or undone, keyed apart from other kinds")
+    func autoLinkDecision() throws {
+        let item = try decodeItem("""
+        {"id":"r-1","kind":"auto_link","title":"Pot","summary":"","confidence":0.91,
+          "subject":{"id":"t-2"},"linked":{"id":"t-3"},"actions":["undo"]}
+        """)
+
+        #expect(!item.needsDecision)
+        #expect(item.counterpart?.id == "t-3")
+        #expect(item.counterpartConfidence == 0.91)
+        #expect(item.acceptAction == .keep)
+        #expect(item.rejectAction == .undo)
+        #expect(item.reviewKey == "auto_link:r-1")
+    }
+
+    private func decodeItem(_ json: String) throws -> FlintReviewItem {
+        try makeDecoder().decode(FlintReviewItem.self, from: Data(json.utf8))
     }
 
     private func makeDecoder() -> JSONDecoder {
