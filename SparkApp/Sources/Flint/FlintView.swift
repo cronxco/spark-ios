@@ -66,7 +66,9 @@ struct FlintView: View {
         return SparkSectionPager(
             title: "Flint",
             sections: FlintViewModel.FlintTab.allCases.map { SparkPagerSection(id: $0, title: $0.title) },
-            selection: $viewModel.selectedTab
+            selection: $viewModel.selectedTab,
+            // Review rows swipe sideways to accept or reject.
+            swipeDisabled: [.review]
         ) { tab in
             sectionPage(tab, viewModel: viewModel)
         }
@@ -108,6 +110,18 @@ struct FlintView: View {
 
     @ViewBuilder
     private func sectionPage(_ tab: FlintViewModel.FlintTab, viewModel: FlintViewModel) -> some View {
+        if tab == .review {
+            // Review is a list of its own, for the rows' swipe actions.
+            if let reviewModel {
+                FlintReviewSection(model: reviewModel)
+                    .refreshable { await refresh(tab) }
+            }
+        } else {
+            scrollingPage(tab, viewModel: viewModel)
+        }
+    }
+
+    private func scrollingPage(_ tab: FlintViewModel.FlintTab, viewModel: FlintViewModel) -> some View {
         ScrollView {
             content(tab, viewModel: viewModel)
                 .frame(maxWidth: 720, alignment: .leading)
@@ -128,9 +142,7 @@ struct FlintView: View {
         case .threads: threads(viewModel)
         case .history: history(viewModel)
         case .review:
-            if let reviewModel {
-                FlintReviewSection(model: reviewModel)
-            }
+            EmptyView()
         }
     }
 

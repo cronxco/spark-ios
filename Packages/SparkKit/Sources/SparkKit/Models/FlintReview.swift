@@ -132,3 +132,46 @@ public struct FlintReviewActionRequest: Codable, Sendable, Hashable {
         case transactionID = "transaction_id"
     }
 }
+
+public extension FlintReviewItem {
+    /// Unique across kinds: a receipt suggestion and a link can share an id.
+    var reviewKey: String { "\(kind.rawValue):\(id)" }
+
+    /// Suggestions wait on you; automatic decisions are already in effect.
+    var needsDecision: Bool { kind == .receiptSuggestion || kind == .linkSuggestion }
+
+    /// The receipt suggestion's highest-scoring candidate; the first wins a tie.
+    var bestCandidate: FlintReviewEvent? {
+        candidates.max { ($0.confidence ?? 0) < ($1.confidence ?? 0) }
+    }
+
+    /// What the subject would be, or is, linked to.
+    var counterpart: FlintReviewEvent? {
+        kind == .receiptSuggestion ? bestCandidate : linked
+    }
+
+    /// The score shown for the pairing on screen.
+    var counterpartConfidence: Double? {
+        kind == .receiptSuggestion ? bestCandidate?.confidence ?? confidence : confidence
+    }
+
+    /// Accepting confirms a suggestion (with the best candidate, for a
+    /// receipt) or keeps an automatic decision. The server accepts `keep` on
+    /// automatic decisions whether or not it lists it.
+    var acceptAction: FlintReviewAction? {
+        switch kind {
+        case .receiptSuggestion:
+            bestCandidate != nil && actions.contains(.confirm) ? .confirm : nil
+        case .linkSuggestion:
+            actions.contains(.confirm) ? .confirm : nil
+        case .receiptAutoMatch, .autoLink:
+            .keep
+        }
+    }
+
+    /// Rejecting dismisses a suggestion or undoes an automatic decision.
+    var rejectAction: FlintReviewAction? {
+        let action: FlintReviewAction = needsDecision ? .dismiss : .undo
+        return actions.contains(action) ? action : nil
+    }
+}

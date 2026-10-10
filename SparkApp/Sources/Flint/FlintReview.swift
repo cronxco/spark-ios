@@ -15,10 +15,12 @@ final class FlintReviewModel {
 
     private(set) var items: [FlintReviewItem] = []
     private(set) var state: State = .idle
-    private(set) var pendingItemID: String?
     var actionError: String?
-    /// The candidate transaction picked for each receipt suggestion.
-    var chosenTransaction: [String: String] = [:]
+    /// Items swiped away whose action is still in flight.
+    private var pendingKeys: Set<String> = []
+    /// Items acted on this session, so a slower response that predates the
+    /// action can't bring one back.
+    private var settledKeys: Set<String> = []
 
     let apiClient: APIClient
 
@@ -34,7 +36,7 @@ final class FlintReviewModel {
     func load() async {
         state = .loading
         do {
-            items = try await apiClient.request(FlintEndpoint.review()).data
+            apply(try await apiClient.request(FlintEndpoint.review()).data)
             state = .loaded
         } catch where error.isAPICancellation {
             state = items.isEmpty ? .idle : .loaded
@@ -45,65 +47,71 @@ final class FlintReviewModel {
     }
 
     func canPerform(_ action: FlintReviewAction, on item: FlintReviewItem) -> Bool {
-        guard pendingItemID == nil else { return false }
-        if item.kind == .receiptSuggestion, action == .confirm {
-            return item.candidates.contains { $0.id == chosenTransaction[item.id] }
-        }
-        return true
+        guard !pendingKeys.contains(item.reviewKey) else { return false }
+        return action == item.acceptAction || action == item.rejectAction
     }
 
+    /// Removes the item straight away, so a swipe feels instant, and puts it
+    /// back if the server refuses.
     func perform(_ action: FlintReviewAction, on item: FlintReviewItem) async {
-        guard canPerform(action, on: item) else { return }
-        pendingItemID = item.id
-        defer { pendingItemID = nil }
+        guard canPerform(action, on: item),
+              let index = items.firstIndex(where: { $0.reviewKey == item.reviewKey }) else { return }
+        let key = item.reviewKey
+        pendingKeys.insert(key)
+        items.remove(at: index)
 
         let request = FlintReviewActionRequest(
             action: action,
-            transactionID: action == .confirm ? chosenTransaction[item.id] : nil
+            transactionID: action == .confirm && item.kind == .receiptSuggestion ? item.bestCandidate?.id : nil
         )
         do {
-            items = try await apiClient.request(FlintEndpoint.reviewAction(kind: item.kind, id: item.id, request)).data
-            let remaining = Set(items.map(\.id))
-            chosenTransaction = chosenTransaction.filter { remaining.contains($0.key) }
+            let fresh = try await apiClient.request(FlintEndpoint.reviewAction(kind: item.kind, id: item.id, request)).data
+            pendingKeys.remove(key)
+            settledKeys.insert(key)
+            apply(fresh)
         } catch where error.isAPICancellation {
-            return
+            pendingKeys.remove(key)
+            restore(item, at: index)
         } catch {
+            pendingKeys.remove(key)
             SparkObservability.captureHandled(error)
             if case APIError.httpStatus(404, _, _) = error {
-                items.removeAll { $0.id == item.id && $0.kind == item.kind }
+                settledKeys.insert(key)
                 actionError = "That item is no longer available. The list has been refreshed."
                 return
             }
             if case APIError.httpStatus(422, _, _) = error {
                 await load()
+            } else {
+                restore(item, at: index)
             }
             actionError = (error as? LocalizedError)?.errorDescription ?? "Couldn’t save that. Please try again."
         }
     }
+
+    private func apply(_ fresh: [FlintReviewItem]) {
+        items = fresh.filter { !pendingKeys.contains($0.reviewKey) && !settledKeys.contains($0.reviewKey) }
+    }
+
+    private func restore(_ item: FlintReviewItem, at index: Int) {
+        guard !items.contains(where: { $0.reviewKey == item.reviewKey }) else { return }
+        items.insert(item, at: min(index, items.count))
+    }
 }
 
+/// The Review tab. A `List` rather than a scroll view so each row gets the
+/// system's full swipe: swipe right to accept, left to reject.
 struct FlintReviewSection: View {
     let model: FlintReviewModel
     @State private var showingUnmatched = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.md) {
-            Text("Decide on suggestions first. Spark’s automatic links remain available to undo for 30 days.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Button("Browse unmatched receipts") { showingUnmatched = true }
-                .buttonStyle(.bordered)
-                .sheet(isPresented: $showingUnmatched) {
-                    NavigationStack {
-                        ReceiptUnmatchedView(apiClient: model.apiClient)
-                            .sparkDetailDestinations()
-                    }
-                }
-
+        List {
             switch model.state {
             case .idle where model.items.isEmpty, .loading where model.items.isEmpty:
-                ProgressView("Loading review…")
+                ProgressView()
                     .frame(maxWidth: .infinity)
+                    .listRowBackground(Color.clear)
             case .error(let message) where model.items.isEmpty:
                 VStack(spacing: SparkSpacing.md) {
                     EmptyState(systemImage: "wifi.exclamationmark", title: "Couldn’t load review", message: message)
@@ -111,13 +119,31 @@ struct FlintReviewSection: View {
                         Task { await model.load() }
                     }
                 }
+                .listRowBackground(Color.clear)
             default:
                 if model.items.isEmpty {
                     EmptyState(systemImage: "checkmark.circle", title: "Nothing to review", message: "Spark has nothing waiting for you.")
+                        .listRowBackground(Color.clear)
                 } else {
-                    reviewGroup("Needs your decision", items: model.items.filter(\.needsDecision))
+                    reviewGroup("To decide", items: model.items.filter(\.needsDecision))
                     reviewGroup("Linked by Spark", items: model.items.filter { !$0.needsDecision })
                 }
+            }
+
+            Section {
+                Button {
+                    showingUnmatched = true
+                } label: {
+                    Label("Unmatched receipts", systemImage: "doc.text.magnifyingglass")
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .animation(.default, value: model.items.map(\.reviewKey))
+        .sheet(isPresented: $showingUnmatched) {
+            NavigationStack {
+                ReceiptUnmatchedView(apiClient: model.apiClient)
+                    .sparkDetailDestinations()
             }
         }
         .alert("Couldn’t save", isPresented: Binding(
@@ -133,119 +159,80 @@ struct FlintReviewSection: View {
     @ViewBuilder
     private func reviewGroup(_ title: String, items: [FlintReviewItem]) -> some View {
         if !items.isEmpty {
-            VStack(alignment: .leading, spacing: SparkSpacing.md) {
-                Text("\(title) (\(items.count))")
-                    .font(.title3.weight(.semibold))
-                    .accessibilityAddTraits(.isHeader)
+            Section {
                 ForEach(items, id: \.reviewKey) { item in
-                    FlintReviewCard(item: item, model: model)
+                    FlintReviewRow(item: item, model: model)
                 }
+            } header: {
+                Text("\(title) (\(items.count))")
             }
         }
     }
 }
 
-private struct FlintReviewCard: View {
+/// One decision on one line: the receipt or first transaction on the left,
+/// what it is (or would be) linked to on the right.
+private struct FlintReviewRow: View {
     let item: FlintReviewItem
-    @Bindable var model: FlintReviewModel
-    @State private var showingUndoConfirmation = false
+    let model: FlintReviewModel
     @State private var showingReceiptMatch = false
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var isReceipt: Bool { item.kind == .receiptSuggestion || item.kind == .receiptAutoMatch }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-            HStack(alignment: .top) {
-                Text(item.kind.label)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                if let confidence = item.confidence {
-                    Text("\(Int((confidence * 100).rounded()))% match score")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        Group {
+            if isReceipt {
+                Button { showingReceiptMatch = true } label: { pairing }
+                    .buttonStyle(.plain)
+            } else {
+                // A hidden link keeps the row free of the disclosure chevron,
+                // which would squeeze the right-hand side.
+                pairing.background {
+                    NavigationLink(value: DetailRoute.event(id: item.subject.id)) { EmptyView() }
+                        .opacity(0)
                 }
-                Spacer()
-                if let createdAt = item.createdAt, item.kind != .receiptSuggestion {
-                    Text("\(item.needsDecision ? "Suggested" : "Linked") \(createdAt.formatted(date: .abbreviated, time: .shortened))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Text(item.summary).font(.subheadline).foregroundStyle(.secondary)
-
-            FlintReviewEventCard(
-                event: item.subject,
-                role: item.kind == .receiptSuggestion || item.kind == .receiptAutoMatch ? "Receipt" : "First transaction"
-            )
-
-            if let linked = item.linked {
-                FlintReviewEventCard(
-                    event: linked,
-                    role: item.kind == .receiptAutoMatch ? "Transaction" : "Linked transaction"
-                )
-            }
-
-            if item.kind == .receiptSuggestion {
-                if item.candidates.isEmpty {
-                    Text("No suggested transactions are available now. You can dismiss this suggestion.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("Choose a transaction")
-                        .font(.subheadline.weight(.semibold))
-                    ForEach(item.candidates) { candidate in
-                        HStack(alignment: .center, spacing: SparkSpacing.sm) {
-                            Button {
-                                model.chosenTransaction[item.id] = candidate.id
-                            } label: {
-                                Image(systemName: model.chosenTransaction[item.id] == candidate.id ? "largecircle.fill.circle" : "circle")
-                                    .font(.title3)
-                                    .frame(minWidth: 44, minHeight: 44)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Select \(candidate.title ?? "transaction")")
-                            .accessibilityAddTraits(model.chosenTransaction[item.id] == candidate.id ? .isSelected : [])
-
-                            FlintReviewEventCard(
-                                event: candidate,
-                                role: "Candidate · \(Int(((candidate.confidence ?? 0) * 100).rounded()))% match score"
-                            )
-                        }
-                    }
-                }
-            } else if let relationshipType = item.relationshipType {
-                Text("Relationship: \(relationshipType.replacingOccurrences(of: "_", with: " "))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack(spacing: SparkSpacing.sm) {
-                ForEach(item.actions.filter { $0 != .keep }, id: \.self) { action in
-                    Button(action.label) {
-                        if action == .undo {
-                            showingUndoConfirmation = true
-                        } else {
-                            Task { await model.perform(action, on: item) }
-                        }
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(action == .confirm ? Color.sparkAccent : Color.secondary)
-                    .disabled(!model.canPerform(action, on: item))
-                }
-            }
-            if item.kind == .receiptSuggestion || item.kind == .receiptAutoMatch {
-                Button("Open receipt matching") { showingReceiptMatch = true }
-                    .buttonStyle(.bordered)
             }
         }
-        .padding(SparkSpacing.md)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .sparkGlass(.roundedRect(SparkRadii.lg))
-        .confirmationDialog("Undo this automatic link?", isPresented: $showingUndoConfirmation) {
-            Button("Undo link", role: .destructive) {
-                Task { await model.perform(.undo, on: item) }
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            if let accept = item.acceptAction {
+                Button {
+                    Task { await model.perform(accept, on: item) }
+                } label: {
+                    Label(accept.label, systemImage: "checkmark")
+                }
+                .tint(.sparkSuccess)
             }
-        } message: {
-            Text("The two events will be unlinked.")
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            if let reject = item.rejectAction {
+                Button {
+                    Task { await model.perform(reject, on: item) }
+                } label: {
+                    Label(reject.label, systemImage: "xmark")
+                }
+                .tint(.sparkError)
+            }
+        }
+        .contextMenu {
+            NavigationLink(value: DetailRoute.event(id: item.subject.id)) {
+                Label(isReceipt ? "Open receipt" : "Open transaction", systemImage: "arrow.up.forward.app")
+            }
+            if let counterpart = item.counterpart {
+                NavigationLink(value: DetailRoute.event(id: counterpart.id)) {
+                    Label(isReceipt ? "Open transaction" : "Open linked transaction", systemImage: "arrow.up.forward.app")
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityDescription)
+        .accessibilityActions {
+            if let accept = item.acceptAction {
+                Button(accept.label) { Task { await model.perform(accept, on: item) } }
+            }
+            if let reject = item.rejectAction {
+                Button(reject.label) { Task { await model.perform(reject, on: item) } }
+            }
         }
         .sheet(isPresented: $showingReceiptMatch, onDismiss: {
             Task { await model.load() }
@@ -255,6 +242,85 @@ private struct FlintReviewCard: View {
                     .sparkDetailDestinations()
             }
         }
+    }
+
+    private var pairing: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: SparkSpacing.sm))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: SparkSpacing.sm))
+        return layout {
+            FlintReviewSide(event: item.subject, alignment: .leading)
+            score
+            if let counterpart = item.counterpart {
+                FlintReviewSide(event: counterpart, alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .trailing)
+            } else {
+                Text("No match")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: dynamicTypeSize.isAccessibilitySize ? .leading : .trailing)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+
+    private var score: some View {
+        VStack(spacing: 2) {
+            Image(systemName: "link")
+            if let confidence = item.counterpartConfidence {
+                Text(confidence, format: .percent.precision(.fractionLength(0)))
+                    .monospacedDigit()
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+
+    private var accessibilityDescription: String {
+        var parts = ["\(FlintReviewSide.title(item.subject)), \(FlintReviewSide.value(item.subject))"]
+        if let counterpart = item.counterpart {
+            parts.append("linked to \(FlintReviewSide.title(counterpart)), \(FlintReviewSide.value(counterpart))")
+        } else {
+            parts.append("no match")
+        }
+        if let confidence = item.counterpartConfidence {
+            parts.append("\(Int((confidence * 100).rounded()))% match")
+        }
+        return parts.joined(separator: ", ")
+    }
+}
+
+private struct FlintReviewSide: View {
+    let event: FlintReviewEvent
+    let alignment: HorizontalAlignment
+
+    var body: some View {
+        VStack(alignment: alignment, spacing: 2) {
+            Text(Self.title(event))
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+            Text(Self.value(event))
+                .font(.subheadline)
+                .monospacedDigit()
+            if let time = event.time {
+                Text(time, format: .dateTime.day().month(.abbreviated).hour().minute())
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .multilineTextAlignment(alignment == .trailing ? .trailing : .leading)
+        .frame(maxWidth: .infinity, alignment: Alignment(horizontal: alignment, vertical: .center))
+    }
+
+    static func title(_ event: FlintReviewEvent) -> String {
+        event.title.flatMap { $0.isEmpty ? nil : $0 } ?? "Untitled"
+    }
+
+    static func value(_ event: FlintReviewEvent) -> String {
+        guard let amount = event.amount else { return "No amount" }
+        guard let unit = event.unit, unit.count == 3 else {
+            return "\(amount.formatted())\(event.unit.map { " \($0)" } ?? "")"
+        }
+        return amount.formatted(.currency(code: unit.uppercased()))
     }
 }
 
@@ -332,9 +398,4 @@ struct FlintReviewEventCard: View {
             .font(.subheadline.weight(.medium))
             .multilineTextAlignment(.trailing)
     }
-}
-
-private extension FlintReviewItem {
-    var reviewKey: String { "\(kind.rawValue):\(id)" }
-    var needsDecision: Bool { kind == .receiptSuggestion || kind == .linkSuggestion }
 }
