@@ -164,6 +164,24 @@ struct TodayView: View {
             async let historyLoad: Void = checkInHistoryVM?.load() ?? ()
             _ = await (dayLoad, historyLoad)
         }
+        .task(id: date) {
+            // The tomorrow card appears from 17:00; a page left open across
+            // that hour would otherwise wait for the next sync to show it.
+            guard isToday,
+                  let boundary = Calendar.current.date(
+                      bySettingHour: TodayViewModel.tomorrowGlanceHour, minute: 0, second: 0, of: .now
+                  )
+            else { return }
+            let delay = boundary.timeIntervalSinceNow
+            guard delay > 0 else { return }
+            do {
+                try await Task.sleep(for: .seconds(delay))
+            } catch {
+                return
+            }
+            guard scenePhase == .active else { return }
+            await viewModel?.backgroundRevalidate()
+        }
         .task {
             if upToSpeedViewModel == nil {
                 upToSpeedViewModel = UpToSpeedViewModel(

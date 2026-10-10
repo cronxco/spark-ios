@@ -99,6 +99,11 @@ final class LookingAheadViewModel {
             questions = []
             return
         }
+        // A newer digest replaced the one these questions came from; don't
+        // leave them answerable if the fetch below fails.
+        if questions.contains(where: { $0.digestID != digestID }) {
+            questions = []
+        }
         do {
             let open = try await apiClient.collectAllPages(maxPages: 2) { cursor in
                 FlintEndpoint.questions(statuses: [.open], since: "24h", cursor: cursor)
