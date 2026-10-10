@@ -180,33 +180,36 @@ struct DayContextSection: View {
     /// statistic about the weather rather than the weather.
     private func weatherRow(_ weather: FlintDayContextWeather) -> some View {
         HStack(spacing: SparkSpacing.md) {
-            Image(systemName: Self.symbol(for: weather.condition))
+            Image(systemName: Self.symbol(for: weather.condition, rainProbability: weather.rainProbabilityPct))
                 .font(.system(size: 26))
                 .foregroundStyle(Color.sparkOcean)
                 .frame(width: 34)
 
-            if let temp = weather.tempHighC {
-                Text("High \(Int(temp.rounded()))°")
-                    .font(SparkFonts.display(.title2, weight: .bold))
-                    .foregroundStyle(.primary)
-            }
-
-            VStack(alignment: .leading, spacing: 1) {
+            // Temperature over the condition, so a long condition gets the
+            // card's full width instead of wrapping in a column beside it.
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline) {
+                    if let temp = weather.tempHighC {
+                        Text("High \(Int(temp.rounded()))°")
+                            .font(SparkFonts.display(.title2, weight: .bold))
+                            .foregroundStyle(.primary)
+                    }
+                    Spacer(minLength: SparkSpacing.sm)
+                    // On a travel weekend the location is the part of this
+                    // card that tells you something.
+                    if let location = weather.location, !location.isEmpty {
+                        Text(location)
+                            .font(SparkTypography.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
                 if let detail = weatherDetail(weather) {
                     Text(detail)
                         .font(SparkTypography.bodySmall)
                         .foregroundStyle(.secondary)
-                }
-                // Decoded all along and never shown. On a travel weekend the
-                // location is the half of this line that tells you something.
-                if let location = weather.location, !location.isEmpty {
-                    Text(location)
-                        .font(SparkTypography.caption)
-                        .foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-
-            Spacer(minLength: 0)
         }
         .padding(SparkSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -217,18 +220,21 @@ struct DayContextSection: View {
     private func weatherDetail(_ weather: FlintDayContextWeather) -> String? {
         let parts = [
             weather.condition,
-            weather.rainProbabilityPct.map { "\($0)% rain" },
+            // "0% rain" beside "drizzle possible" contradicts itself.
+            weather.rainProbabilityPct.flatMap { $0 > 0 ? "\($0)% rain" : nil },
         ].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    static func symbol(for condition: String?) -> String {
+    static func symbol(for condition: String?, rainProbability: Int? = nil) -> String {
         guard let condition = condition?.lowercased() else { return "cloud.fill" }
+        // A forecast of no rain shouldn't draw rain, whatever the wording.
+        let rainless = rainProbability == 0
 
         if condition.contains("thunder") { return "cloud.bolt.rain.fill" }
         if condition.contains("snow") || condition.contains("sleet") { return "cloud.snow.fill" }
-        if condition.contains("drizzle") { return "cloud.drizzle.fill" }
-        if condition.contains("rain") || condition.contains("shower") { return "cloud.rain.fill" }
+        if condition.contains("drizzle") { return rainless ? "cloud.fill" : "cloud.drizzle.fill" }
+        if condition.contains("rain") || condition.contains("shower") { return rainless ? "cloud.fill" : "cloud.rain.fill" }
         if condition.contains("fog") || condition.contains("mist") { return "cloud.fog.fill" }
         if condition.contains("wind") || condition.contains("breez") { return "wind" }
         // Checked before the bare "cloud" test, which would otherwise swallow it.
@@ -249,10 +255,8 @@ struct DayContextSection: View {
             Text("Yesterday")
                 .font(SparkTypography.caption)
                 .foregroundStyle(.secondary)
-            Text(text)
-                .font(SparkTypography.bodySmall)
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
+            // Flint writes markdown: bold labels and links to Spark records.
+            SparkRichContentText(text: text, font: SparkTypography.bodySmall, lineSpacing: 2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(SparkSpacing.lg)

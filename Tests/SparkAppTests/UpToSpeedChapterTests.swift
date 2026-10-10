@@ -40,8 +40,8 @@ struct UpToSpeedChapterTests {
         #expect(chapters.map(\.kind) == [.intro, .news, .headlines, .wrap])
         #expect(chapters[1].cardCount == 3)
         #expect(chapters[2].cardCount == 2)
-        #expect(chapters[2].shortLabel == "Headlines")
-        #expect(chapters[2].title == "Also in your news")
+        #expect(chapters[2].shortLabel == "News")
+        #expect(chapters[2].title == "And in other news")
     }
 
     /// The day is a section of the opener now, not a chapter of its own, so the

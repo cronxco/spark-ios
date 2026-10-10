@@ -414,9 +414,18 @@ public enum UpToSpeedParsing {
         return chunk.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
     }
 
+    /// Up to the first full stop that ends a sentence, or the first line
+    /// break. A full stop counts only before whitespace or the end, so the
+    /// dots in a markdown link's URL don't cut the sentence mid-link.
     private static func firstSentence(of text: String) -> String {
-        if let stop = text.firstIndex(where: { $0 == "." || $0 == "\n" }) {
-            return String(text[..<stop])
+        var index = text.startIndex
+        while index < text.endIndex {
+            let character = text[index]
+            let next = text.index(after: index)
+            if character == "\n" || (character == "." && (next == text.endIndex || text[next].isWhitespace)) {
+                return String(text[..<index])
+            }
+            index = next
         }
         return text
     }

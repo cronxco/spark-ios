@@ -15,6 +15,8 @@ struct UpToSpeedChapter: Identifiable {
         case news
         /// Every individual article behind them, as a skimmable second tier.
         case headlines
+        /// A check-in still to log, between the briefing and the news.
+        case checkIn
         case wrap
         /// Everything already seen today, offered after the flow proper.
         case recap
@@ -24,8 +26,9 @@ struct UpToSpeedChapter: Identifiable {
             case .intro: "Start"
             case .anomaly(let domain): Self.anomalyLabel(for: domain)
             case .digest: "Briefing"
-            case .news: "News"
-            case .headlines: "Headlines"
+            case .news: "Need to know"
+            case .headlines: "News"
+            case .checkIn: "Check-in"
             case .wrap: "Wrap"
             case .recap: "Earlier"
             }
@@ -38,6 +41,7 @@ struct UpToSpeedChapter: Identifiable {
             case .digest: .sparkAccent
             case .news: .sparkOcean
             case .headlines: .domainKnowledge
+            case .checkIn: .sparkSuccess
             case .wrap: .sparkSuccess
             case .recap: .secondary
             }
@@ -110,8 +114,9 @@ struct UpToSpeedChapter: Identifiable {
         // was known, was as likely to be a bank balance as a health metric.
         case .anomaly: kind.shortLabel
         case .digest(let title): title
-        case .news: "News roundup"
-        case .headlines: "Also in your news"
+        case .news: "You need to know"
+        case .headlines: "And in other news"
+        case .checkIn: "Check-in"
         case .wrap: "Before you go"
         case .recap: "Already seen today"
         }

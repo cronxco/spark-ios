@@ -121,6 +121,17 @@ struct UpToSpeedParsingTests {
         #expect(recap == "Yesterday was a solid, uneventful office day — the RSA breakfast with Daniel went to plan")
     }
 
+    @Test("a link's URL doesn't end the yesterday recap mid-link")
+    func yesterdayRecapKeepsLinks() {
+        let summary = """
+        WHAT YOU'VE BEEN UP TO —
+
+        **THE CORRECTION:** Friday's [activity record](https://spark.cronx.co/events/abc) was a run, not a walk. Sleep was fine.
+        """
+        let recap = UpToSpeedParsing.yesterdayRecap(from: summary)
+        #expect(recap == "**THE CORRECTION:** Friday's [activity record](https://spark.cronx.co/events/abc) was a run, not a walk")
+    }
+
     @Test("yesterday recap is nil when the summary has no such section")
     func yesterdayRecapNilWhenAbsent() {
         let summary = """

@@ -11,7 +11,6 @@ import SwiftUI
 /// prose that was its only content.
 struct FlintOpenerScreen: View {
     let viewModel: UpToSpeedViewModel
-    var onShowRecap: (() -> Void)?
 
     var body: some View {
         StoryScreenScaffold(flintByline: .init(meta: openerTime)) {
@@ -47,13 +46,6 @@ struct FlintOpenerScreen: View {
                         }
                     }
                 }
-                if let onShowRecap, !viewModel.recapItems.isEmpty {
-                    Button(action: onShowRecap) {
-                        Label("Recap", systemImage: "clock.arrow.circlepath")
-                            .font(SparkTypography.bodySmall)
-                    }
-                    .buttonStyle(.plain)
-                }
                 if viewModel.digestsFailedToLoad > 0 {
                     Button("Some of your briefing couldn’t load. Try again") {
                         Task { await viewModel.reloadQueue() }
@@ -79,8 +71,9 @@ struct FlintOpenerScreen: View {
             || viewModel.openerYesterday != nil
     }
 
+    /// The Wrap is always there, so listing it says nothing.
     private var chapterRows: [UpToSpeedChapter] {
-        viewModel.chapters.filter { $0.kind != .intro }
+        viewModel.chapters.filter { $0.kind != .intro && $0.kind != .wrap }
     }
 
     private func chapterRow(_ chapter: UpToSpeedChapter) -> some View {
@@ -92,23 +85,50 @@ struct FlintOpenerScreen: View {
                 .font(SparkTypography.body)
                 .foregroundStyle(.primary)
             Spacer(minLength: SparkSpacing.sm)
-            Text(cardCountLabel(chapter))
-                .font(SparkTypography.caption)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
+            let label = countLabel(chapter)
+            if !label.isEmpty {
+                Text(label)
+                    .font(SparkTypography.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
         }
         .padding(.horizontal, SparkSpacing.lg)
         .padding(.vertical, SparkSpacing.md)
         .contentShape(Rectangle())
     }
 
-    /// Headlines opens on a contents page, which isn't an article.
-    private func cardCountLabel(_ chapter: UpToSpeedChapter) -> String {
-        if chapter.kind == .headlines {
-            let articles = max(chapter.cardCount - 1, 0)
-            return articles == 1 ? "1 article" : "\(articles) articles"
+    /// Counts what the chapter actually holds rather than its cards: an
+    /// anomaly is an observation, a roundup section a story. Headlines opens
+    /// on a contents page, which isn't an article.
+    private func countLabel(_ chapter: UpToSpeedChapter) -> String {
+        switch chapter.kind {
+        case .anomaly: return Self.count(chapter.cardCount, "observation")
+        case .news: return Self.count(chapter.cardCount, "story", plural: "stories")
+        case .headlines: return Self.count(max(chapter.cardCount - 1, 0), "article")
+        case .checkIn, .wrap: return ""
+        case .digest:
+            let questions = screens(in: chapter).filter {
+                if case .flintQuestion = $0 { return true }
+                return false
+            }.count
+            let sections = Self.count(chapter.cardCount - questions, "section")
+            return questions == 0 ? sections : "\(sections) · \(Self.count(questions, "question"))"
+        case .intro, .recap: return Self.count(chapter.cardCount, "card")
         }
-        return chapter.cardCount == 1 ? "1 card" : "\(chapter.cardCount) cards"
+    }
+
+    private func screens(in chapter: UpToSpeedChapter) -> ArraySlice<UpToSpeedScreen> {
+        let range = chapter.range.clamped(to: viewModel.screens.indices)
+        return viewModel.screens[range]
+    }
+
+    private static func count(_ n: Int, _ singular: String, plural: String? = nil) -> String {
+        n == 1 ? "1 \(singular)" : "\(n) \(plural ?? singular + "s")"
     }
 
     private var openerTime: String {

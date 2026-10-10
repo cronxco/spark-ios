@@ -37,6 +37,8 @@ struct AnomalyScreen: View {
             }
         }
         .task { await loadMetric() }
+        // Covers both "Not worth flagging" and a confirmed mute.
+        .sensoryFeedback(.impact(weight: .light), trigger: acknowledged) { _, new in new }
         .onChange(of: acknowledged) { _, newValue in
             guard newValue else { return }
             viewModel.markAnomalyRead(itemID: item.id)
