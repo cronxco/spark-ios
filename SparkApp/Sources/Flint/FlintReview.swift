@@ -51,18 +51,76 @@ final class FlintReviewModel {
         return action == item.acceptAction || action == item.rejectAction
     }
 
-    /// Removes the item straight away, so a swipe feels instant, and puts it
-    /// back if the server refuses.
-    func perform(_ action: FlintReviewAction, on item: FlintReviewItem) async {
+    /// A swiped decision held back for a few seconds so it can be undone.
+    /// The server has no reverse for these actions, so nothing is sent
+    /// until the window closes.
+    struct StagedDecision: Equatable, Sendable {
+        let id = UUID()
+        let item: FlintReviewItem
+        let action: FlintReviewAction
+        let index: Int
+
+        var isAccept: Bool { action == item.acceptAction }
+
+        var message: String {
+            let verb = switch action {
+            case .confirm: "Linked"
+            case .keep: "Kept"
+            case .dismiss: "Dismissed"
+            case .undo: "Unlinked"
+            }
+            let title = item.subject.title.flatMap { $0.isEmpty ? nil : $0 } ?? "item"
+            return "\(verb) \(title)"
+        }
+    }
+
+    static let undoWindow: Duration = .seconds(5)
+
+    private(set) var staged: StagedDecision?
+    private var commitTask: Task<Void, Never>?
+
+    /// Removes the item straight away, so a swipe feels instant, and sends
+    /// the action once the undo window closes. A second swipe sends the
+    /// first one at once.
+    func stage(_ action: FlintReviewAction, on item: FlintReviewItem) {
         guard canPerform(action, on: item),
               let index = items.firstIndex(where: { $0.reviewKey == item.reviewKey }) else { return }
-        let key = item.reviewKey
-        pendingKeys.insert(key)
+        commitStaged()
+        pendingKeys.insert(item.reviewKey)
         items.remove(at: index)
+        staged = StagedDecision(item: item, action: action, index: index)
+        commitTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.undoWindow)
+            guard !Task.isCancelled else { return }
+            self?.commitStaged()
+        }
+    }
 
+    func undoStaged() {
+        guard let decision = staged else { return }
+        commitTask?.cancel()
+        commitTask = nil
+        staged = nil
+        pendingKeys.remove(decision.item.reviewKey)
+        restore(decision.item, at: decision.index)
+    }
+
+    /// Sends the held decision now, e.g. when the tab goes off screen.
+    func commitStaged() {
+        guard let decision = staged else { return }
+        commitTask?.cancel()
+        commitTask = nil
+        staged = nil
+        Task { await send(decision) }
+    }
+
+    /// Puts the item back if the server refuses.
+    private func send(_ decision: StagedDecision) async {
+        let item = decision.item
+        let key = item.reviewKey
         let request = FlintReviewActionRequest(
-            action: action,
-            transactionID: action == .confirm && item.kind == .receiptSuggestion ? item.bestCandidate?.id : nil
+            action: decision.action,
+            transactionID: decision.action == .confirm && item.kind == .receiptSuggestion ? item.bestCandidate?.id : nil
         )
         do {
             let fresh = try await apiClient.request(FlintEndpoint.reviewAction(kind: item.kind, id: item.id, request)).data
@@ -71,7 +129,7 @@ final class FlintReviewModel {
             apply(fresh)
         } catch where error.isAPICancellation {
             pendingKeys.remove(key)
-            restore(item, at: index)
+            restore(item, at: decision.index)
         } catch {
             pendingKeys.remove(key)
             SparkObservability.captureHandled(error)
@@ -83,7 +141,7 @@ final class FlintReviewModel {
             if case APIError.httpStatus(422, _, _) = error {
                 await load()
             } else {
-                restore(item, at: index)
+                restore(item, at: decision.index)
             }
             actionError = (error as? LocalizedError)?.errorDescription ?? "Couldn’t save that. Please try again."
         }
@@ -140,6 +198,22 @@ struct FlintReviewSection: View {
         }
         .scrollContentBackground(.hidden)
         .animation(.default, value: model.items.map(\.reviewKey))
+        .safeAreaInset(edge: .bottom) {
+            if let staged = model.staged {
+                UndoToast(staged.message, systemImage: staged.isAccept ? "checkmark" : "xmark") {
+                    model.undoStaged()
+                }
+                .padding(.horizontal, SparkSpacing.lg)
+                .padding(.bottom, SparkSpacing.sm)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.snappy, value: model.staged)
+        .sensoryFeedback(trigger: model.staged) { _, new in
+            guard let new else { return nil }
+            return new.isAccept ? .success : .impact(weight: .medium)
+        }
+        .onDisappear { model.commitStaged() }
         .sheet(isPresented: $showingUnmatched) {
             NavigationStack {
                 ReceiptUnmatchedView(apiClient: model.apiClient)
@@ -197,7 +271,7 @@ private struct FlintReviewRow: View {
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
             if let accept = item.acceptAction {
                 Button {
-                    Task { await model.perform(accept, on: item) }
+                    model.stage(accept, on: item)
                 } label: {
                     Label(accept.label, systemImage: "checkmark")
                 }
@@ -207,7 +281,7 @@ private struct FlintReviewRow: View {
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             if let reject = item.rejectAction {
                 Button {
-                    Task { await model.perform(reject, on: item) }
+                    model.stage(reject, on: item)
                 } label: {
                     Label(reject.label, systemImage: "xmark")
                 }
@@ -228,10 +302,10 @@ private struct FlintReviewRow: View {
         .accessibilityLabel(accessibilityDescription)
         .accessibilityActions {
             if let accept = item.acceptAction {
-                Button(accept.label) { Task { await model.perform(accept, on: item) } }
+                Button(accept.label) { model.stage(accept, on: item) }
             }
             if let reject = item.rejectAction {
-                Button(reject.label) { Task { await model.perform(reject, on: item) } }
+                Button(reject.label) { model.stage(reject, on: item) }
             }
         }
         .sheet(isPresented: $showingReceiptMatch, onDismiss: {
