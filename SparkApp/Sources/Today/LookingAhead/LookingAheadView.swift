@@ -137,6 +137,13 @@ struct LookingAheadView: View {
                 message: message,
                 actionTitle: "Retry"
             ) { Task { await viewModel?.refresh() } }
+        case .idle:
+            // Loaded, but the server sent no `ahead` section for this day.
+            EmptyState(
+                systemImage: "calendar",
+                title: "Nothing to look ahead to yet",
+                message: "Spark will fill this in once it knows more about \(date.formatted(.dateTime.weekday(.wide)))."
+            )
         default:
             VStack(spacing: SparkSpacing.md) {
                 LoadingShimmerCard()
