@@ -87,6 +87,16 @@ final class FlintReviewModel {
     private(set) var staged: StagedDecision?
     private var commitTask: Task<Void, Never>?
 
+    /// Bumped each time the person leaves Review. A row captures it as its
+    /// swipe animation starts, so a decision staged after they've gone is
+    /// sent straight away rather than sitting out the undo window.
+    private(set) var reviewExitGeneration = 0
+
+    func reviewDidExit() {
+        reviewExitGeneration += 1
+        commitStaged()
+    }
+
     /// Removes the item straight away, so a swipe feels instant, and sends
     /// the action once the undo window closes. A second swipe sends the
     /// first one at once.
@@ -211,7 +221,7 @@ struct FlintReviewSection: View {
             guard let new else { return nil }
             return new.isAccept ? .success : .impact(weight: .medium)
         }
-        .onDisappear { model.commitStaged() }
+        .onDisappear { model.reviewDidExit() }
         .sheet(isPresented: $showingUnmatched) {
             NavigationStack {
                 ReceiptUnmatchedView(apiClient: model.apiClient)
@@ -383,10 +393,14 @@ private struct FlintReviewRow: View {
             return
         }
         let travel = max(rowWidth, 320) + SparkSpacing.xl
+        let exitGeneration = model.reviewExitGeneration
         withAnimation(.snappy(duration: 0.2)) {
             offset = translation > 0 ? travel : -travel
         } completion: {
             model.stage(action, on: item)
+            if model.reviewExitGeneration != exitGeneration {
+                model.commitStaged()
+            }
         }
     }
 

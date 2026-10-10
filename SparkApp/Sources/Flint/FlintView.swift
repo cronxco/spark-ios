@@ -77,7 +77,7 @@ struct FlintView: View {
             // The pager can keep Review mounted off screen, so don't rely on
             // its onDisappear to send a held decision.
             if oldTab == .review, tab != .review {
-                reviewModel?.commitStaged()
+                reviewModel?.reviewDidExit()
             }
             sectionChanged(to: tab, viewModel: viewModel)
         }
