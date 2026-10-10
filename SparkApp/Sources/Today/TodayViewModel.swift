@@ -30,6 +30,13 @@ final class TodayViewModel {
     private(set) var recentQuestions: [FlintQuestion] = []
     private(set) var topics: [FlintTopic] = []
     private(set) var moneyContext: MoneyContext = .empty
+    /// Tomorrow's `ahead` section, fetched from the evening onwards so Today
+    /// can offer a way across to it. `nil` earlier in the day, or when there
+    /// is nothing on tomorrow worth a card.
+    private(set) var tomorrowAhead: DayAhead?
+
+    /// The hour from which Today offers a glance at tomorrow.
+    static let tomorrowGlanceHour = 17
 
     /// How far back "recent" reaches for the question stack, in the server's
     /// relative-window syntax.
@@ -83,7 +90,31 @@ final class TodayViewModel {
         async let questions: Void = loadRecentQuestions()
         async let threads: Void = loadTopics()
         async let money: Void = loadMoneyContext()
-        _ = await (digest, questions, threads, money)
+        async let tomorrow: Void = loadTomorrowAhead()
+        _ = await (digest, questions, threads, money, tomorrow)
+    }
+
+    private func loadTomorrowAhead(now: Date = .now) async {
+        let calendar = Calendar.current
+        guard calendar.component(.hour, from: now) >= Self.tomorrowGlanceHour,
+              let tomorrow = calendar.date(byAdding: .day, value: 1, to: date)
+        else {
+            tomorrowAhead = nil
+            return
+        }
+        do {
+            let summary = try await apiClient.request(BriefingEndpoint.today(date: Self.isoKey(for: tomorrow)))
+            tomorrowAhead = summary.ahead.flatMap(Self.worthAGlance)
+        } catch where error.isAPICancellation {
+            return
+        } catch {
+            SparkObservability.captureHandled(error)
+        }
+    }
+
+    /// A card that only says "nothing on" is noise on an evening page.
+    nonisolated static func worthAGlance(_ ahead: DayAhead) -> DayAhead? {
+        ahead.hasSchedule || ahead.openPlanCount > 0 || ahead.sleepTarget != nil ? ahead : nil
     }
 
     private func loadLatestDigest() async {

@@ -19,7 +19,22 @@ struct TodayView: View {
 
     private var isToday: Bool { Calendar.current.isDateInToday(date) }
 
+    /// A day that has not started yet gets its own forward-looking page;
+    /// nothing on the Today layout can have data for it.
+    private var isFuture: Bool {
+        Calendar.current.compare(date, to: .now, toGranularity: .day) == .orderedDescending
+    }
+
     var body: some View {
+        if isFuture {
+            LookingAheadView(date: date, showsToolbar: showsToolbar)
+        } else {
+            todayBody
+        }
+    }
+
+    @ViewBuilder
+    private var todayBody: some View {
         let snapshot = TodaySnapshot(
             summary: viewModel?.cached,
             date: date,
@@ -42,6 +57,16 @@ struct TodayView: View {
                     // page that was today before midnight stops showing them.
                     if isToday, let digest = viewModel?.latestDigest {
                         DigestOpenerCard(digest: digest) { showUpToSpeed = true }
+                    }
+
+                    // In the evening, once there is something to say about
+                    // tomorrow, a way across to it.
+                    if isToday, let tomorrow = viewModel?.tomorrowAhead {
+                        TomorrowGlanceCard(ahead: tomorrow) {
+                            if let next = Calendar.current.date(byAdding: .day, value: 1, to: date) {
+                                appModel.pendingRoute = .day(next)
+                            }
+                        }
                     }
 
                     MetricsGrid(metrics: viewModel?.metrics ?? DayMetrics(summary: nil))
@@ -251,9 +276,6 @@ struct TodayView: View {
             return "\(firstName),\nyour day so far."
         } else if Calendar.current.isDateInYesterday(date) {
             return "Yesterday\nin review"
-        } else if let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: .now),
-                  Calendar.current.isDate(date, inSameDayAs: tomorrow) {
-            return "Looking ahead"
         } else {
             return Self.dayTitleFormatter.string(from: date)
         }
