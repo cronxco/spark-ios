@@ -16,9 +16,12 @@ public struct Endpoint<Response: Decodable & Sendable>: Sendable {
     public let contentType: String?
     public let requiresAuth: Bool
 
-    /// Whether GETs send `If-None-Match` from the shared `ETagCache`. Turn off
-    /// for endpoints whose caller keeps no local copy of the body: a 304 gives
-    /// them nothing to render.
+    /// Whether GETs send `If-None-Match` from the shared `ETagCache`.
+    ///
+    /// Off by default. The cache outlives every view, so a 304 can answer a
+    /// screen that has never seen the body and leave it with nothing to render.
+    /// Opt in only where the caller keeps its own copy, such as a SwiftData
+    /// cache or an already loaded value it revalidates.
     public let usesETag: Bool
 
     /// Extra request headers.
@@ -34,7 +37,7 @@ public struct Endpoint<Response: Decodable & Sendable>: Sendable {
         body: Data? = nil,
         contentType: String? = nil,
         requiresAuth: Bool = true,
-        usesETag: Bool = true,
+        usesETag: Bool = false,
         headers: [String: String] = [:]
     ) {
         self.method = method

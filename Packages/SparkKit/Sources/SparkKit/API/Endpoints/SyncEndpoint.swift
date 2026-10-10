@@ -5,12 +5,14 @@ import Foundation
 public enum SyncEndpoint {
     /// GET /sync/delta?since={cursor}
     /// Returns events that changed since the cursor. No cursor = last 24h.
+    /// Uses the ETag cache: the deltas live in SwiftData, so a 304 means
+    /// there is nothing new to apply.
     public static func delta(since cursor: String?) -> Endpoint<DeltaResponse> {
         var query: [URLQueryItem] = []
         if let cursor {
             query.append(URLQueryItem(name: "since", value: cursor))
         }
-        return Endpoint(method: .get, path: "/sync/delta", query: query)
+        return Endpoint(method: .get, path: "/sync/delta", query: query, usesETag: true)
     }
 
     /// Wire-format response. Shape is load-bearing — only change through

@@ -22,11 +22,13 @@ public enum CheckInsEndpoint {
     }
 
     /// GET /check-ins?date=YYYY-MM-DD — completion status for both periods on a date.
-    public static func today(date: String) -> Endpoint<CheckInDayResponse> {
+    /// Pass `usesETag: true` only when the caller persists the response.
+    public static func today(date: String, usesETag: Bool = false) -> Endpoint<CheckInDayResponse> {
         Endpoint(
             method: .get,
             path: "/check-ins",
-            query: [URLQueryItem(name: "date", value: date)]
+            query: [URLQueryItem(name: "date", value: date)],
+            usesETag: usesETag
         )
     }
 

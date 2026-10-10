@@ -17,7 +17,7 @@ struct EventDetailDecodingTests {
     @Test("detail for write never sends If-None-Match")
     func detailForWriteSkipsETagCache() {
         #expect(EventsEndpoint.detailForWrite(id: "evt_article").usesETag == false)
-        #expect(EventsEndpoint.detail(id: "evt_article").usesETag)
+        #expect(EventsEndpoint.detail(id: "evt_article").usesETag == false)
     }
 
     @Test("decodes the 202 reprocess body")
