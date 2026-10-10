@@ -2,6 +2,8 @@ import Observation
 import SparkKit
 import SparkUI
 import SwiftUI
+import UIKit
+import UIKit.UIGestureRecognizerSubclass
 
 /// Flint's Review queue: decisions Spark made by itself, and suggestions it
 /// was not sure enough to act on (decisions E-1 and EX-D4).
@@ -16,6 +18,9 @@ final class FlintReviewModel {
     private(set) var items: [FlintReviewItem] = []
     private(set) var state: State = .idle
     var actionError: String?
+    /// True while a finger is down on a row, so the section pager leaves the
+    /// sideways drag to the row's swipe actions.
+    var isTouchingRow = false
     /// Items swiped away whose action is still in flight.
     private var pendingKeys: Set<String> = []
     /// Items acted on this session, so a slower response that predates the
@@ -292,6 +297,9 @@ private struct FlintReviewRow: View {
                 .tint(.sparkError)
             }
         }
+        .gesture(RowTouchTracker { touching in
+            if model.isTouchingRow != touching { model.isTouchingRow = touching }
+        })
         .contextMenu {
             NavigationLink(value: DetailRoute.event(id: item.subject.id)) {
                 Label(isReceipt ? "Open receipt" : "Open transaction", systemImage: "arrow.up.forward.app")
@@ -475,5 +483,67 @@ struct FlintReviewEventCard: View {
         Text(value)
             .font(.subheadline.weight(.medium))
             .multilineTextAlignment(.trailing)
+    }
+}
+
+/// Reports when a finger goes down on, and lifts off, the view it's attached
+/// to. It never recognises, so taps, scrolling and swipe actions carry on.
+private struct RowTouchTracker: UIGestureRecognizerRepresentable {
+    let onChange: (Bool) -> Void
+
+    func makeUIGestureRecognizer(context: Context) -> TouchTrackingRecognizer {
+        let recognizer = TouchTrackingRecognizer()
+        recognizer.cancelsTouchesInView = false
+        recognizer.delaysTouchesBegan = false
+        recognizer.delaysTouchesEnded = false
+        recognizer.delegate = context.coordinator
+        return recognizer
+    }
+
+    func updateUIGestureRecognizer(_ recognizer: TouchTrackingRecognizer, context: Context) {
+        recognizer.onChange = onChange
+    }
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator {
+        Coordinator()
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            true
+        }
+    }
+}
+
+private final class TouchTrackingRecognizer: UIGestureRecognizer {
+    var onChange: ((Bool) -> Void)?
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesBegan(touches, with: event)
+        onChange?(true)
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesEnded(touches, with: event)
+        finish()
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesCancelled(touches, with: event)
+        finish()
+    }
+
+    override func reset() {
+        super.reset()
+        onChange?(false)
+    }
+
+    private func finish() {
+        onChange?(false)
+        state = .failed
     }
 }

@@ -67,8 +67,9 @@ struct FlintView: View {
             title: "Flint",
             sections: FlintViewModel.FlintTab.allCases.map { SparkPagerSection(id: $0, title: $0.title) },
             selection: $viewModel.selectedTab,
-            // Review rows swipe sideways to accept or reject.
-            swipeDisabled: [.review]
+            // Review rows swipe sideways to accept or reject, so the pager
+            // only stops swiping while a finger is down on one of them.
+            swipeDisabled: reviewModel?.isTouchingRow == true ? [.review] : []
         ) { tab in
             sectionPage(tab, viewModel: viewModel)
         }

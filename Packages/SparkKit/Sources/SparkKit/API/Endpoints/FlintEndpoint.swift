@@ -170,7 +170,7 @@ public enum FlintEndpoint {
     }
 
     public static func unmatchedReceipts(page: Int = 1) -> Endpoint<ReceiptMatchListResponse> {
-        Endpoint(method: .get, path: "/flint/receipts/unmatched", query: [URLQueryItem(name: "page", value: String(page))])
+        Endpoint(method: .get, path: "/flint/receipts/unmatched", query: [URLQueryItem(name: "page", value: String(page))], usesETag: false)
     }
 
     public static func receiptMatch(id: String) -> Endpoint<ReceiptMatchResponse> {
