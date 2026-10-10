@@ -23,7 +23,7 @@ struct HeadlinesIndexScreen: View {
             onReachedBottom: onReachedBottom
         ) {
             VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-                Text("Also in your news")
+                Text("And in other news")
                     .font(SparkTypography.heroSmall)
                     .foregroundStyle(.primary)
 

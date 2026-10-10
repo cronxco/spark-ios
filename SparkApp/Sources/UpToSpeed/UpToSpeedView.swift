@@ -137,12 +137,13 @@ struct UpToSpeedView: View {
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .ignoresSafeArea()
-        // A tick per chapter rather than per card: Headlines alone can run to
-        // dozens of cards. Arriving at the Wrap gets a success instead.
+        // A light tick between cards, a firmer tap on crossing into a new
+        // chapter, and a success on arriving at the Wrap.
         .sensoryFeedback(trigger: vm.currentIndex) { old, new in
             let chapter = { (index: Int) -> Int? in vm.chapters.firstIndex { $0.range.contains(index) } }
-            guard let newChapter = chapter(new), newChapter != chapter(old) else { return nil }
-            return vm.chapters[newChapter].kind == .wrap ? .success : .selection
+            guard let newChapter = chapter(new) else { return nil }
+            guard newChapter != chapter(old) else { return .selection }
+            return vm.chapters[newChapter].kind == .wrap ? .success : .impact(weight: .medium)
         }
         .accessibilityAction(named: "Next card") {
             guard vm.currentIndex + 1 < vm.screens.count else { return }
@@ -192,6 +193,7 @@ struct UpToSpeedView: View {
                 }
                 Spacer(minLength: 0)
                 toolbarCapsule(vm: vm)
+                closeButton { dismissFlow(vm: vm) }
             }
 
             if vm.newItemsAvailable > 0 {
@@ -216,11 +218,13 @@ struct UpToSpeedView: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
     }
 
-    /// One glass capsule for every control, grouped the way the day page's
-    /// toolbar is, rather than a row of separate circles. Mark-as-read joins
-    /// it only on a Headlines article, the one place it applies.
+    /// One glass capsule for the card's controls, with Close standing apart
+    /// to its right. Mark-as-read joins it on a News story or a Headlines
+    /// article, Recap only on the Start card, and Skip whenever there is a
+    /// chapter still to come.
     private func toolbarCapsule(vm: UpToSpeedViewModel) -> some View {
         let article = markableArticle(in: vm)
+        let nextChapterStart = nextChapterStart(in: vm)
         return HStack(spacing: 0) {
             if let article {
                 let isRead = vm.isMarkedRead(article.id)
@@ -237,19 +241,31 @@ struct UpToSpeedView: View {
             toolbarButton(systemImage: "square.and.pencil", label: "Note to Flint") {
                 noteComposerContext = currentScreen(in: vm)?.flintNoteContext ?? .generic
             }
-            toolbarButton(systemImage: "clock.arrow.circlepath", label: "Recap") {
-                showsRecap = true
+            if vm.currentChapter?.kind == .intro, !vm.recapItems.isEmpty {
+                toolbarButton(systemImage: "clock.arrow.circlepath", label: "Recap") {
+                    showsRecap = true
+                }
+                .transition(.opacity)
             }
-            toolbarButton(systemImage: "xmark", label: "Close") {
-                dismissFlow(vm: vm)
+            if let nextChapterStart {
+                toolbarButton(systemImage: "forward.end", label: "Skip to next section") {
+                    vm.jump(to: nextChapterStart)
+                }
+                .transition(.opacity)
             }
-            // The dismiss drag would otherwise compete for the tap.
-            .highPriorityGesture(TapGesture().onEnded { dismissFlow(vm: vm) })
         }
         .padding(.horizontal, SparkSpacing.xs)
         .sparkGlass(.capsule)
         .animation(reduceMotion ? nil : .snappy, value: article?.id)
+        .animation(reduceMotion ? nil : .snappy, value: vm.currentChapterIndex)
         .sensoryFeedback(.selection, trigger: readToggleCount)
+    }
+
+    /// Where Skip lands: the first card of the chapter after this one.
+    private func nextChapterStart(in vm: UpToSpeedViewModel) -> Int? {
+        let next = vm.currentChapterIndex + 1
+        guard vm.chapters.indices.contains(next) else { return nil }
+        return vm.chapters[next].range.lowerBound
     }
 
     private func toolbarButton(systemImage: String, label: String, action: @escaping () -> Void) -> some View {
@@ -264,11 +280,15 @@ struct UpToSpeedView: View {
         .accessibilityLabel(label)
     }
 
-    /// The article on screen, when it's one the reader can mark by hand.
+    /// The item on screen, when it's one the reader can mark by hand: a
+    /// Headlines article, or the roundup behind a News story. A roundup is a
+    /// single item, so marking one story marks the whole roundup.
     private func markableArticle(in vm: UpToSpeedViewModel) -> UpToSpeedItem? {
-        guard vm.currentChapter?.kind == .headlines,
-              case .newsSummary(let item)? = currentScreen(in: vm) else { return nil }
-        return item
+        switch currentScreen(in: vm) {
+        case .newsSummary(let item)? where vm.currentChapter?.kind == .headlines: item
+        case .newsStory(let item, _, _, _)?: item
+        default: nil
+        }
     }
 
     private func currentScreen(in viewModel: UpToSpeedViewModel) -> UpToSpeedScreen? {
@@ -347,7 +367,7 @@ struct UpToSpeedView: View {
 
         switch screen {
         case .opener:
-            FlintOpenerScreen(viewModel: vm, onShowRecap: { showsRecap = true })
+            FlintOpenerScreen(viewModel: vm)
         case .flintHeader(let item, let firstSection):
             FlintHeaderPage(item: item, firstSection: firstSection, isActive: isActive, onReachedBottom: consumed, supplement: supplement)
         case .flintParagraph(let item, let text, _):

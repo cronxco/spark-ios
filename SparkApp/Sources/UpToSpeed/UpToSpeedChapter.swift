@@ -110,8 +110,8 @@ struct UpToSpeedChapter: Identifiable {
         // was known, was as likely to be a bank balance as a health metric.
         case .anomaly: kind.shortLabel
         case .digest(let title): title
-        case .news: "News roundup"
-        case .headlines: "Also in your news"
+        case .news: "You need to know"
+        case .headlines: "And in other news"
         case .wrap: "Before you go"
         case .recap: "Already seen today"
         }
