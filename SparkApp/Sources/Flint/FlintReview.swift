@@ -40,6 +40,9 @@ final class FlintReviewModel {
             state = .loaded
         } catch where error.isAPICancellation {
             state = items.isEmpty ? .idle : .loaded
+        } catch APIError.notModified {
+            // Nothing new since the last load; keep what's showing.
+            state = .loaded
         } catch {
             SparkObservability.captureHandled(error)
             state = .error((error as? LocalizedError)?.errorDescription ?? "Couldn’t load the review queue.")

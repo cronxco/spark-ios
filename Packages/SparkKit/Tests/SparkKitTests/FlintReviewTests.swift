@@ -104,6 +104,7 @@ struct FlintReviewTests {
         #expect(endpoint.method == .get)
         #expect(endpoint.path == "/flint/review")
         #expect(endpoint.headers["Cache-Control"] == "no-cache")
+        #expect(endpoint.usesETag == false)
     }
 
     @Test("receipt matching decodes per-receipt status and candidate events")

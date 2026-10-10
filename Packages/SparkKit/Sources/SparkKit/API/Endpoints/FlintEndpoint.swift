@@ -148,9 +148,10 @@ public enum FlintEndpoint {
     }
 
     /// GET /flint/review — Flint's queue of automated decisions and
-    /// suggestions waiting for a person.
+    /// suggestions waiting for a person. The tab keeps no cached copy, so
+    /// it skips the ETag cache: a 304 would leave it nothing to show.
     public static func review() -> Endpoint<FlintReviewResponse> {
-        Endpoint(method: .get, path: "/flint/review", headers: ["Cache-Control": "no-cache"])
+        Endpoint(method: .get, path: "/flint/review", usesETag: false, headers: ["Cache-Control": "no-cache"])
     }
 
     /// POST /flint/review/{kind}/{id} — confirm, dismiss or undo one item.
@@ -173,7 +174,7 @@ public enum FlintEndpoint {
     }
 
     public static func receiptMatch(id: String) -> Endpoint<ReceiptMatchResponse> {
-        Endpoint(method: .get, path: "/flint/receipts/\(id)/match", headers: ["Cache-Control": "no-cache"])
+        Endpoint(method: .get, path: "/flint/receipts/\(id)/match", usesETag: false, headers: ["Cache-Control": "no-cache"])
     }
 
     public static func receiptTransactions(id: String, query: String) -> Endpoint<ReceiptTransactionListResponse> {
