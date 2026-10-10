@@ -135,6 +135,7 @@ final class FlintReviewModel {
             SparkObservability.captureHandled(error)
             if case APIError.httpStatus(404, _, _) = error {
                 settledKeys.insert(key)
+                await load()
                 actionError = "That item is no longer available. The list has been refreshed."
                 return
             }

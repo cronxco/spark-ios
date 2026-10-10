@@ -72,7 +72,12 @@ struct FlintView: View {
         ) { tab in
             sectionPage(tab, viewModel: viewModel)
         }
-        .onChange(of: viewModel.selectedTab) { _, tab in
+        .onChange(of: viewModel.selectedTab) { oldTab, tab in
+            // The pager can keep Review mounted off screen, so don't rely on
+            // its onDisappear to send a held decision.
+            if oldTab == .review, tab != .review {
+                reviewModel?.commitStaged()
+            }
             sectionChanged(to: tab, viewModel: viewModel)
         }
     }
