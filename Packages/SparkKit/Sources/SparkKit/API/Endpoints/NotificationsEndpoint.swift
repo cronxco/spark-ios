@@ -13,12 +13,15 @@ public enum NotificationsEndpoint {
     }
 
     /// GET /notifications/feed — the shared web/iOS feed contract.
+    ///
+    /// Pass `usesETag: true` only when the caller already shows a copy of the page.
     public static func feed(
         scope: Scope = .active,
         stream: NotificationFeedItem.Stream? = nil,
         search: String? = nil,
         cursor: String? = nil,
-        limit: Int = 25
+        limit: Int = 25,
+        usesETag: Bool = false
     ) -> Endpoint<NotificationFeedPage> {
         var query = [
             URLQueryItem(name: "scope", value: scope.rawValue),
@@ -27,7 +30,7 @@ public enum NotificationsEndpoint {
         if let stream { query.append(URLQueryItem(name: "stream", value: stream.rawValue)) }
         if let search, !search.isEmpty { query.append(URLQueryItem(name: "search", value: search)) }
         if let cursor { query.append(URLQueryItem(name: "cursor", value: cursor)) }
-        return Endpoint(method: .get, path: "/notifications/feed", query: query)
+        return Endpoint(method: .get, path: "/notifications/feed", query: query, usesETag: usesETag)
     }
 
     /// POST /notifications/{id}/read

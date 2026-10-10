@@ -328,11 +328,11 @@ final class TodayViewModel {
         do {
             let status: CheckInDayResponse
             #if DEBUG
-                let response = try await apiClient.requestWithRawResponse(CheckInsEndpoint.today(date: key))
+                let response = try await apiClient.requestWithRawResponse(CheckInsEndpoint.today(date: key, usesETag: true))
                 status = response.decoded
                 upsertRawAPIEntry(title: "GET /check-ins/today?date=\(key)", body: response.utf8Body)
             #else
-                status = try await apiClient.request(CheckInsEndpoint.today(date: key))
+                status = try await apiClient.request(CheckInsEndpoint.today(date: key, usesETag: true))
             #endif
 
             let context = ModelContext(container)
@@ -378,13 +378,13 @@ final class TodayViewModel {
             let summary: DaySummary
             #if DEBUG
                 let response = try await apiClient.requestWithRawResponse(
-                    BriefingEndpoint.today(date: Self.isoKey(for: date))
+                    BriefingEndpoint.today(date: Self.isoKey(for: date), usesETag: cached != nil)
                 )
                 summary = response.decoded
                 upsertRawAPIEntry(title: "GET /briefing/today?date=\(Self.isoKey(for: date))", body: response.utf8Body)
             #else
                 summary = try await apiClient.request(
-                    BriefingEndpoint.today(date: Self.isoKey(for: date))
+                    BriefingEndpoint.today(date: Self.isoKey(for: date), usesETag: cached != nil)
                 )
             #endif
 
@@ -416,7 +416,7 @@ final class TodayViewModel {
                 let page: Page<Event>
                 #if DEBUG
                     let response = try await apiClient.requestWithRawResponse(
-                        FeedEndpoint.feed(cursor: cursor, limit: 100, date: dateKey)
+                        FeedEndpoint.feed(cursor: cursor, limit: 100, date: dateKey, usesETag: true)
                     )
                     page = response.decoded
                     upsertRawAPIEntry(
@@ -425,7 +425,7 @@ final class TodayViewModel {
                     )
                 #else
                     page = try await apiClient.request(
-                        FeedEndpoint.feed(cursor: cursor, limit: 100, date: dateKey)
+                        FeedEndpoint.feed(cursor: cursor, limit: 100, date: dateKey, usesETag: true)
                     )
                 #endif
 

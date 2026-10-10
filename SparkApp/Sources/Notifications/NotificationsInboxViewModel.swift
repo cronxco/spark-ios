@@ -82,7 +82,8 @@ final class NotificationsInboxViewModel {
             let page = try await apiClient.request(NotificationsEndpoint.feed(
                 scope: filter.scope,
                 stream: filter.stream,
-                search: filter.search
+                search: filter.search,
+                usesETag: !items.isEmpty
             ))
             guard isCurrent(filter: filter, generation: generation) else { return false }
             items = page.data

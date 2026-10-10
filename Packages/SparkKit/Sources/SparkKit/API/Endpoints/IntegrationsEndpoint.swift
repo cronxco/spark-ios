@@ -10,9 +10,10 @@ public enum IntegrationsEndpoint {
         Endpoint(method: .get, path: "/integrations")
     }
 
-    /// GET /integrations/{id}
+    /// GET /integrations/{id} with `If-None-Match`, for revalidating a detail
+    /// that is already on screen.
     public static func detail(id: String) -> Endpoint<IntegrationDetail> {
-        Endpoint(method: .get, path: "/integrations/\(id)")
+        Endpoint(method: .get, path: "/integrations/\(id)", usesETag: true)
     }
 
     /// GET /integrations/{id} without `If-None-Match`, for reads that need the

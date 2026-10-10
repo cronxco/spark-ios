@@ -2,7 +2,9 @@ import Foundation
 
 public enum BriefingEndpoint {
     /// GET /briefing/today?date=YYYY-MM-DD
-    public static func today(date: String? = nil, domains: [String]? = nil) -> Endpoint<DaySummary> {
+    ///
+    /// Pass `usesETag: true` only when a cached summary for the date exists.
+    public static func today(date: String? = nil, domains: [String]? = nil, usesETag: Bool = false) -> Endpoint<DaySummary> {
         var query: [URLQueryItem] = []
         if let date {
             query.append(URLQueryItem(name: "date", value: date))
@@ -10,6 +12,6 @@ public enum BriefingEndpoint {
         if let domains, !domains.isEmpty {
             query.append(URLQueryItem(name: "domains", value: domains.joined(separator: ",")))
         }
-        return Endpoint(method: .get, path: "/briefing/today", query: query)
+        return Endpoint(method: .get, path: "/briefing/today", query: query, usesETag: usesETag)
     }
 }

@@ -148,12 +148,50 @@ struct APIClientTests {
         )
 
         await StubURLProtocol.set { _ in (Data("{}".utf8), 200, [:]) }
-        _ = try await client.request(Endpoint<EmptyResponse>(method: .get, path: "/briefing/today", requiresAuth: false))
-        _ = try await client.request(Endpoint<EmptyResponse>(method: .post, path: "/briefing/today", requiresAuth: false))
+        _ = try await client.request(Endpoint<EmptyResponse>(method: .get, path: "/briefing/today", requiresAuth: false, usesETag: true))
+        _ = try await client.request(Endpoint<EmptyResponse>(method: .post, path: "/briefing/today", requiresAuth: false, usesETag: true))
 
         let requests = await StubURLProtocol.recorded()
         #expect(requests.dropLast().last?.value(forHTTPHeaderField: "If-None-Match") == "\"cached\"")
         #expect(requests.last?.value(forHTTPHeaderField: "If-None-Match") == nil)
+    }
+
+    @Test("GETs skip cached ETags unless the endpoint opts in")
+    func cachedETagsRequireOptIn() async throws {
+        let cache = makeCache()
+        let environment = APIEnvironment(
+            baseURL: URL(string: "https://test.spark.cronx.co/api/v1/mobile")!,
+            oauthAuthorizeURL: URL(string: "https://test.spark.cronx.co/oauth/authorize")!,
+            name: "test"
+        )
+        let url = URL(string: "https://test.spark.cronx.co/api/v1/mobile/briefing/today")!
+        await cache.store("\"cached\"", for: url)
+        let client = APIClient(
+            environment: environment,
+            session: makeSession(),
+            tokenStore: makeStore(),
+            etagCache: cache,
+            telemetry: APITelemetry()
+        )
+
+        await StubURLProtocol.set { _ in (Data("{}".utf8), 200, [:]) }
+        _ = try await client.request(Endpoint<EmptyResponse>(method: .get, path: "/briefing/today", requiresAuth: false))
+
+        let requests = await StubURLProtocol.recorded()
+        #expect(requests.last?.value(forHTTPHeaderField: "If-None-Match") == nil)
+    }
+
+    @Test("only endpoints backed by a local copy opt into ETags")
+    func persistedEndpointsOptIntoETags() {
+        #expect(BriefingEndpoint.today().usesETag == false)
+        #expect(BriefingEndpoint.today(usesETag: true).usesETag)
+        #expect(FeedEndpoint.feed().usesETag == false)
+        #expect(FeedEndpoint.feed(usesETag: true).usesETag)
+        #expect(CheckInsEndpoint.today(date: "2026-10-10").usesETag == false)
+        #expect(NotificationsEndpoint.feed().usesETag == false)
+        #expect(SyncEndpoint.delta(since: nil).usesETag)
+        #expect(EventsEndpoint.detail(id: "evt_1").usesETag == false)
+        #expect(ObjectsEndpoint.detail(id: "obj_1").usesETag == false)
     }
 
     @Test("401 with refresh token refreshes and retries once")
