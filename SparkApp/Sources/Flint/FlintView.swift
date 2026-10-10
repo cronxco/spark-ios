@@ -117,7 +117,7 @@ struct FlintView: View {
     @ViewBuilder
     private func sectionPage(_ tab: FlintViewModel.FlintTab, viewModel: FlintViewModel) -> some View {
         if tab == .review {
-            // Review is a list of its own, for the rows' swipe actions.
+            // Review owns its scroll view, for the rows' swipe gesture.
             if let reviewModel {
                 FlintReviewSection(model: reviewModel)
                     .refreshable { await refresh(tab) }

@@ -166,46 +166,35 @@ final class FlintReviewModel {
     }
 }
 
-/// The Review tab. A `List` rather than a scroll view so each row gets the
-/// system's full swipe: swipe right to accept, left to reject.
+/// The Review tab: glass rows in a scroll view of its own. A short swipe
+/// right accepts a row, a short swipe left rejects it.
 struct FlintReviewSection: View {
     let model: FlintReviewModel
     @State private var showingUnmatched = false
 
     var body: some View {
-        List {
-            switch model.state {
-            case .idle where model.items.isEmpty, .loading where model.items.isEmpty:
-                ProgressView()
-                    .frame(maxWidth: .infinity)
-                    .listRowBackground(Color.clear)
-            case .error(let message) where model.items.isEmpty:
-                VStack(spacing: SparkSpacing.md) {
-                    EmptyState(systemImage: "wifi.exclamationmark", title: "Couldn’t load review", message: message)
-                    PillButton("Retry", systemImage: "arrow.clockwise", tint: .sparkAccent) {
-                        Task { await model.load() }
-                    }
-                }
-                .listRowBackground(Color.clear)
-            default:
-                if model.items.isEmpty {
-                    EmptyState(systemImage: "checkmark.circle", title: "Nothing to review", message: "Spark has nothing waiting for you.")
-                        .listRowBackground(Color.clear)
-                } else {
-                    reviewGroup("To decide", items: model.items.filter(\.needsDecision))
-                    reviewGroup("Linked by Spark", items: model.items.filter { !$0.needsDecision })
-                }
-            }
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: SparkSpacing.lg) {
+                content
 
-            Section {
                 Button {
                     showingUnmatched = true
                 } label: {
                     Label("Unmatched receipts", systemImage: "doc.text.magnifyingglass")
+                        .font(.subheadline.weight(.medium))
+                        .padding(SparkSpacing.md)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .sparkGlass(.roundedRect(SparkRadii.lg))
             }
+            .frame(maxWidth: 720, alignment: .leading)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, SparkSpacing.lg)
+            .padding(.top, SparkSpacing.lg)
+            .padding(.bottom, SparkSpacing.xxl * 2)
         }
-        .scrollContentBackground(.hidden)
         .animation(.default, value: model.items.map(\.reviewKey))
         .safeAreaInset(edge: .bottom) {
             if let staged = model.staged {
@@ -240,14 +229,42 @@ struct FlintReviewSection: View {
     }
 
     @ViewBuilder
+    private var content: some View {
+        switch model.state {
+        case .idle where model.items.isEmpty, .loading where model.items.isEmpty:
+            ProgressView()
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, SparkSpacing.xl)
+        case .error(let message) where model.items.isEmpty:
+            VStack(spacing: SparkSpacing.md) {
+                EmptyState(systemImage: "wifi.exclamationmark", title: "Couldn’t load review", message: message)
+                PillButton("Retry", systemImage: "arrow.clockwise", tint: .sparkAccent) {
+                    Task { await model.load() }
+                }
+            }
+            .frame(maxWidth: .infinity)
+        default:
+            if model.items.isEmpty {
+                EmptyState(systemImage: "checkmark.circle", title: "Nothing to review", message: "Spark has nothing waiting for you.")
+                    .frame(maxWidth: .infinity)
+            } else {
+                reviewGroup("To decide", items: model.items.filter(\.needsDecision))
+                reviewGroup("Linked by Spark", items: model.items.filter { !$0.needsDecision })
+            }
+        }
+    }
+
+    @ViewBuilder
     private func reviewGroup(_ title: String, items: [FlintReviewItem]) -> some View {
         if !items.isEmpty {
-            Section {
+            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                Text("\(title) (\(items.count))")
+                    .font(.title3.weight(.semibold))
+                    .accessibilityAddTraits(.isHeader)
                 ForEach(items, id: \.reviewKey) { item in
                     FlintReviewRow(item: item, model: model)
+                        .transition(.opacity)
                 }
-            } header: {
-                Text("\(title) (\(items.count))")
             }
         }
     }
@@ -259,47 +276,60 @@ private struct FlintReviewRow: View {
     let item: FlintReviewItem
     let model: FlintReviewModel
     @State private var showingReceiptMatch = false
+    @State private var offset: CGFloat = 0
+    @State private var rowWidth: CGFloat = 0
+    @State private var isPastThreshold = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// How far a row travels before letting go commits it. Kept short so a
+    /// flick of the thumb is enough.
+    private static let commitDistance: CGFloat = 72
 
     private var isReceipt: Bool { item.kind == .receiptSuggestion || item.kind == .receiptAutoMatch }
 
     var body: some View {
+        card
+            .offset(x: offset)
+            .background(alignment: offset >= 0 ? .leading : .trailing) { swipeHint }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { rowWidth = $0 }
+            .gesture(HorizontalSwipeGesture(onChanged: dragChanged, onEnded: dragEnded))
+            .gesture(RowTouchTracker { touching in
+                if model.isTouchingRow != touching { model.isTouchingRow = touching }
+            })
+            .sensoryFeedback(.selection, trigger: isPastThreshold) { _, new in new }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(accessibilityDescription)
+            .accessibilityActions {
+                if let accept = item.acceptAction {
+                    Button(accept.label) { model.stage(accept, on: item) }
+                }
+                if let reject = item.rejectAction {
+                    Button(reject.label) { model.stage(reject, on: item) }
+                }
+            }
+            .sheet(isPresented: $showingReceiptMatch, onDismiss: {
+                Task { await model.load() }
+            }) {
+                NavigationStack {
+                    ReceiptMatchingView(receiptID: item.subject.id, apiClient: model.apiClient)
+                        .sparkDetailDestinations()
+                }
+            }
+    }
+
+    private var card: some View {
         Group {
             if isReceipt {
                 Button { showingReceiptMatch = true } label: { pairing }
-                    .buttonStyle(.plain)
             } else {
-                // A hidden link keeps the row free of the disclosure chevron,
-                // which would squeeze the right-hand side.
-                pairing.background {
-                    NavigationLink(value: DetailRoute.event(id: item.subject.id)) { EmptyView() }
-                        .opacity(0)
-                }
+                NavigationLink(value: DetailRoute.event(id: item.subject.id)) { pairing }
             }
         }
-        .swipeActions(edge: .leading, allowsFullSwipe: true) {
-            if let accept = item.acceptAction {
-                Button {
-                    model.stage(accept, on: item)
-                } label: {
-                    Label(accept.label, systemImage: "checkmark")
-                }
-                .tint(.sparkSuccess)
-            }
-        }
-        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            if let reject = item.rejectAction {
-                Button {
-                    model.stage(reject, on: item)
-                } label: {
-                    Label(reject.label, systemImage: "xmark")
-                }
-                .tint(.sparkError)
-            }
-        }
-        .gesture(RowTouchTracker { touching in
-            if model.isTouchingRow != touching { model.isTouchingRow = touching }
-        })
+        .buttonStyle(.plain)
+        .padding(SparkSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .sparkGlass(.roundedRect(SparkRadii.lg))
+        .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: SparkRadii.lg))
         .contextMenu {
             NavigationLink(value: DetailRoute.event(id: item.subject.id)) {
                 Label(isReceipt ? "Open receipt" : "Open transaction", systemImage: "arrow.up.forward.app")
@@ -310,23 +340,53 @@ private struct FlintReviewRow: View {
                 }
             }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityDescription)
-        .accessibilityActions {
-            if let accept = item.acceptAction {
-                Button(accept.label) { model.stage(accept, on: item) }
-            }
-            if let reject = item.rejectAction {
-                Button(reject.label) { model.stage(reject, on: item) }
-            }
+    }
+
+    /// The strip the card uncovers as it slides: green for accept on the
+    /// left, red for reject on the right. It only fills the uncovered gap so
+    /// the colour never shows through the glass.
+    @ViewBuilder
+    private var swipeHint: some View {
+        let accepting = offset > 0
+        if let action = accepting ? item.acceptAction : item.rejectAction, offset != 0 {
+            RoundedRectangle(cornerRadius: SparkRadii.lg)
+                .fill(accepting ? Color.sparkSuccess : Color.sparkError)
+                .opacity(isPastThreshold ? 1 : 0.45)
+                .overlay {
+                    Image(systemName: accepting ? "checkmark" : "xmark")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(.white)
+                        .scaleEffect(isPastThreshold ? 1.15 : 0.9)
+                        .accessibilityLabel(action.label)
+                }
+                .frame(width: max(abs(offset) - SparkSpacing.xs, 0))
+                .animation(.snappy(duration: 0.15), value: isPastThreshold)
         }
-        .sheet(isPresented: $showingReceiptMatch, onDismiss: {
-            Task { await model.load() }
-        }) {
-            NavigationStack {
-                ReceiptMatchingView(receiptID: item.subject.id, apiClient: model.apiClient)
-                    .sparkDetailDestinations()
-            }
+    }
+
+    private func dragChanged(_ translation: CGFloat) {
+        let allowed = translation > 0 ? item.acceptAction != nil : item.rejectAction != nil
+        // A direction with no action still gives a little, so the row
+        // doesn't feel stuck.
+        offset = allowed ? translation : translation / 4
+        let past = allowed && abs(translation) >= Self.commitDistance
+        if past != isPastThreshold { isPastThreshold = past }
+    }
+
+    private func dragEnded(_ translation: CGFloat, _ velocity: CGFloat) {
+        let action = translation > 0 ? item.acceptAction : item.rejectAction
+        let flicked = abs(velocity) > 600 && abs(translation) > 24 && (velocity > 0) == (translation > 0)
+        isPastThreshold = false
+
+        guard let action, abs(translation) >= Self.commitDistance || flicked else {
+            withAnimation(.snappy) { offset = 0 }
+            return
+        }
+        let travel = max(rowWidth, 320) + SparkSpacing.xl
+        withAnimation(.snappy(duration: 0.2)) {
+            offset = translation > 0 ? travel : -travel
+        } completion: {
+            model.stage(action, on: item)
         }
     }
 
@@ -483,6 +543,47 @@ struct FlintReviewEventCard: View {
         Text(value)
             .font(.subheadline.weight(.medium))
             .multilineTextAlignment(.trailing)
+    }
+}
+
+/// A pan that only starts when the finger moves more sideways than up or
+/// down, so vertical scrolling still belongs to the scroll view.
+private struct HorizontalSwipeGesture: UIGestureRecognizerRepresentable {
+    let onChanged: (CGFloat) -> Void
+    let onEnded: (_ translation: CGFloat, _ velocity: CGFloat) -> Void
+
+    func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
+        let recognizer = UIPanGestureRecognizer()
+        recognizer.delegate = context.coordinator
+        return recognizer
+    }
+
+    func handleUIGestureRecognizerAction(_ recognizer: UIPanGestureRecognizer, context: Context) {
+        // Window coordinates: the row itself moves with the finger.
+        let translation = recognizer.translation(in: nil).x
+        switch recognizer.state {
+        case .began, .changed:
+            onChanged(translation)
+        case .ended:
+            onEnded(translation, recognizer.velocity(in: nil).x)
+        case .cancelled, .failed:
+            onEnded(0, 0)
+        default:
+            break
+        }
+    }
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator {
+        Coordinator()
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return false }
+            let velocity = pan.velocity(in: nil)
+            return abs(velocity.x) > abs(velocity.y)
+        }
     }
 }
 
