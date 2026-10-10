@@ -71,16 +71,9 @@ struct FlintOpenerScreen: View {
             || viewModel.openerYesterday != nil
     }
 
-    /// The Wrap is always there, so it earns a row only when a check-in is
-    /// waiting in it.
+    /// The Wrap is always there, so listing it says nothing.
     private var chapterRows: [UpToSpeedChapter] {
-        viewModel.chapters.filter { chapter in
-            switch chapter.kind {
-            case .intro: false
-            case .wrap: checkInCount(in: chapter) > 0
-            default: true
-            }
-        }
+        viewModel.chapters.filter { $0.kind != .intro && $0.kind != .wrap }
     }
 
     private func chapterRow(_ chapter: UpToSpeedChapter) -> some View {
@@ -88,7 +81,7 @@ struct FlintOpenerScreen: View {
             Circle()
                 .fill(chapter.accent)
                 .frame(width: 7, height: 7)
-            Text(chapter.kind == .wrap ? "Check-in" : chapter.title)
+            Text(chapter.title)
                 .font(SparkTypography.body)
                 .foregroundStyle(.primary)
             Spacer(minLength: SparkSpacing.sm)
@@ -117,7 +110,7 @@ struct FlintOpenerScreen: View {
         case .anomaly: return Self.count(chapter.cardCount, "observation")
         case .news: return Self.count(chapter.cardCount, "story", plural: "stories")
         case .headlines: return Self.count(max(chapter.cardCount - 1, 0), "article")
-        case .wrap: return ""
+        case .checkIn, .wrap: return ""
         case .digest:
             let questions = screens(in: chapter).filter {
                 if case .flintQuestion = $0 { return true }
@@ -132,13 +125,6 @@ struct FlintOpenerScreen: View {
     private func screens(in chapter: UpToSpeedChapter) -> ArraySlice<UpToSpeedScreen> {
         let range = chapter.range.clamped(to: viewModel.screens.indices)
         return viewModel.screens[range]
-    }
-
-    private func checkInCount(in chapter: UpToSpeedChapter) -> Int {
-        screens(in: chapter).filter {
-            if case .checkIn = $0 { return true }
-            return false
-        }.count
     }
 
     private static func count(_ n: Int, _ singular: String, plural: String? = nil) -> String {

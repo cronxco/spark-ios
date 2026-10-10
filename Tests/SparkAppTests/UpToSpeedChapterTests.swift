@@ -40,7 +40,7 @@ struct UpToSpeedChapterTests {
         #expect(chapters.map(\.kind) == [.intro, .news, .headlines, .wrap])
         #expect(chapters[1].cardCount == 3)
         #expect(chapters[2].cardCount == 2)
-        #expect(chapters[2].shortLabel == "Headlines")
+        #expect(chapters[2].shortLabel == "News")
         #expect(chapters[2].title == "And in other news")
     }
 

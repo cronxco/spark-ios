@@ -130,6 +130,17 @@ final class UpToSpeedViewModel {
 
     private let apiClient: APIClient
     private let profileName: String?
+    /// Where the last-viewed card is kept so reopening resumes there. `nil`
+    /// (the default, and what tests get) turns resuming off.
+    private let resumeStore: UserDefaults?
+    /// Resume only on the first build of a session, never on a reload.
+    private var shouldResume: Bool
+    /// Questions answered in this session, for the Wrap's tally. Distinct
+    /// from `answeredQuestionIDs`, which also holds ones answered earlier.
+    private var sessionAnsweredQuestionIDs: Set<String> = []
+
+    private static let resumeScreenKey = "upToSpeed.resume.screenID"
+    private static let resumeDateKey = "upToSpeed.resume.date"
 
     struct OpenQuestion: Identifiable {
         let item: UpToSpeedItem
@@ -137,9 +148,59 @@ final class UpToSpeedViewModel {
         var id: String { block.id }
     }
 
-    init(apiClient: APIClient, profileName: String? = nil) {
+    init(apiClient: APIClient, profileName: String? = nil, resumeStore: UserDefaults? = nil) {
         self.apiClient = apiClient
         self.profileName = profileName
+        self.resumeStore = resumeStore
+        self.shouldResume = resumeStore != nil
+    }
+
+    // MARK: - Resume
+
+    /// Remembers the card on screen so closing partway through and reopening
+    /// later the same day picks up there.
+    func rememberPosition() {
+        guard let resumeStore, screens.indices.contains(currentIndex) else { return }
+        resumeStore.set(screens[currentIndex].id, forKey: Self.resumeScreenKey)
+        resumeStore.set(Date.now, forKey: Self.resumeDateKey)
+    }
+
+    /// The saved card's index, when it was saved today and is still in the
+    /// queue. Never the Start card or the Wrap: resuming on either is the
+    /// same as starting over or being done.
+    private func resumeIndex() -> Int? {
+        guard let resumeStore,
+              let savedAt = resumeStore.object(forKey: Self.resumeDateKey) as? Date,
+              Calendar.current.isDateInToday(savedAt),
+              let id = resumeStore.string(forKey: Self.resumeScreenKey),
+              id != UpToSpeedScreen.opener.id, id != UpToSpeedScreen.wrap.id
+        else { return nil }
+        return screens.firstIndex { $0.id == id }
+    }
+
+    // MARK: - Wrap tally
+
+    /// What the reader got through this session, for the Wrap: "3 stories ·
+    /// 11 articles · 2 questions answered". Empty parts are left out.
+    var sessionTally: String? {
+        let seen = Set(sessionSeenDates.keys).subtracting(manuallyUnreadIDs)
+        let seenTypes = allItems.filter { seen.contains($0.id) }.map(\.type)
+        let stories = consumedIndices.filter { index in
+            guard screens.indices.contains(index), case .newsStory = screens[index] else { return false }
+            return true
+        }.count
+        let parts = [
+            Self.tallyPart(seenTypes.filter { $0 == .anomaly }.count, "observation"),
+            Self.tallyPart(stories, "story", plural: "stories"),
+            Self.tallyPart(seenTypes.filter { $0 == .newsSummary }.count, "article"),
+            Self.tallyPart(sessionAnsweredQuestionIDs.count, "question answered", plural: "questions answered"),
+        ].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private static func tallyPart(_ n: Int, _ singular: String, plural: String? = nil) -> String? {
+        guard n > 0 else { return nil }
+        return n == 1 ? "1 \(singular)" : "\(n) \(plural ?? singular + "s")"
     }
 
     // MARK: - Load
@@ -558,6 +619,7 @@ final class UpToSpeedViewModel {
     /// dwell fires moments later and the test runs again.
     func onQuestionAnswered(blockID: String, itemID: String) {
         answeredQuestionIDs.insert(blockID)
+        sessionAnsweredQuestionIDs.insert(blockID)
         openQuestions.removeAll { $0.block.id == blockID }
         let allIDs = digestQuestionMap[itemID] ?? []
         guard !allIDs.isEmpty else { return }
@@ -754,6 +816,15 @@ final class UpToSpeedViewModel {
             }
         }
 
+        // Check-in (incomplete) after the briefing, before the news.
+        var hasPendingCheckIn = false
+        for item in unread where item.type == .checkIn {
+            if case .checkIn(let summary) = item.payload, !summary.completed {
+                built.append((.checkIn(item), .checkIn))
+                hasPendingCheckIn = true
+            }
+        }
+
         // 3 — day context onto the opener, then news
         openerDayContext = dayContextCandidate
         if dayContextCandidate?.describesToday(now: .now, calendar: .current) ?? true {
@@ -778,14 +849,8 @@ final class UpToSpeedViewModel {
             }
         }
 
-        // 4 — check-in (incomplete), then wrap
-        var wrapChapterHasContent = !readingItems.isEmpty || !openQuestions.isEmpty
-        for item in unread where item.type == .checkIn {
-            if case .checkIn(let summary) = item.payload, !summary.completed {
-                built.append((.checkIn(item), .wrap))
-                wrapChapterHasContent = true
-            }
-        }
+        // 4 — wrap
+        let wrapChapterHasContent = !readingItems.isEmpty || !openQuestions.isEmpty || hasPendingCheckIn
 
         // Compute recap before the empty-queue guard: today's already-seen
         // items can be the only content available. Also, a solo folded
@@ -812,6 +877,10 @@ final class UpToSpeedViewModel {
 
         if resetIndex {
             currentIndex = 0
+            if shouldResume {
+                shouldResume = false
+                if let index = resumeIndex() { currentIndex = index }
+            }
         } else {
             currentIndex = screens.firstIndex(where: { $0.id == previousID }) ?? min(currentIndex, screens.count - 1)
             consumedIndices = Set(screens.indices.filter { previouslyConsumed.contains(screens[$0].id) })

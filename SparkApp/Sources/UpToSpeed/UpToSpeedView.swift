@@ -110,7 +110,8 @@ struct UpToSpeedView: View {
             if viewModel == nil {
                 viewModel = UpToSpeedViewModel(
                     apiClient: appModel.apiClient,
-                    profileName: appModel.profile?.name
+                    profileName: appModel.profile?.name,
+                    resumeStore: .sparkAppGroup
                 )
             }
             await viewModel?.load()
@@ -157,6 +158,7 @@ struct UpToSpeedView: View {
             if new > old {
                 vm.markRead(at: old)
             }
+            vm.rememberPosition()
             UIApplication.shared.sendAction(
                 #selector(UIResponder.resignFirstResponder),
                 to: nil, from: nil, for: nil
@@ -176,7 +178,10 @@ struct UpToSpeedView: View {
 
     private func controlsOverlay(vm: UpToSpeedViewModel) -> some View {
         VStack(spacing: SparkSpacing.sm) {
-            StoryProgressBar(chapters: progressChapters(vm: vm), currentIndex: vm.currentIndex)
+            StoryProgressBar(chapters: progressChapters(vm: vm), currentIndex: vm.currentIndex) { chapter in
+                guard vm.chapters.indices.contains(chapter) else { return }
+                vm.jump(to: vm.chapters[chapter].range.lowerBound)
+            }
             HStack(alignment: .center, spacing: SparkSpacing.sm) {
                 HStack(spacing: SparkSpacing.sm) {
                     if let chapter = vm.currentChapter {
