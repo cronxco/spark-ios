@@ -137,6 +137,13 @@ struct UpToSpeedView: View {
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .ignoresSafeArea()
+        // A tick per chapter rather than per card: Headlines alone can run to
+        // dozens of cards. Arriving at the Wrap gets a success instead.
+        .sensoryFeedback(trigger: vm.currentIndex) { old, new in
+            let chapter = { (index: Int) -> Int? in vm.chapters.firstIndex { $0.range.contains(index) } }
+            guard let newChapter = chapter(new), newChapter != chapter(old) else { return nil }
+            return vm.chapters[newChapter].kind == .wrap ? .success : .selection
+        }
         .accessibilityAction(named: "Next card") {
             guard vm.currentIndex + 1 < vm.screens.count else { return }
             vm.jump(to: vm.currentIndex + 1)
