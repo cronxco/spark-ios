@@ -28,19 +28,29 @@ public struct StoryProgressBar: View {
     private let chapters: [ChapterSpec]
     private let currentIndex: Int
     private let segmentProgress: Double
+    private let onSelectChapter: ((Int) -> Void)?
 
     /// Flat bar — `total` evenly-weighted segments.
     public init(total: Int, currentIndex: Int, segmentProgress: Double = 1) {
         self.chapters = [ChapterSpec(label: "", segments: max(total, 0))]
         self.currentIndex = currentIndex
         self.segmentProgress = segmentProgress
+        self.onSelectChapter = nil
     }
 
     /// Chaptered bar — segments grouped by chapter.
-    public init(chapters: [ChapterSpec], currentIndex: Int, segmentProgress: Double = 1) {
+    /// Pass `onSelectChapter` to make each chapter's run of segments a tap
+    /// target that jumps to that chapter.
+    public init(
+        chapters: [ChapterSpec],
+        currentIndex: Int,
+        segmentProgress: Double = 1,
+        onSelectChapter: ((Int) -> Void)? = nil
+    ) {
         self.chapters = chapters
         self.currentIndex = currentIndex
         self.segmentProgress = segmentProgress
+        self.onSelectChapter = onSelectChapter
     }
 
     public var body: some View {
@@ -64,9 +74,13 @@ public struct StoryProgressBar: View {
                         }
                     }
                 }
+                // The bar is 3pt tall; the tap target reaches well beyond it.
+                .contentShape(Rectangle().inset(by: -12))
+                .onTapGesture { onSelectChapter?(chapterIndex) }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(chapter.label.isEmpty ? "Story progress" : chapter.label)
                 .accessibilityValue(accessibilityValue(for: chapter, chapterIndex: chapterIndex))
+                .accessibilityAddTraits(onSelectChapter == nil ? [] : .isButton)
             }
         }
         .frame(height: 3)

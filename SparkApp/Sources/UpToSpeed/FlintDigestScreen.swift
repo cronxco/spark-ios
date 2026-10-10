@@ -172,6 +172,8 @@ struct FlintQuestionPage: View {
                 }
             }
         }
+        .sensoryFeedback(.success, trigger: submittedAnswer) { _, new in new != nil }
+        .sensoryFeedback(.error, trigger: submitError) { _, new in new != nil }
     }
 
     private var otherOpenQuestionCount: Int {

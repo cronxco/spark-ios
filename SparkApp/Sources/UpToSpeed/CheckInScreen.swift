@@ -34,6 +34,10 @@ struct CheckInScreen: View {
                 }
             }
         }
+        .sensoryFeedback(.selection, trigger: physical)
+        .sensoryFeedback(.selection, trigger: mental)
+        .sensoryFeedback(.success, trigger: submitted) { _, new in new }
+        .sensoryFeedback(.error, trigger: submitError) { _, new in new != nil }
     }
 
     // MARK: - Completed state

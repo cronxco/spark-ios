@@ -35,6 +35,13 @@ struct WrapScreen: View {
                         .foregroundStyle(.primary)
                         .fixedSize(horizontal: false, vertical: true)
 
+                    if let tally = viewModel.sessionTally {
+                        Text(tally)
+                            .font(SparkTypography.bodyStrong)
+                            .foregroundStyle(.primary)
+                            .monospacedDigit()
+                    }
+
                     Text("Your catch-up is here whenever you need it.")
                         .font(SparkTypography.body)
                         .foregroundStyle(.secondary)
