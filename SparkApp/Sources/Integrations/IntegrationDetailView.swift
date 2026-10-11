@@ -4,6 +4,8 @@ import SwiftUI
 
 struct IntegrationDetailView: View {
     let integrationId: String
+    var reauthOnOpen = false
+    @State private var didStartReauth = false
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: IntegrationDetailViewModel?
 
@@ -45,6 +47,11 @@ struct IntegrationDetailView: View {
                 )
             }
             await viewModel?.load()
+            if reauthOnOpen && !didStartReauth, case .loaded(let detail) = viewModel?.state, detail.canReauthorise,
+               let anchor = ASPresentationAnchorHandle.current() {
+                didStartReauth = true
+                await viewModel?.reauthorise(presentationAnchor: anchor)
+            }
         }
     }
 

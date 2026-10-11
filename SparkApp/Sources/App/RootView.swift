@@ -27,7 +27,7 @@ struct RootView: View {
             // In-app deep links embedded in rendered prose (e.g. Flint digest
             // markdown). Anything not a navigable Spark route falls through to
             // the system (real external links still open in Safari).
-            guard let link = DeepLink.parse(url), link.detailRoute != nil else {
+            guard let link = DeepLink.parse(url), link.detailRoute != nil || link.isKnowledgeLink else {
                 return .systemAction
             }
             handle(url: url)
@@ -50,6 +50,8 @@ struct RootView: View {
             model.pendingRoute = .object(id: id)
         case .block(let id):
             model.pendingRoute = .block(id: id)
+        case .task(let id): model.pendingRoute = .knowledgeTask(id: id)
+        case .project(let id): model.pendingRoute = .knowledgeProject(id: id)
         case .metric(let identifier):
             model.pendingRoute = .metric(identifier: identifier)
         case .place(let id):

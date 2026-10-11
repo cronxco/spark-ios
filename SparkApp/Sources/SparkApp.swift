@@ -233,7 +233,7 @@ final class SparkAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
         // REAUTH sends the user to the integration regardless of the
         // notification's own deep link, since fixing auth is the point.
         if actionIdentifier == "REAUTH", entityType == "integration", let entityId {
-            AppModel.shared.pendingRoute = .integration(service: entityId)
+            AppModel.shared.pendingRoute = .integrationReauth(id: entityId)
             return
         }
 

@@ -375,7 +375,21 @@ struct PlanList: View {
         }
     }
 
+    @ViewBuilder
     private func row(_ item: DayAhead.PlanItem) -> some View {
+        switch item.kind {
+        case .topicReview, .task, .topicTask:
+            Button {
+                AppModel.shared.pendingRoute = item.kind == .topicReview ? .object(id: item.topicId ?? item.id) : .knowledgeTask(id: item.id)
+            } label: {
+                rowContent(item)
+            }.buttonStyle(.plain)
+        case .dayNote, .unknown:
+            rowContent(item)
+        }
+    }
+
+    private func rowContent(_ item: DayAhead.PlanItem) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.md) {
             Image(systemName: symbol(for: item))
                 .foregroundStyle(item.done ? Color.sparkSuccess : .secondary)
@@ -414,7 +428,7 @@ struct PlanList: View {
             return item.topicTitle.map { "Due · \($0)" } ?? "Due"
         case .topicReview:
             return "Thread up for review"
-        case .dayNote, .unknown:
+        case .task, .dayNote, .unknown:
             return nil
         }
     }

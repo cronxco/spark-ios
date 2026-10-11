@@ -166,6 +166,7 @@ public struct DayAhead: Codable, Sendable, Hashable {
         public enum Kind: String, Codable, Sendable, Hashable {
             case dayNote = "day_note"
             case topicTask = "topic_task"
+            case task
             case topicReview = "topic_review"
             case unknown
         }

@@ -133,6 +133,7 @@ public extension Error {
 /// mobile API prefix `/api/v1/mobile` — callers pass `absoluteBase` to target them.
 public actor APIClient {
     private let environment: APIEnvironment
+    public nonisolated var cacheScope: String { environment.baseURL.absoluteString }
     private let session: URLSession
     private let tokenStore: KeychainTokenStore
     private let etagCache: ETagCache

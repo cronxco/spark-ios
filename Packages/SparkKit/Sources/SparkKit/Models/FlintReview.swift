@@ -67,6 +67,7 @@ public enum FlintReviewKind: String, Codable, Sendable, Hashable {
     case receiptAutoMatch = "receipt_auto_match"
     case linkSuggestion = "link_suggestion"
     case autoLink = "auto_link"
+    case taskProposal = "task_proposal"
 
     public var label: String {
         switch self {
@@ -74,6 +75,7 @@ public enum FlintReviewKind: String, Codable, Sendable, Hashable {
         case .receiptAutoMatch: "Receipt linked automatically"
         case .linkSuggestion: "Link suggestion"
         case .autoLink: "Linked automatically"
+        case .taskProposal: "Task suggestion"
         }
     }
 }
@@ -138,7 +140,7 @@ public extension FlintReviewItem {
     var reviewKey: String { "\(kind.rawValue):\(id)" }
 
     /// Suggestions wait on you; automatic decisions are already in effect.
-    var needsDecision: Bool { kind == .receiptSuggestion || kind == .linkSuggestion }
+    var needsDecision: Bool { kind == .receiptSuggestion || kind == .linkSuggestion || kind == .taskProposal }
 
     /// The receipt suggestion's highest-scoring candidate; the first wins a tie.
     var bestCandidate: FlintReviewEvent? {
@@ -162,7 +164,7 @@ public extension FlintReviewItem {
         switch kind {
         case .receiptSuggestion:
             bestCandidate != nil && actions.contains(.confirm) ? .confirm : nil
-        case .linkSuggestion:
+        case .linkSuggestion, .taskProposal:
             actions.contains(.confirm) ? .confirm : nil
         case .receiptAutoMatch, .autoLink:
             .keep

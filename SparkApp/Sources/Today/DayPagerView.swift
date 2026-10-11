@@ -60,6 +60,8 @@ struct DayPagerView: View {
                     AnomalyDetailView(anomalyId: id)
                 case .integration(let service):
                     IntegrationDetailView(integrationId: service)
+                case .integrationReauth(let id):
+                    IntegrationDetailView(integrationId: id, reauthOnOpen: true)
                 case .account(let id):
                     AccountDetailView(accountId: id)
                 case .tag(let id, let name, let type):
@@ -78,6 +80,7 @@ struct DayPagerView: View {
     private func apply(route: AppRoute?) {
         guard let route else { return }
         switch route {
+        case .knowledgeTask, .knowledgeProject: return
         case .today(let date):
             jump(to: date ?? .now)
         case .day(let date):
@@ -96,6 +99,8 @@ struct DayPagerView: View {
             push(.anomaly(id: id))
         case .integration(let service):
             push(.integration(service: service))
+        case .integrationReauth(let id):
+            push(.integrationReauth(id: id))
         case .account(let id):
             push(.account(id: id))
         case .tag(let name, let type):
@@ -121,6 +126,7 @@ struct DayPagerView: View {
 
 /// Detail destinations pushed onto the Day tab's `NavigationStack`.
 enum DetailRoute: Hashable {
+    case integrationReauth(id: String)
     case event(id: String)
     case object(id: String)
     case block(id: String)

@@ -10,9 +10,12 @@ struct MainTabView: View {
 
         tabs
             .tabBarMinimizeBehavior(.onScrollDown)
-            .onChange(of: model.pendingRoute) { _, new in
+            .onChange(of: model.pendingRoute, initial: true) { _, new in
                 guard new != nil else { return }
-                selection = .day
+                switch new {
+                case .knowledgeTask, .knowledgeProject: selection = .knowledge
+                default: selection = .day
+                }
             }
             .onChange(of: model.pendingSearchQuery, initial: true) { _, new in
                 guard new != nil else { return }

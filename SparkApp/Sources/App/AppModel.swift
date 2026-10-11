@@ -25,6 +25,9 @@ enum AppRoute: Hashable {
     case place(id: String)
     case anomaly(id: String)
     case integration(service: String)
+    case integrationReauth(id: String)
+    case knowledgeTask(id: String)
+    case knowledgeProject(id: String)
     case account(id: String)
     case tag(name: String, type: String?)
 }
@@ -200,6 +203,9 @@ final class AppModel {
         case "place": return parts.count > 1 ? .place(id: parts[1]) : nil
         case "anomaly": return parts.count > 1 ? .anomaly(id: parts[1]) : nil
         case "integration": return parts.count > 1 ? .integration(service: parts[1]) : nil
+        case "integration-reauth": return parts.count > 1 ? .integrationReauth(id: parts[1]) : nil
+        case "task": return parts.count > 1 ? .knowledgeTask(id: parts[1]) : nil
+        case "project": return parts.count > 1 ? .knowledgeProject(id: parts[1]) : nil
         case "account": return parts.count > 1 ? .account(id: parts[1]) : nil
         default: return nil
         }
@@ -416,6 +422,7 @@ final class AppModel {
         // the current account stays active and can safely retry; a second
         // account is never admitted to partially purged shared state.
         try purgeDataStore(container)
+        try KnowledgeTasksViewModel.clearAccounts()
         try await purgeSpotlight()
 
         // Invalidate the remote session only once durable local erasure has

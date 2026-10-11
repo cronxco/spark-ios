@@ -70,7 +70,7 @@ extension DeepLink {
         case .anomaly(let id): .anomaly(id: id)
         case .integration(let service): .integration(service: service)
         case .tag(let name): .tag(name: name, type: nil)
-        case .today, .day, .authCallback: nil
+        case .today, .day, .authCallback, .task, .project: nil
         }
     }
 }
@@ -95,6 +95,8 @@ extension View {
                 AnomalyDetailView(anomalyId: id)
             case .integration(let service):
                 IntegrationDetailView(integrationId: service)
+            case .integrationReauth(let id):
+                IntegrationDetailView(integrationId: id, reauthOnOpen: true)
             case .account(let id):
                 AccountDetailView(accountId: id)
             case .tag(let id, let name, let type):
