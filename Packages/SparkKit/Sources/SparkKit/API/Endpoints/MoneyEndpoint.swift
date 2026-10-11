@@ -90,4 +90,58 @@ public enum MoneyEndpoint {
             headers: ["Idempotency-Key": idempotencyKey.uuidString]
         )
     }
+
+    // MARK: - Plan
+
+    /// GET /money/plan — safe to spend, card cover, budgets, pots and interest in one call.
+    public static func plan() -> Endpoint<MoneyPlanResponse> {
+        Endpoint(method: .get, path: "/money/plan")
+    }
+
+    /// GET /money/spending?month=yyyy-MM — the spending-only list.
+    public static func spending(month: String? = nil) -> Endpoint<SpendingResponse> {
+        var query: [URLQueryItem] = []
+        if let month {
+            query.append(URLQueryItem(name: "month", value: month))
+        }
+        return Endpoint(method: .get, path: "/money/spending", query: query)
+    }
+
+    /// POST /money/buffer/preview — what Add to buffer would move. Moves nothing.
+    public static func previewBuffer(eventIds: [String]) -> Endpoint<BufferPreviewResponse> {
+        Endpoint(
+            method: .post,
+            path: "/money/buffer/preview",
+            body: try? encoder.encode(BufferRequest(eventIds: eventIds)),
+            contentType: "application/json"
+        )
+    }
+
+    /// POST /money/buffer — moves money into the buffer pot.
+    ///
+    /// The key is minted when the endpoint is built so transport retries replay
+    /// the first response; a fresh tap on the confirmation is a new intent.
+    public static func addToBuffer(
+        eventIds: [String],
+        confirmedTotal: Int,
+        idempotencyKey: UUID = UUID()
+    ) -> Endpoint<BufferResult> {
+        Endpoint(
+            method: .post,
+            path: "/money/buffer",
+            body: try? encoder.encode(BufferRequest(eventIds: eventIds, confirmedTotal: confirmedTotal)),
+            contentType: "application/json",
+            headers: ["Idempotency-Key": idempotencyKey.uuidString]
+        )
+    }
+
+    /// PATCH /money/pots/{id} — mark or unmark the pot used as the card buffer.
+    public static func setCardBuffer(potId: String, enabled: Bool) -> Endpoint<CardBufferPotResponse> {
+        Endpoint(
+            method: .patch,
+            path: "/money/pots/\(potId)",
+            body: try? encoder.encode(CardBufferPotRequest(cardBuffer: enabled)),
+            contentType: "application/json"
+        )
+    }
 }

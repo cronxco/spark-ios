@@ -33,9 +33,19 @@ enum HistoryRange: String, CaseIterable, Identifiable {
     }
 }
 
+enum MoneySection: String, CaseIterable, Identifiable {
+    case now = "Now"
+    case pots = "Pots"
+    case worth = "Worth"
+
+    var id: String { rawValue }
+}
+
 struct MoneyExploreView: View {
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: MoneyExploreViewModel?
+    @State private var planViewModel: MoneyPlanViewModel?
+    @State private var section: MoneySection = .now
     @Binding var path: [DetailRoute]
     @State private var showCreateAccount = false
     @State private var selectedRange: HistoryRange = .oneMonth
@@ -47,7 +57,15 @@ struct MoneyExploreView: View {
                 pageHeader
                     .padding(.horizontal, SparkSpacing.lg)
 
-                content
+                Picker("Section", selection: $section) {
+                    ForEach(MoneySection.allCases) { section in
+                        Text(section.rawValue).tag(section)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, SparkSpacing.lg)
+
+                sectionContent
             }
             .padding(.top, SparkSpacing.md)
             .padding(.bottom, SparkSpacing.xl)
@@ -56,7 +74,10 @@ struct MoneyExploreView: View {
             Task { await viewModel?.refresh() }
         }
         .refreshable {
-            await viewModel?.refresh()
+            switch section {
+            case .worth: await viewModel?.refresh()
+            case .now, .pots: await planViewModel?.refresh()
+            }
         }
         .sheet(isPresented: $showCreateAccount) {
             CreateAccountSheet { account in
@@ -67,7 +88,27 @@ struct MoneyExploreView: View {
             if viewModel == nil {
                 viewModel = MoneyExploreViewModel(apiClient: appModel.apiClient)
             }
+            if planViewModel == nil {
+                planViewModel = MoneyPlanViewModel(apiClient: appModel.apiClient)
+            }
             await viewModel?.load()
+            await planViewModel?.load()
+        }
+    }
+
+    @ViewBuilder
+    private var sectionContent: some View {
+        switch section {
+        case .now:
+            if let planViewModel {
+                MoneyNowView(viewModel: planViewModel)
+            }
+        case .pots:
+            if let planViewModel {
+                MoneyPotsView(viewModel: planViewModel)
+            }
+        case .worth:
+            content
         }
     }
 
