@@ -139,10 +139,7 @@ struct KnowledgeTasksView: View {
     let tasks = model.visible
     SparkSectionCaption(text: caption(count: tasks.count, noun: "task", filter: model.filter))
     searchField(model: model, prompt: "Search tasks")
-    RangeChipBar(
-      Self.filters, selected: model.filter, tint: .domainKnowledge, label: filterLabel
-    ) { model.filter = $0 }
-    .frame(maxWidth: .infinity)
+    filterChips(model: model)
     HStack {
       PillButton("Add task", systemImage: "plus", tint: .domainKnowledge) {
         editing = nil
@@ -205,6 +202,29 @@ struct KnowledgeTasksView: View {
         ForEach(projects) { project in projectCard(project, model: model) }
       }
     }
+  }
+
+  private func filterChips(model: KnowledgeTasksViewModel) -> some View {
+    ScrollView(.horizontal) {
+      HStack(spacing: SparkSpacing.sm) {
+        ForEach(Self.filters, id: \.self) { filter in
+          let isSelected = model.filter == filter
+          Button { model.filter = filter } label: {
+            Text(filterLabel(filter))
+              .font(SparkTypography.bodyStrong)
+              .foregroundStyle(isSelected ? Color.sparkOnAccent : Color.primary)
+              .padding(.horizontal, SparkSpacing.lg)
+              .frame(minHeight: 44)
+              .background { if isSelected { Capsule().fill(Color.domainKnowledge) } }
+              .sparkGlass(.capsule)
+              .contentShape(Capsule())
+          }
+          .buttonStyle(.plain)
+          .accessibilityAddTraits(isSelected ? .isSelected : [])
+        }
+      }
+    }
+    .scrollIndicators(.hidden)
   }
 
   private func selectionBar(model: KnowledgeTasksViewModel) -> some View {
@@ -565,49 +585,67 @@ private struct KnowledgeTaskEditor: View {
   @State private var activity: [KnowledgeTaskHistory] = []
   var body: some View {
     Form {
-      if let error = model.error { Text(error).foregroundStyle(.orange) }
-      TextField("Task title", text: $title)
-      TextField("Details", text: $content, axis: .vertical)
-      Picker("Duration", selection: $lifecycle) {
-        Text("Single day").tag("day")
-        Text("Up to seven days").tag("week")
-        Text("Until completed").tag("persistent")
+      if let error = model.error {
+        Section { Text(error).foregroundStyle(Color.sparkWarning) }.glassRows()
       }
-      Toggle("Schedule this task", isOn: hasDate($availability))
-      if !availability.isEmpty {
-        DatePicker("Available", selection: dateBinding($availability), displayedComponents: .date)
-      }
-      Toggle("Set a deadline", isOn: hasDate($due))
-      if !due.isEmpty {
-        DatePicker("Due", selection: dateBinding($due), displayedComponents: .date)
-      }
-      Toggle("Set a review date", isOn: hasDate($review))
-      if !review.isEmpty {
-        DatePicker("Review", selection: dateBinding($review), displayedComponents: .date)
-      }
-      Toggle("Remind me", isOn: $hasReminder)
-      if hasReminder { DatePicker("Reminder", selection: $reminderDate) }
-      Stepper("Order: \(position)", value: $position, in: 0...10000)
-      if let task { Text("Dates use \(task.scheduleTimezone)").font(.caption) }
-      Picker("Project", selection: $project) {
-        Text("None").tag("")
-        ForEach(model.projects) { Text($0.title).tag($0.id) }
-      }
-      Toggle("Important", isOn: $important)
-      Picker("Repeat", selection: $recurrence) {
-        Text("Never").tag("")
-        Text("Daily").tag("daily")
-        Text("Weekly").tag("weekly")
-        Text("Monthly").tag("monthly")
-      }
-      Section("Threads") {
-        ForEach(model.topics) { topic in
-          Toggle(
-            topic.title,
-            isOn: Binding(
-              get: { threads.contains(topic.id) },
-              set: { if $0 { threads.insert(topic.id) } else { threads.remove(topic.id) } }))
+      Section {
+        TextField("Task title", text: $title)
+        TextField("Details", text: $content, axis: .vertical)
+      }.glassRows()
+      Section("Schedule") {
+        Picker("Duration", selection: $lifecycle) {
+          Text("Single day").tag("day")
+          Text("Up to seven days").tag("week")
+          Text("Until completed").tag("persistent")
         }
+        Toggle("Schedule this task", isOn: hasDate($availability))
+        if !availability.isEmpty {
+          DatePicker("Available", selection: dateBinding($availability), displayedComponents: .date)
+        }
+        Toggle("Set a deadline", isOn: hasDate($due))
+        if !due.isEmpty {
+          DatePicker("Due", selection: dateBinding($due), displayedComponents: .date)
+        }
+        Toggle("Set a review date", isOn: hasDate($review))
+        if !review.isEmpty {
+          DatePicker("Review", selection: dateBinding($review), displayedComponents: .date)
+        }
+        Toggle("Remind me", isOn: $hasReminder)
+        if hasReminder { DatePicker("Reminder", selection: $reminderDate) }
+        if let task {
+          Text("Dates use \(task.scheduleTimezone)")
+            .font(SparkTypography.caption).foregroundStyle(.secondary)
+        }
+        if lifecycle == "week" {
+          Text(
+            "Expires seven calendar days after its original date. Deferring doesn't restart that window."
+          ).font(SparkTypography.caption).foregroundStyle(.secondary)
+        }
+      }.glassRows()
+      Section("Organise") {
+        Picker("Project", selection: $project) {
+          Text("None").tag("")
+          ForEach(model.projects) { Text($0.title).tag($0.id) }
+        }
+        Toggle("Important", isOn: $important)
+        Picker("Repeat", selection: $recurrence) {
+          Text("Never").tag("")
+          Text("Daily").tag("daily")
+          Text("Weekly").tag("weekly")
+          Text("Monthly").tag("monthly")
+        }
+        Stepper("Order: \(position)", value: $position, in: 0...10000)
+      }.glassRows()
+      if !model.topics.isEmpty {
+        Section("Threads") {
+          ForEach(model.topics) { topic in
+            Toggle(
+              topic.title,
+              isOn: Binding(
+                get: { threads.contains(topic.id) },
+                set: { if $0 { threads.insert(topic.id) } else { threads.remove(topic.id) } }))
+          }
+        }.glassRows()
       }
       if let task, let context = task.context, !context.isEmpty {
         Section("Related items") {
@@ -619,24 +657,22 @@ private struct KnowledgeTaskEditor: View {
               }
             }
           }
-        }
+        }.glassRows()
       }
       if !activity.isEmpty {
         Section("Recent activity") {
           ForEach(activity) { change in
             VStack(alignment: .leading) {
               Text(change.action.replacingOccurrences(of: "_", with: " "))
-              if let time = change.time { Text(time).font(.caption) }
+              if let time = change.time {
+                Text(time).font(SparkTypography.caption).foregroundStyle(.secondary)
+              }
             }
           }
-        }
-      }
-      if lifecycle == "week" {
-        Text(
-          "Expires seven calendar days after its original date. Deferring doesn't restart that window."
-        ).font(.caption)
+        }.glassRows()
       }
     }
+    .editorSurface()
     .environment(
       \.timeZone, TimeZone(identifier: task?.scheduleTimezone ?? model.timezone) ?? .current
     )
@@ -716,37 +752,45 @@ private struct KnowledgeProjectEditor: View {
   @State private var hideTasks = true
   var body: some View {
     Form {
-      if let error = model.error { Text(error).foregroundStyle(.orange) }
-      TextField("Project title", text: $title)
-      TextField("Details", text: $content, axis: .vertical)
-      TextField("Target YYYY-MM-DD", text: $target)
-      Picker("Status", selection: $status) {
-        ForEach(["active", "paused", "completed", "archived"], id: \.self) {
-          Text($0.capitalized).tag($0)
-        }
+      if let error = model.error {
+        Section { Text(error).foregroundStyle(Color.sparkWarning) }.glassRows()
       }
-      Toggle("Hide ordinary tasks when paused", isOn: $hideTasks)
-      if status == "completed" || status == "archived" {
-        Text("Unfinished tasks will remain active. Cancel or move them separately if needed.").font(
-          .caption)
-      }
-      if let project {
-        Picker("Next action", selection: $nextAction) {
-          Text("None").tag("")
-          ForEach(model.tasks.filter { $0.projectID == project.id && $0.status == "open" }) {
-            Text($0.title).tag($0.id)
+      Section {
+        TextField("Project title", text: $title)
+        TextField("Details", text: $content, axis: .vertical)
+        TextField("Target YYYY-MM-DD", text: $target)
+      }.glassRows()
+      Section {
+        Picker("Status", selection: $status) {
+          ForEach(["active", "paused", "completed", "archived"], id: \.self) {
+            Text($0.capitalized).tag($0)
           }
         }
-      }
+        Toggle("Hide ordinary tasks when paused", isOn: $hideTasks)
+        if status == "completed" || status == "archived" {
+          Text("Unfinished tasks will remain active. Cancel or move them separately if needed.")
+            .font(SparkTypography.caption).foregroundStyle(.secondary)
+        }
+        if let project {
+          Picker("Next action", selection: $nextAction) {
+            Text("None").tag("")
+            ForEach(model.tasks.filter { $0.projectID == project.id && $0.status == "open" }) {
+              Text($0.title).tag($0.id)
+            }
+          }
+        }
+      }.glassRows()
       if let project {
         Section {
           Button("Remove project", role: .destructive) {
             Task { if await model.removeProject(project) { dismiss() } }
           }
-          Text("Tasks are kept without a project.").font(.caption)
-        }
+          Text("Tasks are kept without a project.")
+            .font(SparkTypography.caption).foregroundStyle(.secondary)
+        }.glassRows()
       }
-    }.navigationTitle(project == nil ? "New project" : "Edit project")
+    }.editorSurface()
+      .navigationTitle(project == nil ? "New project" : "Edit project")
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
         ToolbarItem(placement: .confirmationAction) {
@@ -773,5 +817,18 @@ private struct KnowledgeProjectEditor: View {
         nextAction = project?.nextActionTaskID ?? ""
         hideTasks = project?.hideTasks ?? true
       }
+  }
+}
+
+private extension View {
+  /// Rows sit on a material over the app background, not the system grouped grey.
+  func glassRows() -> some View {
+    listRowBackground(Rectangle().fill(.ultraThinMaterial))
+  }
+
+  func editorSurface() -> some View {
+    tint(Color.domainKnowledge)
+      .scrollContentBackground(.hidden)
+      .sparkAppBackground()
   }
 }
