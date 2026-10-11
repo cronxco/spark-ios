@@ -819,16 +819,3 @@ private struct KnowledgeProjectEditor: View {
       }
   }
 }
-
-private extension View {
-  /// Rows sit on a material over the app background, not the system grouped grey.
-  func glassRows() -> some View {
-    listRowBackground(Rectangle().fill(.ultraThinMaterial))
-  }
-
-  func editorSurface() -> some View {
-    tint(Color.domainKnowledge)
-      .scrollContentBackground(.hidden)
-      .sparkAppBackground()
-  }
-}
