@@ -224,6 +224,14 @@ struct NotificationsInboxView: View {
             Task { await viewModel.markRead(item.id) }
         }
 
+        if let destination = item.destination, let route = AppModel.route(from: destination) {
+            switch route {
+            case .knowledgeTask, .knowledgeProject:
+                appModel.pendingRoute = route; return
+            default: break
+            }
+        }
+
         guard let route = route(for: item) else {
             selectedDetail = item
             return
@@ -232,6 +240,9 @@ struct NotificationsInboxView: View {
     }
 
     private func route(for item: NotificationFeedItem) -> DetailRoute? {
+        if let destination = item.destination, case .integrationReauth(let id) = AppModel.route(from: destination) {
+            return .integrationReauth(id: id)
+        }
         if let entity = item.entity {
             return switch entity.kind {
             case .event: .event(id: entity.id)
@@ -252,6 +263,7 @@ struct NotificationsInboxView: View {
         case .place(let id): .place(id: id)
         case .anomaly(let id): .anomaly(id: id)
         case .integration(let service): .integration(service: service)
+        case .integrationReauth(let id): .integrationReauth(id: id)
         case .account(let id): .account(id: id)
         default: nil
         }
@@ -267,6 +279,7 @@ struct NotificationsInboxView: View {
         case .place(let id): PlaceDetailView(placeId: id)
         case .anomaly(let id): AnomalyDetailView(anomalyId: id)
         case .integration(let service): IntegrationDetailView(integrationId: service)
+        case .integrationReauth(let id): IntegrationDetailView(integrationId: id, reauthOnOpen: true)
         case .account(let id): AccountDetailView(accountId: id)
         case .tag(let id, let name, let type): TagDetailView(tagID: id, tagName: name, tagType: type)
         }

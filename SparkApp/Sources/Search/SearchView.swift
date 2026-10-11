@@ -30,6 +30,8 @@ struct SearchView: View {
                         AnomalyDetailView(anomalyId: id)
                     case .integration(let service):
                         IntegrationDetailView(integrationId: service)
+                    case .integrationReauth(let id):
+                        IntegrationDetailView(integrationId: id, reauthOnOpen: true)
                     case .account(let id):
                         AccountDetailView(accountId: id)
                     case .tag(let id, let name, let type):

@@ -13,11 +13,16 @@ public enum DeepLink: Sendable, Equatable {
     case event(id: String)
     case object(id: String)
     case block(id: String)
+    case task(id: String)
+    case project(id: String)
     case metric(identifier: String)
     case place(id: String)
     case anomaly(id: String)
     case integration(service: String)
     case tag(name: String)
+    public var isKnowledgeLink: Bool {
+        switch self { case .task, .project: true; default: false }
+    }
 
     /// Parse an incoming URL. Returns nil when the URL doesn't match any
     /// route — caller can fall through to default handling (e.g. opening
@@ -52,6 +57,12 @@ public enum DeepLink: Sendable, Equatable {
         case "blocks", "block":
             guard parts.count >= 2 else { return nil }
             return .block(id: parts[1])
+        case "tasks":
+            guard parts.count >= 2 else { return nil }
+            return .task(id: parts[1])
+        case "projects":
+            guard parts.count >= 2 else { return nil }
+            return .project(id: parts[1])
         case "metrics", "metric":
             guard parts.count >= 2 else { return nil }
             return .metric(identifier: MetricsEndpoint.canonicalIdentifier(parts[1]))

@@ -84,13 +84,15 @@ struct UpToSpeedView: View {
             isKeyboardVisible = false
         }
         .environment(\.openURL, OpenURLAction { url in
-            guard let link = DeepLink.parse(url), link.detailRoute != nil else {
+            guard let link = DeepLink.parse(url), link.detailRoute != nil || link.isKnowledgeLink else {
                 return .systemAction
             }
             switch link {
             case .event(let id): appModel.pendingRoute = .event(id: id)
             case .object(let id): appModel.pendingRoute = .object(id: id)
             case .block(let id): appModel.pendingRoute = .block(id: id)
+            case .task(let id): appModel.pendingRoute = .knowledgeTask(id: id)
+            case .project(let id): appModel.pendingRoute = .knowledgeProject(id: id)
             case .metric(let identifier): appModel.pendingRoute = .metric(identifier: identifier)
             case .place(let id): appModel.pendingRoute = .place(id: id)
             case .integration(let service): appModel.pendingRoute = .integration(service: service)

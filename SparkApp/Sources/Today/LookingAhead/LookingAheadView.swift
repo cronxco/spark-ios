@@ -376,6 +376,9 @@ struct PlanList: View {
     }
 
     private func row(_ item: DayAhead.PlanItem) -> some View {
+        Button {
+            AppModel.shared.pendingRoute = item.kind == .topicReview ? .object(id: item.topicId ?? item.id) : .knowledgeTask(id: item.id)
+        } label: {
         HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.md) {
             Image(systemName: symbol(for: item))
                 .foregroundStyle(item.done ? Color.sparkSuccess : .secondary)
@@ -399,6 +402,7 @@ struct PlanList: View {
         .rowPadding()
         .accessibilityElement(children: .combine)
         .accessibilityValue(item.done ? "Done" : "")
+        }.buttonStyle(.plain)
     }
 
     private func symbol(for item: DayAhead.PlanItem) -> String {
@@ -414,7 +418,7 @@ struct PlanList: View {
             return item.topicTitle.map { "Due · \($0)" } ?? "Due"
         case .topicReview:
             return "Thread up for review"
-        case .dayNote, .unknown:
+        case .task, .dayNote, .unknown:
             return nil
         }
     }

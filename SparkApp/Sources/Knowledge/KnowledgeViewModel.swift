@@ -7,6 +7,8 @@ import SparkKit
 @MainActor
 final class KnowledgeViewModel {
     enum Filter: String, CaseIterable, Identifiable {
+        case tasks = "Tasks"
+        case projects = "Projects"
         case reading = "Reading"
         case personal = "Personal"
         case all = "All"
@@ -27,6 +29,7 @@ final class KnowledgeViewModel {
 
     func items(for filter: Filter) -> [Event] {
         switch filter {
+        case .tasks, .projects: return []
         case .reading: return allItems.filter { $0.service == "fetch" || $0.service == "newsletter" }
         case .personal: return allItems.filter { $0.service == "outline" || $0.service == "calendar" }
         case .all: return allItems

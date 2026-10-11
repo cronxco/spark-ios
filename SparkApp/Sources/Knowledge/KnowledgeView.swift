@@ -27,6 +27,13 @@ struct KnowledgeView: View {
         .onChange(of: filter) { _, filter in
             viewModel?.filter = filter
         }
+        .onChange(of: appModel.pendingRoute, initial: true) { _, route in
+            switch route {
+            case .knowledgeTask: filter = .tasks
+            case .knowledgeProject: filter = .projects
+            default: break
+            }
+        }
         .task {
             if viewModel == nil {
                 viewModel = KnowledgeViewModel(apiClient: appModel.apiClient)
@@ -37,7 +44,9 @@ struct KnowledgeView: View {
 
     @ViewBuilder
     private func page(filter: KnowledgeViewModel.Filter) -> some View {
-        if let viewModel {
+        if filter == .tasks || filter == .projects {
+            KnowledgeTasksView(projectsOnly: filter == .projects)
+        } else if let viewModel {
             mainContent(viewModel: viewModel, filter: filter)
         } else {
             loadingPlaceholder
