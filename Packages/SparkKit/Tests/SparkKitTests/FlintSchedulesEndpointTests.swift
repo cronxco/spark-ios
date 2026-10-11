@@ -41,7 +41,7 @@ struct FlintSchedulesEndpointTests {
         #expect(endpoint.method == .put)
         #expect(endpoint.path == "/flint/schedules/topics")
         let body = try #require(endpoint.body)
-        let object = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let object = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
         #expect(object["enabled"] as? Bool == true)
         #expect(object["frequency"] as? String == "weekly")
         #expect(object["days"] as? [String] == ["mon", "thu"])
@@ -55,8 +55,10 @@ struct FlintSchedulesEndpointTests {
         let numeric = FlintSchedulesEndpoint.update(routine: "money_close", enabled: nil, schedule: FlintSchedule(frequency: "monthly", dayOfMonth: "2"))
         let keyword = FlintSchedulesEndpoint.update(routine: "money_close", enabled: nil, schedule: FlintSchedule(frequency: "monthly", dayOfMonth: "last"))
 
-        let numericObject = try #require(try JSONSerialization.jsonObject(with: #require(numeric.body)) as? [String: Any])
-        let keywordObject = try #require(try JSONSerialization.jsonObject(with: #require(keyword.body)) as? [String: Any])
+        let numericBody = try #require(numeric.body)
+        let keywordBody = try #require(keyword.body)
+        let numericObject = try #require(JSONSerialization.jsonObject(with: numericBody) as? [String: Any])
+        let keywordObject = try #require(JSONSerialization.jsonObject(with: keywordBody) as? [String: Any])
         #expect(numericObject["day_of_month"] as? Int == 2)
         #expect(keywordObject["day_of_month"] as? String == "last")
     }
