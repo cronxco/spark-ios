@@ -375,10 +375,21 @@ struct PlanList: View {
         }
     }
 
+    @ViewBuilder
     private func row(_ item: DayAhead.PlanItem) -> some View {
-        Button {
-            AppModel.shared.pendingRoute = item.kind == .topicReview ? .object(id: item.topicId ?? item.id) : .knowledgeTask(id: item.id)
-        } label: {
+        switch item.kind {
+        case .topicReview, .task, .topicTask:
+            Button {
+                AppModel.shared.pendingRoute = item.kind == .topicReview ? .object(id: item.topicId ?? item.id) : .knowledgeTask(id: item.id)
+            } label: {
+                rowContent(item)
+            }.buttonStyle(.plain)
+        case .dayNote, .unknown:
+            rowContent(item)
+        }
+    }
+
+    private func rowContent(_ item: DayAhead.PlanItem) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.md) {
             Image(systemName: symbol(for: item))
                 .foregroundStyle(item.done ? Color.sparkSuccess : .secondary)
@@ -402,7 +413,6 @@ struct PlanList: View {
         .rowPadding()
         .accessibilityElement(children: .combine)
         .accessibilityValue(item.done ? "Done" : "")
-        }.buttonStyle(.plain)
     }
 
     private func symbol(for item: DayAhead.PlanItem) -> String {

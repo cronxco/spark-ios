@@ -129,7 +129,13 @@ struct KnowledgeTasksView: View {
           }
         }
         .searchable(text: $model.search, prompt: "Search tasks")
-        .refreshable { await model.refresh() }
+        .refreshable {
+          let refreshed = await model.refresh()
+          applyRoute(clearIfUnavailable: refreshed)
+        }
+        .onChange(of: model.loading) { _, loading in
+          if !loading { applyRoute(clearIfUnavailable: model.lastRefreshSucceeded) }
+        }
         .sheet(isPresented: $showEditor) {
           NavigationStack { KnowledgeTaskEditor(model: model, task: editing) }
         }
@@ -141,23 +147,48 @@ struct KnowledgeTasksView: View {
       }
     }
     .task(id: app.profile?.id) {
+      model = nil
+      editing = nil
+      routedProject = nil
+      showEditor = false
+      selected = []
       guard let account = app.profile?.id, !account.isEmpty else { return }
-      model = KnowledgeTasksViewModel(api: app.apiClient, accountID: account)
-      await model?.refresh()
-      applyRoute()
+      let current = KnowledgeTasksViewModel(api: app.apiClient, accountID: account)
+      model = current
+      let refreshed = await current.refresh()
+      guard app.profile?.id == account, model === current else { return }
+      applyRoute(clearIfUnavailable: refreshed)
     }
-    .onChange(of: app.pendingRoute) { _, _ in applyRoute() }
+    .onChange(of: app.pendingRoute) { _, route in
+      applyRoute()
+      guard let model else { return }
+      switch route {
+      case .knowledgeTask, .knowledgeProject:
+        Task {
+          let refreshed = await model.refresh()
+          guard self.model === model else { return }
+          applyRoute(clearIfUnavailable: refreshed)
+        }
+      default: break
+      }
+    }
   }
-  private func applyRoute() {
+  private func applyRoute(clearIfUnavailable: Bool = false) {
     guard let model else { return }
     switch app.pendingRoute {
     case .knowledgeTask(let id) where !projectsOnly:
-      guard let task = model.tasks.first(where: { $0.id == id }) else { return }
+      guard let task = model.tasks.first(where: { $0.id == id }) else {
+        if clearIfUnavailable && !model.loading { app.pendingRoute = nil }
+        return
+      }
       editing = task
       showEditor = true
       app.pendingRoute = nil
     case .knowledgeProject(let id) where projectsOnly:
-      guard let project = model.projects.first(where: { $0.id == id }) else { return }
+      guard let project = model.projects.first(where: { $0.id == id }) else {
+        if clearIfUnavailable && !model.loading { app.pendingRoute = nil }
+        return
+      }
       routedProject = project
       app.pendingRoute = nil
     default: break

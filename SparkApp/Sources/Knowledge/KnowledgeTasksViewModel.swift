@@ -23,6 +23,7 @@ final class KnowledgeTasksViewModel {
   private(set) var topics: [FlintTopic] = []
   private(set) var pending: [Pending] = []
   private(set) var loading = false
+  private(set) var lastRefreshSucceeded = false
   private(set) var timezone = TimeZone.current.identifier
   var error: String?
   var filter = "today"
@@ -99,19 +100,22 @@ final class KnowledgeTasksViewModel {
       )
     }
   }
-  func refresh() async {
-    guard !loading else { return }
+  @discardableResult func refresh() async -> Bool {
+    guard !loading, generation == Self.cacheGeneration else { return false }
     loading = true
+    lastRefreshSucceeded = false
     error = nil
     defer { loading = false }
     await flush()
     do {
+      var refreshedTimezone = timezone
       var all: [KnowledgeTask] = []
       var cursor: String?
       var seen: Set<String> = []
       repeat {
         let page = try await api.request(KnowledgeTasksEndpoint.list(cursor: cursor))
-        timezone = page.scheduleTimezone ?? timezone
+        guard generation == Self.cacheGeneration else { return false }
+        refreshedTimezone = page.scheduleTimezone ?? refreshedTimezone
         all += page.data
         cursor = page.nextCursor
         if let cursor, !seen.insert(cursor).inserted { throw APIError.noData }
@@ -125,8 +129,6 @@ final class KnowledgeTasksViewModel {
         cursor = page.nextCursor
         if let cursor, !seen.insert(cursor).inserted { throw APIError.noData }
       } while cursor != nil
-      tasks = all
-      projects = allProjects
       var allTopics: [FlintTopic] = []
       cursor = nil
       seen = []
@@ -136,10 +138,19 @@ final class KnowledgeTasksViewModel {
         cursor = page.nextCursor
         if let cursor, !seen.insert(cursor).inserted { throw APIError.noData }
       } while cursor != nil
-      guard generation == Self.cacheGeneration else { return }
+      guard generation == Self.cacheGeneration else { return false }
+      tasks = all
+      projects = allProjects
       topics = allTopics
+      timezone = refreshedTimezone
       persist()
-    } catch { self.error = error.localizedDescription }
+      lastRefreshSucceeded = true
+      return true
+    } catch {
+      guard generation == Self.cacheGeneration else { return false }
+      self.error = error.localizedDescription
+      return false
+    }
   }
   @discardableResult func save(task: KnowledgeTask?, fields: [String: Any]) async -> Bool {
     var values = fields
@@ -234,6 +245,7 @@ final class KnowledgeTasksViewModel {
       let data = try JSONSerialization.data(withJSONObject: fields)
       let response = try await api.request(
         KnowledgeTasksEndpoint.project(id: project?.id, body: data, version: project?.version))
+      guard generation == Self.cacheGeneration else { return }
       projects.removeAll { $0.id == response.data.id }
       projects.append(response.data)
       persist()
