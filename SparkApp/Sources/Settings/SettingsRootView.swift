@@ -39,6 +39,12 @@ struct SettingsRootView: View {
                     }
 
                     NavigationLink {
+                        FlintSchedulesView()
+                    } label: {
+                        Label("Flint schedules", systemImage: "clock.arrow.2.circlepath")
+                    }
+
+                    NavigationLink {
                         HealthKitScopesView()
                     } label: {
                         Label("Health & Activity", systemImage: "heart.fill")
