@@ -64,8 +64,8 @@ final class AppStubURLProtocol: URLProtocol, @unchecked Sendable {
             data.append(buffer, count: count)
         }
         var copy = request
-        copy.httpBody = data
         copy.httpBodyStream = nil
+        copy.httpBody = data
         return copy
     }
 

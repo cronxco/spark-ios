@@ -29,6 +29,7 @@ struct KnowledgeTaskOutboxTests {
     #expect(second.pending.isEmpty)
     #expect(second.tasks.first?.id == "task-1")
     let requests = await AppStubURLProtocol.recorded(host: Self.host)
+    #expect(requests.count == 1)
     #expect(requests.first?.httpBody == change.body)
   }
   @Test("a version conflict stays visible and is never silently retried")
