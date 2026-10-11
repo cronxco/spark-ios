@@ -88,6 +88,9 @@ struct MoneyPotsView: View {
                 Text("Press and hold a pot to choose it as the card buffer.")
                     .font(SparkTypography.caption)
                     .foregroundStyle(.secondary)
+                if let error = viewModel.bufferError {
+                    Text(error).font(SparkTypography.caption).foregroundStyle(Color.sparkError)
+                }
             }
         }
     }

@@ -83,7 +83,13 @@ final class MoneyPlanViewModel {
         } catch {
             SparkObservability.captureHandled(error)
             logger.error("Money plan load failed: \(String(describing: error))")
-            loadState = .error((error as? LocalizedError)?.errorDescription ?? "Couldn't load your plan.")
+            let message = (error as? LocalizedError)?.errorDescription ?? "Couldn't load your plan."
+            if plan != nil {
+                loadState = .loaded
+                bufferError = bufferError ?? message
+            } else {
+                loadState = .error(message)
+            }
         }
     }
 
@@ -95,7 +101,7 @@ final class MoneyPlanViewModel {
     }
 
     func toggle(_ transaction: SpendingTransaction) {
-        guard transaction.canAddToBuffer else { return }
+        guard preview == nil, transaction.canAddToBuffer else { return }
         if selectedIds.contains(transaction.id) {
             selectedIds.remove(transaction.id)
         } else {
@@ -127,7 +133,7 @@ final class MoneyPlanViewModel {
         defer { isMoving = false }
         do {
             let result = try await apiClient.request(
-                MoneyEndpoint.addToBuffer(eventIds: Array(selectedIds), confirmedTotal: preview.total)
+                MoneyEndpoint.addToBuffer(eventIds: preview.transactions.map(\.id), confirmedTotal: preview.total)
             )
             bufferMessage = "Asked Monzo to move \(MoneyPlanFormat.pounds(result.data.total)) into \(preview.pot.name)."
             self.preview = nil
