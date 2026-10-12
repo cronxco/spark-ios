@@ -146,7 +146,7 @@ struct KnowledgeTasksView: View {
         showEditor = true
       }
       Spacer(minLength: SparkSpacing.md)
-      if !tasks.isEmpty {
+      if !tasks.isEmpty || selecting {
         Button(selecting ? "Done" : "Select") {
           selecting.toggle()
           selected = []
@@ -267,7 +267,7 @@ struct KnowledgeTasksView: View {
     _ model: KnowledgeTasksViewModel, _ work: @escaping (KnowledgeTask) async -> Void
   ) {
     Task {
-      for task in model.tasks where selected.contains(task.id) { await work(task) }
+      for task in model.visible where selected.contains(task.id) { await work(task) }
       selected = []
     }
   }
