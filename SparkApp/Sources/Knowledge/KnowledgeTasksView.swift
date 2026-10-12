@@ -10,125 +10,28 @@ struct KnowledgeTasksView: View {
   @State private var selecting = false
   @State private var selected: Set<String> = []
   @State private var routedProject: KnowledgeProject?
+  @State private var showNewProject = false
   let projectsOnly: Bool
+
+  private static let filters = ["today", "inbox", "all", "history", "deleted"]
+
   var body: some View {
     Group {
       if let model {
-        @Bindable var model = model
-        List {
-          if let error = model.error { Section { Text(error).foregroundStyle(.orange) } }
-          if !model.pending.isEmpty {
-            Section("Pending changes on this device") {
-              ForEach(model.pending) { change in
-                VStack(alignment: .leading) {
-                  Text(change.title)
-                  Text(change.error ?? "Waiting to sync").font(.caption)
-                  Button("Discard pending change", role: .destructive) { model.discard(change.id) }
-                }
-              }
+        ScrollView {
+          VStack(spacing: SparkSpacing.lg) {
+            if let error = model.error { StatusPill(.warning, message: error) }
+            pendingSection(model: model)
+            if projectsOnly {
+              projectsContent(model: model)
+            } else {
+              tasksContent(model: model)
             }
           }
-          if projectsOnly {
-            Section {
-              NavigationLink("New project") { KnowledgeProjectEditor(model: model, project: nil) }
-            }
-            ForEach(
-              model.projects.filter {
-                model.search.isEmpty || $0.title.localizedCaseInsensitiveContains(model.search)
-                  || ($0.content?.localizedCaseInsensitiveContains(model.search) ?? false)
-              }
-            ) { project in
-              Section {
-                NavigationLink {
-                  KnowledgeProjectEditor(model: model, project: project)
-                } label: {
-                  VStack(alignment: .leading) {
-                    Text(project.title)
-                    Text(project.status).font(.caption).foregroundStyle(.secondary)
-                    if let progress = project.progress {
-                      Text("\(progress.completed) / \(progress.total) completed").font(.caption)
-                    }
-                  }
-                }
-                ForEach(model.tasks.filter { $0.projectID == project.id }) { task in
-                  taskRow(task, model: model)
-                }
-              }
-            }
-          } else {
-            Section {
-              Picker("View", selection: $model.filter) {
-                Text("Today").tag("today")
-                Text("Inbox").tag("inbox")
-                Text("All").tag("all")
-                Text("History").tag("history")
-                Text("Deleted").tag("deleted")
-              }.pickerStyle(.segmented)
-              Button {
-                editing = nil
-                showEditor = true
-              } label: {
-                Label("Add task", systemImage: "plus")
-              }
-            }
-            if selecting {
-              Section("Selected tasks") {
-                Button("Complete") {
-                  Task {
-                    for task in model.tasks where selected.contains(task.id) {
-                      await model.act(task, action: "complete")
-                    }
-                    selected = []
-                  }
-                }
-                Button("Defer to tomorrow") {
-                  Task {
-                    for task in model.tasks where selected.contains(task.id) {
-                      var calendar = Calendar(identifier: .gregorian)
-                      calendar.timeZone = TimeZone(identifier: task.scheduleTimezone) ?? .current
-                      let date = calendar.date(byAdding: .day, value: 1, to: .now) ?? .now
-                      await model.save(
-                        task: task, fields: ["availability_on": task.localDate(at: date)])
-                    }
-                    selected = []
-                  }
-                }
-                Button("Cancel", role: .destructive) {
-                  Task {
-                    for task in model.tasks where selected.contains(task.id) {
-                      await model.act(task, action: "cancel")
-                    }
-                    selected = []
-                  }
-                }
-                Menu("Move to project") {
-                  ForEach(model.projects) { project in
-                    Button(project.title) {
-                      Task {
-                        for task in model.tasks where selected.contains(task.id) {
-                          await model.save(task: task, fields: ["project_id": project.id])
-                        }
-                        selected = []
-                      }
-                    }
-                  }
-                }
-              }
-            }
-            ForEach(model.visible) { task in taskRow(task, model: model) }
-          }
+          .padding(.horizontal, SparkSpacing.lg)
+          .padding(.top, SparkSpacing.md)
+          .padding(.bottom, SparkSpacing.xl)
         }
-        .toolbar {
-          ToolbarItem(placement: .primaryAction) {
-            if !projectsOnly {
-              Button(selecting ? "Done" : "Select") {
-                selecting.toggle()
-                selected = []
-              }
-            }
-          }
-        }
-        .searchable(text: $model.search, prompt: "Search tasks")
         .refreshable {
           let refreshed = await model.refresh()
           applyRoute(clearIfUnavailable: refreshed)
@@ -142,8 +45,14 @@ struct KnowledgeTasksView: View {
         .sheet(item: $routedProject) { project in
           NavigationStack { KnowledgeProjectEditor(model: model, project: project) }
         }
+        .sheet(isPresented: $showNewProject) {
+          NavigationStack { KnowledgeProjectEditor(model: model, project: nil) }
+        }
       } else {
-        ProgressView()
+        VStack(spacing: SparkSpacing.md) {
+          ForEach(0..<3, id: \.self) { _ in LoadingShimmerCard().frame(height: 96) }
+        }
+        .padding(SparkSpacing.lg)
       }
     }
     .task(id: app.profile?.id) {
@@ -151,6 +60,7 @@ struct KnowledgeTasksView: View {
       editing = nil
       routedProject = nil
       showEditor = false
+      showNewProject = false
       selected = []
       guard let account = app.profile?.id, !account.isEmpty else { return }
       let current = KnowledgeTasksViewModel(api: app.apiClient, accountID: account)
@@ -173,6 +83,421 @@ struct KnowledgeTasksView: View {
       }
     }
   }
+
+  // MARK: Sections
+
+  @ViewBuilder
+  private func pendingSection(model: KnowledgeTasksViewModel) -> some View {
+    if !model.pending.isEmpty {
+      GlassCard(radius: SparkRadii.lg) {
+        VStack(alignment: .leading, spacing: SparkSpacing.md) {
+          Text("Waiting to sync")
+            .font(SparkTypography.captionStrong)
+            .foregroundStyle(.secondary)
+          ForEach(model.pending) { change in
+            HStack(alignment: .top) {
+              VStack(alignment: .leading, spacing: SparkSpacing.xxs) {
+                Text(change.title).font(SparkTypography.bodyStrong)
+                Text(change.error ?? "Saved on this device")
+                  .font(SparkTypography.caption)
+                  .foregroundStyle(change.error == nil ? Color.secondary : Color.sparkWarning)
+              }
+              Spacer(minLength: SparkSpacing.sm)
+              Button("Discard", role: .destructive) { model.discard(change.id) }
+                .font(SparkTypography.caption)
+                .buttonStyle(.borderless)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  private func searchField(model: KnowledgeTasksViewModel, prompt: String) -> some View {
+    @Bindable var model = model
+    return HStack(spacing: SparkSpacing.sm) {
+      Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+      TextField(prompt, text: $model.search)
+        .font(SparkTypography.bodySmall)
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled()
+      if !model.search.isEmpty {
+        Button { model.search = "" } label: {
+          Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Clear search")
+      }
+    }
+    .padding(.horizontal, SparkSpacing.lg)
+    .padding(.vertical, SparkSpacing.md)
+    .sparkGlass(.capsule)
+  }
+
+  @ViewBuilder
+  private func tasksContent(model: KnowledgeTasksViewModel) -> some View {
+    let tasks = model.visible
+    SparkSectionCaption(text: caption(count: tasks.count, noun: "task", filter: model.filter))
+    searchField(model: model, prompt: "Search tasks")
+    filterChips(model: model)
+    HStack {
+      PillButton("Add task", systemImage: "plus", tint: .domainKnowledge) {
+        editing = nil
+        showEditor = true
+      }
+      Spacer(minLength: SparkSpacing.md)
+      if !tasks.isEmpty || selecting {
+        Button(selecting ? "Done" : "Select") {
+          selecting.toggle()
+          selected = []
+        }
+        .font(SparkTypography.bodyStrong)
+        .foregroundStyle(Color.domainKnowledge)
+      }
+    }
+    if selecting { selectionBar(model: model) }
+    if tasks.isEmpty {
+      if model.loading {
+        ForEach(0..<3, id: \.self) { _ in LoadingShimmerCard().frame(height: 96) }
+      } else {
+        EmptyState(
+          systemImage: "checklist",
+          title: model.search.isEmpty ? "No tasks here" : "No matching tasks",
+          message: model.search.isEmpty ? "Tasks you add or that Spark finds will appear here." : nil
+        )
+      }
+    } else {
+      LazyVStack(spacing: SparkSpacing.md) {
+        ForEach(tasks) { task in taskCard(task, model: model) }
+      }
+    }
+  }
+
+  @ViewBuilder
+  private func projectsContent(model: KnowledgeTasksViewModel) -> some View {
+    let projects = model.projects.filter {
+      model.search.isEmpty || $0.title.localizedCaseInsensitiveContains(model.search)
+        || ($0.content?.localizedCaseInsensitiveContains(model.search) ?? false)
+    }
+    SparkSectionCaption(text: caption(count: projects.count, noun: "project", filter: nil))
+    searchField(model: model, prompt: "Search projects")
+    HStack {
+      PillButton("New project", systemImage: "plus", tint: .domainKnowledge) {
+        showNewProject = true
+      }
+      Spacer(minLength: 0)
+    }
+    if projects.isEmpty {
+      if model.loading {
+        ForEach(0..<2, id: \.self) { _ in LoadingShimmerCard().frame(height: 120) }
+      } else {
+        EmptyState(
+          systemImage: "folder",
+          title: model.search.isEmpty ? "No projects yet" : "No matching projects",
+          message: model.search.isEmpty ? "Group related tasks into a project." : nil
+        )
+      }
+    } else {
+      LazyVStack(spacing: SparkSpacing.md) {
+        ForEach(projects) { project in projectCard(project, model: model) }
+      }
+    }
+  }
+
+  private func filterChips(model: KnowledgeTasksViewModel) -> some View {
+    ScrollView(.horizontal) {
+      HStack(spacing: SparkSpacing.sm) {
+        ForEach(Self.filters, id: \.self) { filter in
+          let isSelected = model.filter == filter
+          Button { model.filter = filter } label: {
+            Text(filterLabel(filter))
+              .font(SparkTypography.bodyStrong)
+              .foregroundStyle(isSelected ? Color.sparkOnAccent : Color.primary)
+              .padding(.horizontal, SparkSpacing.lg)
+              .frame(minHeight: 44)
+              .background { if isSelected { Capsule().fill(Color.domainKnowledge) } }
+              .sparkGlass(.capsule)
+              .contentShape(Capsule())
+          }
+          .buttonStyle(.plain)
+          .accessibilityAddTraits(isSelected ? .isSelected : [])
+        }
+      }
+    }
+    .scrollIndicators(.hidden)
+  }
+
+  private func selectionBar(model: KnowledgeTasksViewModel) -> some View {
+    GlassCard(radius: SparkRadii.lg) {
+      HStack {
+        Text("\(selected.count) selected").font(SparkTypography.bodyStrong)
+        Spacer(minLength: SparkSpacing.sm)
+        Menu("Actions") {
+          Button("Complete", systemImage: "checkmark.circle") {
+            applyToSelection(model) { await model.act($0, action: "complete") }
+          }
+          Button("Defer to tomorrow", systemImage: "calendar.badge.clock") {
+            applyToSelection(model) { task in
+              var calendar = Calendar(identifier: .gregorian)
+              calendar.timeZone = TimeZone(identifier: task.scheduleTimezone) ?? .current
+              let date = calendar.date(byAdding: .day, value: 1, to: .now) ?? .now
+              await model.save(task: task, fields: ["availability_on": task.localDate(at: date)])
+            }
+          }
+          Menu("Move to project") {
+            ForEach(model.projects) { project in
+              Button(project.title) {
+                applyToSelection(model) {
+                  await model.save(task: $0, fields: ["project_id": project.id])
+                }
+              }
+            }
+          }
+          Button("Cancel tasks", systemImage: "xmark.circle", role: .destructive) {
+            applyToSelection(model) { await model.act($0, action: "cancel") }
+          }
+        }
+        .disabled(selected.isEmpty)
+        .foregroundStyle(Color.domainKnowledge)
+      }
+    }
+  }
+
+  private func applyToSelection(
+    _ model: KnowledgeTasksViewModel, _ work: @escaping (KnowledgeTask) async -> Void
+  ) {
+    Task {
+      for task in model.visible where selected.contains(task.id) { await work(task) }
+      selected = []
+    }
+  }
+
+  // MARK: Cards
+
+  private func taskCard(_ task: KnowledgeTask, model: KnowledgeTasksViewModel) -> some View {
+    let date = task.localDate()
+    let status = task.effectiveStatus(on: date)
+    let isOpen = status == "open"
+    return GlassCard(radius: SparkRadii.lg, padding: SparkSpacing.md) {
+      HStack(alignment: .top, spacing: SparkSpacing.md) {
+        leadingControl(task, status: status, model: model)
+        Button {
+          editing = task
+          showEditor = true
+        } label: {
+          VStack(alignment: .leading, spacing: SparkSpacing.xs) {
+            Text(task.title)
+              .font(SparkTypography.bodyStrong)
+              .strikethrough(status == "completed")
+              .foregroundStyle(isOpen ? Color.primary : Color.secondary)
+              .multilineTextAlignment(.leading)
+            if let content = task.content, !content.isEmpty {
+              Text(content)
+                .font(SparkTypography.bodySmall)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+            }
+            taskMeta(task, status: status, date: date)
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        taskMenu(task, status: status, model: model)
+      }
+    }
+    .overlay(alignment: .leading) {
+      if task.priority == "important" {
+        Capsule().fill(Color.domainKnowledge).frame(width: 3).padding(.vertical, SparkSpacing.md)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private func leadingControl(
+    _ task: KnowledgeTask, status: String, model: KnowledgeTasksViewModel
+  ) -> some View {
+    if selecting {
+      Button {
+        if selected.contains(task.id) { selected.remove(task.id) } else { selected.insert(task.id) }
+      } label: {
+        Image(systemName: selected.contains(task.id) ? "checkmark.circle.fill" : "circle")
+          .font(.title2)
+          .foregroundStyle(selected.contains(task.id) ? Color.domainKnowledge : .secondary)
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel(selected.contains(task.id) ? "Deselect \(task.title)" : "Select \(task.title)")
+    } else if task.action == nil {
+      Button {
+        let primary = primaryAction(task, status: status)
+        Task { await model.act(task, action: primary.action, date: primary.date) }
+      } label: {
+        Image(systemName: status == "completed" ? "checkmark.circle.fill" : "circle")
+          .font(.title2)
+          .foregroundStyle(status == "completed" ? Color.domainKnowledge : .secondary)
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("\(primaryAction(task, status: status).label) \(task.title)")
+    } else {
+      Image(systemName: "exclamationmark.triangle.fill")
+        .font(.title3)
+        .foregroundStyle(Color.sparkWarning)
+        .accessibilityHidden(true)
+    }
+  }
+
+  private func primaryAction(_ task: KnowledgeTask, status: String) -> (
+    action: String, date: String?, label: String
+  ) {
+    if status == "open" { return ("complete", nil, "Complete") }
+    if status == "completed" { return ("reopen", nil, "Reopen") }
+    if task.status == "deleted" { return ("restore", nil, "Restore") }
+    return ("reactivate", task.localDate(), "Reactivate")
+  }
+
+  @ViewBuilder
+  private func taskMeta(_ task: KnowledgeTask, status: String, date: String) -> some View {
+    let overdue = status == "open" && (task.dueOn.map { $0 < date } ?? false)
+    FlowChips {
+      if let project = task.projectTitle { metaChip(project, systemImage: "folder", tint: .domainKnowledge) }
+      if status != "open" || task.status == "deleted" {
+        metaChip(task.status == "deleted" ? "Deleted" : status.capitalized, tint: .secondary)
+      }
+      if overdue {
+        metaChip("Overdue", systemImage: "exclamationmark.circle", tint: .sparkWarning)
+      } else if let due = task.dueOn {
+        metaChip("Due \(due)", systemImage: "calendar", tint: .secondary)
+      }
+      if task.carriedDays > 0 {
+        metaChip("Carried \(task.carriedDays)d", systemImage: "arrow.uturn.forward", tint: .secondary)
+      }
+      if task.recurrence != nil { metaChip("Repeats", systemImage: "repeat", tint: .secondary) }
+      if task.sync.status != "synced" {
+        metaChip("Outline \(task.sync.status)", systemImage: "arrow.triangle.2.circlepath", tint: .sparkWarning)
+      }
+    }
+    if let action = task.action {
+      NavigationLink {
+        IntegrationDetailView(
+          integrationId: action.integrationID, reauthOnOpen: action.kind == "integration_reauth")
+      } label: {
+        Label(
+          action.kind == "integration_reauth" ? "Reconnect" : "Review connection",
+          systemImage: "link"
+        )
+        .font(SparkTypography.captionStrong)
+        .foregroundStyle(Color.domainKnowledge)
+      }
+    }
+  }
+
+  private func metaChip(_ text: String, systemImage: String? = nil, tint: Color) -> some View {
+    HStack(spacing: SparkSpacing.xxs) {
+      if let systemImage { Image(systemName: systemImage) }
+      Text(text)
+    }
+    .font(SparkTypography.monoSmall)
+    .foregroundStyle(tint)
+    .padding(.horizontal, SparkSpacing.sm)
+    .padding(.vertical, 3)
+    .background(tint.opacity(0.14))
+    .clipShape(.capsule)
+  }
+
+  private func taskMenu(
+    _ task: KnowledgeTask, status: String, model: KnowledgeTasksViewModel
+  ) -> some View {
+    Menu {
+      Button("Edit", systemImage: "pencil") {
+        editing = task
+        showEditor = true
+      }
+      if task.action == nil && status == "open" {
+        Button("Cancel task", systemImage: "xmark.circle") {
+          Task { await model.act(task, action: "cancel") }
+        }
+      }
+      if let raw = task.sourceURL, task.sync.status != "synced", let url = URL(string: raw) {
+        Link(destination: url) { Label("Open in Outline", systemImage: "arrow.up.right.square") }
+      }
+      if ["error", "blocked", "conflict"].contains(task.sync.status) {
+        Button("Retry Outline sync", systemImage: "arrow.clockwise") {
+          Task { await model.act(task, action: "retry_sync") }
+        }
+      }
+      if task.status != "deleted" {
+        Button("Delete task", systemImage: "trash", role: .destructive) {
+          Task { await model.act(task, action: "delete") }
+        }
+      }
+    } label: {
+      Image(systemName: "ellipsis")
+        .foregroundStyle(.secondary)
+        .frame(width: 32, height: 32)
+        .contentShape(Rectangle())
+    }
+    .accessibilityLabel("More actions for \(task.title)")
+  }
+
+  private func projectCard(_ project: KnowledgeProject, model: KnowledgeTasksViewModel) -> some View {
+    Button {
+      routedProject = project
+    } label: {
+      GlassCard(radius: SparkRadii.lg) {
+        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+          HStack(alignment: .firstTextBaseline) {
+            Text(project.title).font(SparkTypography.bodyStrong).multilineTextAlignment(.leading)
+            Spacer(minLength: SparkSpacing.sm)
+            Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+          }
+          if let content = project.content, !content.isEmpty {
+            Text(content)
+              .font(SparkTypography.bodySmall)
+              .foregroundStyle(.secondary)
+              .lineLimit(2)
+              .multilineTextAlignment(.leading)
+          }
+          if let progress = project.progress, progress.total > 0 {
+            ProgressView(value: Double(progress.completed), total: Double(progress.total))
+              .tint(Color.domainKnowledge)
+            Text("\(progress.completed) of \(progress.total) completed")
+              .font(SparkTypography.caption)
+              .foregroundStyle(.secondary)
+          }
+          FlowChips {
+            metaChip(
+              project.status.capitalized,
+              tint: project.status == "active" ? .domainKnowledge : .secondary)
+            if let target = project.targetOn { metaChip("Target \(target)", systemImage: "flag", tint: .secondary) }
+            if let next = model.tasks.first(where: { $0.id == project.nextActionTaskID }) {
+              metaChip("Next: \(next.title)", systemImage: "arrow.right.circle", tint: .secondary)
+            }
+          }
+        }
+      }
+    }
+    .buttonStyle(.plain)
+  }
+
+  // MARK: Helpers
+
+  private func filterLabel(_ filter: String) -> String {
+    switch filter {
+    case "today": "Today"
+    case "inbox": "Inbox"
+    case "all": "All"
+    case "history": "History"
+    default: "Deleted"
+    }
+  }
+
+  private func caption(count: Int, noun: String, filter: String?) -> String {
+    let counted = "\(count) \(count == 1 ? noun : noun + "s")"
+    guard let filter else { return counted }
+    return "\(counted) in \(filterLabel(filter))"
+  }
+
   private func applyRoute(clearIfUnavailable: Bool = false) {
     guard let model else { return }
     switch app.pendingRoute {
@@ -194,74 +519,49 @@ struct KnowledgeTasksView: View {
     default: break
     }
   }
-  private func taskRow(_ task: KnowledgeTask, model: KnowledgeTasksViewModel) -> some View {
-    VStack(alignment: .leading, spacing: 8) {
-      if selecting {
-        Toggle(
-          "Select task",
-          isOn: Binding(
-            get: { selected.contains(task.id) },
-            set: { if $0 { selected.insert(task.id) } else { selected.remove(task.id) } }))
+}
+
+/// Wraps chips onto as many lines as they need.
+private struct FlowChips<Content: View>: View {
+  @ViewBuilder let content: Content
+  var body: some View {
+    FlowLayout(spacing: SparkSpacing.xs) { content }
+  }
+}
+
+private struct FlowLayout: Layout {
+  var spacing: CGFloat
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    arrange(width: proposal.width ?? .infinity, subviews: subviews).size
+  }
+  func placeSubviews(
+    in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+  ) {
+    let result = arrange(width: bounds.width, subviews: subviews)
+    for (index, origin) in result.origins.enumerated() {
+      subviews[index].place(
+        at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y), proposal: .unspecified)
+    }
+  }
+  private func arrange(width: CGFloat, subviews: Subviews) -> (size: CGSize, origins: [CGPoint]) {
+    var origins: [CGPoint] = []
+    var x: CGFloat = 0
+    var y: CGFloat = 0
+    var rowHeight: CGFloat = 0
+    var maxX: CGFloat = 0
+    for subview in subviews {
+      let size = subview.sizeThatFits(.unspecified)
+      if x > 0, x + size.width > width {
+        x = 0
+        y += rowHeight + spacing
+        rowHeight = 0
       }
-      Button {
-        editing = task
-        showEditor = true
-      } label: {
-        VStack(alignment: .leading) {
-          Text(task.title).font(.headline)
-          Text(
-            [task.effectiveStatus(on: task.localDate()), task.lifecycle, task.projectTitle]
-              .compactMap { $0 }.joined(separator: " · ")
-          ).font(.caption)
-        }
-      }.buttonStyle(.plain)
-      if let content = task.content, !content.isEmpty { Text(content).font(.subheadline) }
-      if task.effectiveStatus(on: task.localDate()) == "open", let due = task.dueOn,
-        due < task.localDate()
-      {
-        Text("Overdue").foregroundStyle(.orange)
-      }
-      if task.carriedDays > 0 { Text("Carried \(task.carriedDays) days").font(.caption) }
-      if task.sync.status != "synced" {
-        Text("Outline: \(task.sync.status)").foregroundStyle(.orange)
-        if let raw = task.sourceURL, let url = URL(string: raw) {
-          Link("Open in Outline", destination: url)
-        }
-      }
-      if let action = task.action {
-        NavigationLink(action.kind == "integration_reauth" ? "Reconnect" : "Review connection") {
-          IntegrationDetailView(
-            integrationId: action.integrationID, reauthOnOpen: action.kind == "integration_reauth")
-        }
-      } else {
-        HStack {
-          if task.effectiveStatus(on: task.localDate()) == "open" {
-            Button("Complete") { Task { await model.act(task, action: "complete") } }
-          } else if task.status == "completed" {
-            Button("Reopen") { Task { await model.act(task, action: "reopen") } }
-          } else if task.status == "deleted" {
-            Button("Restore") { Task { await model.act(task, action: "restore") } }
-          } else {
-            Button("Reactivate today") {
-              Task { await model.act(task, action: "reactivate", date: task.localDate()) }
-            }
-          }
-          Button("Cancel", role: .destructive) { Task { await model.act(task, action: "cancel") } }
-        }.buttonStyle(.borderless)
-      }
-    }.padding(.vertical, 4)
-      .contextMenu {
-        if task.status != "deleted" {
-          Button("Delete task", role: .destructive) {
-            Task { await model.act(task, action: "delete") }
-          }
-        }
-        if task.sync.status == "error" || task.sync.status == "blocked"
-          || task.sync.status == "conflict"
-        {
-          Button("Retry Outline sync") { Task { await model.act(task, action: "retry_sync") } }
-        }
-      }
+      origins.append(CGPoint(x: x, y: y))
+      x += size.width + spacing
+      rowHeight = max(rowHeight, size.height)
+      maxX = max(maxX, x - spacing)
+    }
+    return (CGSize(width: maxX, height: y + rowHeight), origins)
   }
 }
 
@@ -285,49 +585,67 @@ private struct KnowledgeTaskEditor: View {
   @State private var activity: [KnowledgeTaskHistory] = []
   var body: some View {
     Form {
-      if let error = model.error { Text(error).foregroundStyle(.orange) }
-      TextField("Task title", text: $title)
-      TextField("Details", text: $content, axis: .vertical)
-      Picker("Duration", selection: $lifecycle) {
-        Text("Single day").tag("day")
-        Text("Up to seven days").tag("week")
-        Text("Until completed").tag("persistent")
+      if let error = model.error {
+        Section { Text(error).foregroundStyle(Color.sparkWarning) }.glassRows()
       }
-      Toggle("Schedule this task", isOn: hasDate($availability))
-      if !availability.isEmpty {
-        DatePicker("Available", selection: dateBinding($availability), displayedComponents: .date)
-      }
-      Toggle("Set a deadline", isOn: hasDate($due))
-      if !due.isEmpty {
-        DatePicker("Due", selection: dateBinding($due), displayedComponents: .date)
-      }
-      Toggle("Set a review date", isOn: hasDate($review))
-      if !review.isEmpty {
-        DatePicker("Review", selection: dateBinding($review), displayedComponents: .date)
-      }
-      Toggle("Remind me", isOn: $hasReminder)
-      if hasReminder { DatePicker("Reminder", selection: $reminderDate) }
-      Stepper("Order: \(position)", value: $position, in: 0...10000)
-      if let task { Text("Dates use \(task.scheduleTimezone)").font(.caption) }
-      Picker("Project", selection: $project) {
-        Text("None").tag("")
-        ForEach(model.projects) { Text($0.title).tag($0.id) }
-      }
-      Toggle("Important", isOn: $important)
-      Picker("Repeat", selection: $recurrence) {
-        Text("Never").tag("")
-        Text("Daily").tag("daily")
-        Text("Weekly").tag("weekly")
-        Text("Monthly").tag("monthly")
-      }
-      Section("Threads") {
-        ForEach(model.topics) { topic in
-          Toggle(
-            topic.title,
-            isOn: Binding(
-              get: { threads.contains(topic.id) },
-              set: { if $0 { threads.insert(topic.id) } else { threads.remove(topic.id) } }))
+      Section {
+        TextField("Task title", text: $title)
+        TextField("Details", text: $content, axis: .vertical)
+      }.glassRows()
+      Section("Schedule") {
+        Picker("Duration", selection: $lifecycle) {
+          Text("Single day").tag("day")
+          Text("Up to seven days").tag("week")
+          Text("Until completed").tag("persistent")
         }
+        Toggle("Schedule this task", isOn: hasDate($availability))
+        if !availability.isEmpty {
+          DatePicker("Available", selection: dateBinding($availability), displayedComponents: .date)
+        }
+        Toggle("Set a deadline", isOn: hasDate($due))
+        if !due.isEmpty {
+          DatePicker("Due", selection: dateBinding($due), displayedComponents: .date)
+        }
+        Toggle("Set a review date", isOn: hasDate($review))
+        if !review.isEmpty {
+          DatePicker("Review", selection: dateBinding($review), displayedComponents: .date)
+        }
+        Toggle("Remind me", isOn: $hasReminder)
+        if hasReminder { DatePicker("Reminder", selection: $reminderDate) }
+        if let task {
+          Text("Dates use \(task.scheduleTimezone)")
+            .font(SparkTypography.caption).foregroundStyle(.secondary)
+        }
+        if lifecycle == "week" {
+          Text(
+            "Expires seven calendar days after its original date. Deferring doesn't restart that window."
+          ).font(SparkTypography.caption).foregroundStyle(.secondary)
+        }
+      }.glassRows()
+      Section("Organise") {
+        Picker("Project", selection: $project) {
+          Text("None").tag("")
+          ForEach(model.projects) { Text($0.title).tag($0.id) }
+        }
+        Toggle("Important", isOn: $important)
+        Picker("Repeat", selection: $recurrence) {
+          Text("Never").tag("")
+          Text("Daily").tag("daily")
+          Text("Weekly").tag("weekly")
+          Text("Monthly").tag("monthly")
+        }
+        Stepper("Order: \(position)", value: $position, in: 0...10000)
+      }.glassRows()
+      if !model.topics.isEmpty {
+        Section("Threads") {
+          ForEach(model.topics) { topic in
+            Toggle(
+              topic.title,
+              isOn: Binding(
+                get: { threads.contains(topic.id) },
+                set: { if $0 { threads.insert(topic.id) } else { threads.remove(topic.id) } }))
+          }
+        }.glassRows()
       }
       if let task, let context = task.context, !context.isEmpty {
         Section("Related items") {
@@ -339,24 +657,22 @@ private struct KnowledgeTaskEditor: View {
               }
             }
           }
-        }
+        }.glassRows()
       }
       if !activity.isEmpty {
         Section("Recent activity") {
           ForEach(activity) { change in
             VStack(alignment: .leading) {
               Text(change.action.replacingOccurrences(of: "_", with: " "))
-              if let time = change.time { Text(time).font(.caption) }
+              if let time = change.time {
+                Text(time).font(SparkTypography.caption).foregroundStyle(.secondary)
+              }
             }
           }
-        }
-      }
-      if lifecycle == "week" {
-        Text(
-          "Expires seven calendar days after its original date. Deferring doesn't restart that window."
-        ).font(.caption)
+        }.glassRows()
       }
     }
+    .editorSurface()
     .environment(
       \.timeZone, TimeZone(identifier: task?.scheduleTimezone ?? model.timezone) ?? .current
     )
@@ -436,38 +752,47 @@ private struct KnowledgeProjectEditor: View {
   @State private var hideTasks = true
   var body: some View {
     Form {
-      if let error = model.error { Text(error).foregroundStyle(.orange) }
-      TextField("Project title", text: $title)
-      TextField("Details", text: $content, axis: .vertical)
-      TextField("Target YYYY-MM-DD", text: $target)
-      Picker("Status", selection: $status) {
-        ForEach(["active", "paused", "completed", "archived"], id: \.self) {
-          Text($0.capitalized).tag($0)
-        }
+      if let error = model.error {
+        Section { Text(error).foregroundStyle(Color.sparkWarning) }.glassRows()
       }
-      Toggle("Hide ordinary tasks when paused", isOn: $hideTasks)
-      if status == "completed" || status == "archived" {
-        Text("Unfinished tasks will remain active. Cancel or move them separately if needed.").font(
-          .caption)
-      }
-      if let project {
-        Picker("Next action", selection: $nextAction) {
-          Text("None").tag("")
-          ForEach(model.tasks.filter { $0.projectID == project.id && $0.status == "open" }) {
-            Text($0.title).tag($0.id)
+      Section {
+        TextField("Project title", text: $title)
+        TextField("Details", text: $content, axis: .vertical)
+        TextField("Target YYYY-MM-DD", text: $target)
+      }.glassRows()
+      Section {
+        Picker("Status", selection: $status) {
+          ForEach(["active", "paused", "completed", "archived"], id: \.self) {
+            Text($0.capitalized).tag($0)
           }
         }
-      }
+        Toggle("Hide ordinary tasks when paused", isOn: $hideTasks)
+        if status == "completed" || status == "archived" {
+          Text("Unfinished tasks will remain active. Cancel or move them separately if needed.")
+            .font(SparkTypography.caption).foregroundStyle(.secondary)
+        }
+        if let project {
+          Picker("Next action", selection: $nextAction) {
+            Text("None").tag("")
+            ForEach(model.tasks.filter { $0.projectID == project.id && $0.status == "open" }) {
+              Text($0.title).tag($0.id)
+            }
+          }
+        }
+      }.glassRows()
       if let project {
         Section {
           Button("Remove project", role: .destructive) {
             Task { if await model.removeProject(project) { dismiss() } }
           }
-          Text("Tasks are kept without a project.").font(.caption)
-        }
+          Text("Tasks are kept without a project.")
+            .font(SparkTypography.caption).foregroundStyle(.secondary)
+        }.glassRows()
       }
-    }.navigationTitle(project == nil ? "New project" : "Edit project")
+    }.editorSurface()
+      .navigationTitle(project == nil ? "New project" : "Edit project")
       .toolbar {
+        ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
         ToolbarItem(placement: .confirmationAction) {
           Button("Save") {
             Task {

@@ -843,14 +843,21 @@ private struct FlintTopicTaskComposer: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Task", text: $title)
-                TextField("Details (optional)", text: $content, axis: .vertical)
-                Toggle("Due date", isOn: $hasDueDate)
-                if hasDueDate { DatePicker("Due", selection: $dueDate, displayedComponents: .date) }
-                Toggle("Review date", isOn: $hasReviewDate)
-                if hasReviewDate { DatePicker("Review", selection: $reviewDate, displayedComponents: .date) }
-                if let error { Text(error).foregroundStyle(.red) }
+                Section {
+                    TextField("Task", text: $title)
+                    TextField("Details (optional)", text: $content, axis: .vertical)
+                }.glassRows()
+                Section("Dates") {
+                    Toggle("Due date", isOn: $hasDueDate)
+                    if hasDueDate { DatePicker("Due", selection: $dueDate, displayedComponents: .date) }
+                    Toggle("Review date", isOn: $hasReviewDate)
+                    if hasReviewDate { DatePicker("Review", selection: $reviewDate, displayedComponents: .date) }
+                }.glassRows()
+                if let error {
+                    Section { Text(error).foregroundStyle(Color.sparkWarning) }.glassRows()
+                }
             }
+            .editorSurface()
             .navigationTitle(task == nil ? "New thread task" : "Edit thread task")
             .onAppear {
                 guard let task else { return }
