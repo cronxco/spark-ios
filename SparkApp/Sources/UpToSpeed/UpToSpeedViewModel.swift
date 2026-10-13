@@ -572,6 +572,51 @@ final class UpToSpeedViewModel {
         }
     }
 
+    // MARK: - Mark all as read (Wrap)
+
+    /// Whether anything in this flow is still unread, so the Wrap knows to
+    /// offer "Mark all as read".
+    var hasUnreadInFlow: Bool {
+        !Self.markAllTargets(in: screens, alreadyRead: sessionReadIDs, restored: restoredIDs).isEmpty
+    }
+
+    /// The Wrap's "Mark all as read": an explicit override of the dwell for
+    /// everything this flow showed. Articles marked unread by hand this
+    /// session are included, because the reader has now said otherwise.
+    func markAllRead() async {
+        let targets = Self.markAllTargets(in: screens, alreadyRead: sessionReadIDs, restored: restoredIDs)
+        for ref in targets {
+            manuallyUnreadIDs.remove(ref.id)
+            enqueueMarkRead(ref)
+        }
+        markReachedWrap()
+        await flushAndWait()
+    }
+
+    private var sessionReadIDs: Set<String> {
+        Set(sessionSeenDates.keys).subtracting(manuallyUnreadIDs)
+    }
+
+    /// Every item behind a screen in the flow that "Mark all as read" should
+    /// mark, once each, in queue order. Check-ins are left out: one is done by
+    /// submitting it, not by reading it. Items restored from the recap are
+    /// left out too, since the reader asked for those back.
+    nonisolated static func markAllTargets(
+        in screens: [UpToSpeedScreen],
+        alreadyRead: Set<String>,
+        restored: Set<String>
+    ) -> [UpToSpeedReadRef] {
+        var seen: Set<String> = []
+        var refs: [UpToSpeedReadRef] = []
+        for screen in screens {
+            guard let item = screen.item, item.type != .checkIn else { continue }
+            guard !alreadyRead.contains(item.id), !restored.contains(item.id) else { continue }
+            guard seen.insert(item.id).inserted else { continue }
+            refs.append(UpToSpeedReadRef(type: item.type, id: item.id))
+        }
+        return refs
+    }
+
     /// Called by AnomalyScreen when the user acknowledges or suppresses an anomaly.
     func markAnomalyRead(itemID: String) {
         enqueueMarkRead(itemID: itemID, type: .anomaly)

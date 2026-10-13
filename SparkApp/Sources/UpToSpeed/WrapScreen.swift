@@ -12,6 +12,8 @@ struct WrapScreen: View {
 
     @Environment(\.openURL) private var openURL
     @Environment(\.storyHeaderClearance) private var headerClearance
+    @State private var isMarkingAll = false
+    @State private var didMarkAll = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -60,6 +62,10 @@ struct WrapScreen: View {
                 Spacer(minLength: SparkSpacing.xl)
 
                 VStack(spacing: SparkSpacing.md) {
+                    if viewModel.hasUnreadInFlow || didMarkAll {
+                        markAllReadButton
+                    }
+
                     Button(action: onDone) {
                         Text("Done for now")
                             .font(SparkTypography.bodyStrong)
@@ -80,6 +86,34 @@ struct WrapScreen: View {
         }
         .environment(\.storyShowsReadIndicator, false)
         }
+    }
+
+    /// Marks everything left in the flow caught up, for when the reader has
+    /// skimmed the rest and doesn't want it back next time. Green because
+    /// it finishes the catch-up; it stays put, showing the result, once done.
+    private var markAllReadButton: some View {
+        Button {
+            isMarkingAll = true
+            Task {
+                await viewModel.markAllRead()
+                isMarkingAll = false
+                didMarkAll = true
+            }
+        } label: {
+            Label(
+                didMarkAll ? "All marked as read" : "Mark all as read",
+                systemImage: didMarkAll ? "checkmark.circle.fill" : "checkmark.circle"
+            )
+            .font(SparkTypography.bodyStrong)
+            .foregroundStyle(.black)
+            .frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(.borderedProminent)
+        .buttonBorderShape(.capsule)
+        .tint(.sparkSuccess)
+        .disabled(isMarkingAll || didMarkAll)
+        .sensoryFeedback(.success, trigger: didMarkAll)
+        .accessibilityHint("Marks everything in this catch-up as read")
     }
 
     /// A quiet way back to anything already dealt with today. Deliberately
