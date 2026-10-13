@@ -14,6 +14,7 @@ struct WrapScreen: View {
     @Environment(\.storyHeaderClearance) private var headerClearance
     @State private var isMarkingAll = false
     @State private var didMarkAll = false
+    @State private var markAllFailed = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -94,14 +95,16 @@ struct WrapScreen: View {
     private var markAllReadButton: some View {
         Button {
             isMarkingAll = true
+            markAllFailed = false
             Task {
-                await viewModel.markAllRead()
+                let succeeded = await viewModel.markAllRead()
                 isMarkingAll = false
-                didMarkAll = true
+                didMarkAll = succeeded
+                markAllFailed = !succeeded
             }
         } label: {
             Label(
-                didMarkAll ? "All marked as read" : "Mark all as read",
+                didMarkAll ? "All marked as read" : (markAllFailed ? "Couldn’t mark all · Try again" : "Mark all as read"),
                 systemImage: didMarkAll ? "checkmark.circle.fill" : "checkmark.circle"
             )
             .font(SparkTypography.bodyStrong)

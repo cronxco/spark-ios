@@ -583,14 +583,27 @@ final class UpToSpeedViewModel {
     /// The Wrap's "Mark all as read": an explicit override of the dwell for
     /// everything this flow showed. Articles marked unread by hand this
     /// session are included, because the reader has now said otherwise.
-    func markAllRead() async {
+    ///
+    /// Returns whether every mark reached the server. On failure the refs stay
+    /// queued for the next flush, and the Wrap lets the reader try again.
+    @discardableResult
+    func markAllRead() async -> Bool {
         let targets = Self.markAllTargets(in: screens, alreadyRead: sessionReadIDs, restored: restoredIDs)
         for ref in targets {
             manuallyUnreadIDs.remove(ref.id)
             enqueueMarkRead(ref)
         }
         markReachedWrap()
-        await flushAndWait()
+
+        let ids = Set(targets.map(\.id)).union(foldedDigestIDs)
+        let isPending = { self.pendingReadRefs.contains { ids.contains($0.id) } }
+        // A flush already in flight posts its own earlier snapshot and
+        // `flushAndWait` returns with it, leaving these refs queued. Go again,
+        // a bounded number of times so a dead network can't spin here.
+        for _ in 0..<3 where isPending() {
+            await flushAndWait()
+        }
+        return !isPending()
     }
 
     private var sessionReadIDs: Set<String> {
