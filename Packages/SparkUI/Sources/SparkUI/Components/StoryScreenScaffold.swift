@@ -113,11 +113,14 @@ public struct StoryScreenScaffold<Content: View>: View {
                 storyScrollTopChanged(metrics.isAtTop)
             }
         }
+        // `isAtEnd` is deliberately kept while the page is off screen. The
+        // pager lays a card out before it is swiped to, and a card that fits
+        // without scrolling never reports new scroll geometry after that, so
+        // clearing it here left short cards unread until the reader nudged
+        // them. The `isActive` half of the dwell key is the off-screen gate.
         .onChange(of: isActive, initial: true) { _, isActive in
             if isActive {
                 storyScrollTopChanged(isAtTop)
-            } else {
-                isAtEnd = false
             }
         }
         .task(id: dwellKey) {

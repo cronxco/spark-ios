@@ -18,19 +18,26 @@ struct DigestOpenerCard: View {
 
     var body: some View {
         if let opener = digest.opener {
-            Button(action: onOpen) {
-                Text(opener)
-                    .font(SparkTypography.longFormBodySmall)
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(SparkSpacing.lg)
-                    .sparkGlass(.roundedRect(SparkRadii.lg))
-            }
-            .buttonStyle(.plain)
+            // Not a Button: a Button swallows taps on the inline links Flint
+            // writes into the opener (events, days, objects), so they could
+            // never be followed. A tap anywhere else on the card still opens
+            // the digest; a tap on a link goes to the app's `openURL` action.
+            SparkRichContentText(
+                text: opener,
+                font: SparkTypography.longFormBodySmall,
+                lineSpacing: 0
+            )
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(SparkSpacing.lg)
+            .sparkGlass(.roundedRect(SparkRadii.lg))
+            .contentShape(.rect(cornerRadius: SparkRadii.lg))
+            .onTapGesture(perform: onOpen)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
             .accessibilityLabel(accessibilityLabel(opener))
             .accessibilityHint("Opens the full digest")
+            .accessibilityAction { onOpen() }
         }
     }
 
@@ -41,6 +48,8 @@ struct DigestOpenerCard: View {
         let source = [digest.period?.displayName, digest.title]
             .compactMap { $0 }
             .first ?? "Digest"
-        return "\(source). \(opener)"
+        // Read the rendered words, not the markdown: a link's URL is noise.
+        let words = String(SparkRichContentText.rendered(opener).characters)
+        return "\(source). \(words)"
     }
 }
