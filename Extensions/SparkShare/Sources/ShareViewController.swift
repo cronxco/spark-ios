@@ -8,18 +8,43 @@ import UniformTypeIdentifiers
 @objc(ShareViewController)
 final class ShareViewController: UIViewController {
     private let tokenStore = KeychainTokenStore()
+    private let status = ShareStatusModel()
+    private var work: Task<Void, Never>?
+    private var isFinished = false
+
+    /// How long the success state stays up before the sheet dismisses itself.
+    private static let successDwell: Duration = .milliseconds(1200)
 
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = UIColor(Color.sparkSurface)
+        embedStatusView()
         handleSharedItems()
+    }
+
+    private func embedStatusView() {
+        status.onCancel = { [weak self] in self?.cancel() }
+        status.onDone = { [weak self] in self?.complete() }
+
+        let host = UIHostingController(rootView: ShareStatusView(model: status))
+        host.view.backgroundColor = .clear
+        host.view.translatesAutoresizingMaskIntoConstraints = false
+        addChild(host)
+        view.addSubview(host.view)
+        NSLayoutConstraint.activate([
+            host.view.topAnchor.constraint(equalTo: view.topAnchor),
+            host.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            host.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+        ])
+        host.didMove(toParent: self)
     }
 
     // MARK: - Item routing
 
     private func handleSharedItems() {
         guard let items = extensionContext?.inputItems as? [NSExtensionItem] else {
-            complete()
+            fail("Nothing to share.")
             return
         }
 
@@ -38,7 +63,7 @@ final class ShareViewController: UIViewController {
                     case .some(.url(let url)):
                         self.shareURL(url)
                     case .none:
-                        self.complete()
+                        self.fail("Couldn't read this page.")
                     }
                 }
             }
@@ -53,7 +78,7 @@ final class ShareViewController: UIViewController {
             _ = provider.loadObject(ofClass: URL.self) { [weak self] url, _ in
                 // Cast to Sendable type before crossing actor boundary.
                 Task { @MainActor [weak self] in
-                    if let url { self?.shareURL(url) } else { self?.complete() }
+                    if let url { self?.shareURL(url) } else { self?.fail("Couldn't read this link.") }
                 }
             }
             return
@@ -66,7 +91,7 @@ final class ShareViewController: UIViewController {
                     let imageData = (item as? UIImage)?.jpegData(compressionQuality: 0.8)
                     Task { @MainActor [weak self] in
                         if let imageData { self?.shareImageData(imageData) }
-                        else { self?.complete() }
+                        else { self?.fail("Couldn't read this photo.") }
                     }
                 }
             } else {
@@ -78,7 +103,7 @@ final class ShareViewController: UIViewController {
                     let copiedURL = fileURL.flatMap { Self.copySharedImage(from: $0) }
                     Task { @MainActor [weak self] in
                         if let copiedURL { self?.shareImage(at: copiedURL) }
-                        else { self?.complete() }
+                        else { self?.fail("Couldn't read this photo.") }
                     }
                 }
             }
@@ -88,19 +113,20 @@ final class ShareViewController: UIViewController {
         if let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) }) {
             _ = provider.loadObject(ofClass: String.self) { [weak self] text, _ in
                 Task { @MainActor [weak self] in
-                    if let text { self?.shareText(text) } else { self?.complete() }
+                    if let text { self?.shareText(text) } else { self?.fail("Couldn't read this text.") }
                 }
             }
             return
         }
 
-        complete()
+        fail("Spark can't save this kind of item.")
     }
 
     // MARK: - URL sharing (bookmark)
 
     private func shareCapturedPage(_ page: CapturedWebPage) {
-        Task {
+        status.phase = .working("Saving page to Spark…")
+        work = Task {
             do {
                 let client = APIClient(tokenStore: tokenStore, etagCache: ETagCache())
                 let payload = CapturedWebPageRequest(
@@ -108,51 +134,48 @@ final class ShareViewController: UIViewController {
                     title: page.title,
                     html: page.html
                 )
-                let endpoint = Endpoint<EmptyShareResponse>(
+                let endpoint = Endpoint<EmptyResponse>(
                     method: .post,
                     path: "/bookmarks/capture",
                     body: try JSONEncoder().encode(payload),
                     contentType: "application/json"
                 )
                 _ = try await client.request(endpoint)
-                await MainActor.run { self.showToast("Page captured!") }
+                succeed("Page saved to Spark.")
             } catch {
-                await MainActor.run { self.showToast("Couldn't capture page.") }
+                if !Task.isCancelled { fail(Self.failureMessage(for: error, saving: "this page")) }
             }
-            complete()
         }
     }
 
     private func shareURL(_ url: URL) {
-        Task {
+        status.phase = .working("Saving bookmark…")
+        work = Task {
             do {
                 let client = APIClient(tokenStore: tokenStore, etagCache: ETagCache())
                 let body = try? JSONEncoder().encode(["url": url.absoluteString])
-                let endpoint = Endpoint<EmptyShareResponse>(
+                let endpoint = Endpoint<EmptyResponse>(
                     method: .post, path: "/bookmarks",
                     body: body, contentType: "application/json"
                 )
                 _ = try await client.request(endpoint)
-                await MainActor.run { self.showToast("Bookmarked!") }
+                succeed("Bookmarked.")
             } catch {
-                await MainActor.run { self.showToast("Couldn't save bookmark.") }
+                if !Task.isCancelled { fail(Self.failureMessage(for: error, saving: "this bookmark")) }
             }
-            complete()
         }
     }
 
     // MARK: - Image sharing
 
     private func shareImage(at fileURL: URL) {
-        Task {
+        status.phase = .working("Sending photo to Spark…")
+        work = Task {
             let scheduled = await scheduleBackgroundImageUpload(fileURL: fileURL)
             if !scheduled {
                 try? FileManager.default.removeItem(at: fileURL)
             }
-            await MainActor.run {
-                self.showToast(scheduled ? "Photo upload queued." : "Couldn't save photo.")
-            }
-            complete()
+            finishPhotoUpload(scheduled: scheduled)
         }
     }
 
@@ -164,23 +187,29 @@ final class ShareViewController: UIViewController {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let dest = dir.appendingPathComponent("\(UUID().uuidString).jpg")
 
+        status.phase = .working("Sending photo to Spark…")
         guard (try? data.write(to: dest)) != nil else {
-            showToast("Couldn't save photo.")
-            complete()
+            fail("Couldn't save this photo.")
             return
         }
 
-        Task {
+        work = Task {
             let scheduled = await scheduleBackgroundImageUpload(fileURL: dest)
             if !scheduled {
                 // Nothing will collect an orphaned file, so don't leave it in
                 // the shared container pretending to be queued work.
                 try? FileManager.default.removeItem(at: dest)
             }
-            await MainActor.run {
-                self.showToast(scheduled ? "Photo upload queued." : "Couldn't save photo.")
-            }
-            complete()
+            finishPhotoUpload(scheduled: scheduled)
+        }
+    }
+
+    private func finishPhotoUpload(scheduled: Bool) {
+        if scheduled {
+            // The upload carries on in the background after the sheet closes.
+            succeed("Photo is uploading to Spark.")
+        } else {
+            fail("Couldn't send this photo. Open Spark to sign in, then try again.")
         }
     }
 
@@ -254,8 +283,7 @@ final class ShareViewController: UIViewController {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard let url = Self.firstURL(in: trimmed) else {
-            showToast("Sharing text isn't supported yet.")
-            complete()
+            fail("Sharing text isn't supported yet. Share a link or a photo instead.")
             return
         }
 
@@ -312,32 +340,44 @@ final class ShareViewController: UIViewController {
         )
     }
 
-    // MARK: - Helpers
+    // MARK: - Outcome
 
-    private func showToast(_ message: String) {
-        let label = UILabel()
-        label.text = message
-        label.textAlignment = .center
-        label.backgroundColor = UIColor(Color.sparkSurface).withAlphaComponent(0.9)
-        label.layer.cornerRadius = 12
-        label.layer.masksToBounds = true
-        label.font = .systemFont(ofSize: 15, weight: .medium)
-        label.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(label)
-        NSLayoutConstraint.activate([
-            label.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            label.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-            label.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, multiplier: 0.8),
-            label.heightAnchor.constraint(equalToConstant: 44),
-        ])
+    /// Shows the success state briefly, then dismisses the sheet.
+    private func succeed(_ message: String) {
+        guard !isFinished else { return }
+        status.phase = .succeeded(message)
+        Task {
+            try? await Task.sleep(for: Self.successDwell)
+            complete()
+        }
+    }
+
+    /// Shows the failure state and leaves it up until the user taps Done.
+    private func fail(_ message: String) {
+        guard !isFinished else { return }
+        status.phase = .failed(message)
+    }
+
+    private static func failureMessage(for error: Error, saving thing: String) -> String {
+        if case APIError.unauthorized = error {
+            return "Couldn't save \(thing). Open Spark to sign in, then try again."
+        }
+        return "Couldn't save \(thing). Check your connection and try again."
+    }
+
+    private func cancel() {
+        guard !isFinished else { return }
+        isFinished = true
+        work?.cancel()
+        extensionContext?.cancelRequest(withError: CocoaError(.userCancelled))
     }
 
     private func complete() {
+        guard !isFinished else { return }
+        isFinished = true
         extensionContext?.completeRequest(returningItems: nil)
     }
 }
-
-private struct EmptyShareResponse: Decodable, Sendable {}
 
 private enum PreprocessedPage: Sendable {
     case captured(CapturedWebPage)
