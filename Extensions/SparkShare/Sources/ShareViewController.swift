@@ -252,6 +252,8 @@ final class ShareViewController: UIViewController {
         config.sharedContainerIdentifier = "group.co.cronx.sparkapp"
         let fileSize = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
 
+        // The user may have tapped Cancel while the token read was pending.
+        guard !Task.isCancelled else { return false }
         URLSession(configuration: config).uploadTask(with: request, fromFile: fileURL).resume()
 
         await APITelemetry.shared.capture(
