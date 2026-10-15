@@ -222,6 +222,35 @@ struct UpToSpeedReadMarkingTests {
         #expect(target(at: 1, in: screens, consumed: [0, 1]) == nil)
     }
 
+    // "Mark all as read" on the Wrap: each item once, whatever number of
+    // screens it spans, skipping what is already read, check-ins (done by
+    // submitting) and anything restored from the recap.
+    @Test func markAllTargetsEachUnreadItemOnce() {
+        let digestA = digest(id: "digest-a")
+        let news = newsSummary(id: "news-a")
+        let read = newsSummary(id: "news-read")
+        let restored = newsSummary(id: "news-restored")
+        let checkIn = UpToSpeedItem(id: "check-in", type: .checkIn, caughtUpAt: nil, payload: news.payload)
+        let screens: [UpToSpeedScreen] = [
+            .opener,
+            .flintHeader(digestA, firstSection: nil),
+            .flintParagraph(digestA, text: "body", index: 0),
+            .checkIn(checkIn),
+            .newsSummary(news),
+            .newsSummary(read),
+            .newsSummary(restored),
+            .wrap,
+        ]
+
+        let refs = UpToSpeedViewModel.markAllTargets(
+            in: screens,
+            alreadyRead: ["news-read"],
+            restored: ["news-restored"]
+        )
+        #expect(refs.map(\.id) == ["digest-a", "news-a"])
+        #expect(refs.map(\.type) == [UpToSpeedItemType.flintDigest.rawValue, UpToSpeedItemType.newsSummary.rawValue])
+    }
+
     private func target(
         at index: Int,
         in screens: [UpToSpeedScreen],
