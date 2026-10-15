@@ -381,6 +381,30 @@ enum SparkObservability {
         }
     }
 
+    /// Breadcrumb for each Flint generation: which tier served it, why PCC was
+    /// skipped if it was, and the token spend. Informational only; PCC
+    /// fallbacks are expected (quota, offline) and must not raise Sentry events.
+    static func captureFlintGeneration(path: String, result: FlintGenerationResult) {
+        let crumb = Breadcrumb(level: .info, category: "flint.generation")
+        crumb.type = "debug"
+        crumb.message = "Flint generation served"
+        var data: [String: Any] = [
+            "path": path,
+            "tier": result.tier.rawValue,
+        ]
+        if let reason = result.pccFallbackReason {
+            data["pcc_fallback_reason"] = reason
+        }
+        if let usage = result.usage {
+            data["input_tokens"] = usage.inputTokens
+            data["output_tokens"] = usage.outputTokens
+            data["reasoning_tokens"] = usage.reasoningTokens
+            data["response_token_budget"] = usage.responseTokenBudget
+        }
+        crumb.setSparkData(data)
+        SentrySDK.addBreadcrumb(crumb)
+    }
+
     static func captureSpotlightDiagnostics(_ snapshot: SpotlightDiagnosticsSnapshot, source: String) {
         let crumb = Breadcrumb(level: .info, category: "spotlight")
         crumb.type = "debug"

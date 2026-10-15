@@ -63,6 +63,10 @@ struct FlintGenerationResult: Sendable, Equatable {
     let usedAppleIntelligence: Bool
     let tier: FlintGenerationTier
     let usage: FlintGenerationUsage?
+    /// Why a request that wanted PCC was served by a lower tier, e.g.
+    /// `quota_limit_reached` or `network_failure`. `nil` when PCC served the
+    /// request or the lower tier was the first choice.
+    var pccFallbackReason: String?
 }
 
 enum FlintGenerationService {
@@ -78,65 +82,42 @@ enum FlintGenerationService {
         Keep the note calm, specific, and useful.
         """
 
-        let resolved = FlintModelProvider.resolve(
+        return try await generate(
             reasoning: .deep,
             instructions: instructions,
-            tools: FlintTools.digestTools
-        )
+            tools: FlintTools.digestTools,
+            fallbackNote: facts.fallbackNote,
+            path: "digest"
+        ) { model in
+            let response = try await model.session.respond(
+                generating: GeneratedFlintDailyNote.self,
+                options: FlintModelProvider.generationOptions(for: .deep),
+                contextOptions: FlintModelProvider.contextOptions(for: .deep),
+                metadata: [
+                    "spark.generation.path": "digest",
+                    "spark.generation.tier": model.tier.rawValue,
+                ]
+            ) {
+                """
+                Create a daily highlight note from these facts.
+                Return:
+                - a short title
+                - a two sentence summary
+                - up to four highlights
+                - up to three watchouts
+                - up to three suggested actions
 
-        switch resolved {
-        case .failure(let availability):
-            return staticResult(note: facts.fallbackNote, availability: availability)
-        case .success(let model):
-            func respond(using model: FlintResolvedSession) async throws -> FlintGenerationResult {
-                let response = try await model.session.respond(
-                    generating: GeneratedFlintDailyNote.self,
-                    options: FlintModelProvider.generationOptions(for: .deep),
-                    contextOptions: FlintModelProvider.contextOptions(for: .deep),
-                    metadata: [
-                        "spark.generation.path": "digest",
-                        "spark.generation.tier": model.tier.rawValue,
-                    ]
-                ) {
-                    """
-                    Create a daily highlight note from these facts.
-                    Return:
-                    - a short title
-                    - a two sentence summary
-                    - up to four highlights
-                    - up to three watchouts
-                    - up to three suggested actions
-
-                    Spark briefing facts:
-                    \(facts.promptText)
-                    """
-                }
-                return modelResult(
-                    note: response.content.note,
-                    tier: model.tier,
-                    availability: model.availability,
-                    reasoning: .deep,
-                    usage: response.usage
-                )
+                Spark briefing facts:
+                \(facts.promptText)
+                """
             }
-
-            do {
-                return try await respond(using: model)
-            } catch where error.isFoundationModelManagerRuntimeFailure {
-                let retry = FlintModelProvider.resolve(
-                    reasoning: .deep,
-                    instructions: instructions,
-                    tools: FlintTools.digestTools
-                )
-                guard case .success(let retryModel) = retry else {
-                    return staticResult(note: facts.fallbackNote, availability: .modelNotReady)
-                }
-                do {
-                    return try await respond(using: retryModel)
-                } catch where error.isFoundationModelManagerRuntimeFailure {
-                    return staticResult(note: facts.fallbackNote, availability: .modelNotReady)
-                }
-            }
+            return modelResult(
+                note: response.content.note,
+                tier: model.tier,
+                availability: model.availability,
+                reasoning: .deep,
+                usage: response.usage
+            )
         }
     }
 
@@ -176,61 +157,94 @@ enum FlintGenerationService {
         If nothing in the facts is worth a sentence, return empty text rather than a generic line.
         """
 
-        let resolved = FlintModelProvider.resolve(reasoning: .light, instructions: instructions)
+        return try await generate(
+            reasoning: .light,
+            instructions: instructions,
+            tools: [],
+            fallbackNote: fallback,
+            path: "summary_line"
+        ) { model in
+            let response = try await model.session.respond(
+                generating: GeneratedTodaySummaryLine.self,
+                options: FlintModelProvider.generationOptions(for: .light),
+                contextOptions: FlintModelProvider.contextOptions(for: .light),
+                metadata: [
+                    "spark.generation.path": "summary_line",
+                    "spark.generation.tier": model.tier.rawValue,
+                ]
+            ) {
+                """
+                Write one sentence for the top of the day page.
+                Tone: calm, specific, concise, and human.
+                Context: \(context == .daySoFar ? "today's day so far" : "the day in review").
 
-        switch resolved {
-        case .failure(let availability):
-            return staticResult(note: fallback, availability: availability)
-        case .success(let model):
-            func respond(using model: FlintResolvedSession) async throws -> FlintGenerationResult {
-                let response = try await model.session.respond(
-                    generating: GeneratedTodaySummaryLine.self,
-                    options: FlintModelProvider.generationOptions(for: .light),
-                    contextOptions: FlintModelProvider.contextOptions(for: .light),
-                    metadata: [
-                        "spark.generation.path": "summary_line",
-                        "spark.generation.tier": model.tier.rawValue,
-                    ]
-                ) {
-                    """
-                    Write one sentence for the top of the day page.
-                    Tone: calm, specific, concise, and human.
-                    Context: \(context == .daySoFar ? "today's day so far" : "the day in review").
-
-                    Spark briefing facts:
-                    \(facts.promptText)
-                    """
-                }
-                let note = FlintDailyNote(
-                    title: "",
-                    summary: response.content.text,
-                    highlights: [],
-                    watchouts: [],
-                    suggestedActions: []
-                )
-                return modelResult(
-                    note: note,
-                    tier: model.tier,
-                    availability: model.availability,
-                    reasoning: .light,
-                    usage: response.usage
-                )
+                Spark briefing facts:
+                \(facts.promptText)
+                """
             }
+            let note = FlintDailyNote(
+                title: "",
+                summary: response.content.text,
+                highlights: [],
+                watchouts: [],
+                suggestedActions: []
+            )
+            return modelResult(
+                note: note,
+                tier: model.tier,
+                availability: model.availability,
+                reasoning: .light,
+                usage: response.usage
+            )
+        }
+    }
 
-            do {
-                return try await respond(using: model)
-            } catch where error.isFoundationModelManagerRuntimeFailure {
-                let retry = FlintModelProvider.resolve(reasoning: .light, instructions: instructions)
-                guard case .success(let retryModel) = retry else {
-                    return staticResult(note: fallback, availability: .modelNotReady)
-                }
+    // MARK: - Tier fallback
+
+    /// Runs `respond` against the best available tier. A PCC runtime failure
+    /// (quota used up, no network, service down, rate limit, timeout) re-resolves
+    /// with PCC excluded so the request is served on-device; a model-manager
+    /// runtime failure is retried on the same tier. Anything that still fails
+    /// ends at the static fallback.
+    private static func generate(
+        reasoning: FlintReasoning,
+        instructions: String,
+        tools: [any Tool],
+        fallbackNote: FlintDailyNote,
+        path: String,
+        respond: (FlintResolvedSession) async throws -> FlintGenerationResult
+    ) async throws -> FlintGenerationResult {
+        var allowPrivateCloudCompute = true
+        var fallbackReason: String?
+
+        for _ in 0..<3 {
+            let resolved = FlintModelProvider.resolve(
+                reasoning: reasoning,
+                instructions: instructions,
+                tools: tools,
+                allowPrivateCloudCompute: allowPrivateCloudCompute
+            )
+
+            switch resolved {
+            case .failure(let availability):
+                return staticResult(note: fallbackNote, availability: availability, pccFallbackReason: fallbackReason)
+            case .success(let model):
+                let reason = fallbackReason ?? model.pccSkipReason?.rawValue
                 do {
-                    return try await respond(using: retryModel)
+                    var result = try await respond(model)
+                    result.pccFallbackReason = reason
+                    SparkObservability.captureFlintGeneration(path: path, result: result)
+                    return result
+                } catch where model.tier == .privateCloudCompute && error.privateCloudComputeFallbackReason != nil {
+                    fallbackReason = error.privateCloudComputeFallbackReason
+                    allowPrivateCloudCompute = false
                 } catch where error.isFoundationModelManagerRuntimeFailure {
-                    return staticResult(note: fallback, availability: .modelNotReady)
+                    continue
                 }
             }
         }
+
+        return staticResult(note: fallbackNote, availability: .modelNotReady, pccFallbackReason: fallbackReason)
     }
 
     // MARK: - Result builders
@@ -261,15 +275,34 @@ enum FlintGenerationService {
 
     private static func staticResult(
         note: FlintDailyNote,
-        availability: FlintGenerationAvailability
+        availability: FlintGenerationAvailability,
+        pccFallbackReason: String? = nil
     ) -> FlintGenerationResult {
         FlintGenerationResult(
             note: note,
             availability: availability,
             usedAppleIntelligence: false,
             tier: .staticFallback,
-            usage: nil
+            usage: nil,
+            pccFallbackReason: pccFallbackReason
         )
+    }
+}
+
+extension Error {
+    /// A short telemetry reason when this error means the PCC tier could not
+    /// serve the request but a lower tier still can; `nil` for everything else
+    /// (cancellation, guardrails, programmer errors), which must not be retried
+    /// on-device.
+    var privateCloudComputeFallbackReason: String? {
+        if self is PrivateCloudComputeLanguageModel.Error {
+            return "pcc_error"
+        }
+        if let error = self as? LanguageModelError {
+            if case .rateLimited = error { return "rate_limited" }
+            if case .timeout = error { return "timeout" }
+        }
+        return nil
     }
 }
 
