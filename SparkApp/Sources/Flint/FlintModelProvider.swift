@@ -107,7 +107,7 @@ enum FlintModelProvider {
         instructions: String,
         tools: [any Tool] = [],
         allowPrivateCloudCompute: Bool = true
-    ) -> Result<FlintResolvedSession, FlintGenerationAvailability> {
+    ) async -> Result<FlintResolvedSession, FlintGenerationAvailability> {
         // 1. Private Cloud Compute (primary).
         var skipReason: FlintPCCReadiness?
         if allowPrivateCloudCompute {
@@ -115,7 +115,7 @@ enum FlintModelProvider {
                 skipReason = .disabled
             } else {
                 let pcc = PrivateCloudComputeLanguageModel()
-                let readiness = pccSnapshot(for: pcc).readiness
+                let readiness = await pccSnapshot(for: pcc).readiness
                 if readiness.isReady {
                     let session = LanguageModelSession(model: pcc, tools: tools, instructions: instructions)
                     return .success(FlintResolvedSession(
@@ -169,7 +169,7 @@ enum FlintModelProvider {
         defaults.bool(forKey: pccKillSwitchKey)
     }
 
-    private static func pccSnapshot(for model: PrivateCloudComputeLanguageModel) -> FlintPCCSnapshot {
+    private static func pccSnapshot(for model: PrivateCloudComputeLanguageModel) async -> FlintPCCSnapshot {
         let availability: FlintPCCSnapshot.Availability
         if case .available = model.availability {
             availability = .available
@@ -183,7 +183,7 @@ enum FlintModelProvider {
         return FlintPCCSnapshot(
             isDisabledByKillSwitch: false,
             availability: availability,
-            supportsCurrentLocale: model.supportsLocale(.current),
+            supportsCurrentLocale: (try? await model.supportsLocale(.current)) ?? true,
             isQuotaLimitReached: model.quotaUsage.isLimitReached
         )
     }

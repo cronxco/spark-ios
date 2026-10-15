@@ -218,7 +218,7 @@ enum FlintGenerationService {
         var fallbackReason: String?
 
         for _ in 0..<3 {
-            let resolved = FlintModelProvider.resolve(
+            let resolved = await FlintModelProvider.resolve(
                 reasoning: reasoning,
                 instructions: instructions,
                 tools: tools,
