@@ -515,6 +515,7 @@ struct DebugView: View {
 
     private func runSpotlightIndexing() async {
         isIndexingSpotlight = true
+        await EntityCacheRefresher.refresh(using: appModel.apiClient, container: appModel.container)
         let report = await SpotlightIndexer.indexBatchWithReport(container: appModel.container)
         spotlightReport = report
         SparkObservability.captureSpotlightIndexReport(report, source: "debug_menu")

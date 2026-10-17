@@ -263,6 +263,8 @@ final class SparkAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
             container: { @Sendable in try SparkDataStore.makeContainer() },
             onPrefetch: { @Sendable in
                 guard let container = try? SparkDataStore.makeContainer() else { return }
+                let client = APIClient(tokenStore: KeychainTokenStore(), etagCache: ETagCache())
+                await EntityCacheRefresher.refresh(using: client, container: container)
                 let report = await SpotlightIndexer.indexBatchWithReport(container: container)
                 SparkObservability.captureSpotlightIndexReport(report, source: "background")
                 await SpotlightIndexer.purgeStaleItems(container: container)

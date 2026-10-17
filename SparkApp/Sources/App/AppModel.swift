@@ -89,6 +89,7 @@ final class AppModel {
         }
         defaults.set(Date.now, forKey: key)
         try? await Task.sleep(for: .seconds(5))
+        await EntityCacheRefresher.refresh(using: apiClient, container: container)
         await SpotlightIndexer.indexBatch(container: container)
     }
 
