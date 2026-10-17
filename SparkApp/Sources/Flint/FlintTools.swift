@@ -99,12 +99,45 @@ struct GetMetricTrendTool: Tool {
     }
 }
 
-/// Searches recent events for a free-text query.
+/// Semantic search through the backend, so "coffee" can find a Starbucks
+/// transaction. Returns nothing when offline or when the request fails, and
+/// the tools then fall back to the cached literal match.
+enum FlintSearch {
+    static func semanticHits(for query: String) async -> [SearchResult] {
+        let service = await IntentService()
+        guard let response = try? await service.apiClient.request(
+            SearchEndpoint.query(text: query, mode: .semantic)
+        ) else {
+            return []
+        }
+        return response.results
+    }
+
+    static func isEventLike(_ hit: SearchResult) -> Bool {
+        if case .event = hit { return true }
+        if case .object = hit { return true }
+        return false
+    }
+
+    static func isBlock(_ hit: SearchResult) -> Bool {
+        if case .block = hit { return true }
+        return false
+    }
+
+    static func line(for hit: SearchResult) -> String {
+        guard let subtitle = hit.subtitle, !subtitle.isEmpty else {
+            return "- \(hit.title)"
+        }
+        return "- \(hit.title): \(subtitle)"
+    }
+}
+
+/// Searches the user's events and objects by meaning, then by literal text.
 struct SearchEventsTool: Tool {
     typealias Output = String
 
     let name = "searchEvents"
-    let description = "Search the user's recent Spark events by free text."
+    let description = "Search the user's Spark events and objects by meaning, e.g. 'coffee', 'runs', 'train tickets'."
 
     @Generable
     struct Arguments {
@@ -113,6 +146,10 @@ struct SearchEventsTool: Tool {
     }
 
     func call(arguments: Arguments) async throws -> String {
+        let hits = await FlintSearch.semanticHits(for: arguments.query).filter(FlintSearch.isEventLike)
+        if !hits.isEmpty {
+            return hits.prefix(8).map(FlintSearch.line(for:)).joined(separator: "\n")
+        }
         let results = await MainActor.run { IntentService.eventEntities(query: arguments.query, limit: 8) }
         guard !results.isEmpty else {
             return "No events found for '\(arguments.query)'."
@@ -126,12 +163,12 @@ struct SearchEventsTool: Tool {
     }
 }
 
-/// Searches recent blocks for a free-text query.
+/// Searches the user's text blocks and notes by meaning, then by literal text.
 struct SearchBlocksTool: Tool {
     typealias Output = String
 
     let name = "searchBlocks"
-    let description = "Search the user's recent Spark text/content blocks by free text."
+    let description = "Search the user's Spark text blocks and notes by meaning."
 
     @Generable
     struct Arguments {
@@ -140,6 +177,10 @@ struct SearchBlocksTool: Tool {
     }
 
     func call(arguments: Arguments) async throws -> String {
+        let hits = await FlintSearch.semanticHits(for: arguments.query).filter(FlintSearch.isBlock)
+        if !hits.isEmpty {
+            return hits.prefix(8).map(FlintSearch.line(for:)).joined(separator: "\n")
+        }
         let needle = arguments.query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let results = await MainActor.run {
             IntentService.blockEntities(limit: 500).filter { block in
