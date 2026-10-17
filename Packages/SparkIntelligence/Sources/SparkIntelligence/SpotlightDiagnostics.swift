@@ -6,6 +6,8 @@ public struct SpotlightDiagnosticsSnapshot: Sendable {
     public let capturedAt: Date
     public let isSignedIn: Bool
     public let canOpenStore: Bool
+    /// Why the shared store could not be opened, when it could not.
+    public let storeError: String?
     public let counts: [SpotlightEntityCount]
 
     public var totalCount: Int {
@@ -16,11 +18,13 @@ public struct SpotlightDiagnosticsSnapshot: Sendable {
         capturedAt: Date = .now,
         isSignedIn: Bool,
         canOpenStore: Bool,
+        storeError: String? = nil,
         counts: [SpotlightEntityCount]
     ) {
         self.capturedAt = capturedAt
         self.isSignedIn = isSignedIn
         self.canOpenStore = canOpenStore
+        self.storeError = storeError
         self.counts = counts
     }
 }
@@ -100,11 +104,18 @@ public enum SpotlightDiagnostics {
     @MainActor
     public static func snapshot() async -> SpotlightDiagnosticsSnapshot {
         async let token = KeychainTokenStore().accessToken()
-        let canOpenStore = IntentService.makeContext() != nil
+        var storeError: String?
+        do {
+            _ = try SparkDataStore.makeContainer()
+        } catch {
+            storeError = String(describing: error)
+        }
+        let canOpenStore = storeError == nil
 
         return await SpotlightDiagnosticsSnapshot(
             isSignedIn: token != nil,
             canOpenStore: canOpenStore,
+            storeError: storeError,
             counts: [
                 SpotlightEntityCount(name: "Events", count: IntentService.eventEntities(matching: nil, limit: 1000).count),
                 SpotlightEntityCount(name: "Blocks", count: IntentService.blockEntities(matching: nil, limit: 1000).count),

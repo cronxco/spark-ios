@@ -44,6 +44,7 @@ final class AppModel {
         do {
             container = try SparkDataStore.makeContainer()
         } catch {
+            SparkObservability.captureHandled(error)
             container = (try? SparkDataStore.makeInMemoryContainer()) ?? {
                 fatalError("Unable to bootstrap any SwiftData container: \(error)")
             }()

@@ -380,6 +380,13 @@ struct DebugView: View {
                 }
                 .font(SparkTypography.bodySmall)
 
+                if let storeError = spotlightSnapshot.storeError {
+                    Text(storeError)
+                        .font(SparkTypography.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+
                 ForEach(spotlightSnapshot.counts) { count in
                     HStack {
                         Text(count.name)
