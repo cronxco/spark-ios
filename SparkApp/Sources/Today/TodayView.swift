@@ -50,13 +50,10 @@ struct TodayView: View {
                         .sparkAppEntityIdentifier(type: "day", identifier: TodayViewModel.isoKey(for: date))
 
                     // Flint's own words first: the numbers below are what it
-                    // is talking about, not a dashboard the digest happens to
+                    // is talking about, not a dashboard the summary happens to
                     // sit near.
-                    // The digest, questions and threads are "now", not this
-                    // date's; the view model only loads them for today, and a
-                    // page that was today before midnight stops showing them.
-                    if isToday, let digest = viewModel?.latestDigest {
-                        DigestOpenerCard(digest: digest) { showUpToSpeed = true }
+                    if let summary = viewModel?.briefingSummaryLine {
+                        DaySummaryCard(summary: summary)
                     }
 
                     // In the evening, once there is something to say about
@@ -212,14 +209,6 @@ struct TodayView: View {
                 heroTitleWithAction(titleLines: titleLines, unreadCount: unreadCount)
             } else {
                 heroTitleStack(titleLines: titleLines)
-            }
-
-            if let subtitle = viewModel?.briefingSummaryLine {
-                Text(subtitle)
-                    .font(SparkTypography.body)
-                    .foregroundStyle(Color.secondary)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

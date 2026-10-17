@@ -380,6 +380,13 @@ struct DebugView: View {
                 }
                 .font(SparkTypography.bodySmall)
 
+                if let storeError = spotlightSnapshot.storeError {
+                    Text(storeError)
+                        .font(SparkTypography.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+
                 ForEach(spotlightSnapshot.counts) { count in
                     HStack {
                         Text(count.name)
@@ -508,6 +515,7 @@ struct DebugView: View {
 
     private func runSpotlightIndexing() async {
         isIndexingSpotlight = true
+        await EntityCacheRefresher.refresh(using: appModel.apiClient, container: appModel.container)
         let report = await SpotlightIndexer.indexBatchWithReport(container: appModel.container)
         spotlightReport = report
         SparkObservability.captureSpotlightIndexReport(report, source: "debug_menu")

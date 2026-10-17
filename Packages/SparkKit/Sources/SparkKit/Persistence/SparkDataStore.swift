@@ -21,14 +21,24 @@ public enum SparkDataStore {
     }
 
     /// Default container bound to the App Group. Use from app + extensions.
+    ///
+    /// Optional properties were added to `CachedEvent` without a schema bump, so
+    /// a store written before then matches no version in the migration plan and
+    /// is rejected as `unknownDataStoreSchema`. Retrying without the plan lets
+    /// SwiftData infer the lightweight migration from the store's own layout.
     public static func makeContainer() throws -> ModelContainer {
         let url = try storeURL()
         let configuration = ModelConfiguration(url: url)
-        return try ModelContainer(
-            for: Schema(versionedSchema: SparkSchemaV3.self),
-            migrationPlan: SparkMigrationPlan.self,
-            configurations: configuration
-        )
+        let schema = Schema(versionedSchema: SparkSchemaV3.self)
+        do {
+            return try ModelContainer(
+                for: schema,
+                migrationPlan: SparkMigrationPlan.self,
+                configurations: configuration
+            )
+        } catch {
+            return try ModelContainer(for: schema, configurations: configuration)
+        }
     }
 
     /// Deletes every cached record from the shared store.

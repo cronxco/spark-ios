@@ -40,6 +40,7 @@ public struct EventEntity: AppEntity, IndexedEntity {
     public var service: String
     public var domain: String
     public var action: String
+    @Property(indexingKey: \.contentCreationDate)
     public var timestamp: Date?
 
     public init(
@@ -106,6 +107,7 @@ public struct BlockEntity: AppEntity, IndexedEntity {
     public var keywords: [String]
 
     public var blockType: String
+    @Property(indexingKey: \.contentCreationDate)
     public var timestamp: Date?
 
     public init(id: String, title: String, body: String?, blockType: String, timestamp: Date?) {

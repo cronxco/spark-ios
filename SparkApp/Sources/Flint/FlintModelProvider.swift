@@ -1,16 +1,24 @@
 import Foundation
 import FoundationModels
+import SparkKit
 
 // MARK: - Flint model provider (iOS 27)
 //
 // PCC-primary generation with on-device fallback, per the iOS 27 decision:
 // try Private Cloud Compute first (better quality, supports deep reasoning +
 // tool calling), fall back to the on-device system model when PCC is
-// unavailable (EU, not signed in to Apple Intelligence, offline), and finally
-// to a static fallback handled by the caller.
+// unavailable (ineligible device, Apple Intelligence off, unsupported locale,
+// daily quota used up, offline), and finally to a static fallback handled by
+// the caller. Runtime PCC failures (quota, network, service) are handled by
+// `FlintGenerationService`, which re-resolves with PCC excluded.
 //
-// Reasoning is tiered: `.light` for the quick summary line, `.deep` for the
-// digest (which also gets the live-data tools attached).
+// PCC needs the managed `com.apple.developer.private-cloud-compute`
+// entitlement (SparkApp.entitlements). The App Group default
+// `spark.flint.pcc.disabled` is a kill switch that forces on-device only.
+//
+// Reasoning is tiered: `.moderate` for the Day summary (with the day and
+// baseline tools, so it can compare against yesterday), `.deep` for the digest
+// (which gets every live-data tool).
 
 /// Which model tier actually produced a result — surfaced in telemetry.
 enum FlintGenerationTier: String, Sendable, Equatable {
@@ -22,11 +30,13 @@ enum FlintGenerationTier: String, Sendable, Equatable {
 /// Reasoning intensity requested for a generation.
 enum FlintReasoning: Sendable {
     case light
+    case moderate
     case deep
 
     var maximumResponseTokens: Int {
         switch self {
         case .light: 80
+        case .moderate: 500
         case .deep: 500
         }
     }
@@ -34,6 +44,7 @@ enum FlintReasoning: Sendable {
     var contextReasoningLevel: ContextOptions.ReasoningLevel {
         switch self {
         case .light: .light
+        case .moderate: .moderate
         case .deep: .deep
         }
     }
@@ -44,6 +55,51 @@ struct FlintResolvedSession {
     let session: LanguageModelSession
     let tier: FlintGenerationTier
     let availability: FlintGenerationAvailability
+    /// Why PCC was skipped when this session is on-device; `nil` when PCC was
+    /// used or was not requested.
+    var pccSkipReason: FlintPCCReadiness?
+}
+
+/// Whether the Private Cloud Compute model can serve a request right now.
+enum FlintPCCReadiness: String, Sendable, Equatable {
+    case ready
+    case disabled
+    case deviceNotEligible = "device_not_eligible"
+    case systemNotReady = "system_not_ready"
+    case unavailable
+    case unsupportedLocale = "unsupported_locale"
+    case quotaLimitReached = "quota_limit_reached"
+
+    var isReady: Bool { self == .ready }
+}
+
+/// The inputs to the PCC readiness decision, separated from the framework
+/// types so the ordering of the checks can be unit-tested.
+struct FlintPCCSnapshot: Sendable, Equatable {
+    enum Availability: Sendable, Equatable {
+        case available
+        case deviceNotEligible
+        case systemNotReady
+        case other
+    }
+
+    var isDisabledByKillSwitch: Bool
+    var availability: Availability
+    var supportsCurrentLocale: Bool
+    var isQuotaLimitReached: Bool
+
+    var readiness: FlintPCCReadiness {
+        if isDisabledByKillSwitch { return .disabled }
+        switch availability {
+        case .available: break
+        case .deviceNotEligible: return .deviceNotEligible
+        case .systemNotReady: return .systemNotReady
+        case .other: return .unavailable
+        }
+        if !supportsCurrentLocale { return .unsupportedLocale }
+        if isQuotaLimitReached { return .quotaLimitReached }
+        return .ready
+    }
 }
 
 enum FlintModelProvider {
@@ -53,16 +109,28 @@ enum FlintModelProvider {
     static func resolve(
         reasoning: FlintReasoning,
         instructions: String,
-        tools: [any Tool] = []
+        tools: [any Tool] = [],
+        allowPrivateCloudCompute: Bool = true
     ) -> Result<FlintResolvedSession, FlintGenerationAvailability> {
         // 1. Private Cloud Compute (primary).
-        if let pcc = privateCloudComputeModel(), pccIsAvailable(pcc) {
-            let session = LanguageModelSession(model: pcc, tools: tools, instructions: instructions)
-            return .success(FlintResolvedSession(
-                session: session,
-                tier: .privateCloudCompute,
-                availability: .privateCloudCompute
-            ))
+        var skipReason: FlintPCCReadiness?
+        if allowPrivateCloudCompute {
+            if isPrivateCloudComputeDisabled() {
+                skipReason = .disabled
+            } else {
+                let pcc = PrivateCloudComputeLanguageModel()
+                let readiness = pccSnapshot(for: pcc).readiness
+                if readiness.isReady {
+                    let session = LanguageModelSession(model: pcc, tools: tools, instructions: instructions)
+                    return .success(FlintResolvedSession(
+                        session: session,
+                        tier: .privateCloudCompute,
+                        availability: .privateCloudCompute,
+                        pccSkipReason: nil
+                    ))
+                }
+                skipReason = readiness
+            }
         }
 
         // 2. On-device system model (fallback).
@@ -73,7 +141,8 @@ enum FlintModelProvider {
             return .success(FlintResolvedSession(
                 session: session,
                 tier: .onDevice,
-                availability: .onDevice
+                availability: .onDevice,
+                pccSkipReason: skipReason
             ))
         case .unavailable(let reason):
             return .failure(availability(from: reason))
@@ -82,8 +151,11 @@ enum FlintModelProvider {
         }
     }
 
-    static func generationOptions(for reasoning: FlintReasoning) -> GenerationOptions {
-        GenerationOptions(maximumResponseTokens: reasoning.maximumResponseTokens)
+    static func generationOptions(
+        for reasoning: FlintReasoning,
+        maximumResponseTokens: Int? = nil
+    ) -> GenerationOptions {
+        GenerationOptions(maximumResponseTokens: maximumResponseTokens ?? reasoning.maximumResponseTokens)
     }
 
     static func contextOptions(for reasoning: FlintReasoning) -> ContextOptions {
@@ -92,22 +164,35 @@ enum FlintModelProvider {
 
     // MARK: - Private Cloud Compute resolution
     //
-    // PCC is exposed as a `SystemLanguageModel.UseCase`-style provider on iOS 27.
-    // Availability is a *runtime* check (not OS-version gated): it is false in the
-    // EU, on ineligible devices, when Apple Intelligence is off, or offline. The
-    // call is isolated here so the rest of Flint is provider-agnostic.
+    // Availability is a *runtime* check (not OS-version gated; the deployment
+    // target is iOS 27): it is false on ineligible devices, when Apple
+    // Intelligence is off, for unsupported locales, and once the user's daily
+    // quota is used. The call is isolated here so the rest of Flint is
+    // provider-agnostic.
 
-    private static func privateCloudComputeModel() -> PrivateCloudComputeLanguageModel? {
-        // Constructing PCC without `com.apple.developer.private-cloud-compute`
-        // is a framework-level fatal error, not a throwable availability state.
-        // Spark does not currently ship that entitlement, so skip PCC and let
-        // the existing on-device/static fallback path handle generation.
-        nil
+    static let pccKillSwitchKey = "spark.flint.pcc.disabled"
+
+    static func isPrivateCloudComputeDisabled(defaults: UserDefaults = .sparkAppGroup) -> Bool {
+        defaults.bool(forKey: pccKillSwitchKey)
     }
 
-    private static func pccIsAvailable(_ model: PrivateCloudComputeLanguageModel) -> Bool {
-        if case .available = model.availability { return true }
-        return false
+    private static func pccSnapshot(for model: PrivateCloudComputeLanguageModel) -> FlintPCCSnapshot {
+        let availability: FlintPCCSnapshot.Availability
+        if case .available = model.availability {
+            availability = .available
+        } else if case .unavailable(.deviceNotEligible) = model.availability {
+            availability = .deviceNotEligible
+        } else if case .unavailable(.systemNotReady) = model.availability {
+            availability = .systemNotReady
+        } else {
+            availability = .other
+        }
+        return FlintPCCSnapshot(
+            isDisabledByKillSwitch: false,
+            availability: availability,
+            supportsCurrentLocale: true, // supportsLocale(_:) is missing from the shipping FoundationModels runtime (dyld crash); unsupported locales fall back via runtime errors
+            isQuotaLimitReached: model.quotaUsage.isLimitReached
+        )
     }
 
     private static func availability(

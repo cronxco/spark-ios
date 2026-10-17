@@ -62,6 +62,41 @@ public struct IntentService {
             .map { $0 }
     }
 
+    /// Events matching `query` by meaning, via the backend's semantic search,
+    /// mapped back onto the cached rows. Empty when offline, when the request
+    /// fails, or when none of the hits are cached; callers then fall back to
+    /// the literal match.
+    public static func semanticEventEntities(query: String, limit: Int = 25) async -> [EventEntity] {
+        let service = IntentService()
+        guard let response = try? await service.apiClient.request(
+            SearchEndpoint.query(text: query, mode: .semantic)
+        ) else {
+            return []
+        }
+        let ids = response.results.compactMap { hit -> String? in
+            if case let .event(event) = hit { return event.id }
+            return nil
+        }
+        guard !ids.isEmpty else { return [] }
+        return Array(eventEntities(matching: ids).prefix(limit))
+    }
+
+    /// Blocks matching `query` by meaning; see `semanticEventEntities`.
+    public static func semanticBlockEntities(query: String, limit: Int = 25) async -> [BlockEntity] {
+        let service = IntentService()
+        guard let response = try? await service.apiClient.request(
+            SearchEndpoint.query(text: query, mode: .semantic)
+        ) else {
+            return []
+        }
+        let ids = response.results.compactMap { hit -> String? in
+            if case let .block(block) = hit { return block.id }
+            return nil
+        }
+        guard !ids.isEmpty else { return [] }
+        return Array(blockEntities(matching: ids).prefix(limit))
+    }
+
     public static func blockEntities(matching ids: [String]? = nil, limit: Int = 50) -> [BlockEntity] {
         guard let context = makeContext() else { return [] }
         var descriptor = FetchDescriptor<CachedBlock>(sortBy: [SortDescriptor(\.time, order: .reverse)])
@@ -192,6 +227,27 @@ public struct TodayIntentSnapshot: Sendable {
         guard let mins = sleepDurationMinutes else { return "unknown duration" }
         let h = mins / 60; let m = mins % 60
         return m == 0 ? "\(h) hours" : "\(h) hours and \(m) minutes"
+    }
+
+    /// Everything the cached day has to say, as a short spoken answer to
+    /// "how's my day?". Parts with no data are left out.
+    public var spokenSummary: String {
+        var parts: [String] = []
+        if let score = sleepScore {
+            parts.append("You slept \(sleepDurationDisplay) with a sleep score of \(score).")
+        } else if sleepDurationMinutes != nil {
+            parts.append("You slept \(sleepDurationDisplay).")
+        }
+        if let steps {
+            parts.append("You've taken \(steps) steps.")
+        }
+        if spentToday != nil {
+            parts.append("You've spent \(spentDisplay).")
+        }
+        if anomalyCount > 0 {
+            parts.append("\(anomalyCount) unusual \(anomalyCount == 1 ? "signal" : "signals") to look at.")
+        }
+        return parts.isEmpty ? "Nothing to report for today yet." : parts.joined(separator: " ")
     }
 
     public var spentDisplay: String {

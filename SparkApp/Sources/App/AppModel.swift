@@ -44,6 +44,7 @@ final class AppModel {
         do {
             container = try SparkDataStore.makeContainer()
         } catch {
+            SparkObservability.captureHandled(error)
             container = (try? SparkDataStore.makeInMemoryContainer()) ?? {
                 fatalError("Unable to bootstrap any SwiftData container: \(error)")
             }()
@@ -77,6 +78,20 @@ final class AppModel {
     private var deviceRegistrationTokenInFlight: String?
     private let purgeDataStore: @MainActor (ModelContainer) throws -> Void
     private let purgeSpotlight: @MainActor () async throws -> Void
+
+    /// Re-indexes Spotlight at most once an hour while the app is in use, so
+    /// Siri sees today's data without waiting for the nightly background task.
+    func indexSpotlightIfDue() async {
+        let key = "spark.spotlight.lastForegroundIndexAt"
+        let defaults = UserDefaults.sparkAppGroup
+        if let last = defaults.object(forKey: key) as? Date, Date.now.timeIntervalSince(last) < 3600 {
+            return
+        }
+        defaults.set(Date.now, forKey: key)
+        try? await Task.sleep(for: .seconds(5))
+        await EntityCacheRefresher.refresh(using: apiClient, container: container)
+        await SpotlightIndexer.indexBatch(container: container)
+    }
 
     init(
         container: ModelContainer,
