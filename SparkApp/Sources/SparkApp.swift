@@ -49,6 +49,7 @@ struct SparkApp: App {
                     // app was not running (decision N-8).
                     SparkAppDelegate.flushReceipts()
                     await model.reverbConnect()
+                    await model.indexSpotlightIfDue()
                 case .background, .inactive:
                     await model.reverbDisconnect()
                 @unknown default:
