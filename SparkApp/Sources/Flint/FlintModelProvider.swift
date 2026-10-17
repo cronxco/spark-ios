@@ -147,8 +147,11 @@ enum FlintModelProvider {
         }
     }
 
-    static func generationOptions(for reasoning: FlintReasoning) -> GenerationOptions {
-        GenerationOptions(maximumResponseTokens: reasoning.maximumResponseTokens)
+    static func generationOptions(
+        for reasoning: FlintReasoning,
+        maximumResponseTokens: Int? = nil
+    ) -> GenerationOptions {
+        GenerationOptions(maximumResponseTokens: maximumResponseTokens ?? reasoning.maximumResponseTokens)
     }
 
     static func contextOptions(for reasoning: FlintReasoning) -> ContextOptions {

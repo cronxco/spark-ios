@@ -127,7 +127,7 @@ enum FlintGenerationService {
         from facts: FlintBriefingFacts,
         context: FlintBriefingFacts.SummaryLineContext
     ) async throws -> FlintGenerationResult {
-        // No model, no line: the Day greeting never shows a raw fact line.
+        // No model, no line: the Day summary never shows a raw fact line.
         let fallback = FlintDailyNote(
             title: "",
             summary: "",
@@ -137,24 +137,26 @@ enum FlintGenerationService {
         )
 
         let instructions = """
-        You write the subtitle under the user's Day page heading.
+        You write the short summary at the top of the user's Day page.
         Use only the supplied briefing facts.
         The app is named Spark, but Spark is not the user and must not be described as doing the user's actions.
         Do not write phrases like "Spark slept", "Spark walked", "Spark spent", or "Spark had".
         Write about the user directly ("You slept...") or use neutral phrasing ("Sleep held steady...").
-        Help the user understand the main pattern at a glance.
-        Choose the single most useful pattern for the user to notice.
-        Prefer anomalies or unusual changes, then activity, sleep, or spend highlights, then a neutral recap.
-        Do not invent missing data.
+        Write two or three short sentences, never more than 320 characters in total.
+        First sentence: the main pattern worth noticing.
+        Second sentence: the most notable change, anomaly or heads-up, with the actual numbers or times from the facts.
+        Optional third sentence: one thing worth watching, only if the facts support it.
+        Prefer anomalies and unusual changes, then activity, sleep or spend, then a neutral recap.
+        Be specific: name what happened and when. Never write "an unusual reading" without saying which reading and how it differed.
+        Do not invent missing data. Do not repeat the same fact twice.
         For today, describe the day so far.
         For past dates, describe the day in review.
         Do not say "today" for past dates.
         Avoid raw metric names, IDs, source names, and jargon.
         Avoid medical or financial advice.
-        Avoid percentage changes; they are not meaningful in this header.
-        Write one warm, plain-English sentence.
-        Keep it ideally 80-140 characters and never more than 180 characters.
-        If nothing in the facts is worth a sentence, return empty text rather than a generic line.
+        Avoid percentage changes.
+        No greetings, no filler, no exclamation marks.
+        If nothing in the facts is worth saying, return empty text rather than a generic line.
         """
 
         return try await generate(
@@ -166,7 +168,7 @@ enum FlintGenerationService {
         ) { model in
             let response = try await model.session.respond(
                 generating: GeneratedTodaySummaryLine.self,
-                options: FlintModelProvider.generationOptions(for: .light),
+                options: FlintModelProvider.generationOptions(for: .light, maximumResponseTokens: 300),
                 contextOptions: FlintModelProvider.contextOptions(for: .light),
                 metadata: [
                     "spark.generation.path": "summary_line",
@@ -174,7 +176,7 @@ enum FlintGenerationService {
                 ]
             ) {
                 """
-                Write one sentence for the top of the day page.
+                Write the summary for the top of the day page.
                 Tone: calm, specific, concise, and human.
                 Context: \(context == .daySoFar ? "today's day so far" : "the day in review").
 
