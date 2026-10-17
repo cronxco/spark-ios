@@ -23,7 +23,9 @@ public struct EventEntityQuery: EntityQuery, EntityStringQuery {
     }
 
     public func entities(matching string: String) async throws -> [EventEntity] {
-        await MainActor.run { IntentService.eventEntities(query: string) }
+        let semantic = await IntentService.semanticEventEntities(query: string)
+        if !semantic.isEmpty { return semantic }
+        return await MainActor.run { IntentService.eventEntities(query: string) }
     }
 }
 
@@ -39,6 +41,8 @@ public struct BlockEntityQuery: EntityQuery, EntityStringQuery {
     }
 
     public func entities(matching string: String) async throws -> [BlockEntity] {
+        let semantic = await IntentService.semanticBlockEntities(query: string)
+        if !semantic.isEmpty { return semantic }
         let needle = string.lowercased()
         return await MainActor.run {
             IntentService.blockEntities(limit: 500).filter {

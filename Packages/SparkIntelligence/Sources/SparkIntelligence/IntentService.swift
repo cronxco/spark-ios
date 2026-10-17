@@ -62,6 +62,41 @@ public struct IntentService {
             .map { $0 }
     }
 
+    /// Events matching `query` by meaning, via the backend's semantic search,
+    /// mapped back onto the cached rows. Empty when offline, when the request
+    /// fails, or when none of the hits are cached; callers then fall back to
+    /// the literal match.
+    public static func semanticEventEntities(query: String, limit: Int = 25) async -> [EventEntity] {
+        let service = IntentService()
+        guard let response = try? await service.apiClient.request(
+            SearchEndpoint.query(text: query, mode: .semantic)
+        ) else {
+            return []
+        }
+        let ids = response.results.compactMap { hit -> String? in
+            if case let .event(event) = hit { return event.id }
+            return nil
+        }
+        guard !ids.isEmpty else { return [] }
+        return Array(eventEntities(matching: ids).prefix(limit))
+    }
+
+    /// Blocks matching `query` by meaning; see `semanticEventEntities`.
+    public static func semanticBlockEntities(query: String, limit: Int = 25) async -> [BlockEntity] {
+        let service = IntentService()
+        guard let response = try? await service.apiClient.request(
+            SearchEndpoint.query(text: query, mode: .semantic)
+        ) else {
+            return []
+        }
+        let ids = response.results.compactMap { hit -> String? in
+            if case let .block(block) = hit { return block.id }
+            return nil
+        }
+        guard !ids.isEmpty else { return [] }
+        return Array(blockEntities(matching: ids).prefix(limit))
+    }
+
     public static func blockEntities(matching ids: [String]? = nil, limit: Int = 50) -> [BlockEntity] {
         guard let context = makeContext() else { return [] }
         var descriptor = FetchDescriptor<CachedBlock>(sortBy: [SortDescriptor(\.time, order: .reverse)])
