@@ -33,13 +33,13 @@ public struct SparkShortcuts: AppShortcutsProvider {
             systemImageName: "creditcard.fill"
         )
         AppShortcut(
-            intent: GetReadinessIntent(),
+            intent: GetDaySummaryIntent(),
             phrases: [
-                "What's my readiness score in \(.applicationName)",
-                "Am I ready for today in \(.applicationName)",
+                "How's my day in \(.applicationName)",
+                "Summarise my day in \(.applicationName)",
             ],
-            shortTitle: "Readiness",
-            systemImageName: "heart.fill"
+            shortTitle: "My Day",
+            systemImageName: "text.bubble.fill"
         )
         AppShortcut(
             intent: LogCheckInIntent(),

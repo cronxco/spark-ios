@@ -229,6 +229,27 @@ public struct TodayIntentSnapshot: Sendable {
         return m == 0 ? "\(h) hours" : "\(h) hours and \(m) minutes"
     }
 
+    /// Everything the cached day has to say, as a short spoken answer to
+    /// "how's my day?". Parts with no data are left out.
+    public var spokenSummary: String {
+        var parts: [String] = []
+        if let score = sleepScore {
+            parts.append("You slept \(sleepDurationDisplay) with a sleep score of \(score).")
+        } else if sleepDurationMinutes != nil {
+            parts.append("You slept \(sleepDurationDisplay).")
+        }
+        if let steps {
+            parts.append("You've taken \(steps) steps.")
+        }
+        if spentToday != nil {
+            parts.append("You've spent \(spentDisplay).")
+        }
+        if anomalyCount > 0 {
+            parts.append("\(anomalyCount) unusual \(anomalyCount == 1 ? "signal" : "signals") to look at.")
+        }
+        return parts.isEmpty ? "Nothing to report for today yet." : parts.joined(separator: " ")
+    }
+
     public var spentDisplay: String {
         guard let amount = spentToday else { return "nothing" }
         let f = NumberFormatter()
