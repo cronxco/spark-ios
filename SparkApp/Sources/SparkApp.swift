@@ -1,3 +1,4 @@
+import AppIntents
 import CoreSpotlight
 import OSLog
 import Sentry
@@ -48,6 +49,7 @@ struct SparkApp: App {
                     // Sends receipts the service extension queued while the
                     // app was not running (decision N-8).
                     SparkAppDelegate.flushReceipts()
+                    SparkShortcuts.updateAppShortcutParameters()
                     await model.reverbConnect()
                     await model.indexSpotlightIfDue()
                 case .background, .inactive:
