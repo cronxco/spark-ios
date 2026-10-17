@@ -183,7 +183,7 @@ enum FlintModelProvider {
         return FlintPCCSnapshot(
             isDisabledByKillSwitch: false,
             availability: availability,
-            supportsCurrentLocale: (try? model.supportsLocale(.current)) ?? true,
+            supportsCurrentLocale: model.supportsLocale(.current),
             isQuotaLimitReached: model.quotaUsage.isLimitReached
         )
     }
