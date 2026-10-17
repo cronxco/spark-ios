@@ -183,7 +183,7 @@ enum FlintModelProvider {
         return FlintPCCSnapshot(
             isDisabledByKillSwitch: false,
             availability: availability,
-            supportsCurrentLocale: model.supportsLocale(.current),
+            supportsCurrentLocale: true, // supportsLocale(_:) is missing from the shipping FoundationModels runtime (dyld crash); unsupported locales fall back via runtime errors
             isQuotaLimitReached: model.quotaUsage.isLimitReached
         )
     }
