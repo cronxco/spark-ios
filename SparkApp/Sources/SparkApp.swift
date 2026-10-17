@@ -1,4 +1,5 @@
 import CoreSpotlight
+import OSLog
 import Sentry
 import SparkHealth
 import SparkIntelligence
@@ -403,6 +404,11 @@ enum SparkObservability {
         }
         crumb.setSparkData(data)
         SentrySDK.addBreadcrumb(crumb)
+        #if DEBUG
+        Logger(subsystem: "co.cronx.sparkapp", category: "FlintGeneration").info(
+            "flint.generation path=\(path, privacy: .public) tier=\(result.tier.rawValue, privacy: .public) fallback=\(result.pccFallbackReason ?? "none", privacy: .public)"
+        )
+        #endif
     }
 
     static func captureSpotlightDiagnostics(_ snapshot: SpotlightDiagnosticsSnapshot, source: String) {
