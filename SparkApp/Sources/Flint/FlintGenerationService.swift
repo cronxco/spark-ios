@@ -121,7 +121,7 @@ enum FlintGenerationService {
         }
     }
 
-    // MARK: - Today summary line — light reasoning, no tools
+    // MARK: - Today summary — moderate reasoning, day and baseline tools
 
     static func generateTodaySummaryLine(
         from facts: FlintBriefingFacts,
@@ -138,38 +138,33 @@ enum FlintGenerationService {
 
         let instructions = """
         You write the short summary at the top of the user's Day page.
-        Use only the supplied briefing facts.
+        Use the supplied briefing facts. You may call getDaySummary for the previous day to compare, and getMetricBaseline for a normal range.
         The app is named Spark, but Spark is not the user and must not be described as doing the user's actions.
-        Do not write phrases like "Spark slept", "Spark walked", "Spark spent", or "Spark had".
         Write about the user directly ("You slept...") or use neutral phrasing ("Sleep held steady...").
         Write two or three short sentences, never more than 320 characters in total.
-        First sentence: the main pattern worth noticing.
-        Second sentence: the most notable change, anomaly or heads-up, with the actual numbers or times from the facts.
-        Optional third sentence: one thing worth watching, only if the facts support it.
-        Prefer anomalies and unusual changes, then activity, sleep or spend, then a neutral recap.
-        Be specific: name what happened and when. Never write "an unusual reading" without saying which reading and how it differed.
-        Do not invent missing data. Do not repeat the same fact twice.
-        For today, describe the day so far.
-        For past dates, describe the day in review.
-        Do not say "today" for past dates.
-        Avoid raw metric names, IDs, source names, and jargon.
-        Avoid medical or financial advice.
-        Avoid percentage changes.
-        No greetings, no filler, no exclamation marks.
-        If nothing in the facts is worth saying, return empty text rather than a generic line.
+        Lead with the single biggest change from the previous day or from normal. Give both values and the gap, for example "47 minutes less than the night before" or "from 96 to 79".
+        Then say what it adds up to in plain terms, for example "a less settled night despite plenty of sleep" or "recovery looks steady".
+        Mention anything unusual plainly and by when it happened ("heart rate spiked around 1am"). Never write "anomaly", "streak", "resilience level" or "reading".
+        Say durations naturally ("7 hours 49 minutes") and times on the 24-hour clock.
+        Skip money, media and knowledge unless something there is clearly notable.
+        Only state numbers that appear in the facts or tool results. Never invent data and never repeat a fact.
+        Do not give medical or financial advice. No greetings, no filler, no exclamation marks.
+        For today, describe the day so far. For past dates, describe the day in review and do not say "today".
+        If nothing is worth saying, return empty text.
+        Style example, not to be reused for its facts: "You slept 7 hours 49 minutes, 47 minutes less than the night before, and sleep score fell from 96 to 79. Readiness held at 82, but efficiency was 73%, so the night was less settled than the hours suggest."
         """
 
         return try await generate(
-            reasoning: .light,
+            reasoning: .moderate,
             instructions: instructions,
-            tools: [],
+            tools: FlintTools.summaryTools,
             fallbackNote: fallback,
             path: "summary_line"
         ) { model in
             let response = try await model.session.respond(
                 generating: GeneratedTodaySummaryLine.self,
-                options: FlintModelProvider.generationOptions(for: .light, maximumResponseTokens: 300),
-                contextOptions: FlintModelProvider.contextOptions(for: .light),
+                options: FlintModelProvider.generationOptions(for: .moderate),
+                contextOptions: FlintModelProvider.contextOptions(for: .moderate),
                 metadata: [
                     "spark.generation.path": "summary_line",
                     "spark.generation.tier": model.tier.rawValue,
@@ -195,7 +190,7 @@ enum FlintGenerationService {
                 note: note,
                 tier: model.tier,
                 availability: model.availability,
-                reasoning: .light,
+                reasoning: .moderate,
                 usage: response.usage
             )
         }

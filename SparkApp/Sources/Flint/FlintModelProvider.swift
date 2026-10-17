@@ -16,8 +16,9 @@ import SparkKit
 // entitlement (SparkApp.entitlements). The App Group default
 // `spark.flint.pcc.disabled` is a kill switch that forces on-device only.
 //
-// Reasoning is tiered: `.light` for the quick summary line, `.deep` for the
-// digest (which also gets the live-data tools attached).
+// Reasoning is tiered: `.moderate` for the Day summary (with the day and
+// baseline tools, so it can compare against yesterday), `.deep` for the digest
+// (which gets every live-data tool).
 
 /// Which model tier actually produced a result — surfaced in telemetry.
 enum FlintGenerationTier: String, Sendable, Equatable {
@@ -29,11 +30,13 @@ enum FlintGenerationTier: String, Sendable, Equatable {
 /// Reasoning intensity requested for a generation.
 enum FlintReasoning: Sendable {
     case light
+    case moderate
     case deep
 
     var maximumResponseTokens: Int {
         switch self {
         case .light: 80
+        case .moderate: 500
         case .deep: 500
         }
     }
@@ -41,6 +44,7 @@ enum FlintReasoning: Sendable {
     var contextReasoningLevel: ContextOptions.ReasoningLevel {
         switch self {
         case .light: .light
+        case .moderate: .moderate
         case .deep: .deep
         }
     }

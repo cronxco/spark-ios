@@ -10,8 +10,8 @@ import SparkIntelligence
 // live API (via `IntentService`'s keychain-wired `APIClient`) and fall back to
 // cached SwiftData reads, so they degrade gracefully offline.
 //
-// These are attached to the "deep" reasoning profile only; the quick summary
-// line uses a lean profile with no tools to conserve PCC budget and latency.
+// The digest gets all of them; the Day summary gets only the day and baseline
+// tools, to compare against yesterday without spending much PCC budget.
 
 /// Returns the compact day summary for a given date (defaults to today).
 struct GetDaySummaryTool: Tool {
@@ -195,6 +195,14 @@ struct GetMetricBaselineTool: Tool {
 }
 
 enum FlintTools {
+    /// Tools for the Day summary: yesterday's numbers and normal ranges.
+    static var summaryTools: [any Tool] {
+        [
+            GetDaySummaryTool(),
+            GetMetricBaselineTool(),
+        ]
+    }
+
     /// Tools available to the deep/digest reasoning profile.
     static var digestTools: [any Tool] {
         [

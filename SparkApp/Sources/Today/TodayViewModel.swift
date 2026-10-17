@@ -51,7 +51,7 @@ final class TodayViewModel {
     private let defaults: UserDefaults
     private var summaryLineTask: Task<Void, Never>?
 
-    private static let summaryLinePromptVersion = "today-hero-summary-v4"
+    private static let summaryLinePromptVersion = "today-hero-summary-v5"
     private static let summaryLineCachePrefix = "spark.today.heroSummary"
 
     init(
