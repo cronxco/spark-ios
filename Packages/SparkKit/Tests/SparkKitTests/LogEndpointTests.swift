@@ -52,6 +52,17 @@ struct LogEndpointTests {
         #expect(object["tvdb_id"] as? Int == 371_572)
     }
 
+    @Test("people are sent under the backend's with key")
+    func submitEncodesPeople() throws {
+        let endpoint = LogEndpoint.submit(LogRequest(kind: .wine, idempotencyKey: "key-3", title: "Rioja", people: ["Dan", "Sam"]))
+
+        let body = try #require(endpoint.body)
+        let object = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+
+        #expect(object["with"] as? [String] == ["Dan", "Sam"])
+        #expect(object["people"] == nil)
+    }
+
     @Test("board game kind uses the backend spelling")
     func boardGameRawValue() {
         #expect(LogKind.boardGame.rawValue == "board_game")
@@ -65,7 +76,8 @@ struct LogEndpointTests {
           "events": [
             {"id": "e1", "action": "watched_episode", "title": "The Diplomat S03E01", "time": "2026-10-19T19:30:00+00:00"}
           ],
-          "missing_episodes": [9]
+          "missing_episodes": [9],
+          "people": [{"id": "p1", "name": "Dan", "created": false}, {"id": "p2", "name": "Sam", "created": true}]
         }
         """
 
@@ -73,7 +85,8 @@ struct LogEndpointTests {
 
         #expect(response == .logged(
             events: [LoggedEvent(id: "e1", action: "watched_episode", title: "The Diplomat S03E01", time: "2026-10-19T19:30:00+00:00")],
-            missingEpisodes: [9]
+            missingEpisodes: [9],
+            people: [LoggedPerson(id: "p1", name: "Dan"), LoggedPerson(id: "p2", name: "Sam", created: true)]
         ))
     }
 
@@ -83,7 +96,7 @@ struct LogEndpointTests {
 
         let response = try JSONDecoder().decode(LogResponse.self, from: Data(json.utf8))
 
-        #expect(response == .logged(events: [LoggedEvent(id: "e1", action: "drank_wine")], missingEpisodes: []))
+        #expect(response == .logged(events: [LoggedEvent(id: "e1", action: "drank_wine")], missingEpisodes: [], people: []))
     }
 
     @Test("decodes a season question with the suggested season")

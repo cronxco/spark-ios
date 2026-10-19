@@ -14,6 +14,8 @@ enum LogExtractionService {
     Copy only what the user said. Never invent a season, an episode, a quantity or a time.
     The title is the name of the thing, spelled as the user wrote it, without quantity, serving, verbs or episode numbers.
     "Half a bottle" is quantity 0.5 of a bottle. "A can of" is one beer served as a can. "A pint" is one beer, draft, 568 millilitres.
+    Put the words for when it happened in when, as written: "yesterday at 8pm", "last night", "this morning". Leave when empty for now.
+    "With Dan and Sam" puts Dan and Sam in people. Leave people empty if nobody is named.
     "Episodes 1 and 2 of The Diplomat" is tv, title The Diplomat, episodes [1, 2], no season.
     """
 

@@ -8,11 +8,13 @@ final class LogViewModel {
     struct Outcome: Equatable {
         var events: [LoggedEvent]
         var missingEpisodes: [Int]
+        var people: [LoggedPerson] = []
     }
 
     enum Phase: Equatable {
         case idle
         case working(String)
+        case preview
         case question(LogClarification)
         case logged(Outcome)
         case undone
@@ -24,6 +26,9 @@ final class LogViewModel {
     var text = ""
     private(set) var phase: Phase = .idle
     private(set) var undoError: String?
+
+    /// What was understood, shown for checking and fixing before anything is logged.
+    var draft = LogRequest(kind: .wine, title: "")
 
     /// The request waiting on an answer. Answers amend it and resend under the same idempotency key.
     private var pending: LogRequest?
@@ -42,6 +47,8 @@ final class LogViewModel {
     }
 
     var canSubmit: Bool { !trimmedText.isEmpty && !isWorking }
+
+    var canConfirm: Bool { !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     func updateText(_ value: String) {
         text = String(value.prefix(Self.characterLimit))
@@ -73,7 +80,37 @@ final class LogViewModel {
             return
         }
 
+        draft = request
+        phase = .preview
+    }
+
+    /// Logs what the preview shows, with any fixes made to it.
+    func confirm(using apiClient: APIClient) async {
+        guard case .preview = phase, canConfirm else { return }
+
+        var request = draft
+        request.title = request.title.trimmingCharacters(in: .whitespacesAndNewlines)
         await send(request, using: apiClient)
+    }
+
+    /// Back to the text, keeping what was typed.
+    func edit() {
+        guard case .preview = phase else { return }
+        phase = .idle
+    }
+
+    func removePerson(_ name: String) {
+        draft.people = draft.people?.filter { $0 != name }.nilIfEmpty
+    }
+
+    func addPerson(_ name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        var names = draft.people ?? []
+        guard !trimmed.isEmpty, trimmed.count <= 100, names.count < 10,
+              !names.contains(where: { $0.caseInsensitiveCompare(trimmed) == .orderedSame })
+        else { return }
+        names.append(trimmed)
+        draft.people = names
     }
 
     /// Answers the question on screen: the chosen series or season is added to the waiting request.
@@ -128,9 +165,9 @@ final class LogViewModel {
 
         do {
             switch try await apiClient.request(LogEndpoint.submit(request)) {
-            case .logged(let events, let missingEpisodes):
+            case .logged(let events, let missingEpisodes, let people):
                 pending = nil
-                phase = .logged(Outcome(events: events, missingEpisodes: missingEpisodes))
+                phase = .logged(Outcome(events: events, missingEpisodes: missingEpisodes, people: people))
             case .needsClarification(let question):
                 phase = .question(question)
             }
@@ -165,4 +202,8 @@ final class LogViewModel {
         else { return nil }
         return message
     }
+}
+
+private extension Array {
+    var nilIfEmpty: [Element]? { isEmpty ? nil : self }
 }

@@ -2,7 +2,8 @@ import SparkKit
 import SparkUI
 import SwiftUI
 
-/// Type a line, get it logged. The model reads it on the phone, the backend writes and enriches it,
+/// Type a line, check what was understood, log it. The model reads it on the phone and the sheet shows
+/// the type, name, time, amount and people it found. Fix anything wrong, then the backend writes and enriches it,
 /// and a TV entry that needs a series or season asks first.
 struct LogSheetView: View {
     let apiClient: APIClient
@@ -29,6 +30,7 @@ struct LogSheetView: View {
                     .accessibilityLabel("What did you have?")
 
                 content
+                    .animation(.spring(duration: 0.45, bounce: 0.2), value: model.phase)
 
                 Spacer(minLength: 0)
             }
@@ -40,9 +42,9 @@ struct LogSheetView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(isFinished ? "Done" : "Cancel") { dismiss() }
                 }
-                if !isFinished {
+                if !isFinished, !isPreviewing {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Log") { submit() }
+                        Button("Read") { submit() }
                             .disabled(!model.canSubmit || !isEditable)
                     }
                 }
@@ -59,12 +61,28 @@ struct LogSheetView: View {
             EmptyView()
         case .working(let label):
             HStack(spacing: SparkSpacing.sm) {
-                ProgressView()
+                Image(systemName: "sparkles")
+                    .symbolEffect(.variableColor.iterative.reversing, isActive: true)
+                    .foregroundStyle(Color.sparkAccent)
                 Text(label)
                     .font(SparkTypography.bodySmall)
                     .foregroundStyle(.secondary)
             }
+            .transition(.opacity)
             .accessibilityElement(children: .combine)
+        case .preview:
+            LogPreviewCard(
+                draft: Bindable(model).draft,
+                canLog: model.canConfirm,
+                onAddPerson: { model.addPerson($0) },
+                onRemovePerson: { model.removePerson($0) },
+                onEdit: {
+                    model.edit()
+                    isFocused = true
+                },
+                onLog: { Task { await model.confirm(using: apiClient) } }
+            )
+            .transition(.opacity.combined(with: .move(edge: .bottom)))
         case .question(let question):
             LogQuestionCard(question: question) { option in
                 Task { await model.answer(option, using: apiClient) }
@@ -100,6 +118,11 @@ struct LogSheetView: View {
         }
     }
 
+    private var isPreviewing: Bool {
+        if case .preview = model.phase { return true }
+        return false
+    }
+
     private var isFinished: Bool {
         switch model.phase {
         case .logged, .undone: true
@@ -120,13 +143,29 @@ private struct LogOutcomeCard: View {
     let undoError: String?
     let onUndo: () -> Void
 
+    @State private var appeared = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.md) {
             ForEach(outcome.events) { event in
-                Label(event.title ?? "Logged", systemImage: "checkmark.circle.fill")
-                    .font(SparkTypography.bodyStrong)
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(Color.sparkAccent)
+                Label {
+                    Text(event.title ?? "Logged")
+                } icon: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .symbolEffect(.bounce, value: appeared)
+                }
+                .font(SparkTypography.bodyStrong)
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(Color.sparkAccent)
+            }
+
+            if !outcome.people.isEmpty {
+                Label(
+                    "With " + outcome.people.map { $0.created ? "\($0.name) (new)" : $0.name }.joined(separator: ", "),
+                    systemImage: "person.2"
+                )
+                .font(SparkTypography.bodySmall)
+                .foregroundStyle(.secondary)
             }
 
             if !outcome.missingEpisodes.isEmpty {
@@ -147,6 +186,8 @@ private struct LogOutcomeCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(SparkSpacing.md)
         .sparkGlass(.roundedRect(SparkRadii.md))
+        .sensoryFeedback(.success, trigger: appeared)
+        .onAppear { appeared = true }
     }
 }
 

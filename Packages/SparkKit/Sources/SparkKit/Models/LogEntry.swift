@@ -37,6 +37,8 @@ public struct LogRequest: Codable, Sendable, Hashable {
     public var season: Int?
     public var episodes: [Int]?
     public var tvdbID: Int?
+    /// Names of the people it was shared with. The backend links each one to the events.
+    public var people: [String]?
 
     public init(
         kind: LogKind,
@@ -51,7 +53,8 @@ public struct LogRequest: Codable, Sendable, Hashable {
         notes: String? = nil,
         season: Int? = nil,
         episodes: [Int]? = nil,
-        tvdbID: Int? = nil
+        tvdbID: Int? = nil,
+        people: [String]? = nil
     ) {
         self.kind = kind
         self.idempotencyKey = idempotencyKey
@@ -66,6 +69,7 @@ public struct LogRequest: Codable, Sendable, Hashable {
         self.season = season
         self.episodes = episodes
         self.tvdbID = tvdbID
+        self.people = people
     }
 
     enum CodingKeys: String, CodingKey {
@@ -82,6 +86,7 @@ public struct LogRequest: Codable, Sendable, Hashable {
         case season
         case episodes
         case tvdbID = "tvdb_id"
+        case people = "with"
     }
 }
 
@@ -97,6 +102,19 @@ public struct LoggedEvent: Codable, Sendable, Hashable, Identifiable {
         self.action = action
         self.title = title
         self.time = time
+    }
+}
+
+/// A person tagged on a logged event, matched to someone known or created on the spot.
+public struct LoggedPerson: Codable, Sendable, Hashable, Identifiable {
+    public let id: String
+    public let name: String
+    public let created: Bool
+
+    public init(id: String, name: String, created: Bool = false) {
+        self.id = id
+        self.name = name
+        self.created = created
     }
 }
 
@@ -140,13 +158,14 @@ public struct LogClarification: Codable, Sendable, Hashable {
 
 /// The result of `POST /log`: the events written, or a question to answer first.
 public enum LogResponse: Decodable, Sendable, Hashable {
-    case logged(events: [LoggedEvent], missingEpisodes: [Int])
+    case logged(events: [LoggedEvent], missingEpisodes: [Int], people: [LoggedPerson])
     case needsClarification(LogClarification)
 
     private enum CodingKeys: String, CodingKey {
         case status
         case events
         case missingEpisodes = "missing_episodes"
+        case people
     }
 
     public init(from decoder: Decoder) throws {
@@ -157,7 +176,8 @@ public enum LogResponse: Decodable, Sendable, Hashable {
         case "logged":
             self = .logged(
                 events: try container.decodeIfPresent([LoggedEvent].self, forKey: .events) ?? [],
-                missingEpisodes: try container.decodeIfPresent([Int].self, forKey: .missingEpisodes) ?? []
+                missingEpisodes: try container.decodeIfPresent([Int].self, forKey: .missingEpisodes) ?? [],
+                people: try container.decodeIfPresent([LoggedPerson].self, forKey: .people) ?? []
             )
         case "needs_clarification":
             self = .needsClarification(try LogClarification(from: decoder))

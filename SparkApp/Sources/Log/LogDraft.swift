@@ -32,6 +32,12 @@ struct LogDraft {
 
     @Guide(description: "How many minutes before now it happened. Empty for now, just now or unsaid.")
     var minutesAgo: Int?
+
+    @Guide(description: "The words the user used for when it happened, copied as written: yesterday at 8pm, last night, this morning, Saturday lunch. Empty if unsaid.")
+    var when: String?
+
+    @Guide(description: "Names of the people it was shared with, as written. Dan and Sam gives [Dan, Sam]. Empty if unsaid.")
+    var people: [String]?
 }
 
 /// Why a draft cannot be logged yet.
@@ -59,14 +65,34 @@ extension LogDraft {
             kind: logKind,
             idempotencyKey: idempotencyKey,
             title: name,
-            occurredAt: minutesAgo.flatMap { $0 > 0 ? now.addingTimeInterval(-Double($0) * 60) : nil },
+            occurredAt: occurredAt(now: now),
             quantity: quantity.flatMap { $0 > 0 && $0 <= 100 ? $0 : nil },
             unit: unit?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
             serving: logKind == .beer ? serving.flatMap(LogServing.init(modelValue:)) : nil,
             volumeML: volumeML.flatMap { (10...5_000).contains($0) ? $0 : nil },
             season: logKind == .tv ? season.flatMap { (1...99).contains($0) ? $0 : nil } : nil,
-            episodes: episodeNumbers
+            episodes: episodeNumbers,
+            people: names.isEmpty ? nil : names
         )
+    }
+
+    /// The people named, trimmed and without repeats, in the order said.
+    var names: [String] {
+        var seen = Set<String>()
+        return (people ?? [])
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && $0.count <= 100 && seen.insert($0.lowercased()).inserted }
+            .prefix(10)
+            .map { $0 }
+    }
+
+    /// When it happened: the words the user used if they can be read, otherwise the minutes the model counted.
+    /// Anything within two minutes of now is just now.
+    private func occurredAt(now: Date) -> Date? {
+        let resolved = when.flatMap { LogWhenParser.date(from: $0, now: now) }
+            ?? minutesAgo.flatMap { $0 > 0 ? now.addingTimeInterval(-Double($0) * 60) : nil }
+        guard let resolved, now.timeIntervalSince(resolved) > 120 else { return nil }
+        return resolved
     }
 }
 

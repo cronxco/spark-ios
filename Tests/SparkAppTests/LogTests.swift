@@ -95,6 +95,96 @@ struct LogDraftTests {
     }
 }
 
+@Suite("Log when parser")
+struct LogWhenParserTests {
+    private let calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/London")!
+        return calendar
+    }()
+
+    /// Monday 19 October 2026, 15:00 in London.
+    private var now: Date { calendar.date(from: DateComponents(year: 2026, month: 10, day: 19, hour: 15))! }
+
+    /// Day, hour and minute of the date read from the phrase.
+    private func parts(_ phrase: String) -> [Int]? {
+        LogWhenParser.date(from: phrase, now: now, calendar: calendar).map {
+            [calendar.component(.day, from: $0), calendar.component(.hour, from: $0), calendar.component(.minute, from: $0)]
+        }
+    }
+
+    @Test("yesterday at a time")
+    func yesterdayAtEight() {
+        #expect(parts("yesterday at 8pm") == [18, 20, 0])
+    }
+
+    @Test("last night is yesterday evening")
+    func lastNight() {
+        #expect(parts("last night") == [18, 21, 0])
+    }
+
+    @Test("a bare hour takes the latest time that has already passed")
+    func bareHour() {
+        #expect(parts("at 2") == [19, 14, 0])
+        #expect(parts("at 8") == [19, 8, 0])
+    }
+
+    @Test("a weekday is the most recent one, with a part of the day")
+    func weekdayLunch() {
+        #expect(parts("Saturday lunch") == [17, 13, 0])
+    }
+
+    @Test("times ago count back from now")
+    func agoPhrases() {
+        #expect(LogWhenParser.date(from: "40 minutes ago", now: now, calendar: calendar) == now.addingTimeInterval(-2_400))
+        #expect(LogWhenParser.date(from: "an hour ago", now: now, calendar: calendar) == now.addingTimeInterval(-3_600))
+        #expect(LogWhenParser.date(from: "half an hour ago", now: now, calendar: calendar) == now.addingTimeInterval(-1_800))
+    }
+
+    @Test("words that say nothing about time give nothing")
+    func noTime() {
+        #expect(LogWhenParser.date(from: "", now: now, calendar: calendar) == nil)
+        #expect(LogWhenParser.date(from: "just now", now: now, calendar: calendar) == nil)
+    }
+
+    @Test("a time later today is held at now")
+    func futureIsClamped() throws {
+        let date = try #require(LogWhenParser.date(from: "today at 9pm", now: now, calendar: calendar))
+
+        #expect(date == now)
+    }
+}
+
+@Suite("Log preview format")
+struct LogPreviewFormatTests {
+    @Test("amounts read naturally")
+    func amounts() {
+        #expect(LogPreviewFormat.amount(LogRequest(kind: .wine, title: "Rioja", quantity: 0.5, unit: "bottle")) == "½ bottle")
+        #expect(LogPreviewFormat.amount(LogRequest(kind: .beer, title: "IPA", quantity: 1, serving: .can)) == "1 can")
+        #expect(LogPreviewFormat.amount(LogRequest(kind: .beer, title: "IPA", quantity: 1, serving: .draft, volumeML: 568)) == "1 draft · 568 ml")
+        #expect(LogPreviewFormat.amount(LogRequest(kind: .wine, title: "Rioja")) == nil)
+    }
+
+    @Test("consecutive episodes become ranges")
+    func episodeRanges() {
+        #expect(LogPreviewFormat.episodes([1, 2]) == "E1–2")
+        #expect(LogPreviewFormat.episodes([5, 1, 4, 2]) == "E1–2, E4–5")
+        #expect(LogPreviewFormat.episodes([3]) == "E3")
+    }
+
+    @Test("fractions use vulgar halves and quarters")
+    func fractions() {
+        #expect(LogPreviewFormat.fraction(1.5) == "1½")
+        #expect(LogPreviewFormat.fraction(2) == "2")
+        #expect(LogPreviewFormat.fraction(0.25) == "¼")
+    }
+
+    @Test("no time means now")
+    func noTime() {
+        #expect(LogPreviewFormat.when(nil) == "Now")
+    }
+}
+
 @Suite("Log view model", .serialized)
 @MainActor
 struct LogViewModelTests {
@@ -122,6 +212,7 @@ struct LogViewModelTests {
         model.updateText("Just watched episodes 1 and 2 of The Diplomat")
 
         await model.submit(using: client)
+        await model.confirm(using: client)
         guard case .question(let question) = model.phase else {
             Issue.record("Expected a season question, got \(model.phase)")
             return
@@ -141,6 +232,48 @@ struct LogViewModelTests {
         #expect(requests.allSatisfy { $0.httpMethod == "POST" && $0.url?.path.hasSuffix("/log") == true })
     }
 
+    @Test("reading shows a preview and sends nothing until it is confirmed")
+    func previewBeforeLogging() async throws {
+        await AppStubURLProtocol.set(host: Self.host) { _ in (Data(Self.logged.utf8), 201, [:]) }
+        let model = LogViewModel(extract: { _ in LogDraft(kind: "wine", title: "Rioja", quantity: 0.5, unit: "bottle", people: ["Dan", "dan", " Sam "]) })
+        let client = try await makeClient()
+        model.updateText("Half a bottle of Rioja with Dan and Sam")
+
+        await model.submit(using: client)
+
+        #expect(model.phase == .preview)
+        #expect(model.draft.title == "Rioja")
+        #expect(model.draft.people == ["Dan", "Sam"])
+        #expect(await AppStubURLProtocol.recorded(host: Self.host).isEmpty)
+
+        model.draft.title = "Rioja Reserva"
+        model.removePerson("Dan")
+        model.addPerson("Alex")
+        model.addPerson("alex")
+        #expect(model.draft.people == ["Sam", "Alex"])
+
+        await model.confirm(using: client)
+
+        let requests = await AppStubURLProtocol.recorded(host: Self.host)
+        #expect(requests.count == 1)
+        let body = try #require(requests.first?.httpBody)
+        let object = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        #expect(object["title"] as? String == "Rioja Reserva")
+        #expect(object["with"] as? [String] == ["Sam", "Alex"])
+    }
+
+    @Test("editing goes back to the text and keeps it")
+    func editKeepsText() async throws {
+        let model = LogViewModel(extract: { _ in LogDraft(kind: "wine", title: "Rioja") })
+        model.updateText("Rioja")
+        await model.submit(using: try await makeClient())
+
+        model.edit()
+
+        #expect(model.phase == .idle)
+        #expect(model.text == "Rioja")
+    }
+
     @Test("a request the server rejects shows its message")
     func showsServerMessage() async throws {
         await AppStubURLProtocol.set(host: Self.host) { _ in
@@ -149,7 +282,9 @@ struct LogViewModelTests {
         let model = LogViewModel(extract: { _ in Self.diplomat() })
         model.updateText("Watched episode 1 of Zzzz")
 
-        await model.submit(using: try await makeClient())
+        let client = try await makeClient()
+        await model.submit(using: client)
+        await model.confirm(using: client)
 
         #expect(model.phase == .failed("No TV series found for that title."))
     }
@@ -179,6 +314,7 @@ struct LogViewModelTests {
         let client = try await makeClient()
         model.updateText("Episodes 1 and 2 of The Diplomat")
         await model.submit(using: client)
+        await model.confirm(using: client)
 
         await model.undo(using: client)
 
@@ -199,6 +335,7 @@ struct LogViewModelTests {
         let client = try await makeClient()
         model.updateText("Episodes 1 and 2 of The Diplomat")
         await model.submit(using: client)
+        await model.confirm(using: client)
 
         await model.undo(using: client)
 
