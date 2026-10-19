@@ -13,6 +13,8 @@ struct EntityTypeNameTests {
     func ownerAccounts() {
         #expect(EntityTypeName.display(type: "manual_log_user", concept: "user") == "Manual log account")
         #expect(EntityTypeName.display(type: "newsletter_user", concept: "user") == "Newsletter account")
+        // Slack users are other workspace members, not the owner's account.
+        #expect(EntityTypeName.display(type: "slack_user", concept: "user") == "Slack user")
     }
 
     @Test("other types are sentence case with acronyms kept")

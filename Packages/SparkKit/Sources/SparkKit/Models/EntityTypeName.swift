@@ -32,7 +32,7 @@ public enum EntityTypeName {
 
         // Every integration writes its own account object for the owner
         // (`newsletter_user`, `manual_log_user`). Name it by the integration.
-        if concept == "user", key.hasSuffix("_user"), key.count > "_user".count {
+        if isAccountOwner(concept: concept, type: key), key.hasSuffix("_user"), key.count > "_user".count {
             return humanised(String(key.dropLast("_user".count))) + " account"
         }
 

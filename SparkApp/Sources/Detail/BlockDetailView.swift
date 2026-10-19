@@ -233,16 +233,22 @@ struct BlockDetailView: View {
     }
 
     private func parentSubject(for detail: BlockDetail) -> String? {
-        guard let parent = parentEvent(for: detail),
-              let target = parent.target?.title.trimmingCharacters(in: .whitespacesAndNewlines),
+        parentEvent(for: detail).flatMap(subject(of:))
+    }
+
+    /// The same rule as the event screen's hero: the target names the event
+    /// only when the event displays with its object.
+    private func subject(of event: Event) -> String? {
+        guard event.displayWithObject,
+              let target = event.target?.title.trimmingCharacters(in: .whitespacesAndNewlines),
               !target.isEmpty
         else { return nil }
         return target
     }
 
     private func parentRowTitle(for event: Event) -> String {
-        // The hero already names the subject, so the row says what happened.
-        event.target == nil ? eventTitle(for: event) : event.action.sparkSentenceCase
+        // When the hero names the subject, the row says what happened.
+        subject(of: event) == nil ? eventTitle(for: event) : event.action.sparkSentenceCase
     }
 
     private func blockEyebrow(for block: Block, leadingWithTitle: Bool) -> String {
