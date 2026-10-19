@@ -19,7 +19,14 @@ struct LogSheetView: View {
                 VStack(alignment: .leading, spacing: SparkSpacing.lg) {
                     TextField("Had half a bottle of Rioja", text: Binding(
                         get: { model.text },
-                        set: { model.updateText($0) }
+                        set: { newValue in
+                            guard newValue.contains("\n") else {
+                                model.updateText(newValue)
+                                return
+                            }
+                            model.updateText(newValue.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespaces))
+                            submit()
+                        }
                     ), axis: .vertical)
                         .font(SparkTypography.body)
                         .lineLimit(1...4)
@@ -43,12 +50,6 @@ struct LogSheetView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(isFinished ? "Done" : "Cancel") { dismiss() }
-                }
-                if !isFinished, !isPreviewing {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Read") { submit() }
-                            .disabled(!model.canSubmit || !isEditable)
-                    }
                 }
             }
             .onAppear { isFocused = true }
