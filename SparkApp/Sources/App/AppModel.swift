@@ -77,6 +77,7 @@ final class AppModel {
     private var deviceRegistrationTask: Task<Void, Never>?
     private var entityRefreshTask: Task<Void, Never>?
     private var foregroundIndexTask: Task<Void, Never>?
+    private var isSigningOut = false
     private var deviceRegistrationTokenInFlight: String?
     private let purgeDataStore: @MainActor (ModelContainer) throws -> Void
     private let purgeSpotlight: @MainActor () async throws -> Void
@@ -84,6 +85,7 @@ final class AppModel {
     /// Re-indexes Spotlight at most once an hour while the app is in use, so
     /// Siri sees today's data without waiting for the nightly background task.
     func indexSpotlightIfDue() async {
+        guard !isSigningOut else { return }
         let key = "spark.spotlight.lastForegroundIndexAt"
         let defaults = UserDefaults.sparkAppGroup
         if let last = defaults.object(forKey: key) as? Date, Date.now.timeIntervalSince(last) < 3600 {
@@ -409,6 +411,9 @@ final class AppModel {
     /// Revocation and privacy-sensitive local erasure must complete before the
     /// credentials are cleared and another account can enter the shared store.
     func signOut() async {
+        isSigningOut = true
+        defer { isSigningOut = false }
+
         guard await revokeRemoteDevice() else {
             lastError = "Couldn't revoke this device. Spark will retry when the connection returns."
             return
