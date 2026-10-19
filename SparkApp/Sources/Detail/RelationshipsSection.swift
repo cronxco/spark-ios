@@ -2,55 +2,112 @@ import SparkKit
 import SparkUI
 import SwiftUI
 
-/// Authoritative relationship list for every owned entity detail.
-struct RelationshipsSection: View {
-    var title = "Relationships"
+/// Relationship state for one entity, owned by its detail screen. The screen
+/// shows `RelationshipsSection` only when there is something in it, and offers
+/// "add" from its shared Add row, so an empty record no longer carries a
+/// "No relationships yet." section.
+@MainActor
+@Observable
+final class RelationshipsStore {
+    var relationships = [EntityRelationship]()
+    var isLoading = true
+    var isMutating = false
+    var errorMessage: String?
+    var mutationError: String?
+    var isAdding = false
+
+    /// Shown once loaded with rows, or when the load failed and can be retried.
+    var hasContent: Bool { !isLoading && (errorMessage != nil || !relationships.isEmpty) }
+
+    func load(kind: SparkEntityKind, entityID: String, apiClient: APIClient) async {
+        isLoading = true; errorMessage = nil; defer { isLoading = false }
+        do { relationships = try await apiClient.request(EntityMutationsEndpoint.relationships(kind: kind, id: entityID)).data }
+        catch APIError.notModified { }
+        catch { errorMessage = "Couldn't load relationships. Tap to retry." }
+    }
+
+    func add(_ request: RelationshipCreateRequest, using create: @MainActor (RelationshipCreateRequest) async throws -> EntityRelationship) async throws {
+        isMutating = true; defer { isMutating = false }
+        do { relationships.append(try await create(request)) }
+        catch { mutationError = (error as? LocalizedError)?.errorDescription ?? "Please try again."; throw error }
+    }
+
+    func remove(_ relationship: EntityRelationship, using delete: @MainActor (EntityRelationship) async throws -> Void) async {
+        isMutating = true; defer { isMutating = false }
+        do { try await delete(relationship); relationships.removeAll { $0.id == relationship.id } }
+        catch { mutationError = (error as? LocalizedError)?.errorDescription ?? "Please try again." }
+    }
+}
+
+/// Loads an entity's relationships and hosts the add sheet. Apply it to the
+/// detail screen itself, so both work while the section is hidden.
+private struct RelationshipsHostModifier: ViewModifier {
+    let store: RelationshipsStore
     let kind: SparkEntityKind
     let entityID: String
     let apiClient: APIClient
     let create: @MainActor (RelationshipCreateRequest) async throws -> EntityRelationship
+
+    func body(content: Content) -> some View {
+        @Bindable var store = store
+        content
+            .task(id: "\(kind.rawValue):\(entityID)") { await self.store.load(kind: kind, entityID: entityID, apiClient: apiClient) }
+            .sheet(isPresented: $store.isAdding) {
+                RelationshipEditorSheet(sourceKind: kind, sourceID: entityID, apiClient: apiClient) { request in
+                    try await self.store.add(request, using: create)
+                }
+            }
+            .alert("Couldn't update relationships", isPresented: Binding(get: { self.store.mutationError != nil }, set: { if !$0 { self.store.mutationError = nil } })) {
+                Button("OK", role: .cancel) {}
+            } message: { Text(self.store.mutationError ?? "Please try again.") }
+    }
+}
+
+extension View {
+    func sparkRelationshipsHost(
+        _ store: RelationshipsStore,
+        kind: SparkEntityKind,
+        entityID: String,
+        apiClient: APIClient,
+        create: @escaping @MainActor (RelationshipCreateRequest) async throws -> EntityRelationship
+    ) -> some View {
+        modifier(RelationshipsHostModifier(store: store, kind: kind, entityID: entityID, apiClient: apiClient, create: create))
+    }
+}
+
+/// Authoritative relationship list for every owned entity detail. Render it
+/// only when `store.hasContent`; loading and adding live on the host.
+struct RelationshipsSection: View {
+    var title = "Relationships"
+    let store: RelationshipsStore
+    let kind: SparkEntityKind
+    let entityID: String
+    let apiClient: APIClient
     let delete: @MainActor (EntityRelationship) async throws -> Void
 
-    @State private var relationships = [EntityRelationship]()
-    @State private var isLoading = true
-    @State private var isMutating = false
-    @State private var errorMessage: String?
-    @State private var mutationError: String?
-    @State private var showingAddSheet = false
     @State private var pendingDeletion: EntityRelationship?
 
     var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-            SparkDetailSectionHeader(title, trailing: relationships.isEmpty ? nil : "\(relationships.count)")
-            if isLoading {
-                ProgressView().frame(maxWidth: .infinity)
-            } else if let errorMessage {
-                Button { Task { await load() } } label: {
+            SparkDetailSectionHeader(title, trailing: store.relationships.isEmpty ? nil : "\(store.relationships.count)")
+            if let errorMessage = store.errorMessage {
+                Button { Task { await store.load(kind: kind, entityID: entityID, apiClient: apiClient) } } label: {
                     Label(errorMessage, systemImage: "arrow.clockwise")
                         .font(SparkTypography.bodySmall).foregroundStyle(.secondary)
                 }.buttonStyle(.plain)
-            } else if relationships.isEmpty {
-                Text("No relationships yet.").font(SparkTypography.bodySmall).foregroundStyle(.secondary)
             } else {
-                ForEach(relationships) { relationship in relationshipRow(relationship) }
+                ForEach(store.relationships) { relationship in relationshipRow(relationship) }
             }
-            Button { showingAddSheet = true } label: {
-                Label("Add relationship", systemImage: "link.badge.plus").font(SparkTypography.bodySmall.weight(.medium))
-            }.buttonStyle(.borderless).disabled(isLoading || isMutating)
-        }
-        .task(id: "\(kind.rawValue):\(entityID)") { await load() }
-        .sheet(isPresented: $showingAddSheet) {
-            RelationshipEditorSheet(sourceKind: kind, sourceID: entityID, apiClient: apiClient) { request in try await add(request) }
         }
         .confirmationDialog("Delete relationship?", isPresented: Binding(get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } })) {
             Button("Delete relationship", role: .destructive) {
                 guard let relationship = pendingDeletion else { return }
-                Task { await remove(relationship) }
+                Task {
+                    await store.remove(relationship, using: delete)
+                    pendingDeletion = nil
+                }
             }
         } message: { Text("This removes the relationship from both entities.") }
-        .alert("Couldn't update relationships", isPresented: Binding(get: { mutationError != nil }, set: { if !$0 { mutationError = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: { Text(mutationError ?? "Please try again.") }
     }
 
     @ViewBuilder private func relationshipRow(_ relationship: EntityRelationship) -> some View {
@@ -77,25 +134,6 @@ struct RelationshipsSection: View {
         case "block", "blocks": .block(id: target.id)
         default: nil
         }
-    }
-
-    private func load() async {
-        isLoading = true; errorMessage = nil; defer { isLoading = false }
-        do { relationships = try await apiClient.request(EntityMutationsEndpoint.relationships(kind: kind, id: entityID)).data }
-        catch APIError.notModified { }
-        catch { errorMessage = "Couldn't load relationships. Tap to retry." }
-    }
-
-    private func add(_ request: RelationshipCreateRequest) async throws {
-        isMutating = true; defer { isMutating = false }
-        do { relationships.append(try await create(request)) }
-        catch { mutationError = (error as? LocalizedError)?.errorDescription ?? "Please try again."; throw error }
-    }
-
-    private func remove(_ relationship: EntityRelationship) async {
-        isMutating = true; defer { isMutating = false; pendingDeletion = nil }
-        do { try await delete(relationship); relationships.removeAll { $0.id == relationship.id } }
-        catch { mutationError = (error as? LocalizedError)?.errorDescription ?? "Please try again." }
     }
 }
 

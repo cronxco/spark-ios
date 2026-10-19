@@ -56,9 +56,13 @@ final class BlockDetailViewModel: ETagDetailMutationHandling {
 
 struct BlockDetailView: View {
     let blockId: String
+    /// The event the block was opened from. Used for the link back when the
+    /// block payload doesn't carry its event.
+    var parent: Event?
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: BlockDetailViewModel?
     @State private var showEditor = false
+    @State private var relationships = RelationshipsStore()
 
     @ViewBuilder
     private func referencesSection(for block: Block) -> some View {
@@ -85,11 +89,10 @@ struct BlockDetailView: View {
             }
             .padding(.horizontal, SparkSpacing.lg)
             .padding(.top, SparkSpacing.xxl)
-            .padding(.bottom, SparkSpacing.xl)
+            .padding(.bottom, SparkSpacing.xxl)
         }
+        .sparkDetailInlineTitle(inlineTitle)
         .sparkAppBackground()
-        .navigationTitle("Block")
-        .navigationBarTitleDisplayMode(.inline)
         .sparkSubViewToolbar(
             shareItems: blockShareItems,
             rawTitle: "Raw block",
@@ -99,6 +102,10 @@ struct BlockDetailView: View {
             flintNoteContext: .block(id: blockId, label: flintNoteLabel)
         )
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Edit") { showEditor = true }.disabled(!isLoaded) } }
+        .sparkRelationshipsHost(relationships, kind: .blocks, entityID: blockId, apiClient: appModel.apiClient) { request in
+            guard let viewModel else { throw TagMutationError.missingETag }
+            return try await viewModel.createRelationship(request)
+        }
         .task(id: blockId) {
             if viewModel == nil {
                 viewModel = BlockDetailViewModel(blockId: blockId, apiClient: appModel.apiClient)
@@ -113,6 +120,11 @@ struct BlockDetailView: View {
             return ["Spark Block: \(blockId)"]
         }
         return ["Spark Block: \(detail.block.title)"]
+    }
+
+    private var inlineTitle: String {
+        if case .loaded(let detail) = viewModel?.state { return heroTitle(for: detail) }
+        return ""
     }
 
     private var isLoaded: Bool {
@@ -155,57 +167,86 @@ struct BlockDetailView: View {
             }
         }
 
-        referencesSection(for: detail.block)
-
-        RelationshipsSection(
-            kind: .blocks,
-            entityID: detail.id,
-            apiClient: appModel.apiClient,
-            create: { request in
-                guard let viewModel else { throw TagMutationError.missingETag }
-                return try await viewModel.createRelationship(request)
-            },
-            delete: { relationship in
-                guard let viewModel else { throw TagMutationError.missingETag }
-                try await viewModel.deleteRelationship(relationship)
-            }
-        )
-
         if let summary = detail.aiSummary, !summary.isEmpty {
             SparkDetailInsightCard(label: "Insight", text: summary)
         }
 
-        if let parent = detail.event {
+        referencesSection(for: detail.block)
+
+        if let parent = parentEvent(for: detail) {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                 SparkDetailSectionHeader("From event")
                 NavigationLink {
                     EventDetailView(eventId: parent.id)
                 } label: {
                     SparkDetailLinkedRow(
-                        title: eventTitle(for: parent),
+                        title: parentRowTitle(for: parent),
                         subtitle: parent.time.map { SparkDetailFormatters.compactDateTime.string(from: $0) },
                         trailing: parent.displayValue?.sparkPlainTextFromHTMLFragment ?? parent.value?.sparkPlainTextFromHTMLFragment,
-                        tint: Color.domainTint(for: parent.domain)
+                        tint: Color.domainTint(for: parent.domain),
+                        icon: EntityPresentation.icon(domain: parent.domain, service: parent.service, action: parent.action, type: "event")
                     )
                 }
                 .buttonStyle(.plain)
             }
         }
+
+        if relationships.hasContent {
+            RelationshipsSection(
+                store: relationships,
+                kind: .blocks,
+                entityID: detail.id,
+                apiClient: appModel.apiClient,
+                delete: { relationship in
+                    guard let viewModel else { throw TagMutationError.missingETag }
+                    try await viewModel.deleteRelationship(relationship)
+                }
+            )
+        }
+
+        SparkDetailAddRow(actions: [
+            SparkDetailAddRow.Action(title: "Link", systemImage: "link") { relationships.isAdding = true },
+        ])
     }
 
+    private func parentEvent(for detail: BlockDetail) -> Event? {
+        detail.event ?? parent
+    }
+
+    /// With a parent, the block is named by what it summarises: the eyebrow
+    /// says which kind of block it is ("Tweet Summary — 19 Oct 2026"), and
+    /// the title is the event's subject ("Jason from 404 Media").
     private func heroSection(for detail: BlockDetail) -> some View {
-        SparkDetailHero(
-            eyebrow: blockEyebrow(for: detail.block),
-            status: detail.event?.action.humanisedAction,
-            title: detail.block.title,
-            subtitle: detail.event?.time.map { "From event on \(SparkDetailFormatters.compactDateTime.string(from: $0))" },
+        let hasSubject = parentSubject(for: detail) != nil
+        return SparkDetailHero(
+            eyebrow: blockEyebrow(for: detail.block, leadingWithTitle: hasSubject),
+            status: nil,
+            title: heroTitle(for: detail),
+            subtitle: nil,
             value: blockDisplayValue(for: detail.block),
             valueTint: .sparkAccent
         )
     }
 
-    private func blockEyebrow(for block: Block) -> String {
-        var parts = [block.blockType.sparkSentenceCase]
+    private func heroTitle(for detail: BlockDetail) -> String {
+        parentSubject(for: detail) ?? detail.block.title
+    }
+
+    private func parentSubject(for detail: BlockDetail) -> String? {
+        guard let parent = parentEvent(for: detail),
+              let target = parent.target?.title.trimmingCharacters(in: .whitespacesAndNewlines),
+              !target.isEmpty
+        else { return nil }
+        return target
+    }
+
+    private func parentRowTitle(for event: Event) -> String {
+        // The hero already names the subject, so the row says what happened.
+        event.target == nil ? eventTitle(for: event) : event.action.sparkSentenceCase
+    }
+
+    private func blockEyebrow(for block: Block, leadingWithTitle: Bool) -> String {
+        var parts = [leadingWithTitle ? block.title : block.blockType.sparkSentenceCase]
         if let time = block.time {
             parts.append(SparkDetailFormatters.shortDate.string(from: time))
             parts.append(SparkDetailFormatters.shortTime.string(from: time))

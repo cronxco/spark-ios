@@ -14,6 +14,8 @@ struct EventDetailView: View {
     @State private var showEditor = false
     @State private var showLocationEditor = false
     @State private var confirmDelete = false
+    @State private var relationships = RelationshipsStore()
+    @State private var showOtherSummaries = false
 
     private func aggregatedReferences(for detail: EventDetail) -> [EntityReference] {
         var seen = Set<String>()
@@ -50,8 +52,9 @@ struct EventDetailView: View {
             }
             .padding(.horizontal, SparkSpacing.lg)
             .padding(.top, SparkSpacing.xxl)
-            .padding(.bottom, SparkSpacing.xl)
+            .padding(.bottom, SparkSpacing.xxl)
         }
+        .sparkDetailInlineTitle(inlineTitle)
         .sparkAppBackground()
         .sparkOnscreenEntity(
             type: "event",
@@ -59,16 +62,21 @@ struct EventDetailView: View {
             title: onscreenTitle,
             subtitle: onscreenSubtitle
         )
-        .navigationBarTitleDisplayMode(.inline)
         .sparkSubViewToolbar(
             shareItems: eventShareItems,
             rawTitle: "Raw event",
             rawPayload: eventRawPayload,
             feedbackContext: eventFeedbackContext,
             refresh: { await viewModel?.retry() },
-            flintNoteContext: .event(id: eventId, label: onscreenTitle)
+            flintNoteContext: .event(id: eventId, label: onscreenTitle),
+            location: SparkSubViewMenuAction(title: hasLocation ? "Edit location" : "Add location", isEnabled: isLoaded) { showLocationEditor = true },
+            delete: SparkSubViewMenuAction(title: "Delete event", isEnabled: isLoaded) { confirmDelete = true }
         )
-        .toolbar { ToolbarItemGroup(placement: .topBarTrailing) { Button("Edit") { showEditor = true }.disabled(!isLoaded); Button { showLocationEditor = true } label: { Image(systemName: "mappin.and.ellipse") }.accessibilityLabel("Edit location").disabled(!isLoaded); Button(role: .destructive) { confirmDelete = true } label: { Image(systemName: "trash") }.accessibilityLabel("Delete event").disabled(!isLoaded) } }
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Edit") { showEditor = true }.disabled(!isLoaded) } }
+        .sparkRelationshipsHost(relationships, kind: .events, entityID: eventId, apiClient: appModel.apiClient) { request in
+            guard let viewModel else { throw TagMutationError.missingETag }
+            return try await viewModel.createRelationship(request)
+        }
         .sparkDeleteWithUndo(
             noun: "event",
             isDeleted: viewModel?.isDeleted == true,
@@ -88,7 +96,7 @@ struct EventDetailView: View {
             }
         }
         .sheet(isPresented: $showEditor) { if case .loaded(let detail) = viewModel?.state { EntityEditorSheet(title: "Event", initial: ["action": detail.event.action, "value": detail.event.value ?? "", "value_multiplier": "", "value_unit": detail.event.unit ?? "", "time": detail.event.time?.ISO8601Format() ?? ""]) { try await viewModel?.update($0) } } }
-        .sheet(isPresented: $showLocationEditor) { LocationEditorSheet(hasLocation: { if case .loaded(let detail) = viewModel?.state { return detail.location != nil }; return false }(), geocode: { try await viewModel?.geocode(address: $0) }, coordinates: { try await viewModel?.setLocation($0) }, clear: { try await viewModel?.clearLocation() }) }
+        .sheet(isPresented: $showLocationEditor) { LocationEditorSheet(hasLocation: hasLocation, geocode: { try await viewModel?.geocode(address: $0) }, coordinates: { try await viewModel?.setLocation($0) }, clear: { try await viewModel?.clearLocation() }) }
         .confirmationDialog(
             "Remove tag?",
             isPresented: Binding(get: { tagPendingRemoval != nil }, set: { if !$0 { tagPendingRemoval = nil } })
@@ -117,6 +125,22 @@ struct EventDetailView: View {
         return "Event"
     }
 
+    private var hasLocation: Bool {
+        if case .loaded(let detail) = viewModel?.state { return detail.location != nil }
+        return false
+    }
+
+    /// Passed to block screens so they can link back before the API sends it.
+    private var loadedEvent: Event? {
+        if case .loaded(let detail) = viewModel?.state { return detail.event }
+        return nil
+    }
+
+    private var inlineTitle: String {
+        if case .loaded(let detail) = viewModel?.state { return heroTitle(for: detail.event) }
+        return ""
+    }
+
     private var isLoaded: Bool {
         if viewModel?.isDeleted == true { return false }
         if case .loaded = viewModel?.state { return true }
@@ -130,6 +154,9 @@ struct EventDetailView: View {
         return nil
     }
 
+    /// Content first, then what it's about, then anything added to it. Empty
+    /// tags, relationships and notes don't get a section; the Add row at the
+    /// end offers them instead.
     @ViewBuilder
     private func content(for detail: EventDetail) -> some View {
         heroSection(for: detail)
@@ -137,8 +164,6 @@ struct EventDetailView: View {
         if let summary = detail.aiSummary, !summary.isEmpty {
             aiCalloutCard(summary)
         }
-
-        tagSection(for: detail)
 
         metricBaselineStatusRow()
 
@@ -148,33 +173,56 @@ struct EventDetailView: View {
             eventMapCard(loc)
         }
 
-        linkedObjectsSection(for: detail)
+        if !detail.blocks.isEmpty {
+            blocksSection(detail.blocks)
+        }
 
-        RelationshipsSection(
-            kind: .events,
-            entityID: detail.id,
-            apiClient: appModel.apiClient,
-            create: { request in
-                guard let viewModel else { throw TagMutationError.missingETag }
-                return try await viewModel.createRelationship(request)
-            },
-            delete: { relationship in
-                guard let viewModel else { throw TagMutationError.missingETag }
-                try await viewModel.deleteRelationship(relationship)
-            }
-        )
+        aboutSection(for: detail)
 
         referencesSection(for: detail)
-
-        if !detail.blocks.isEmpty {
-            blocksGrid(detail.blocks)
-        }
 
         if !detail.related.isEmpty {
             relatedSection(detail.related)
         }
 
-        noteSection(for: detail)
+        if !detail.tags.isEmpty {
+            tagSection(for: detail)
+        }
+
+        if relationships.hasContent {
+            RelationshipsSection(
+                store: relationships,
+                kind: .events,
+                entityID: detail.id,
+                apiClient: appModel.apiClient,
+                delete: { relationship in
+                    guard let viewModel else { throw TagMutationError.missingETag }
+                    try await viewModel.deleteRelationship(relationship)
+                }
+            )
+        }
+
+        if let note = detail.note, !note.isEmpty {
+            noteSection(note)
+        }
+
+        addRow(for: detail)
+            .sheet(isPresented: $showNoteEditor) { noteEditor(for: detail) }
+    }
+
+    private func addRow(for detail: EventDetail) -> some View {
+        var actions = [
+            SparkDetailAddRow.Action(title: "Tag", systemImage: "tag") { showTagPicker = true }
+        ]
+        if detail.note?.isEmpty != false {
+            actions.append(SparkDetailAddRow.Action(title: "Note", systemImage: "square.and.pencil") {
+                noteDraft = ""
+                noteError = nil
+                showNoteEditor = true
+            })
+        }
+        actions.append(SparkDetailAddRow.Action(title: "Link", systemImage: "link") { relationships.isAdding = true })
+        return SparkDetailAddRow(actions: actions)
     }
 
     private func tagSection(for detail: EventDetail) -> some View {
@@ -193,9 +241,6 @@ struct EventDetailView: View {
                             TagPreviewCard(tag: tag).environment(appModel)
                         }
                 }
-                Button { showTagPicker = true } label: { TagChip("+", isGhost: true) }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Add tag")
             }
         }
     }
@@ -214,8 +259,8 @@ struct EventDetailView: View {
     private func heroSection(for detail: EventDetail) -> some View {
         SparkDetailHero(
             eyebrow: eyebrow(for: detail.event),
-            status: nil,
-            title: heroTitle(for: detail),
+            status: heroTargetTitle(for: detail.event) == nil ? nil : detail.event.action.sparkSentenceCase,
+            title: heroTitle(for: detail.event),
             subtitle: heroSubtitle(for: detail),
             value: displayValue(for: detail.event),
             valueTint: Color.domainTint(for: detail.event.domain),
@@ -232,8 +277,19 @@ struct EventDetailView: View {
         return parts.joined(separator: " — ")
     }
 
-    private func heroTitle(for detail: EventDetail) -> String {
-        eventTitle(for: detail.event)
+    /// The thing the event is about leads ("The Diplomat S04E02"), with the
+    /// verb as the status line ("Watched episode"). Gluing the two together
+    /// read as "Watched Episode The Diplomat S04E02".
+    private func heroTitle(for event: Event) -> String {
+        heroTargetTitle(for: event) ?? eventTitle(for: event)
+    }
+
+    private func heroTargetTitle(for event: Event) -> String? {
+        guard event.displayWithObject,
+              let target = event.target?.title.trimmingCharacters(in: .whitespacesAndNewlines),
+              !target.isEmpty
+        else { return nil }
+        return target
     }
 
     private func heroSubtitle(for detail: EventDetail) -> String? {
@@ -243,14 +299,17 @@ struct EventDetailView: View {
         return nil
     }
 
-    // MARK: - Linked objects
+    // MARK: - About
 
+    /// What the event is about, and who it was with when that isn't you.
+    /// The account owner's own user object is the actor on nearly every
+    /// event, so it's left out rather than shown as "Actor" every time.
     @ViewBuilder
-    private func linkedObjectsSection(for detail: EventDetail) -> some View {
+    private func aboutSection(for detail: EventDetail) -> some View {
         let links = linkedObjects(for: detail)
         if !links.isEmpty {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                SparkDetailSectionHeader("Objects", trailing: "\(links.count) linked")
+                SparkDetailSectionHeader("About")
                 ForEach(links) { link in
                     NavigationLink {
                         ObjectDetailView(objectId: link.id)
@@ -258,7 +317,9 @@ struct EventDetailView: View {
                         SparkDetailLinkedRow(
                             title: link.title,
                             subtitle: link.subtitle,
-                            trailing: link.role
+                            trailing: nil,
+                            tint: Color.domainTint(for: detail.event.domain),
+                            icon: link.icon
                         )
                     }
                     .buttonStyle(.plain)
@@ -268,29 +329,29 @@ struct EventDetailView: View {
     }
 
     private func linkedObjects(for detail: EventDetail) -> [LinkedEventObject] {
-        [
-            linkedObject(from: detail.actor, role: "Actor"),
-            linkedObject(from: detail.target, role: "Target")
-        ].compactMap { $0 }
-    }
-
-    private func linkedObject(from object: EventDetail.ActorTarget?, role: String) -> LinkedEventObject? {
-        guard let object, let id = object.id, !id.isEmpty else { return nil }
-        let subtitle = [
-            object.concept?.replacingOccurrences(of: "_", with: " "),
-            object.type?.replacingOccurrences(of: "_", with: " ")
-        ]
-            .compactMap { value -> String? in
-                guard let value, !value.isEmpty else { return nil }
-                return value
-            }
-            .joined(separator: " — ")
-        return LinkedEventObject(
-            id: id,
-            role: role,
-            title: object.title,
-            subtitle: subtitle.isEmpty ? object.subtitle : subtitle
-        )
+        let title = heroTitle(for: detail.event)
+        var links = [LinkedEventObject]()
+        if let target = detail.target, let id = target.id, !id.isEmpty {
+            // When the hero already names the target, the row says what kind
+            // of thing it is instead of repeating the title.
+            let repeatsHero = target.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                .caseInsensitiveCompare(title) == .orderedSame
+            links.append(LinkedEventObject(
+                id: id,
+                title: repeatsHero ? target.typeName : target.title,
+                subtitle: repeatsHero ? nil : target.typeName,
+                icon: ObjectTypeGlyph.symbol(type: target.type, concept: target.concept)
+            ))
+        }
+        if let actor = detail.actor, let id = actor.id, !id.isEmpty, !actor.isAccountOwner, id != detail.target?.id {
+            links.append(LinkedEventObject(
+                id: id,
+                title: actor.title,
+                subtitle: actor.typeName,
+                icon: ObjectTypeGlyph.symbol(type: actor.type, concept: actor.concept)
+            ))
+        }
+        return links
     }
 
     // MARK: - AI summary callout
@@ -372,20 +433,75 @@ struct EventDetailView: View {
         }
     }
 
-    // MARK: - Blocks grid
+    // MARK: - Blocks
 
-    private func blocksGrid(_ blocks: [Block]) -> some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-            SparkDetailSectionHeader("Blocks", trailing: "\(blocks.count) blocks")
+    /// Takeaways read inline, other text blocks are rows with a preview, the
+    /// alternative summaries fold away (the hero already shows the tl;dr), and
+    /// only blocks with a numeric value keep the tile grid.
+    @ViewBuilder
+    private func blocksSection(_ blocks: [Block]) -> some View {
+        let groups = BlockGroups(blocks)
+
+        ForEach(groups.takeaways) { block in
+            NavigationLink {
+                BlockDetailView(blockId: block.id, parent: loadedEvent)
+            } label: {
+                GlassCard(radius: SparkRadii.lg, padding: SparkSpacing.lg) {
+                    VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                        SectionLabel(block.title, style: .dayHeading)
+                        SparkLongFormContentView(text: block.content ?? "", paragraphFont: SparkTypography.body)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .buttonStyle(.plain)
+        }
+
+        if !groups.rows.isEmpty || !groups.summaries.isEmpty {
+            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                SparkDetailSectionHeader("Content", trailing: "\(groups.rows.count + groups.summaries.count) blocks")
+                ForEach(groups.rows) { block in blockRow(block) }
+
+                if !groups.summaries.isEmpty {
+                    Button {
+                        withAnimation(.snappy) { showOtherSummaries.toggle() }
+                    } label: {
+                        HStack(spacing: SparkSpacing.xs) {
+                            Text(groups.rows.isEmpty ? "Summaries" : "Other summaries")
+                            Text("\(groups.summaries.count)").foregroundStyle(.secondary)
+                            Image(systemName: "chevron.down")
+                                .font(.caption2)
+                                .rotationEffect(.degrees(showOtherSummaries ? 0 : -90))
+                        }
+                        .font(SparkTypography.captionStrong)
+                        .foregroundStyle(Color.sparkAccent)
+                        .padding(.vertical, SparkSpacing.xs)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(showOtherSummaries ? "Hide summaries" : "Show \(groups.summaries.count) summaries")
+
+                    if showOtherSummaries {
+                        ForEach(groups.summaries) { block in blockRow(block) }
+                    }
+                }
+            }
+        }
+
+        if !groups.values.isEmpty {
             LazyVGrid(
                 columns: [GridItem(.flexible(), spacing: SparkSpacing.sm), GridItem(.flexible(), spacing: SparkSpacing.sm)],
                 spacing: SparkSpacing.sm
             ) {
-                ForEach(blocks) { block in
+                ForEach(groups.values) { block in
                     NavigationLink {
-                        BlockDetailView(blockId: block.id)
+                        BlockDetailView(blockId: block.id, parent: loadedEvent)
                     } label: {
-                        blockTile(block)
+                        SparkDetailValueTile(
+                            label: block.title,
+                            value: block.value?.sparkPlainTextFromHTMLFragment ?? "",
+                            subtitle: block.unit,
+                            tint: Color.sparkAccent
+                        )
                     }
                     .buttonStyle(.plain)
                 }
@@ -393,15 +509,13 @@ struct EventDetailView: View {
         }
     }
 
-    private func blockTile(_ block: Block) -> some View {
-        SparkDetailValueTile(
-            label: block.blockType.replacingOccurrences(of: "_", with: " "),
-            value: block.value?.sparkPlainTextFromHTMLFragment ?? block.title,
-            subtitle: block.value == nil ? nil : block.title,
-            tint: Color.sparkAccent
-        )
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(block.title), \(block.blockType.replacingOccurrences(of: "_", with: " "))")
+    private func blockRow(_ block: Block) -> some View {
+        NavigationLink {
+            BlockDetailView(blockId: block.id, parent: loadedEvent)
+        } label: {
+            SparkDetailBlockRow(title: block.title, preview: BlockGroups.preview(for: block))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Related events
@@ -417,73 +531,67 @@ struct EventDetailView: View {
 
     // MARK: - Notes
 
-    private func noteSection(for detail: EventDetail) -> some View {
+    private func noteSection(_ note: String) -> some View {
         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-            HStack {
-                SectionLabel("Notes")
+            HStack(alignment: .firstTextBaseline) {
+                SectionLabel("Notes", style: .dayHeading)
                 Spacer(minLength: 0)
                 Button {
-                    noteDraft = detail.note ?? ""
+                    noteDraft = note
                     noteError = nil
                     showNoteEditor = true
                 } label: {
-                    Label(detail.note?.isEmpty == false ? "Edit" : "Add", systemImage: "square.and.pencil")
+                    Label("Edit", systemImage: "square.and.pencil")
                         .font(SparkTypography.captionStrong)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Color.sparkAccent)
             }
 
-            if let note = detail.note, !note.isEmpty {
-                GlassCard(radius: SparkRadii.md, padding: SparkSpacing.md) {
-                    Text(note)
-                        .font(SparkTypography.body)
-                        .italic()
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            } else {
-                GlassCard(radius: SparkRadii.md, padding: SparkSpacing.md) {
-                    Text("No note yet.")
-                        .font(SparkTypography.bodySmall)
-                        .foregroundStyle(.secondary)
-                }
+            GlassCard(radius: SparkRadii.md, padding: SparkSpacing.md) {
+                Text(note)
+                    .font(SparkTypography.body)
+                    .italic()
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .sheet(isPresented: $showNoteEditor) {
-            NavigationStack {
-                VStack(alignment: .leading, spacing: SparkSpacing.md) {
-                    TextEditor(text: $noteDraft)
-                        .font(SparkTypography.body)
-                        .frame(minHeight: 220)
-                        .padding(SparkSpacing.sm)
-                        .sparkGlass(.roundedRect(SparkRadii.md))
+    }
 
-                    if let noteError {
-                        Text(noteError)
-                            .font(SparkTypography.caption)
-                            .foregroundStyle(Color.sparkError)
-                    }
+    private func noteEditor(for detail: EventDetail) -> some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: SparkSpacing.md) {
+                TextEditor(text: $noteDraft)
+                    .font(SparkTypography.body)
+                    .frame(minHeight: 220)
+                    .padding(SparkSpacing.sm)
+                    .sparkGlass(.roundedRect(SparkRadii.md))
 
-                    Spacer(minLength: 0)
+                if let noteError {
+                    Text(noteError)
+                        .font(SparkTypography.caption)
+                        .foregroundStyle(Color.sparkError)
                 }
-                .padding(SparkSpacing.lg)
-                .background(Color.sparkSurface.ignoresSafeArea())
-                .navigationTitle(detail.note?.isEmpty == false ? "Edit note" : "Add note")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            showNoteEditor = false
-                        } label: {
-                            Image(systemName: "xmark")
-                        }
-                        .accessibilityLabel("Close")
+
+                Spacer(minLength: 0)
+            }
+            .padding(SparkSpacing.lg)
+            .background(Color.sparkSurface.ignoresSafeArea())
+            .navigationTitle(detail.note?.isEmpty == false ? "Edit note" : "Add note")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showNoteEditor = false
+                    } label: {
+                        Image(systemName: "xmark")
                     }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Save") {
-                            Task { await saveNoteDraft() }
-                        }
+                    .accessibilityLabel("Close")
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        Task { await saveNoteDraft() }
                     }
                 }
             }
@@ -572,7 +680,43 @@ struct EventDetailView: View {
 
 private struct LinkedEventObject: Identifiable {
     let id: String
-    let role: String
     let title: String
     let subtitle: String?
+    let icon: String
+}
+
+/// Sorts an event's blocks by how the detail screen shows them.
+struct BlockGroups {
+    var takeaways = [Block]()
+    var rows = [Block]()
+    var summaries = [Block]()
+    var values = [Block]()
+
+    init(_ blocks: [Block]) {
+        for block in blocks {
+            let type = block.blockType.lowercased()
+            if let value = block.value, !value.isEmpty {
+                values.append(block)
+            } else if type.contains("takeaway"), block.content?.isEmpty == false {
+                takeaways.append(block)
+            } else if type.contains("summary") || type.contains("tldr") {
+                summaries.append(block)
+            } else {
+                rows.append(block)
+            }
+        }
+    }
+
+    /// The first couple of lines of a block's text, without markup.
+    static func preview(for block: Block) -> String? {
+        guard let content = block.content?.sparkPlainTextFromHTMLFragment else { return nil }
+        let collapsed = content
+            .replacingOccurrences(of: "[#*_>`]", with: "", options: .regularExpression)
+            .split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        guard !collapsed.isEmpty else { return nil }
+        return collapsed.count > 220 ? String(collapsed.prefix(220)) + "…" : collapsed
+    }
 }

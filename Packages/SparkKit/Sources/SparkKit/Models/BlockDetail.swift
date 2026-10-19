@@ -29,8 +29,10 @@ public struct BlockDetail: Codable, Sendable, Hashable, Identifiable {
             event = try container.decodeIfPresent(Event.self, forKey: .event)
             aiSummary = try container.decodeIfPresent(String.self, forKey: .aiSummary)
         } else {
+            // The flat compact shape carries the parent event alongside the
+            // block's own fields, so the detail screen can link back to it.
             block = try Block(from: decoder)
-            event = nil
+            event = try container.decodeIfPresent(Event.self, forKey: .event)
             aiSummary = nil
         }
     }
