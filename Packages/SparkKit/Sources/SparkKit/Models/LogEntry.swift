@@ -277,12 +277,49 @@ public struct LogClarification: Codable, Sendable, Hashable {
     }
 }
 
+/// Whether a name typed after "with" is someone already known, from a dry run.
+public struct LogPersonCheck: Decodable, Sendable, Hashable, Identifiable {
+    public enum State: String, Decodable, Sendable, Hashable {
+        /// The same name.
+        case existing
+        /// One person it could be, like Dan for Daniel.
+        case likely
+        /// Several people it could be.
+        case ambiguous
+        case new
+    }
+
+    public struct Match: Decodable, Sendable, Hashable, Identifiable {
+        public let id: String
+        public let name: String
+
+        public init(id: String, name: String) {
+            self.id = id
+            self.name = name
+        }
+    }
+
+    /// The name as typed.
+    public let name: String
+    public let state: State
+    public let matches: [Match]
+
+    public var id: String { name.lowercased() }
+
+    public init(name: String, state: State, matches: [Match] = []) {
+        self.name = name
+        self.state = state
+        self.matches = matches
+    }
+}
+
 /// The result of `POST /log`: the events written, or a question to answer first.
 public enum LogResponse: Decodable, Sendable, Hashable {
     case logged(events: [LoggedEvent], missingEpisodes: [Int], people: [LoggedPerson])
-    case needsClarification(LogClarification)
+    /// `people` is filled on a dry run only.
+    case needsClarification(LogClarification, people: [LogPersonCheck])
     /// A dry run: what would match. Nil for kinds with nothing to look up (cinema, board games).
-    case preview(LogMatch?)
+    case preview(LogMatch?, people: [LogPersonCheck])
 
     private enum CodingKeys: String, CodingKey {
         case status
@@ -304,9 +341,15 @@ public enum LogResponse: Decodable, Sendable, Hashable {
                 people: try container.decodeIfPresent([LoggedPerson].self, forKey: .people) ?? []
             )
         case "needs_clarification":
-            self = .needsClarification(try LogClarification(from: decoder))
+            self = .needsClarification(
+                try LogClarification(from: decoder),
+                people: try container.decodeIfPresent([LogPersonCheck].self, forKey: .people) ?? []
+            )
         case "preview":
-            self = .preview(try container.decodeIfPresent(LogMatch.self, forKey: .match))
+            self = .preview(
+                try container.decodeIfPresent(LogMatch.self, forKey: .match),
+                people: try container.decodeIfPresent([LogPersonCheck].self, forKey: .people) ?? []
+            )
         default:
             throw DecodingError.dataCorruptedError(
                 forKey: .status,

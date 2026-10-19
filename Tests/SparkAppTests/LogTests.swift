@@ -262,6 +262,61 @@ struct LogViewModelTests {
         #expect(object["with"] as? [String] == ["Sam", "Alex"])
     }
 
+    @Test("a partial name waits for a choice, then logs under the person picked")
+    func partialNameIsResolvedBeforeLogging() async throws {
+        let peoplePreview = """
+        {"status": "preview", "match": null, "people": [
+          {"name": "Dan", "state": "likely", "matches": [{"id": "p1", "name": "Daniel Smith"}]},
+          {"name": "daniel", "state": "existing", "matches": [{"id": "p2", "name": "Daniel"}]},
+          {"name": "Priya", "state": "new", "matches": []}
+        ]}
+        """
+        await AppStubURLProtocol.set(host: Self.host) { request in
+            let body = String(data: request.httpBody ?? Data(), encoding: .utf8) ?? ""
+            return body.contains("\"dry_run\":true") ? (Data(peoplePreview.utf8), 200, [:]) : (Data(Self.logged.utf8), 201, [:])
+        }
+        let model = LogViewModel(extract: { _ in LogDraft(kind: "wine", title: "Rioja", people: ["Dan", "daniel", "Priya"]) })
+        let client = try await makeClient()
+        model.updateText("Rioja with Dan, Daniel and Priya")
+        await model.submit(using: client)
+
+        await model.refreshPeople(using: client)
+
+        #expect(model.draft.people == ["Dan", "Daniel", "Priya"])
+        #expect(model.hasUnresolvedPeople)
+        #expect(model.isUnresolved("Dan"))
+        #expect(!model.isUnresolved("Priya"))
+
+        await model.confirm(using: client)
+        #expect(model.phase == .preview)
+
+        model.resolvePerson("Dan", as: LogPersonCheck.Match(id: "p1", name: "Daniel Smith"))
+        #expect(model.draft.people == ["Daniel Smith", "Daniel", "Priya"])
+        #expect(!model.hasUnresolvedPeople)
+    }
+
+    @Test("keeping a similar name as new settles it")
+    func keepingNewSettlesTheName() async throws {
+        let peoplePreview = """
+        {"status": "preview", "match": null, "people": [
+          {"name": "Sam", "state": "ambiguous", "matches": [{"id": "p1", "name": "Sam Jones"}, {"id": "p2", "name": "Samantha"}]}
+        ]}
+        """
+        await AppStubURLProtocol.set(host: Self.host) { _ in (Data(peoplePreview.utf8), 200, [:]) }
+        let model = LogViewModel(extract: { _ in LogDraft(kind: "wine", title: "Rioja", people: ["Sam"]) })
+        let client = try await makeClient()
+        model.updateText("Rioja with Sam")
+        await model.submit(using: client)
+        await model.refreshPeople(using: client)
+        #expect(model.hasUnresolvedPeople)
+
+        model.keepNewPerson("Sam")
+
+        #expect(!model.hasUnresolvedPeople)
+        #expect(model.isNewPerson("sam"))
+        #expect(model.draft.people == ["Sam"])
+    }
+
     @Test("a dry run fills the match, and a chosen runner-up is sent when logging")
     func dryRunThenChooseMatch() async throws {
         await AppStubURLProtocol.set(host: Self.host) { request in

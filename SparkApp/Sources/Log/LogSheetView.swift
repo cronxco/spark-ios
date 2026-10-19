@@ -81,9 +81,13 @@ struct LogSheetView: View {
                 draft: Bindable(model).draft,
                 match: model.matchState,
                 chosenCard: model.chosenCard,
-                canLog: model.canConfirm,
+                canLog: model.canConfirm && !model.hasUnresolvedPeople,
                 onAnswerQuestion: { model.answerMatchQuestion($0) },
                 onChooseMatch: { model.chooseMatch($0) },
+                personCheck: { model.personCheck(for: $0) },
+                isNewPerson: { model.isNewPerson($0) },
+                onResolvePerson: { model.resolvePerson($0, as: $1) },
+                onKeepNewPerson: { model.keepNewPerson($0) },
                 onAddPerson: { model.addPerson($0) },
                 onRemovePerson: { model.removePerson($0) },
                 onEdit: {
@@ -94,6 +98,7 @@ struct LogSheetView: View {
             )
             .transition(.opacity.combined(with: .move(edge: .bottom)))
             .task(id: model.matchKey) { await model.refreshMatch(using: apiClient) }
+            .task(id: model.peopleKey) { await model.refreshPeople(using: apiClient) }
         case .question(let question):
             LogQuestionCard(question: question) { option in
                 Task { await model.answer(option, using: apiClient) }

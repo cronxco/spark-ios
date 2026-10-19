@@ -43,6 +43,10 @@ final class LogViewModel {
     private(set) var matchState: MatchState = .idle
     /// A runner-up the user picked over the best card.
     private(set) var chosenCard: LogMatch.Card?
+    /// How each typed name matched a known person, keyed by the lowercased name.
+    private(set) var personChecks: [String: LogPersonCheck] = [:]
+    /// Names the user wants as a new person even though someone similar exists, lowercased.
+    private var newPeople: Set<String> = []
 
     /// The request waiting on an answer. Answers amend it and resend under the same idempotency key.
     private var pending: LogRequest?
@@ -66,6 +70,29 @@ final class LogViewModel {
     var matchKey: String {
         let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return "\(draft.kind.rawValue)|\(title)|\(draft.season ?? 0)|\(draft.episodes ?? [])|\(draft.tvdbID ?? 0)"
+    }
+
+    /// Changes when the people named change, so the sheet can check them again.
+    var peopleKey: String {
+        (draft.people ?? []).map { $0.lowercased() }.joined(separator: "|")
+    }
+
+    /// A name that could be one of several people, or a short form of one, and has not been settled.
+    var hasUnresolvedPeople: Bool {
+        (draft.people ?? []).contains { isUnresolved($0) }
+    }
+
+    func isUnresolved(_ name: String) -> Bool {
+        guard let check = personChecks[name.lowercased()], !newPeople.contains(name.lowercased()) else { return false }
+        return check.state == .likely || check.state == .ambiguous
+    }
+
+    func personCheck(for name: String) -> LogPersonCheck? {
+        personChecks[name.lowercased()]
+    }
+
+    func isNewPerson(_ name: String) -> Bool {
+        newPeople.contains(name.lowercased())
     }
 
     var canConfirm: Bool { !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -129,9 +156,9 @@ final class LogViewModel {
         request.dryRun = true
         do {
             switch try await apiClient.request(LogEndpoint.submit(request)) {
-            case .preview(let match):
+            case .preview(let match, _):
                 matchState = .loaded(match)
-            case .needsClarification(let question):
+            case .needsClarification(let question, _):
                 matchState = .question(question)
             case .logged:
                 matchState = .failed
@@ -161,7 +188,7 @@ final class LogViewModel {
 
     /// Logs what the preview shows, with any fixes made to it.
     func confirm(using apiClient: APIClient) async {
-        guard case .preview = phase, canConfirm else { return }
+        guard case .preview = phase, canConfirm, !hasUnresolvedPeople else { return }
 
         var request = draft
         request.title = request.title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -172,6 +199,61 @@ final class LogViewModel {
     func edit() {
         guard case .preview = phase else { return }
         phase = .idle
+    }
+
+    /// Asks which of the named people are already known. Only the people go over, so nothing is looked up on a site.
+    func refreshPeople(using apiClient: APIClient) async {
+        guard case .preview = phase, let names = draft.people, !names.isEmpty else {
+            personChecks = [:]
+            return
+        }
+
+        do {
+            try await Task.sleep(for: .milliseconds(400))
+        } catch {
+            return
+        }
+
+        var request = LogRequest(kind: .cinema, title: draft.title, people: names)
+        request.dryRun = true
+        do {
+            let response = try await apiClient.request(LogEndpoint.submit(request))
+            guard case .preview(_, let checks) = response else { return }
+            personChecks = Dictionary(checks.map { ($0.name.lowercased(), $0) }, uniquingKeysWith: { first, _ in first })
+            normaliseExactMatches(checks)
+        } catch {
+            personChecks = [:]
+        }
+    }
+
+    /// Settles a likely or ambiguous name as the known person picked.
+    func resolvePerson(_ name: String, as match: LogPersonCheck.Match) {
+        replacePerson(name, with: match.name)
+    }
+
+    /// Keeps a typed name as a new person even though someone similar exists.
+    func keepNewPerson(_ name: String) {
+        newPeople.insert(name.lowercased())
+    }
+
+    private func normaliseExactMatches(_ checks: [LogPersonCheck]) {
+        for check in checks where check.state == .existing {
+            guard let known = check.matches.first?.name, known != check.name else { continue }
+            replacePerson(check.name, with: known)
+        }
+    }
+
+    private func replacePerson(_ name: String, with other: String) {
+        var names = draft.people ?? []
+        guard let index = names.firstIndex(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) else { return }
+
+        if names.contains(where: { $0.caseInsensitiveCompare(other) == .orderedSame && $0 != names[index] }) {
+            names.remove(at: index)
+        } else {
+            names[index] = other
+        }
+        draft.people = names.nilIfEmpty
+        newPeople.remove(name.lowercased())
     }
 
     func removePerson(_ name: String) {
@@ -228,6 +310,8 @@ final class LogViewModel {
     }
 
     func reset() {
+        personChecks = [:]
+        newPeople = []
         matchState = .idle
         chosenCard = nil
         text = ""
@@ -245,7 +329,7 @@ final class LogViewModel {
             case .logged(let events, let missingEpisodes, let people):
                 pending = nil
                 phase = .logged(Outcome(events: events, missingEpisodes: missingEpisodes, people: people))
-            case .needsClarification(let question):
+            case .needsClarification(let question, _):
                 phase = .question(question)
             case .preview:
                 phase = .failed("Couldn’t log that. Try again.")

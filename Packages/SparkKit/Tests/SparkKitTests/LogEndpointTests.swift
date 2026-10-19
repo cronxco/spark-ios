@@ -92,7 +92,7 @@ struct LogEndpointTests {
 
         let response = try JSONDecoder().decode(LogResponse.self, from: Data(json.utf8))
 
-        guard case .preview(let match?) = response else {
+        guard case .preview(let match?, _) = response else {
             Issue.record("Expected a preview")
             return
         }
@@ -117,7 +117,7 @@ struct LogEndpointTests {
 
         let response = try JSONDecoder().decode(LogResponse.self, from: Data(json.utf8))
 
-        guard case .preview(let match?) = response else {
+        guard case .preview(let match?, _) = response else {
             Issue.record("Expected a preview")
             return
         }
@@ -131,7 +131,32 @@ struct LogEndpointTests {
     func decodesEmptyPreview() throws {
         let response = try JSONDecoder().decode(LogResponse.self, from: Data(#"{"status": "preview", "match": null}"#.utf8))
 
-        #expect(response == .preview(nil))
+        #expect(response == .preview(nil, people: []))
+    }
+
+    @Test("a preview decodes how each named person matched")
+    func decodesPeopleChecks() throws {
+        let json = """
+        {
+          "status": "preview", "match": null,
+          "people": [
+            {"name": "Daniel", "state": "existing", "matches": [{"id": "p1", "name": "Daniel"}]},
+            {"name": "Dan", "state": "likely", "matches": [{"id": "p1", "name": "Daniel Smith"}]},
+            {"name": "Sam", "state": "ambiguous", "matches": [{"id": "p2", "name": "Sam Jones"}, {"id": "p3", "name": "Samantha"}]},
+            {"name": "Priya", "state": "new", "matches": []}
+          ]
+        }
+        """
+
+        let response = try JSONDecoder().decode(LogResponse.self, from: Data(json.utf8))
+
+        guard case .preview(nil, let people) = response else {
+            Issue.record("Expected a preview")
+            return
+        }
+        #expect(people.map(\.state) == [.existing, .likely, .ambiguous, .new])
+        #expect(people[1].matches.map(\.name) == ["Daniel Smith"])
+        #expect(people[2].matches.count == 2)
     }
 
     @Test("board game kind uses the backend spelling")
@@ -184,7 +209,7 @@ struct LogEndpointTests {
 
         let response = try JSONDecoder().decode(LogResponse.self, from: Data(json.utf8))
 
-        guard case .needsClarification(let question) = response else {
+        guard case .needsClarification(let question, _) = response else {
             Issue.record("Expected a clarification")
             return
         }
@@ -210,7 +235,7 @@ struct LogEndpointTests {
 
         let response = try JSONDecoder().decode(LogResponse.self, from: Data(json.utf8))
 
-        guard case .needsClarification(let question) = response else {
+        guard case .needsClarification(let question, _) = response else {
             Issue.record("Expected a clarification")
             return
         }

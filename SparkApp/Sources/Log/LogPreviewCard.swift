@@ -11,6 +11,10 @@ struct LogPreviewCard: View {
     let canLog: Bool
     let onAnswerQuestion: (LogClarification.Option) -> Void
     let onChooseMatch: (LogMatch.Card?) -> Void
+    let personCheck: (String) -> LogPersonCheck?
+    let isNewPerson: (String) -> Bool
+    let onResolvePerson: (String, LogPersonCheck.Match) -> Void
+    let onKeepNewPerson: (String) -> Void
     let onAddPerson: (String) -> Void
     let onRemovePerson: (String) -> Void
     let onEdit: () -> Void
@@ -78,27 +82,16 @@ struct LogPreviewCard: View {
             LogPreviewRow(index: 6, symbol: "person.2", label: "With") {
                 VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                     if let people = draft.people, !people.isEmpty {
-                        LazyVGrid(
-                            columns: [GridItem(.adaptive(minimum: 96), spacing: SparkSpacing.sm)],
-                            alignment: .leading,
-                            spacing: SparkSpacing.sm
-                        ) {
+                        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                             ForEach(people, id: \.self) { name in
-                                Button {
-                                    onRemovePerson(name)
-                                } label: {
-                                    HStack(spacing: SparkSpacing.xxs) {
-                                        Text(name)
-                                        Image(systemName: "xmark.circle.fill")
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    .font(SparkTypography.bodySmall)
-                                    .padding(.horizontal, SparkSpacing.sm)
-                                    .padding(.vertical, SparkSpacing.xxs)
-                                    .background(.thinMaterial, in: Capsule())
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("Remove \(name)")
+                                LogPersonRow(
+                                    name: name,
+                                    check: personCheck(name),
+                                    isNew: isNewPerson(name),
+                                    onResolve: { onResolvePerson(name, $0) },
+                                    onKeepNew: { onKeepNewPerson(name) },
+                                    onRemove: { onRemovePerson(name) }
+                                )
                                 .transition(.scale.combined(with: .opacity))
                             }
                         }
@@ -347,5 +340,75 @@ private struct LogMatchView: View {
     private func orderedOptions(_ question: LogClarification) -> [LogClarification.Option] {
         guard let suggested = question.suggested else { return question.options }
         return question.options.filter { $0.value == suggested } + question.options.filter { $0.value != suggested }
+    }
+}
+
+/// One named person: the chip with its remove button, and whether they match someone known.
+private struct LogPersonRow: View {
+    let name: String
+    let check: LogPersonCheck?
+    let isNew: Bool
+    let onResolve: (LogPersonCheck.Match) -> Void
+    let onKeepNew: () -> Void
+    let onRemove: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.xs) {
+            HStack(spacing: SparkSpacing.sm) {
+                Button(action: onRemove) {
+                    HStack(spacing: SparkSpacing.xxs) {
+                        Text(name)
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(SparkTypography.bodySmall)
+                    .padding(.horizontal, SparkSpacing.sm)
+                    .padding(.vertical, SparkSpacing.xxs)
+                    .background(.thinMaterial, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Remove \(name)")
+
+                status
+            }
+
+            if !isNew, let check, check.state == .likely || check.state == .ambiguous {
+                HStack(spacing: SparkSpacing.sm) {
+                    ForEach(check.matches) { match in
+                        Button(match.name) { onResolve(match) }
+                            .buttonStyle(.bordered)
+                    }
+                    Button("New", action: onKeepNew)
+                        .buttonStyle(.bordered)
+                }
+                .font(SparkTypography.bodySmall)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .animation(.spring(duration: 0.35, bounce: 0.2), value: check)
+        .animation(.spring(duration: 0.35, bounce: 0.2), value: isNew)
+    }
+
+    @ViewBuilder
+    private var status: some View {
+        if isNew {
+            label("New", symbol: "person.badge.plus", tint: .secondary)
+        } else if let check {
+            switch check.state {
+            case .existing:
+                label("Matched", symbol: "checkmark.circle.fill", tint: Color.sparkAccent)
+            case .likely, .ambiguous:
+                label("Which one?", symbol: "questionmark.circle", tint: .secondary)
+            case .new:
+                label("New", symbol: "person.badge.plus", tint: .secondary)
+            }
+        }
+    }
+
+    private func label(_ text: String, symbol: String, tint: some ShapeStyle) -> some View {
+        Label(text, systemImage: symbol)
+            .font(SparkTypography.caption)
+            .foregroundStyle(tint)
+            .symbolRenderingMode(.hierarchical)
     }
 }
