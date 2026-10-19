@@ -1,4 +1,6 @@
+import AppIntents
 import CoreSpotlight
+import OSLog
 import Sentry
 import SparkHealth
 import SparkIntelligence
@@ -47,7 +49,9 @@ struct SparkApp: App {
                     // Sends receipts the service extension queued while the
                     // app was not running (decision N-8).
                     SparkAppDelegate.flushReceipts()
+                    SparkShortcuts.updateAppShortcutParameters()
                     await model.reverbConnect()
+                    await model.indexSpotlightIfDue()
                 case .background, .inactive:
                     await model.reverbDisconnect()
                 @unknown default:
@@ -261,6 +265,8 @@ final class SparkAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
             container: { @Sendable in try SparkDataStore.makeContainer() },
             onPrefetch: { @Sendable in
                 guard let container = try? SparkDataStore.makeContainer() else { return }
+                let client = APIClient(tokenStore: KeychainTokenStore(), etagCache: ETagCache())
+                await EntityCacheRefresher.refresh(using: client, container: container)
                 let report = await SpotlightIndexer.indexBatchWithReport(container: container)
                 SparkObservability.captureSpotlightIndexReport(report, source: "background")
                 await SpotlightIndexer.purgeStaleItems(container: container)
@@ -379,6 +385,35 @@ enum SparkObservability {
         SentrySDK.capture(error: error) { scope in
             scope.setTag(value: "handled", key: "error_type")
         }
+    }
+
+    /// Breadcrumb for each Flint generation: which tier served it, why PCC was
+    /// skipped if it was, and the token spend. Informational only; PCC
+    /// fallbacks are expected (quota, offline) and must not raise Sentry events.
+    static func captureFlintGeneration(path: String, result: FlintGenerationResult) {
+        let crumb = Breadcrumb(level: .info, category: "flint.generation")
+        crumb.type = "debug"
+        crumb.message = "Flint generation served"
+        var data: [String: Any] = [
+            "path": path,
+            "tier": result.tier.rawValue,
+        ]
+        if let reason = result.pccFallbackReason {
+            data["pcc_fallback_reason"] = reason
+        }
+        if let usage = result.usage {
+            data["input_tokens"] = usage.inputTokens
+            data["output_tokens"] = usage.outputTokens
+            data["reasoning_tokens"] = usage.reasoningTokens
+            data["response_token_budget"] = usage.responseTokenBudget
+        }
+        crumb.setSparkData(data)
+        SentrySDK.addBreadcrumb(crumb)
+        #if DEBUG
+        Logger(subsystem: "co.cronx.sparkapp", category: "FlintGeneration").info(
+            "flint.generation path=\(path, privacy: .public) tier=\(result.tier.rawValue, privacy: .public) fallback=\(result.pccFallbackReason ?? "none", privacy: .public)"
+        )
+        #endif
     }
 
     static func captureSpotlightDiagnostics(_ snapshot: SpotlightDiagnosticsSnapshot, source: String) {

@@ -16,6 +16,8 @@
 	<true/>
 	<key>com.apple.developer.messages.critical-messaging</key>
 	<true/>
+	<key>com.apple.developer.private-cloud-compute</key>
+	<true/>
 	<key>com.apple.developer.siri</key>
 	<true/>
 	<key>com.apple.developer.usernotifications.time-sensitive</key>

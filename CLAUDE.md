@@ -103,6 +103,7 @@ Each target shares:
 - **App Group**: `group.co.cronx.sparkapp`
 - **Keychain access group**: `$(AppIdentifierPrefix)co.cronx.spark`
 - **Associated domain**: `applinks:spark.cronx.co`
+- **Private Cloud Compute** (main app only): managed `com.apple.developer.private-cloud-compute` entitlement, granted per App ID by Apple. Flint prefers PCC and falls back to the on-device model; set the App Group default `spark.flint.pcc.disabled` to `true` to force on-device only.
 
 The William Scott development team is declared in `Project.swift`, so `tuist generate` preserves signing automatically. Xcode can then auto-register App Group, Keychain Sharing, Associated Domains, Push Notifications, and HealthKit as needed.
 

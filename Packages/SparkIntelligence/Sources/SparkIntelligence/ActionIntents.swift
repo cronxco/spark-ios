@@ -229,6 +229,30 @@ public struct SearchSparkIntent: AppIntent {
     }
 }
 
+// MARK: - Find Events
+
+public struct FindEventsIntent: AppIntent {
+    public static let title: LocalizedStringResource = "Find Events"
+    public static let description = IntentDescription("Find events in your Spark data by meaning, such as coffee or runs.")
+
+    @Parameter(title: "Search for")
+    public var query: String
+
+    public init() {}
+    public init(query: String) { self.query = query }
+
+    public func perform() async throws -> some IntentResult & ReturnsValue<[EventEntity]> & ProvidesDialog {
+        let semantic = await IntentService.semanticEventEntities(query: query, limit: 10)
+        let events = semantic.isEmpty
+            ? await MainActor.run { IntentService.eventEntities(query: query, limit: 10) }
+            : semantic
+        guard !events.isEmpty else {
+            return .result(value: [], dialog: "No events found for \(query).")
+        }
+        return .result(value: events, dialog: "Found \(events.count) \(events.count == 1 ? "event" : "events") for \(query).")
+    }
+}
+
 // MARK: - Acknowledge Anomaly
 
 public struct AcknowledgeAnomalyIntent: AppIntent {

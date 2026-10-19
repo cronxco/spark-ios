@@ -44,6 +44,7 @@ final class AppModel {
         do {
             container = try SparkDataStore.makeContainer()
         } catch {
+            SparkObservability.captureHandled(error)
             container = (try? SparkDataStore.makeInMemoryContainer()) ?? {
                 fatalError("Unable to bootstrap any SwiftData container: \(error)")
             }()
@@ -74,9 +75,46 @@ final class AppModel {
         }
     }
     private var deviceRegistrationTask: Task<Void, Never>?
+    private var entityRefreshTask: Task<Void, Never>?
+    private var foregroundIndexTask: Task<Void, Never>?
+    private var isSigningOut = false
     private var deviceRegistrationTokenInFlight: String?
     private let purgeDataStore: @MainActor (ModelContainer) throws -> Void
     private let purgeSpotlight: @MainActor () async throws -> Void
+
+    /// Re-indexes Spotlight at most once an hour while the app is in use, so
+    /// Siri sees today's data without waiting for the nightly background task.
+    func indexSpotlightIfDue() async {
+        guard !isSigningOut else { return }
+        let key = "spark.spotlight.lastForegroundIndexAt"
+        let defaults = UserDefaults.sparkAppGroup
+        if let last = defaults.object(forKey: key) as? Date, Date.now.timeIntervalSince(last) < 3600 {
+            return
+        }
+        guard foregroundIndexTask == nil else { return }
+
+        let task = Task { @MainActor in
+            guard await tokenStore.accessToken() != nil else { return }
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled, session == .loggedIn else { return }
+
+            let client = apiClient
+            let store = container
+            let refresh = Task { @MainActor in
+                await EntityCacheRefresher.refresh(using: client, container: store)
+            }
+            entityRefreshTask = refresh
+            await refresh.value
+            entityRefreshTask = nil
+            guard !Task.isCancelled else { return }
+
+            await SpotlightIndexer.indexBatch(container: container)
+            defaults.set(Date.now, forKey: key)
+        }
+        foregroundIndexTask = task
+        await task.value
+        foregroundIndexTask = nil
+    }
 
     init(
         container: ModelContainer,
@@ -373,6 +411,9 @@ final class AppModel {
     /// Revocation and privacy-sensitive local erasure must complete before the
     /// credentials are cleared and another account can enter the shared store.
     func signOut() async {
+        isSigningOut = true
+        defer { isSigningOut = false }
+
         guard await revokeRemoteDevice() else {
             lastError = "Couldn't revoke this device. Spark will retry when the connection returns."
             return
@@ -418,6 +459,15 @@ final class AppModel {
 
     /// Removes all locally held user state. Idempotent.
     private func purgeLocalState() async throws {
+        // A refresh still awaiting the API must not save the departing
+        // account's entities back after the stores are erased.
+        foregroundIndexTask?.cancel()
+        entityRefreshTask?.cancel()
+        await foregroundIndexTask?.value
+        await entityRefreshTask?.value
+        foregroundIndexTask = nil
+        entityRefreshTask = nil
+
         // Both durable stores are erased before credentials. If either throws,
         // the current account stays active and can safely retry; a second
         // account is never admitted to partially purged shared state.

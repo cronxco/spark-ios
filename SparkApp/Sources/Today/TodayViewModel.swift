@@ -51,7 +51,7 @@ final class TodayViewModel {
     private let defaults: UserDefaults
     private var summaryLineTask: Task<Void, Never>?
 
-    private static let summaryLinePromptVersion = "today-hero-summary-v3"
+    private static let summaryLinePromptVersion = "today-hero-summary-v5"
     private static let summaryLineCachePrefix = "spark.today.heroSummary"
 
     init(
@@ -651,8 +651,8 @@ final class TodayViewModel {
             line.removeLast()
         }
 
-        if line.count > 160 {
-            let end = line.index(line.startIndex, offsetBy: 157)
+        if line.count > 400 {
+            let end = line.index(line.startIndex, offsetBy: 397)
             line = String(line[..<end]).trimmingCharacters(in: .whitespacesAndNewlines) + "..."
         }
         return line

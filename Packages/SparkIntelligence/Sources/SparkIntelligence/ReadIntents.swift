@@ -78,3 +78,18 @@ public struct GetReadinessIntent: AppIntent {
         return .result(value: score, dialog: dialog)
     }
 }
+
+// MARK: - Get Day Summary
+
+public struct GetDaySummaryIntent: AppIntent {
+    public static let title: LocalizedStringResource = "How's My Day"
+    public static let description = IntentDescription("Get a short summary of your day so far.")
+
+    public init() {}
+
+    public func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
+        let summary = await IntentService().todaySnapshot()?.spokenSummary
+            ?? "No data for today yet."
+        return .result(value: summary, dialog: "\(summary)")
+    }
+}
