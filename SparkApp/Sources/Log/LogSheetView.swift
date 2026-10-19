@@ -10,31 +10,33 @@ struct LogSheetView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var model = LogViewModel()
+    @State private var detent: PresentationDetent = .medium
     @FocusState private var isFocused: Bool
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-                TextField("Had half a bottle of Rioja", text: Binding(
-                    get: { model.text },
-                    set: { model.updateText($0) }
-                ), axis: .vertical)
-                    .font(SparkTypography.body)
-                    .lineLimit(1...4)
-                    .focused($isFocused)
-                    .submitLabel(.done)
-                    .padding(SparkSpacing.md)
-                    .sparkGlass(.roundedRect(SparkRadii.md))
-                    .disabled(!isEditable)
-                    .onSubmit { submit() }
-                    .accessibilityLabel("What did you have?")
+            ScrollView {
+                VStack(alignment: .leading, spacing: SparkSpacing.lg) {
+                    TextField("Had half a bottle of Rioja", text: Binding(
+                        get: { model.text },
+                        set: { model.updateText($0) }
+                    ), axis: .vertical)
+                        .font(SparkTypography.body)
+                        .lineLimit(1...4)
+                        .focused($isFocused)
+                        .submitLabel(.done)
+                        .padding(SparkSpacing.md)
+                        .sparkGlass(.roundedRect(SparkRadii.md))
+                        .disabled(!isEditable)
+                        .onSubmit { submit() }
+                        .accessibilityLabel("What did you have?")
 
-                content
-                    .animation(.spring(duration: 0.45, bounce: 0.2), value: model.phase)
-
-                Spacer(minLength: 0)
+                    content
+                        .animation(.spring(duration: 0.45, bounce: 0.2), value: model.phase)
+                }
+                .padding(SparkSpacing.lg)
             }
-            .padding(SparkSpacing.lg)
+            .scrollDismissesKeyboard(.interactively)
             .background(SparkResolvedAppBackground().ignoresSafeArea())
             .navigationTitle("Log")
             .navigationBarTitleDisplayMode(.inline)
@@ -51,7 +53,10 @@ struct LogSheetView: View {
             }
             .onAppear { isFocused = true }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.medium, .large], selection: $detent)
+        .onChange(of: isPreviewing) { _, previewing in
+            if previewing { detent = .large }
+        }
     }
 
     @ViewBuilder

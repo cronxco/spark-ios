@@ -234,7 +234,7 @@ private struct LogMatchView: View {
                 withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) { pulsing = true }
             }
         case .failed:
-            note("Couldn’t check. It will still log.")
+            note("Couldn’t reach Spark. It will still log.")
         case .question(let question):
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                 Text(question.question)
