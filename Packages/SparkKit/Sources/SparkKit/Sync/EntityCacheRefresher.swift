@@ -11,22 +11,49 @@ public enum EntityCacheRefresher {
     public static func refresh(using apiClient: APIClient, container: ModelContainer) async {
         let context = container.mainContext
 
-        if let response = try? await apiClient.request(IntegrationsEndpoint.list()) {
+        if let response = try? await apiClient.request(IntegrationsEndpoint.list()), !Task.isCancelled {
             upsert(integrations: response.data, in: context)
+            prune(integrationsKeeping: Set(response.data.map(\.id)), in: context)
         }
-        if let metrics = try? await apiClient.request(MetricsEndpoint.list()) {
+        if let metrics = try? await apiClient.request(MetricsEndpoint.list()), !Task.isCancelled {
             upsert(metrics: metrics, in: context)
+            prune(metricsKeeping: Set(metrics.map(\.identifier)), in: context)
         }
         if let accounts = try? await apiClient.collectAllPages({ cursor in
             MoneyEndpoint.accounts(limit: 100, cursor: cursor)
-        }) {
+        }), !Task.isCancelled {
             for account in accounts {
                 CachedMoneyAccount.upsert(account, in: context)
             }
+            prune(accountsKeeping: Set(accounts.map(\.id)), in: context)
+        }
+        guard !Task.isCancelled else {
+            context.rollback()
+            return
         }
         upsertAnomaliesFromCachedSummaries(in: context)
 
         try? context.save()
+    }
+
+    /// Deletes cached rows absent from the complete, successfully fetched set,
+    /// so entities removed server-side stop reaching Siri and Spotlight.
+    static func prune(integrationsKeeping ids: Set<String>, in context: ModelContext) {
+        for row in (try? context.fetch(FetchDescriptor<CachedIntegration>())) ?? [] where !ids.contains(row.id) {
+            context.delete(row)
+        }
+    }
+
+    static func prune(metricsKeeping identifiers: Set<String>, in context: ModelContext) {
+        for row in (try? context.fetch(FetchDescriptor<CachedMetric>())) ?? [] where !identifiers.contains(row.identifier) {
+            context.delete(row)
+        }
+    }
+
+    static func prune(accountsKeeping ids: Set<String>, in context: ModelContext) {
+        for row in (try? context.fetch(FetchDescriptor<CachedMoneyAccount>())) ?? [] where !ids.contains(row.id) {
+            context.delete(row)
+        }
     }
 
     static func upsert(integrations: [Integration], in context: ModelContext) {

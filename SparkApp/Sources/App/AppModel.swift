@@ -75,6 +75,7 @@ final class AppModel {
         }
     }
     private var deviceRegistrationTask: Task<Void, Never>?
+    private var entityRefreshTask: Task<Void, Never>?
     private var deviceRegistrationTokenInFlight: String?
     private let purgeDataStore: @MainActor (ModelContainer) throws -> Void
     private let purgeSpotlight: @MainActor () async throws -> Void
@@ -87,10 +88,21 @@ final class AppModel {
         if let last = defaults.object(forKey: key) as? Date, Date.now.timeIntervalSince(last) < 3600 {
             return
         }
-        defaults.set(Date.now, forKey: key)
+        guard await tokenStore.accessToken() != nil else { return }
         try? await Task.sleep(for: .seconds(5))
-        await EntityCacheRefresher.refresh(using: apiClient, container: container)
+
+        let client = apiClient
+        let store = container
+        let refresh = Task { @MainActor in
+            await EntityCacheRefresher.refresh(using: client, container: store)
+        }
+        entityRefreshTask = refresh
+        await refresh.value
+        guard !refresh.isCancelled else { return }
+        entityRefreshTask = nil
+
         await SpotlightIndexer.indexBatch(container: container)
+        defaults.set(Date.now, forKey: key)
     }
 
     init(
@@ -433,6 +445,12 @@ final class AppModel {
 
     /// Removes all locally held user state. Idempotent.
     private func purgeLocalState() async throws {
+        // A refresh still awaiting the API must not save the departing
+        // account's entities back after the stores are erased.
+        entityRefreshTask?.cancel()
+        await entityRefreshTask?.value
+        entityRefreshTask = nil
+
         // Both durable stores are erased before credentials. If either throws,
         // the current account stays active and can safely retry; a second
         // account is never admitted to partially purged shared state.

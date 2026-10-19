@@ -78,7 +78,12 @@ public struct IntentService {
             return nil
         }
         guard !ids.isEmpty else { return [] }
-        return Array(eventEntities(matching: ids).prefix(limit))
+        let rank = Dictionary(ids.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        return Array(
+            eventEntities(matching: ids)
+                .sorted { (rank[$0.id] ?? .max) < (rank[$1.id] ?? .max) }
+                .prefix(limit)
+        )
     }
 
     /// Blocks matching `query` by meaning; see `semanticEventEntities`.
@@ -94,7 +99,12 @@ public struct IntentService {
             return nil
         }
         guard !ids.isEmpty else { return [] }
-        return Array(blockEntities(matching: ids).prefix(limit))
+        let rank = Dictionary(ids.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        return Array(
+            blockEntities(matching: ids)
+                .sorted { (rank[$0.id] ?? .max) < (rank[$1.id] ?? .max) }
+                .prefix(limit)
+        )
     }
 
     public static func blockEntities(matching ids: [String]? = nil, limit: Int = 50) -> [BlockEntity] {

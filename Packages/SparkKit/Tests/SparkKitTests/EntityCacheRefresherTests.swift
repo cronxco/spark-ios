@@ -18,6 +18,19 @@ struct EntityCacheRefresherTests {
         #expect(rows.first?.name == "Oura")
     }
 
+    @Test func pruneDropsOnlyRowsMissingFromTheFetchedSet() throws {
+        let container = try SparkDataStore.makeInMemoryContainer()
+        let context = ModelContext(container)
+        for id in ["i1", "i2"] {
+            context.insert(CachedIntegration(id: id, service: "oura", name: id, status: "active"))
+        }
+
+        EntityCacheRefresher.prune(integrationsKeeping: ["i1"], in: context)
+
+        let rows = try context.fetch(FetchDescriptor<CachedIntegration>())
+        #expect(rows.map(\.id) == ["i1"])
+    }
+
     @Test func anomaliesDescribeAgainstBaseline() throws {
         #expect(try EntityCacheRefresher.describe(Self.anomaly(current: "44 years", baseline: "40 years")) == "Heart age is 44 years, against 40 years normally")
         #expect(try EntityCacheRefresher.describe(Self.anomaly(current: nil, baseline: nil)) == "Heart age")
