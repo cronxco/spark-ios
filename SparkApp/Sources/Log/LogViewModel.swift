@@ -21,6 +21,17 @@ final class LogViewModel {
         case failed(String)
     }
 
+    /// What a dry run found for the preview: the Vivino or Untappd card, or the TheTVDB series, season and episodes.
+    enum MatchState: Equatable {
+        case idle
+        case loading
+        /// Nil when there is nothing to look up (cinema, board games).
+        case loaded(LogMatch?)
+        /// TV that needs a series or season picked before it can be matched.
+        case question(LogClarification)
+        case failed
+    }
+
     static let characterLimit = 300
 
     var text = ""
@@ -29,6 +40,9 @@ final class LogViewModel {
 
     /// What was understood, shown for checking and fixing before anything is logged.
     var draft = LogRequest(kind: .wine, title: "")
+    private(set) var matchState: MatchState = .idle
+    /// A runner-up the user picked over the best card.
+    private(set) var chosenCard: LogMatch.Card?
 
     /// The request waiting on an answer. Answers amend it and resend under the same idempotency key.
     private var pending: LogRequest?
@@ -47,6 +61,12 @@ final class LogViewModel {
     }
 
     var canSubmit: Bool { !trimmedText.isEmpty && !isWorking }
+
+    /// Changes whenever something the lookup depends on does, so the sheet can search again.
+    var matchKey: String {
+        let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return "\(draft.kind.rawValue)|\(title)|\(draft.season ?? 0)|\(draft.episodes ?? [])|\(draft.tvdbID ?? 0)"
+    }
 
     var canConfirm: Bool { !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
@@ -81,7 +101,62 @@ final class LogViewModel {
         }
 
         draft = request
+        matchState = .idle
+        chosenCard = nil
         phase = .preview
+    }
+
+    /// Asks the backend what this would match. Waits briefly first so typing in the name does not search on every key.
+    func refreshMatch(using apiClient: APIClient) async {
+        guard case .preview = phase, canConfirm else { return }
+
+        guard draft.kind != .cinema, draft.kind != .boardGame else {
+            matchState = .loaded(nil)
+            return
+        }
+
+        do {
+            try await Task.sleep(for: .milliseconds(600))
+        } catch {
+            return
+        }
+
+        matchState = .loading
+        chosenCard = nil
+        draft.matchURL = nil
+
+        var request = draft
+        request.dryRun = true
+        do {
+            switch try await apiClient.request(LogEndpoint.submit(request)) {
+            case .preview(let match):
+                matchState = .loaded(match)
+            case .needsClarification(let question):
+                matchState = .question(question)
+            case .logged:
+                matchState = .failed
+            }
+        } catch where error.isAPICancellation {
+            return
+        } catch {
+            matchState = .failed
+        }
+    }
+
+    /// Answers the series or season question in the preview. The changed draft makes the sheet search again.
+    func answerMatchQuestion(_ option: LogClarification.Option) {
+        guard case .question(let question) = matchState else { return }
+
+        switch question.field {
+        case .series: draft.tvdbID = option.value
+        case .season: draft.season = option.value
+        }
+    }
+
+    /// Uses a runner-up instead of the best card: enrichment follows this one.
+    func chooseMatch(_ card: LogMatch.Card?) {
+        chosenCard = card
+        draft.matchURL = card?.url
     }
 
     /// Logs what the preview shows, with any fixes made to it.
@@ -153,6 +228,8 @@ final class LogViewModel {
     }
 
     func reset() {
+        matchState = .idle
+        chosenCard = nil
         text = ""
         pending = nil
         undoError = nil
@@ -170,6 +247,8 @@ final class LogViewModel {
                 phase = .logged(Outcome(events: events, missingEpisodes: missingEpisodes, people: people))
             case .needsClarification(let question):
                 phase = .question(question)
+            case .preview:
+                phase = .failed("Couldn’t log that. Try again.")
             }
         } catch where error.isAPICancellation {
             phase = .idle

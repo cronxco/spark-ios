@@ -11,6 +11,8 @@ public enum LogEndpoint {
     /// structured draft. Answers 201 for new events, 200 for a replay of the
     /// same idempotency key or for a clarification, and 422 for input it
     /// cannot log (such as a series TheTVDB does not know).
+    ///
+    /// With `dryRun` set, answers what would match and writes nothing.
     public static func submit(_ request: LogRequest) -> Endpoint<LogResponse> {
         Endpoint(
             method: .post,

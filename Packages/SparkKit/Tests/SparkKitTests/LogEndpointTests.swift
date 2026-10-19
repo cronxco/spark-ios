@@ -63,6 +63,77 @@ struct LogEndpointTests {
         #expect(object["people"] == nil)
     }
 
+    @Test("a dry run and a chosen match are sent under the backend's keys")
+    func submitEncodesDryRun() throws {
+        let endpoint = LogEndpoint.submit(LogRequest(
+            kind: .wine, idempotencyKey: "key-4", title: "Rioja", rating: 4, dryRun: true, matchURL: "https://www.vivino.com/en/x/w/1"
+        ))
+
+        let body = try #require(endpoint.body)
+        let object = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+
+        #expect(object["dry_run"] as? Bool == true)
+        #expect(object["match_url"] as? String == "https://www.vivino.com/en/x/w/1")
+        #expect(object["rating"] as? Double == 4)
+    }
+
+    @Test("decodes a wine preview with its best card and runners-up")
+    func decodesWinePreview() throws {
+        let json = """
+        {
+          "status": "preview",
+          "match": {
+            "kind": "wine", "state": "matched",
+            "best": {"title": "Raquillet Mercurey", "detail": "Mercurey, France", "rating": 4.1, "url": "https://www.vivino.com/en/x/w/1", "image": null, "score": 1},
+            "candidates": [{"title": "Raquillet Rouge", "detail": null, "rating": 3.9, "url": "https://www.vivino.com/en/y/w/2", "image": null, "score": 0.67}]
+          }
+        }
+        """
+
+        let response = try JSONDecoder().decode(LogResponse.self, from: Data(json.utf8))
+
+        guard case .preview(let match?) = response else {
+            Issue.record("Expected a preview")
+            return
+        }
+        #expect(match.state == .matched)
+        #expect(match.best?.rating == 4.1)
+        #expect(match.candidates.map(\.score) == [0.67])
+        #expect(match.episodes.isEmpty)
+    }
+
+    @Test("decodes a TV preview with episode titles and missing episodes")
+    func decodesTelevisionPreview() throws {
+        let json = """
+        {
+          "status": "preview",
+          "match": {
+            "kind": "tv", "state": "matched", "series": {"id": 371572, "name": "The Diplomat"}, "season": 3,
+            "episodes": [{"number": 1, "name": "The Last Straw", "aired": "2026-01-01"}, {"number": 2, "name": null, "aired": null}],
+            "missing_episodes": [9]
+          }
+        }
+        """
+
+        let response = try JSONDecoder().decode(LogResponse.self, from: Data(json.utf8))
+
+        guard case .preview(let match?) = response else {
+            Issue.record("Expected a preview")
+            return
+        }
+        #expect(match.series == LogMatch.Series(id: 371_572, name: "The Diplomat"))
+        #expect(match.season == 3)
+        #expect(match.episodes.map(\.number) == [1, 2])
+        #expect(match.missingEpisodes == [9])
+    }
+
+    @Test("a preview with nothing to look up decodes to nil")
+    func decodesEmptyPreview() throws {
+        let response = try JSONDecoder().decode(LogResponse.self, from: Data(#"{"status": "preview", "match": null}"#.utf8))
+
+        #expect(response == .preview(nil))
+    }
+
     @Test("board game kind uses the backend spelling")
     func boardGameRawValue() {
         #expect(LogKind.boardGame.rawValue == "board_game")

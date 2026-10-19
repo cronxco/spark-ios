@@ -262,6 +262,77 @@ struct LogViewModelTests {
         #expect(object["with"] as? [String] == ["Sam", "Alex"])
     }
 
+    @Test("a dry run fills the match, and a chosen runner-up is sent when logging")
+    func dryRunThenChooseMatch() async throws {
+        await AppStubURLProtocol.set(host: Self.host) { request in
+            let body = String(data: request.httpBody ?? Data(), encoding: .utf8) ?? ""
+            if body.contains("\"dry_run\":true") {
+                return (Data(Self.winePreview.utf8), 200, [:])
+            }
+            return (Data(Self.logged.utf8), 201, [:])
+        }
+        let model = LogViewModel(extract: { _ in LogDraft(kind: "wine", title: "Raquillet", rating: 4) })
+        let client = try await makeClient()
+        model.updateText("Raquillet, 4 stars")
+        await model.submit(using: client)
+
+        await model.refreshMatch(using: client)
+
+        guard case .loaded(let match?) = model.matchState else {
+            Issue.record("Expected a match, got \(model.matchState)")
+            return
+        }
+        #expect(match.best?.title == "Raquillet Mercurey")
+        let other = try #require(match.candidates.first)
+
+        model.chooseMatch(other)
+        await model.confirm(using: client)
+
+        let requests = await AppStubURLProtocol.recorded(host: Self.host)
+        #expect(requests.count == 2)
+        let dryRun = try #require(requests.first?.httpBody)
+        let log = try #require(requests.last?.httpBody)
+        #expect((try JSONSerialization.jsonObject(with: dryRun) as? [String: Any])?["dry_run"] as? Bool == true)
+        let sent = try #require(try JSONSerialization.jsonObject(with: log) as? [String: Any])
+        #expect(sent["dry_run"] == nil)
+        #expect(sent["match_url"] as? String == "https://www.vivino.com/en/y/w/2")
+        #expect(sent["rating"] as? Double == 4)
+    }
+
+    @Test("cinema and board games have nothing to look up")
+    func nothingToLookUp() async throws {
+        await AppStubURLProtocol.set(host: Self.host) { _ in (Data(), 500, [:]) }
+        let model = LogViewModel(extract: { _ in LogDraft(kind: "cinema", title: "Dune") })
+        let client = try await makeClient()
+        model.updateText("Dune at the cinema")
+        await model.submit(using: client)
+
+        await model.refreshMatch(using: client)
+
+        #expect(model.matchState == .loaded(nil))
+        #expect(await AppStubURLProtocol.recorded(host: Self.host).isEmpty)
+    }
+
+    @Test("a TV season question in the preview is answered on the draft")
+    func answeringThePreviewQuestion() async throws {
+        await AppStubURLProtocol.set(host: Self.host) { _ in (Data(Self.seasonQuestion.utf8), 200, [:]) }
+        let model = LogViewModel(extract: { _ in Self.diplomat() })
+        let client = try await makeClient()
+        model.updateText("Episodes 1 and 2 of The Diplomat")
+        await model.submit(using: client)
+        let before = model.matchKey
+
+        await model.refreshMatch(using: client)
+        guard case .question(let question) = model.matchState else {
+            Issue.record("Expected a question, got \(model.matchState)")
+            return
+        }
+        model.answerMatchQuestion(try #require(question.options.first))
+
+        #expect(model.draft.season == 3)
+        #expect(model.matchKey != before)
+    }
+
     @Test("editing goes back to the text and keeps it")
     func editKeepsText() async throws {
         let model = LogViewModel(extract: { _ in LogDraft(kind: "wine", title: "Rioja") })
@@ -346,6 +417,12 @@ struct LogViewModelTests {
         #expect(outcome.events.count == 2)
         #expect(model.undoError != nil)
     }
+
+    private nonisolated static let winePreview = """
+    {"status":"preview","match":{"kind":"wine","state":"matched",\
+    "best":{"title":"Raquillet Mercurey","detail":"Mercurey, France","rating":4.1,"url":"https://www.vivino.com/en/x/w/1","image":null,"score":1},\
+    "candidates":[{"title":"Raquillet Rouge","detail":null,"rating":3.9,"url":"https://www.vivino.com/en/y/w/2","image":null,"score":0.67}]}}
+    """
 
     private nonisolated static let seasonQuestion = """
     {"status":"needs_clarification","field":"season","question":"Which season?",\

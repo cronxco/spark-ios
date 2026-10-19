@@ -6,7 +6,11 @@ import SwiftUI
 /// Every row can be fixed before anything is logged.
 struct LogPreviewCard: View {
     @Binding var draft: LogRequest
+    let match: LogViewModel.MatchState
+    let chosenCard: LogMatch.Card?
     let canLog: Bool
+    let onAnswerQuestion: (LogClarification.Option) -> Void
+    let onChooseMatch: (LogMatch.Card?) -> Void
     let onAddPerson: (String) -> Void
     let onRemovePerson: (String) -> Void
     let onEdit: () -> Void
@@ -26,18 +30,30 @@ struct LogPreviewCard: View {
                     .font(SparkTypography.body)
             }
 
+            if draft.kind != .cinema, draft.kind != .boardGame {
+                LogPreviewRow(index: 2, symbol: "sparkle.magnifyingglass", label: "Match") {
+                    LogMatchView(
+                        kind: draft.kind,
+                        state: match,
+                        chosen: chosenCard,
+                        onAnswer: onAnswerQuestion,
+                        onChoose: onChooseMatch
+                    )
+                }
+            }
+
             if draft.kind == .tv {
-                LogPreviewRow(index: 2, symbol: "number", label: "Season") {
+                LogPreviewRow(index: 3, symbol: "number", label: "Season") {
                     Text(draft.season.map { "Season \($0)" } ?? "Not said, you’ll be asked")
                         .font(SparkTypography.body)
                         .foregroundStyle(draft.season == nil ? .secondary : .primary)
                 }
-                LogPreviewRow(index: 3, symbol: "list.number", label: "Episodes") {
+                LogPreviewRow(index: 4, symbol: "list.number", label: "Episodes") {
                     Text(LogPreviewFormat.episodes(draft.episodes ?? []))
                         .font(SparkTypography.body)
                 }
             } else if draft.kind == .wine || draft.kind == .beer {
-                LogPreviewRow(index: 2, symbol: "scalemass", label: "Amount") {
+                LogPreviewRow(index: 3, symbol: "scalemass", label: "Amount") {
                     HStack {
                         Text(LogPreviewFormat.amount(draft) ?? "Not said")
                             .font(SparkTypography.body)
@@ -49,7 +65,7 @@ struct LogPreviewCard: View {
                 }
             }
 
-            LogPreviewRow(index: 4, symbol: "clock", label: "When") {
+            LogPreviewRow(index: 5, symbol: "clock", label: "When") {
                 HStack {
                     Text(LogPreviewFormat.when(draft.occurredAt))
                         .font(SparkTypography.body)
@@ -59,7 +75,7 @@ struct LogPreviewCard: View {
                 }
             }
 
-            LogPreviewRow(index: 5, symbol: "person.2", label: "With") {
+            LogPreviewRow(index: 6, symbol: "person.2", label: "With") {
                 VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                     if let people = draft.people, !people.isEmpty {
                         LazyVGrid(
@@ -96,6 +112,10 @@ struct LogPreviewCard: View {
                         }
                 }
                 .animation(.spring(duration: 0.35, bounce: 0.25), value: draft.people)
+            }
+
+            LogPreviewRow(index: 7, symbol: "star", label: "Rating") {
+                LogStarRating(rating: $draft.rating)
             }
 
             HStack {
@@ -158,5 +178,174 @@ private struct LogPreviewRow<Content: View>: View {
                 shown = true
             }
         }
+    }
+}
+
+/// Up to five stars. Tapping the star already chosen clears the rating.
+private struct LogStarRating: View {
+    @Binding var rating: Double?
+
+    var body: some View {
+        HStack(spacing: SparkSpacing.xs) {
+            ForEach(1...5, id: \.self) { star in
+                Button {
+                    rating = rating == Double(star) ? nil : Double(star)
+                } label: {
+                    Image(systemName: Double(star) <= (rating ?? 0) ? "star.fill" : "star")
+                        .font(SparkTypography.body)
+                        .foregroundStyle(Double(star) <= (rating ?? 0) ? Color.sparkAccent : .secondary)
+                        .symbolEffect(.bounce, value: rating == Double(star))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(star) \(star == 1 ? "star" : "stars")")
+            }
+            if rating == nil {
+                Text("Not rated")
+                    .font(SparkTypography.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .sensoryFeedback(.selection, trigger: rating)
+    }
+}
+
+/// What the backend would match: the Vivino or Untappd card, or the TheTVDB series, season and episodes.
+private struct LogMatchView: View {
+    let kind: LogKind
+    let state: LogViewModel.MatchState
+    let chosen: LogMatch.Card?
+    let onAnswer: (LogClarification.Option) -> Void
+    let onChoose: (LogMatch.Card?) -> Void
+
+    @State private var showsOthers = false
+    @State private var pulsing = false
+
+    var body: some View {
+        switch state {
+        case .idle, .loading:
+            HStack(spacing: SparkSpacing.sm) {
+                Image(systemName: "magnifyingglass")
+                Text("Looking up…")
+            }
+            .font(SparkTypography.bodySmall)
+            .foregroundStyle(.secondary)
+            .opacity(pulsing ? 0.35 : 1)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) { pulsing = true }
+            }
+        case .failed:
+            note("Couldn’t check. It will still log.")
+        case .question(let question):
+            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                Text(question.question)
+                    .font(SparkTypography.bodyStrong)
+                ForEach(orderedOptions(question)) { option in
+                    Button(option.label) { onAnswer(option) }
+                        .font(SparkTypography.bodySmall)
+                        .buttonStyle(.bordered)
+                }
+            }
+        case .loaded(let match):
+            if let match {
+                loaded(match)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func loaded(_ match: LogMatch) -> some View {
+        switch match.state {
+        case .unavailable:
+            note("Couldn’t check. It will still log.")
+        case .none:
+            note(kind == .tv ? "TheTVDB doesn’t know this show." : "No match. It will log as typed.")
+        case .matched where kind == .tv:
+            television(match)
+        case .matched, .candidates:
+            drink(match)
+        }
+    }
+
+    private func television(_ match: LogMatch) -> some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.xxs) {
+            if let series = match.series {
+                Text(match.season.map { "\(series.name) · Season \($0)" } ?? series.name)
+                    .font(SparkTypography.bodyStrong)
+            }
+            ForEach(match.episodes) { episode in
+                Text("E\(episode.number)" + (episode.name.map { " \($0)" } ?? ""))
+                    .font(SparkTypography.bodySmall)
+                    .foregroundStyle(.secondary)
+            }
+            if !match.missingEpisodes.isEmpty {
+                Text("No episode \(match.missingEpisodes.map(String.init).joined(separator: ", ")).")
+                    .font(SparkTypography.caption)
+                    .foregroundStyle(Color.sparkError)
+            }
+        }
+    }
+
+    private func drink(_ match: LogMatch) -> some View {
+        let shown = chosen ?? match.best
+        let others = match.candidates + (chosen != nil ? [match.best].compactMap { $0 } : [])
+
+        return VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+            if let shown {
+                card(shown)
+            } else {
+                note("No close match. It will log as typed.")
+            }
+
+            if !others.isEmpty {
+                Button(showsOthers ? "Hide" : (shown == nil ? "Closest" : "Not this one?")) {
+                    withAnimation(.spring(duration: 0.35, bounce: 0.2)) { showsOthers.toggle() }
+                }
+                .font(SparkTypography.caption)
+
+                if showsOthers {
+                    ForEach(others) { other in
+                        Button {
+                            onChoose(other.id == match.best?.id ? nil : other)
+                            withAnimation(.spring(duration: 0.35, bounce: 0.2)) { showsOthers = false }
+                        } label: {
+                            HStack {
+                                card(other)
+                                Spacer(minLength: 0)
+                                Text("\(Int((other.score * 100).rounded()))%")
+                                    .font(SparkTypography.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+                }
+            }
+        }
+    }
+
+    private func card(_ card: LogMatch.Card) -> some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.xxs) {
+            Text(card.title)
+                .font(SparkTypography.bodyStrong)
+                .multilineTextAlignment(.leading)
+            let detail = [card.detail, card.rating.map { String(format: "★ %.1f", $0) }].compactMap { $0 }.joined(separator: " · ")
+            if !detail.isEmpty {
+                Text(detail)
+                    .font(SparkTypography.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func note(_ text: String) -> some View {
+        Text(text)
+            .font(SparkTypography.bodySmall)
+            .foregroundStyle(.secondary)
+    }
+
+    private func orderedOptions(_ question: LogClarification) -> [LogClarification.Option] {
+        guard let suggested = question.suggested else { return question.options }
+        return question.options.filter { $0.value == suggested } + question.options.filter { $0.value != suggested }
     }
 }

@@ -36,6 +36,9 @@ struct LogDraft {
     @Guide(description: "The words the user used for when it happened, copied as written: yesterday at 8pm, last night, this morning, Saturday lunch. Empty if unsaid.")
     var when: String?
 
+    @Guide(description: "Stars out of 5 only if the user gave a rating, such as gave it 4 stars or rated it 8 out of 10 (4). Empty otherwise.")
+    var rating: Double?
+
     @Guide(description: "Names of the people it was shared with, as written. Dan and Sam gives [Dan, Sam]. Empty if unsaid.")
     var people: [String]?
 }
@@ -70,6 +73,7 @@ extension LogDraft {
             unit: unit?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
             serving: logKind == .beer ? serving.flatMap(LogServing.init(modelValue:)) : nil,
             volumeML: volumeML.flatMap { (10...5_000).contains($0) ? $0 : nil },
+            rating: rating.flatMap { (1...5).contains($0) ? $0 : nil },
             season: logKind == .tv ? season.flatMap { (1...99).contains($0) ? $0 : nil } : nil,
             episodes: episodeNumbers,
             people: names.isEmpty ? nil : names
