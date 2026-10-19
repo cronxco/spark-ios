@@ -10,7 +10,7 @@ struct LogDraftTests {
 
     @Test("a beer keeps its serving and quantity")
     func beerDraft() throws {
-        let draft = LogDraft(kind: .beer, title: "  Verdant Nebulous Sky ", quantity: 1, serving: .can)
+        let draft = LogDraft(kind: "beer", title: "  Verdant Nebulous Sky ", quantity: 1, serving: "can")
 
         let request = try draft.request(now: now, idempotencyKey: "k")
 
@@ -25,7 +25,7 @@ struct LogDraftTests {
 
     @Test("minutes ago becomes an earlier time")
     func minutesAgo() throws {
-        let draft = LogDraft(kind: .wine, title: "Cafe François Rouge", quantity: 0.5, unit: "bottle", minutesAgo: 90)
+        let draft = LogDraft(kind: "wine", title: "Cafe François Rouge", quantity: 0.5, unit: "bottle", minutesAgo: 90)
 
         let request = try draft.request(now: now)
 
@@ -37,14 +37,14 @@ struct LogDraftTests {
 
     @Test("a serving is only kept for beer")
     func servingOnlyForBeer() throws {
-        let request = try LogDraft(kind: .wine, title: "Rioja", serving: .bottle).request(now: now)
+        let request = try LogDraft(kind: "wine", title: "Rioja", serving: "bottle").request(now: now)
 
         #expect(request.serving == nil)
     }
 
     @Test("TV episodes are sorted, deduplicated and kept in range")
     func televisionEpisodes() throws {
-        let draft = LogDraft(kind: .tv, title: "The Diplomat", season: 3, episodes: [2, 1, 2, 0, 1_000])
+        let draft = LogDraft(kind: "tv", title: "The Diplomat", season: 3, episodes: [2, 1, 2, 0, 1_000])
 
         let request = try draft.request(now: now)
 
@@ -54,7 +54,7 @@ struct LogDraftTests {
 
     @Test("a season outside the backend range is dropped")
     func seasonOutOfRange() throws {
-        let request = try LogDraft(kind: .tv, title: "The Diplomat", season: 0, episodes: [1]).request(now: now)
+        let request = try LogDraft(kind: "tv", title: "The Diplomat", season: 0, episodes: [1]).request(now: now)
 
         #expect(request.season == nil)
     }
@@ -62,23 +62,33 @@ struct LogDraftTests {
     @Test("TV without episodes asks for them")
     func televisionNeedsEpisodes() {
         #expect(throws: LogDraftIssue.missingEpisodes) {
-            try LogDraft(kind: .tv, title: "The Diplomat", episodes: []).request(now: now)
+            try LogDraft(kind: "tv", title: "The Diplomat", episodes: []).request(now: now)
         }
         #expect(throws: LogDraftIssue.missingEpisodes) {
-            try LogDraft(kind: .tv, title: "The Diplomat").request(now: now)
+            try LogDraft(kind: "tv", title: "The Diplomat").request(now: now)
+        }
+    }
+
+    @Test("the kind is read however the model spells it")
+    func kindSpelling() throws {
+        for spelling in ["boardGame", "board game", "Board_Game"] {
+            #expect(try LogDraft(kind: spelling, title: "Catan").request(now: now).kind == .boardGame)
+        }
+        #expect(throws: LogDraftIssue.unknownKind) {
+            try LogDraft(kind: "podcast", title: "Serial").request(now: now)
         }
     }
 
     @Test("a blank title is rejected")
     func blankTitle() {
         #expect(throws: LogDraftIssue.missingTitle) {
-            try LogDraft(kind: .wine, title: "   ").request(now: now)
+            try LogDraft(kind: "wine", title: "   ").request(now: now)
         }
     }
 
     @Test("values the backend would reject are dropped, not sent")
     func outOfRangeValuesDropped() throws {
-        let request = try LogDraft(kind: .beer, title: "IPA", quantity: 0, volumeML: 5).request(now: now)
+        let request = try LogDraft(kind: "beer", title: "IPA", quantity: 0, volumeML: 5).request(now: now)
 
         #expect(request.quantity == nil)
         #expect(request.volumeML == nil)
@@ -91,7 +101,7 @@ struct LogViewModelTests {
     private nonisolated static let host = "log.spark.test"
 
     private nonisolated static func diplomat() -> LogDraft {
-        LogDraft(kind: .tv, title: "The Diplomat", episodes: [1, 2])
+        LogDraft(kind: "tv", title: "The Diplomat", episodes: [1, 2])
     }
 
     @Test("a season question is answered and the request is resent with that season")

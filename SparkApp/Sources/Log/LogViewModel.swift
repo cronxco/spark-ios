@@ -59,7 +59,7 @@ final class LogViewModel {
         } catch LogExtractionError.unavailable {
             phase = .failed("Apple Intelligence isn’t available.")
             return
-        } catch LogDraftIssue.missingTitle {
+        } catch LogDraftIssue.missingTitle, LogDraftIssue.unknownKind {
             phase = .failed("What was it?")
             return
         } catch LogDraftIssue.missingEpisodes {
