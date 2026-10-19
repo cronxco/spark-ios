@@ -76,6 +76,7 @@ final class AppModel {
     }
     private var deviceRegistrationTask: Task<Void, Never>?
     private var entityRefreshTask: Task<Void, Never>?
+    private var foregroundIndexTask: Task<Void, Never>?
     private var deviceRegistrationTokenInFlight: String?
     private let purgeDataStore: @MainActor (ModelContainer) throws -> Void
     private let purgeSpotlight: @MainActor () async throws -> Void
@@ -88,21 +89,29 @@ final class AppModel {
         if let last = defaults.object(forKey: key) as? Date, Date.now.timeIntervalSince(last) < 3600 {
             return
         }
-        guard await tokenStore.accessToken() != nil else { return }
-        try? await Task.sleep(for: .seconds(5))
+        guard foregroundIndexTask == nil else { return }
 
-        let client = apiClient
-        let store = container
-        let refresh = Task { @MainActor in
-            await EntityCacheRefresher.refresh(using: client, container: store)
+        let task = Task { @MainActor in
+            guard await tokenStore.accessToken() != nil else { return }
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled, session == .loggedIn else { return }
+
+            let client = apiClient
+            let store = container
+            let refresh = Task { @MainActor in
+                await EntityCacheRefresher.refresh(using: client, container: store)
+            }
+            entityRefreshTask = refresh
+            await refresh.value
+            entityRefreshTask = nil
+            guard !Task.isCancelled else { return }
+
+            await SpotlightIndexer.indexBatch(container: container)
+            defaults.set(Date.now, forKey: key)
         }
-        entityRefreshTask = refresh
-        await refresh.value
-        guard !refresh.isCancelled else { return }
-        entityRefreshTask = nil
-
-        await SpotlightIndexer.indexBatch(container: container)
-        defaults.set(Date.now, forKey: key)
+        foregroundIndexTask = task
+        await task.value
+        foregroundIndexTask = nil
     }
 
     init(
@@ -447,8 +456,11 @@ final class AppModel {
     private func purgeLocalState() async throws {
         // A refresh still awaiting the API must not save the departing
         // account's entities back after the stores are erased.
+        foregroundIndexTask?.cancel()
         entityRefreshTask?.cancel()
+        await foregroundIndexTask?.value
         await entityRefreshTask?.value
+        foregroundIndexTask = nil
         entityRefreshTask = nil
 
         // Both durable stores are erased before credentials. If either throws,
