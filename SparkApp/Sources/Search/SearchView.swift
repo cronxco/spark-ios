@@ -9,6 +9,12 @@ struct SearchView: View {
     /// Recents stay on this device and expire after 30 days; see `RecentSearchStore`.
     private let recentSearchStore = RecentSearchStore()
     @State private var recentSearches: [String] = RecentSearchStore().load()
+    /// Set when CMD opens search with a query already typed.
+    let initialQuery: String
+
+    init(initialQuery: String = "") {
+        self.initialQuery = initialQuery
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -53,6 +59,7 @@ struct SearchView: View {
                 viewModel = SearchViewModel(apiClient: appModel.apiClient)
             }
             applyPendingSearchQuery()
+            if !initialQuery.isEmpty { viewModel?.query = initialQuery }
         }
         .onChange(of: appModel.pendingSearchQuery) { _, _ in
             applyPendingSearchQuery()
