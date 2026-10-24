@@ -292,6 +292,8 @@ struct SparkUserFeedbackSheet: View {
 struct SparkMainAppToolbarModifier: ViewModifier {
     let isVisible: Bool
 
+    @Environment(AppModel.self) private var appModel
+    @State private var showLog = false
     @State private var showSettings = false
     @State private var showNotifications = false
 
@@ -314,6 +316,15 @@ struct SparkMainAppToolbarModifier: ViewModifier {
                 if isVisible {
                     ToolbarItemGroup(placement: .topBarTrailing) {
                         Button {
+                            showLog = true
+                        } label: {
+                            Image(systemName: "plus")
+                                .symbolRenderingMode(.monochrome)
+                                .foregroundStyle(Color.primary)
+                        }
+                        .accessibilityLabel("Log")
+
+                        Button {
                             showSettings = true
                         } label: {
                             Image(systemName: "gearshape")
@@ -334,6 +345,9 @@ struct SparkMainAppToolbarModifier: ViewModifier {
                         )
                     }
                 }
+            }
+            .sheet(isPresented: $showLog) {
+                LogSheetView(apiClient: appModel.apiClient)
             }
             .sheet(isPresented: $showSettings) {
                 SettingsRootView()
