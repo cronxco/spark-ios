@@ -143,6 +143,12 @@ struct SearchView: View {
                 .padding(.top, SparkSpacing.xl)
             case .results:
                 LazyVStack(alignment: .leading, spacing: SparkSpacing.lg) {
+                    if let notice = resultsNotice(viewModel) {
+                        Label(notice, systemImage: "info.circle")
+                            .font(SparkTypography.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, SparkSpacing.xs)
+                    }
                     ForEach(viewModel.grouped, id: \.0) { group in
                         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                             Text(group.0)
@@ -174,10 +180,21 @@ struct SearchView: View {
                     message: msg
                 )
                 .padding(.top, SparkSpacing.xl)
+                Button("Retry") { viewModel.retry() }
+                    .buttonStyle(.bordered)
+                    .frame(maxWidth: .infinity)
             }
         } else {
             loadingState
         }
+    }
+
+    /// Says so when the results are not what the mode promised: cached because
+    /// the device is offline, or keyword matches because semantic search failed.
+    private func resultsNotice(_ viewModel: SearchViewModel) -> String? {
+        if viewModel.isShowingCachedResults { return "Offline. Showing cached results." }
+        if viewModel.execution?.isDegraded == true { return "Keyword matches" }
+        return nil
     }
 
     @ViewBuilder
@@ -207,7 +224,7 @@ struct SearchView: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    Text("Try `#` tags · `$` metrics · `@` integrations · `~` semantic")
+                    Text("Try `#` tags · `$` metrics · `@` integrations · `~` semantic · `>` commands")
                         .font(SparkTypography.caption)
                         .foregroundStyle(.tertiary)
                 }
@@ -283,6 +300,7 @@ struct SearchView: View {
         case .place(let h): .place(id: h.id)
         case .tag(let h): .tag(name: h.name, type: h.type)
         case .intent: nil  // Actions ride the App Intents pipeline (Phase 3).
+        case .command: nil  // Running commands arrives with the CMD tab and the native Actions client.
         }
         if let route, path.last != route {
             path.append(route)

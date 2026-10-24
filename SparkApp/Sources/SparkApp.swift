@@ -380,6 +380,16 @@ enum SparkObservability {
         }
     }
 
+    /// A search hit of a kind this build cannot decode was dropped. Kinds only,
+    /// never the query: tells us when a server adds a kind older builds lack.
+    static func captureSearchDroppedKinds(_ kinds: [String]) {
+        SentrySDK.capture(message: "Search dropped unknown result kinds") { scope in
+            scope.setLevel(.warning)
+            scope.setTag(value: "search_contract", key: "area")
+            scope.setExtra(value: Dictionary(grouping: kinds, by: { $0 }).mapValues(\.count), key: "dropped_kinds")
+        }
+    }
+
     static func captureHandled(_ error: Error) {
         guard !error.isAPICancellation else { return }
         SentrySDK.capture(error: error) { scope in

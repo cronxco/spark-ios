@@ -11,6 +11,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
     case place(PlaceHit)
     case tag(TagHit)
     case intent(IntentHit)
+    case command(CommandHit)
 
     public var id: String {
         switch self {
@@ -22,6 +23,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         case .place(let h): "place:\(h.id)"
         case .tag(let h): "tag:\(h.type ?? ""):\(h.name)"
         case .intent(let h): "intent:\(h.id)"
+        case .command(let h): "command:\(h.id)"
         }
     }
 
@@ -35,6 +37,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         case .place(let h): h.title
         case .tag(let h): h.title
         case .intent(let h): h.title
+        case .command(let h): h.title
         }
     }
 
@@ -48,6 +51,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         case .place(let h): h.subtitle
         case .tag(let h): h.subtitle
         case .intent(let h): h.subtitle
+        case .command(let h): h.subtitle
         }
     }
 
@@ -61,6 +65,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         case .place: "Places"
         case .tag: "Tags"
         case .intent: "Actions"
+        case .command: "Commands"
         }
     }
 
@@ -81,6 +86,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         case "place": self = .place(try single.decode(PlaceHit.self))
         case "tag": self = .tag(try single.decode(TagHit.self))
         case "intent": self = .intent(try single.decode(IntentHit.self))
+        case "command": self = .command(try single.decode(CommandHit.self))
         default:
             throw DecodingError.dataCorruptedError(
                 forKey: .kind,
@@ -101,6 +107,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         case .place(let h): try single.encode(h)
         case .tag(let h): try single.encode(h)
         case .intent(let h): try single.encode(h)
+        case .command(let h): try single.encode(h)
         }
     }
 
@@ -189,6 +196,44 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         }
     }
 
+    /// A command from the server's action registry. `id` is the action id for
+    /// `POST /actions/{id}/run`; `confirm` is the registry's confirm policy.
+    public struct CommandHit: Codable, Sendable, Hashable {
+        public let id: String
+        public let title: String
+        public let subtitle: String?
+        /// The registry's icon name (a Heroicon), not an SF Symbol; see `symbol`.
+        public let icon: String?
+        public let actionKind: String?
+        public let confirm: String?
+
+        enum CodingKeys: String, CodingKey {
+            case id, title, subtitle, icon, confirm
+            case actionKind = "action_kind"
+        }
+
+        /// True for commands the client opens itself rather than asks the server to run.
+        public var isNavigation: Bool { actionKind == "navigation" }
+
+        /// An SF Symbol for the registry's icon name; unknown names read as a terminal.
+        public var symbol: String {
+            switch icon {
+            case "arrow-path": "arrow.triangle.2.circlepath"
+            case "tag": "tag"
+            case "trash": "trash"
+            case "pause": "pause.circle"
+            case "play": "play.circle"
+            case "bell", "bell-alert": "bell"
+            case "home": "house"
+            case "cog-6-tooth": "gearshape"
+            case "chart-bar": "chart.bar"
+            case "banknotes": "banknote"
+            case "sparkles": "sparkles"
+            default: "terminal"
+            }
+        }
+    }
+
     public struct IntentHit: Codable, Sendable, Hashable {
         public let id: String
         public let title: String
@@ -197,14 +242,63 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
     }
 }
 
+/// How a search was served. `degraded` means the server could not do what the
+/// mode promised (a semantic search that fell back to keyword matching) and
+/// `fallbackReason` says why, so the UI can label the results honestly.
+public struct SearchExecution: Codable, Sendable, Hashable {
+    public enum Status: String, Codable, Sendable, Hashable {
+        case complete, degraded
+    }
+
+    public let status: Status
+    public let fallbackReason: String?
+
+    public var isDegraded: Bool { status == .degraded }
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case fallbackReason = "fallback_reason"
+    }
+
+    public init(status: Status = .complete, fallbackReason: String? = nil) {
+        self.status = status
+        self.fallbackReason = fallbackReason
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // An unknown future status reads as complete rather than failing the page.
+        let raw = try container.decodeIfPresent(String.self, forKey: .status)
+        status = raw.flatMap(Status.init(rawValue:)) ?? .complete
+        fallbackReason = try container.decodeIfPresent(String.self, forKey: .fallbackReason)
+    }
+}
+
 /// Search payload returned by `/search`.
-/// Backend returns a grouped object: `{ mode, query, events: [...], objects: [...], integrations: [...], metrics: [...] }`,
+///
+/// Contract v1 (`contract_version=1`) is a flat versioned envelope:
+/// `{ schema_version, query, mode, execution, results: [{ kind, ... }], meta }`.
+/// Hits of a kind this build does not know are dropped and their kinds listed
+/// in `droppedKinds` (for the caller to report); the rest of the page renders.
+///
+/// Older backends return a grouped object: `{ mode, query, events: [...], objects: [...], integrations: [...], metrics: [...] }`,
 /// or `{ blocks: [...], meta }` from typed block search.
 /// Legacy flat-array and wrapped-array formats are also accepted for backwards compatibility.
 public struct SearchResponse: Codable, Sendable, Hashable {
     public let results: [SearchResult]
+    /// `schema_version` of a v1 payload; nil for the older shapes.
+    public private(set) var schemaVersion: Int?
+    /// Present on v1 payloads only.
+    public private(set) var execution: SearchExecution?
+    /// Kinds in a v1 payload this build could not decode, one entry per dropped hit.
+    public private(set) var droppedKinds: [String] = []
+
+    /// True when the server fell back from what the mode promised.
+    public var isDegraded: Bool { execution?.isDegraded ?? false }
 
     enum CodingKeys: String, CodingKey {
+        // Contract v1
+        case schemaVersion = "schema_version", execution
         // Grouped backend format
         case events, objects, blocks, integrations, metrics, tags
         // Legacy wrapped formats
@@ -224,7 +318,17 @@ public struct SearchResponse: Codable, Sendable, Hashable {
 
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
-        // 2. Grouped backend format: { events: [...], objects: [...], ... }
+        // 2a. Contract v1: flat, versioned, tolerant of kinds from newer servers.
+        if container.contains(.schemaVersion) {
+            schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+            execution = try container.decodeIfPresent(SearchExecution.self, forKey: .execution)
+            let hits = try container.decodeIfPresent([LossySearchResult].self, forKey: .results) ?? []
+            results = hits.compactMap(\.result)
+            droppedKinds = hits.compactMap(\.droppedKind)
+            return
+        }
+
+        // 2b. Grouped backend format: { events: [...], objects: [...], ... }
         if container.contains(.events) || container.contains(.objects)
             || container.contains(.blocks) || container.contains(.integrations) || container.contains(.metrics)
             || container.contains(.tags) {
@@ -304,6 +408,29 @@ public struct SearchResponse: Codable, Sendable, Hashable {
     public func encode(to encoder: Encoder) throws {
         var single = encoder.singleValueContainer()
         try single.encode(results)
+    }
+}
+
+// MARK: - Lossy hit decoding
+
+/// Decodes one hit without letting a bad one fail the whole page: a kind this
+/// build does not know (or a hit that does not match its kind's shape) becomes
+/// `droppedKind` instead of an error.
+private struct LossySearchResult: Decodable {
+    let result: SearchResult?
+    let droppedKind: String?
+
+    private enum KindKey: String, CodingKey { case kind }
+
+    init(from decoder: Decoder) throws {
+        do {
+            result = try SearchResult(from: decoder)
+            droppedKind = nil
+        } catch {
+            result = nil
+            let kind = try? decoder.container(keyedBy: KindKey.self).decode(String.self, forKey: .kind)
+            droppedKind = kind ?? "unknown"
+        }
     }
 }
 

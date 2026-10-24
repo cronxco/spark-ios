@@ -1,18 +1,22 @@
 import Foundation
 
 public enum SearchEndpoint {
+    /// The search contract version this build speaks. The server serves the
+    /// versioned envelope only when asked for it; see `SearchResponse`.
+    public static let contractVersion = 1
+
     public enum EntityType: String, Sendable, CaseIterable {
         case events, objects, blocks
     }
-    /// Search modes the backend serves. There is no Actions mode yet: the
-    /// server rejects `mode=actions` with 422, so it is not offered until an
-    /// action registry exists behind it.
+    /// Search modes the backend serves (contract v1). `commands` searches the
+    /// server's action registry; the server rejects any other mode name with 422.
     public enum Mode: String, Sendable, CaseIterable {
         case `default`
         case tags
         case metrics
         case integrations
         case semantic
+        case commands
 
         /// The backend's singular mode name (`tag`, `metric`, `integration`).
         public var queryValue: String {
@@ -20,6 +24,7 @@ public enum SearchEndpoint {
             case .tags: "tag"
             case .metrics: "metric"
             case .integrations: "integration"
+            case .commands: "command"
             default: rawValue
             }
         }
@@ -33,6 +38,7 @@ public enum SearchEndpoint {
             case .metrics: "$"
             case .integrations: "@"
             case .semantic: "~"
+            case .commands: ">"
             }
         }
 
@@ -43,20 +49,25 @@ public enum SearchEndpoint {
             case .metrics: "Metrics"
             case .integrations: "Integrations"
             case .semantic: "Semantic"
+            case .commands: "Commands"
             }
         }
     }
 
-    /// GET /search?q=…&mode=…
-    public static func query(text: String, mode: Mode = .default) -> Endpoint<SearchResponse> {
-        Endpoint(
-            method: .get,
-            path: "/search",
-            query: [
-                URLQueryItem(name: "q", value: text),
-                URLQueryItem(name: "mode", value: mode.queryValue),
-            ]
-        )
+    /// GET /search?contract_version=1&query=…&mode=…
+    ///
+    /// Needs a backend that serves contract v1: older ones read `q` and would
+    /// return nothing for `query`.
+    public static func query(text: String, mode: Mode = .default, limit: Int? = nil) -> Endpoint<SearchResponse> {
+        var items = [
+            URLQueryItem(name: "contract_version", value: String(contractVersion)),
+            URLQueryItem(name: "query", value: text),
+            URLQueryItem(name: "mode", value: mode.queryValue),
+        ]
+        if let limit {
+            items.append(URLQueryItem(name: "limit", value: String(limit)))
+        }
+        return Endpoint(method: .get, path: "/search", query: items)
     }
 
     /// Typed entity search used by relationship selection and DEBUG tools.
