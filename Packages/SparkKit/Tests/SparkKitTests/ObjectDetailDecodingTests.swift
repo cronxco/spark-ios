@@ -86,3 +86,32 @@ struct ObjectDetailDecodingTests {
         #expect(account.object.mediaURL == nil)
     }
 }
+
+@Suite("PersonTimeline decoding")
+struct PersonTimelineDecodingTests {
+    @Test("decodes events and the day counts")
+    func decodesTimeline() throws {
+        let timeline = try JSONDecoder().decode(PersonTimeline.self, from: Data("""
+        {
+          "person": { "id": "p1", "concept": "person", "type": "person", "title": "Dan" },
+          "event_count": 2,
+          "month": "2026-10",
+          "calendar": { "2026-10-05": 1, "2026-10-07": 1 },
+          "events": [
+            { "id": "evt_1", "service": "manual", "domain": "social", "action": "met" }
+          ]
+        }
+        """.utf8))
+        #expect(timeline.person.isPerson)
+        #expect(timeline.eventCount == 2)
+        #expect(timeline.calendar["2026-10-05"] == 1)
+        #expect(timeline.events.count == 1)
+    }
+
+    @Test("endpoint carries month and date")
+    func endpointQuery() {
+        let endpoint = PeopleEndpoint.timeline(id: "p1", month: "2026-10", date: "2026-10-05")
+        #expect(endpoint.path == "/people/p1/timeline")
+        #expect(endpoint.query.map(\.name) == ["month", "date"])
+    }
+}
