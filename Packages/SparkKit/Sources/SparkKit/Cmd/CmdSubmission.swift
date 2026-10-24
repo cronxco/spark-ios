@@ -54,7 +54,8 @@ public struct StubCmdSubmitter: CmdSubmitting {
 
 /// Entries that could not be sent yet, kept on this device and retried in
 /// order. Survives relaunch; sign-out removes it.
-public struct CmdQueue {
+/// `UserDefaults` is thread-safe, so the queue can cross actors.
+public struct CmdQueue: @unchecked Sendable {
     public static let defaultsKey = "spark.cmd.queue"
 
     private let defaults: UserDefaults
