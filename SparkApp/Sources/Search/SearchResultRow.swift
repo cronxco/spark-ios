@@ -39,6 +39,7 @@ struct SearchResultRow: View {
         case .place: "mappin.circle.fill"
         case .tag: "tag.fill"
         case .intent(let h): h.symbol ?? "sparkles"
+        case .command(let h): h.symbol
         }
     }
 
@@ -67,6 +68,7 @@ struct SearchResultRow: View {
         case .place: .sparkAccent
         case .tag(let h): EventTag(name: h.name, type: h.type).tagTint
         case .intent: .sparkAccent
+        case .command: .sparkAccent
         }
     }
 }

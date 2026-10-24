@@ -16,7 +16,7 @@ struct SearchResponseDecodingTests {
 
     @Test("every mode sends a mode name the backend accepts")
     func modesUseBackendQueryValues() {
-        let accepted: Set<String> = ["default", "semantic", "tag", "metric", "integration"]
+        let accepted: Set<String> = ["default", "semantic", "tag", "metric", "integration", "command"]
         for mode in SearchEndpoint.Mode.allCases {
             #expect(accepted.contains(mode.queryValue), "\(mode) sends \(mode.queryValue)")
         }

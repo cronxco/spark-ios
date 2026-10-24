@@ -8,15 +8,15 @@ public enum SearchEndpoint {
     public enum EntityType: String, Sendable, CaseIterable {
         case events, objects, blocks
     }
-    /// Search modes the backend serves. There is no Actions mode yet: the
-    /// server rejects `mode=actions` with 422, so it is not offered until an
-    /// action registry exists behind it.
+    /// Search modes the backend serves (contract v1). `commands` searches the
+    /// server's action registry; the server rejects any other mode name with 422.
     public enum Mode: String, Sendable, CaseIterable {
         case `default`
         case tags
         case metrics
         case integrations
         case semantic
+        case commands
 
         /// The backend's singular mode name (`tag`, `metric`, `integration`).
         public var queryValue: String {
@@ -24,6 +24,7 @@ public enum SearchEndpoint {
             case .tags: "tag"
             case .metrics: "metric"
             case .integrations: "integration"
+            case .commands: "command"
             default: rawValue
             }
         }
@@ -37,6 +38,7 @@ public enum SearchEndpoint {
             case .metrics: "$"
             case .integrations: "@"
             case .semantic: "~"
+            case .commands: ">"
             }
         }
 
@@ -47,6 +49,7 @@ public enum SearchEndpoint {
             case .metrics: "Metrics"
             case .integrations: "Integrations"
             case .semantic: "Semantic"
+            case .commands: "Commands"
             }
         }
     }

@@ -224,7 +224,7 @@ struct SearchView: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    Text("Try `#` tags · `$` metrics · `@` integrations · `~` semantic")
+                    Text("Try `#` tags · `$` metrics · `@` integrations · `~` semantic · `>` commands")
                         .font(SparkTypography.caption)
                         .foregroundStyle(.tertiary)
                 }
@@ -300,6 +300,7 @@ struct SearchView: View {
         case .place(let h): .place(id: h.id)
         case .tag(let h): .tag(name: h.name, type: h.type)
         case .intent: nil  // Actions ride the App Intents pipeline (Phase 3).
+        case .command: nil  // Running commands arrives with the CMD tab and the native Actions client.
         }
         if let route, path.last != route {
             path.append(route)

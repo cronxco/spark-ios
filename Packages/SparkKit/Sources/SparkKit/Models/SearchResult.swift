@@ -11,6 +11,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
     case place(PlaceHit)
     case tag(TagHit)
     case intent(IntentHit)
+    case command(CommandHit)
 
     public var id: String {
         switch self {
@@ -22,6 +23,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         case .place(let h): "place:\(h.id)"
         case .tag(let h): "tag:\(h.type ?? ""):\(h.name)"
         case .intent(let h): "intent:\(h.id)"
+        case .command(let h): "command:\(h.id)"
         }
     }
 
@@ -35,6 +37,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         case .place(let h): h.title
         case .tag(let h): h.title
         case .intent(let h): h.title
+        case .command(let h): h.title
         }
     }
 
@@ -48,6 +51,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         case .place(let h): h.subtitle
         case .tag(let h): h.subtitle
         case .intent(let h): h.subtitle
+        case .command(let h): h.subtitle
         }
     }
 
@@ -61,6 +65,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         case .place: "Places"
         case .tag: "Tags"
         case .intent: "Actions"
+        case .command: "Commands"
         }
     }
 
@@ -81,6 +86,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         case "place": self = .place(try single.decode(PlaceHit.self))
         case "tag": self = .tag(try single.decode(TagHit.self))
         case "intent": self = .intent(try single.decode(IntentHit.self))
+        case "command": self = .command(try single.decode(CommandHit.self))
         default:
             throw DecodingError.dataCorruptedError(
                 forKey: .kind,
@@ -101,6 +107,7 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
         case .place(let h): try single.encode(h)
         case .tag(let h): try single.encode(h)
         case .intent(let h): try single.encode(h)
+        case .command(let h): try single.encode(h)
         }
     }
 
@@ -186,6 +193,44 @@ public enum SearchResult: Codable, Sendable, Hashable, Identifiable {
             try container.encodeIfPresent(type, forKey: .type)
             try container.encode(title, forKey: .title)
             try container.encodeIfPresent(subtitle, forKey: .subtitle)
+        }
+    }
+
+    /// A command from the server's action registry. `id` is the action id for
+    /// `POST /actions/{id}/run`; `confirm` is the registry's confirm policy.
+    public struct CommandHit: Codable, Sendable, Hashable {
+        public let id: String
+        public let title: String
+        public let subtitle: String?
+        /// The registry's icon name (a Heroicon), not an SF Symbol; see `symbol`.
+        public let icon: String?
+        public let actionKind: String?
+        public let confirm: String?
+
+        enum CodingKeys: String, CodingKey {
+            case id, title, subtitle, icon, confirm
+            case actionKind = "action_kind"
+        }
+
+        /// True for commands the client opens itself rather than asks the server to run.
+        public var isNavigation: Bool { actionKind == "navigation" }
+
+        /// An SF Symbol for the registry's icon name; unknown names read as a terminal.
+        public var symbol: String {
+            switch icon {
+            case "arrow-path": "arrow.triangle.2.circlepath"
+            case "tag": "tag"
+            case "trash": "trash"
+            case "pause": "pause.circle"
+            case "play": "play.circle"
+            case "bell", "bell-alert": "bell"
+            case "home": "house"
+            case "cog-6-tooth": "gearshape"
+            case "chart-bar": "chart.bar"
+            case "banknotes": "banknote"
+            case "sparkles": "sparkles"
+            default: "terminal"
+            }
         }
     }
 

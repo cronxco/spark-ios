@@ -37,10 +37,10 @@ struct SearchContractFixtureTests {
         #expect(response.execution == SearchExecution(status: .complete, fallbackReason: nil))
         #expect(!response.isDegraded)
         #expect(response.droppedKinds.isEmpty)
-        #expect(response.results.count == 7)
+        #expect(response.results.count == 8)
 
         let sections = response.results.map(\.sectionLabel)
-        #expect(sections == ["Events", "Objects", "Blocks", "Metrics", "Integrations", "Places", "Tags"])
+        #expect(sections == ["Events", "Objects", "Blocks", "Metrics", "Integrations", "Places", "Tags", "Commands"])
 
         if case .metric(let hit) = response.results[3] {
             #expect(hit.identifier == "oura.sleep_score")
@@ -55,6 +55,21 @@ struct SearchContractFixtureTests {
         } else {
             Issue.record("Expected a tag hit at index 6.")
         }
+    }
+
+    @Test("decodes a command hit with its confirm policy")
+    func decodesCommandHit() throws {
+        let response = try decode("complete")
+
+        guard case .command(let hit) = try #require(response.results.last) else {
+            Issue.record("Expected a command hit last.")
+            return
+        }
+        #expect(hit.id == "integrations.sync_all")
+        #expect(hit.actionKind == "safe")
+        #expect(hit.confirm == "none")
+        #expect(!hit.isNavigation)
+        #expect(hit.symbol == "arrow.triangle.2.circlepath")
     }
 
     @Test("a degraded semantic search is reported with its reason")
