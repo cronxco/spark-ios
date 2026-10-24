@@ -488,6 +488,8 @@ final class AppModel {
 
         // Recent searches live in standard defaults rather than the App Group.
         RecentSearchStore().clear()
+        CmdQueue().clear()
+        CmdRecentStore().clear()
 
         await authService.signOut()
         await etagCache.clearAll()
