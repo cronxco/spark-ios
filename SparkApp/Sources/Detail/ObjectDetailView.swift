@@ -247,7 +247,13 @@ struct ObjectDetailView: View {
             SparkDetailInsightCard(label: "Insight", text: summary)
         }
 
-        if !detail.recentEvents.isEmpty {
+        if detail.object.isPerson {
+            PersonTimelineSection(
+                personID: detail.object.id,
+                personName: detail.object.title,
+                apiClient: appModel.apiClient
+            )
+        } else if !detail.recentEvents.isEmpty {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                 SparkDetailSectionHeader(
                     recentEventsTitle(for: detail.object),
