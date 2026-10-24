@@ -15,7 +15,17 @@ final class CmdViewModel {
     }
 
     var input: String = "" {
-        didSet { reclassify() }
+        didSet {
+            // A vertical-axis field can insert a newline for return instead of
+            // calling onSubmit; a lone inserted newline means send.
+            if input != oldValue, input.contains("\n"), input.replacingOccurrences(of: "\n", with: "") == oldValue.replacingOccurrences(of: "\n", with: ""),
+               input.filter({ $0 == "\n" }).count == oldValue.filter({ $0 == "\n" }).count + 1 {
+                input = oldValue
+                submit()
+                return
+            }
+            reclassify()
+        }
     }
     private(set) var classification: CmdClassification?
     /// Set when the user picks an intent on the chip or in the ask sheet.
