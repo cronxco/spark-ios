@@ -141,8 +141,8 @@ struct PersonTimelineSection: View {
         do {
             timeline = try await apiClient.request(
                 PeopleEndpoint.timeline(id: personID, month: Self.monthKey.string(from: month), date: selectedDay)
-            ).data
-        } catch is CancellationError {
+            )
+        } catch where error.isAPICancellation {
             return
         } catch {
             errorMessage = "Couldn't load the timeline. Tap to retry."
