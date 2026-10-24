@@ -11,6 +11,7 @@ enum LogExtractionError: Error, Equatable {
 enum LogExtractionService {
     static let instructions = """
     You turn one short line the user typed into a log entry for wine, beer, TV, cinema or board games.
+    If the line is not about wine, beer, TV, cinema or board games, the kind is none.
     Copy only what the user said. Never invent a season, an episode, a quantity or a time.
     The title is the name of the thing, spelled as the user wrote it, without quantity, serving, verbs or episode numbers.
     "Half a bottle" is quantity 0.5 of a bottle. "A can of" is one beer served as a can. "A pint" is one beer, draft, 568 millilitres.

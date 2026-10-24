@@ -133,6 +133,16 @@ final class LogViewModel {
         phase = .preview
     }
 
+    /// Opens straight on the preview for a line that was already read, such as one typed into the CMD tab.
+    func start(text: String, request: LogRequest) {
+        guard case .idle = phase else { return }
+        updateText(text)
+        draft = request
+        matchState = .idle
+        chosenCard = nil
+        phase = .preview
+    }
+
     /// Asks the backend what this would match. Waits briefly first so typing in the name does not search on every key.
     func refreshMatch(using apiClient: APIClient) async {
         guard case .preview = phase, canConfirm else { return }

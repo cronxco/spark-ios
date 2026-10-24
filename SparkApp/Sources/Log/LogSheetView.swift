@@ -2,11 +2,20 @@ import SparkKit
 import SparkUI
 import SwiftUI
 
+/// A line read before the sheet opened, with what was understood from it.
+struct LogPrefill: Identifiable {
+    let id = UUID()
+    let text: String
+    let request: LogRequest
+}
+
 /// Type a line, check what was understood, log it. The model reads it on the phone and the sheet shows
 /// the type, name, time, amount and people it found. Fix anything wrong, then the backend writes and enriches it,
 /// and a TV entry that needs a series or season asks first.
 struct LogSheetView: View {
     let apiClient: APIClient
+    /// A line already read elsewhere (the CMD tab): the sheet opens on its preview.
+    var prefill: LogPrefill?
 
     @Environment(\.dismiss) private var dismiss
     @State private var model = LogViewModel()
@@ -52,7 +61,13 @@ struct LogSheetView: View {
                     Button(isFinished ? "Done" : "Cancel") { dismiss() }
                 }
             }
-            .onAppear { isFocused = true }
+            .onAppear {
+                if let prefill {
+                    model.start(text: prefill.text, request: prefill.request)
+                } else {
+                    isFocused = true
+                }
+            }
         }
         .presentationDetents([.medium, .large], selection: $detent)
         .onChange(of: isPreviewing) { _, previewing in

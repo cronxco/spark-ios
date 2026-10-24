@@ -6,7 +6,7 @@ import SparkKit
 /// It carries only what the user said; `LogDraft.request(...)` decides whether that is enough to log.
 @Generable
 struct LogDraft {
-    @Guide(description: "What it was. Exactly one of: wine, beer, tv, cinema, boardGame")
+    @Guide(description: "What it was. Exactly one of: wine, beer, tv, cinema, boardGame, none. none if the line is about something else.")
     var kind: String
 
     @Guide(description: "Only the name of the wine, beer, show, film or game. No quantity, serving, verbs or episode numbers.")

@@ -21,6 +21,8 @@ final class CmdViewModel {
     /// Set when the user picks an intent on the chip or in the ask sheet.
     private(set) var override: CmdIntent?
     var isAsking = false
+    /// Set when a log line reads as TV, wine, beer, cinema or a board game: the Log sheet opens on its preview.
+    var logPrefill: LogPrefill?
     var searchQuery: String?
     private(set) var receipt: Receipt?
     private(set) var recents: [CmdRecentStore.Item]
@@ -30,14 +32,23 @@ final class CmdViewModel {
     private let submitter: any CmdSubmitting
     private let queue: CmdQueue
     private let recentStore: CmdRecentStore
+    private let structuredLog: @Sendable (String) async -> LogRequest?
     private var classifyTask: Task<Void, Never>?
+
+    /// Reads a line with the on-device model. Nil when it isn't something with its own flow, or the model can't serve it.
+    static let readStructuredLog: @Sendable (String) async -> LogRequest? = { text in
+        guard let draft = try? await LogExtractionService.extract(from: text) else { return nil }
+        return try? draft.request()
+    }
 
     init(
         classifier: any CmdClassifying = HeuristicCmdClassifier(),
         submitter: any CmdSubmitting = StubCmdSubmitter(),
         queue: CmdQueue = CmdQueue(),
-        recentStore: CmdRecentStore = CmdRecentStore()
+        recentStore: CmdRecentStore = CmdRecentStore(),
+        structuredLog: @escaping @Sendable (String) async -> LogRequest? = CmdViewModel.readStructuredLog
     ) {
+        self.structuredLog = structuredLog
         self.classifier = classifier
         self.submitter = submitter
         self.queue = queue
@@ -133,7 +144,25 @@ final class CmdViewModel {
             intent: intent, text: text, classifiedAs: classification.intent, confidence: classification.confidence)
         recents = recentStore.record(text: text, intent: intent)
         reset()
-        Task { await deliver(entry) }
+        Task {
+            if intent == .log {
+                await deliverLog(entry)
+            } else {
+                await deliver(entry)
+            }
+        }
+    }
+
+    /// A line about something with its own flow (TV, wine, beer, cinema, board games) goes to the Log preview,
+    /// where it is matched and its people are checked. Anything else is saved as a reflection.
+    private func deliverLog(_ entry: CmdEntry) async {
+        receipt = Receipt(id: entry.id, summary: "Reading", undoToken: nil, isQueued: false)
+        if let request = await structuredLog(entry.text) {
+            receipt = nil
+            logPrefill = LogPrefill(text: entry.text, request: request)
+        } else {
+            await deliver(entry)
+        }
     }
 
     private func deliver(_ entry: CmdEntry) async {

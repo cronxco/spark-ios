@@ -36,6 +36,9 @@ struct CmdView: View {
             SearchView(initialQuery: query.text)
         }
         .sheet(isPresented: $viewModel.isAsking) { askSheet }
+        .sheet(item: $viewModel.logPrefill) { prefill in
+            LogSheetView(apiClient: appModel.apiClient, prefill: prefill)
+        }
         .task {
             consumePendingSearch()
             await viewModel.flushQueue()
