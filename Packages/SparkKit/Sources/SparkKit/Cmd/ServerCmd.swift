@@ -97,15 +97,20 @@ public struct ServerCmdSubmitter: CmdSubmitting {
     /// and actions that need a target (an event, an integration) aren't
     /// runnable from a typed line yet.
     private func runCommand(_ entry: CmdEntry) async -> CmdSubmissionResult {
+        guard !entry.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return .rejected(reason: "No matching command")
+        }
         let found: [CmdActionsEndpoint.Action]
         do {
             found = try await apiClient.request(CmdActionsEndpoint.list(query: entry.text)).data
         } catch {
             return .retry
         }
-        let query = entry.text.lowercased()
-        let match = found.first { $0.title.lowercased() == query } ?? found.first
-        guard let action = match else { return .rejected(reason: "No matching command") }
+        // Exact title only: a fuzzy first hit could run the wrong action.
+        let query = entry.text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty, let action = found.first(where: { $0.title.lowercased() == query }) else {
+            return .rejected(reason: "No matching command")
+        }
         guard action.kind != "navigation", action.runsWithoutInput else {
             return .rejected(reason: "Can't run that from here yet")
         }

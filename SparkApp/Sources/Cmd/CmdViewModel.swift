@@ -83,7 +83,10 @@ final class CmdViewModel {
     func undo() {
         guard let token = receipt?.undoToken else { return }
         receipt = nil
-        Task { _ = await submitter.undo(token: token) }
+        Task {
+            guard await submitter.undo(token: token) == false else { return }
+            receipt = Receipt(id: UUID(), summary: "Couldn't undo", undoToken: nil, isQueued: false)
+        }
     }
 
     func confirmPending() {
@@ -96,8 +99,19 @@ final class CmdViewModel {
 
     func flushQueue() async {
         guard !queue.load().isEmpty else { return }
-        _ = await queue.flush(using: submitter)
+        let sent = await queue.flush(using: submitter)
         queuedCount = queue.load().count
+        for (entry, result) in sent {
+            switch result {
+            case .needsConfirmation(let prompt):
+                receipt = Receipt(
+                    id: entry.id, summary: prompt, undoToken: nil, isQueued: false, pendingConfirmation: entry)
+            case .rejected(let reason):
+                receipt = Receipt(id: entry.id, summary: reason, undoToken: nil, isQueued: false)
+            case .done, .retry:
+                break
+            }
+        }
     }
 
     func clearLocalState() {
