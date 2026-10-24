@@ -1,6 +1,10 @@
 import Foundation
 
 public enum SearchEndpoint {
+    /// The search contract version this build speaks. The server serves the
+    /// versioned envelope only when asked for it; see `SearchResponse`.
+    public static let contractVersion = 1
+
     public enum EntityType: String, Sendable, CaseIterable {
         case events, objects, blocks
     }
@@ -47,16 +51,20 @@ public enum SearchEndpoint {
         }
     }
 
-    /// GET /search?q=…&mode=…
-    public static func query(text: String, mode: Mode = .default) -> Endpoint<SearchResponse> {
-        Endpoint(
-            method: .get,
-            path: "/search",
-            query: [
-                URLQueryItem(name: "q", value: text),
-                URLQueryItem(name: "mode", value: mode.queryValue),
-            ]
-        )
+    /// GET /search?contract_version=1&query=…&mode=…
+    ///
+    /// Needs a backend that serves contract v1: older ones read `q` and would
+    /// return nothing for `query`.
+    public static func query(text: String, mode: Mode = .default, limit: Int? = nil) -> Endpoint<SearchResponse> {
+        var items = [
+            URLQueryItem(name: "contract_version", value: String(contractVersion)),
+            URLQueryItem(name: "query", value: text),
+            URLQueryItem(name: "mode", value: mode.queryValue),
+        ]
+        if let limit {
+            items.append(URLQueryItem(name: "limit", value: String(limit)))
+        }
+        return Endpoint(method: .get, path: "/search", query: items)
     }
 
     /// Typed entity search used by relationship selection and DEBUG tools.
