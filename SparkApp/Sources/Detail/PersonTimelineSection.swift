@@ -65,7 +65,7 @@ struct PersonTimelineSection: View {
                         EventDetailView(eventId: event.id)
                     } label: {
                         SparkDetailLinkedRow(
-                            title: event.action.sparkActionTitle,
+                            title: rowTitle(for: event),
                             subtitle: event.time.map { SparkDetailFormatters.compactDateTime.string(from: $0) },
                             trailing: event.displayValue?.sparkPlainTextFromHTMLFragment,
                             tint: Color.domainTint(for: event.domain)
@@ -78,6 +78,17 @@ struct PersonTimelineSection: View {
             }
         }
         .task(id: "\(personID):\(Self.monthKey.string(from: month)):\(selectedDay ?? "")") { await load() }
+    }
+
+    private func rowTitle(for event: Event) -> String {
+        let action = event.action.sparkActionTitle
+        guard event.displayWithObject,
+              let target = event.target?.title.trimmingCharacters(in: .whitespacesAndNewlines),
+              !target.isEmpty
+        else {
+            return action
+        }
+        return "\(action) \(target)"
     }
 
     private var monthHeader: some View {
