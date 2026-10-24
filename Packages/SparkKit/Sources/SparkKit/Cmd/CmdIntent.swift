@@ -36,12 +36,18 @@ public struct CmdClassification: Equatable, Sendable {
     public let text: String
     /// True when a prefix (`/`, `?`) or `@flint` decided the intent.
     public let isForced: Bool
+    /// `@mentions` the server matched to people. Empty offline.
+    public let mentions: [CmdMention]
 
-    public init(intent: CmdIntent, confidence: Double, text: String, isForced: Bool = false) {
+    public init(
+        intent: CmdIntent, confidence: Double, text: String, isForced: Bool = false,
+        mentions: [CmdMention] = []
+    ) {
         self.intent = intent
         self.confidence = confidence
         self.text = text
         self.isForced = isForced
+        self.mentions = mentions
     }
 
     public var needsAsk: Bool { confidence < CmdClassifier.askThreshold }
@@ -119,5 +125,98 @@ public struct HeuristicCmdClassifier: CmdClassifying {
 
     private static func rest(of text: String, dropping count: Int) -> String {
         String(text.dropFirst(count)).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+/// An `@mention` and who it could mean.
+public struct CmdMention: Equatable, Identifiable, Sendable {
+    public enum State: String, Sendable {
+        /// The name is a person already.
+        case existing
+        /// One person starts with it (`@dan`, Daniel).
+        case likely
+        /// Several people do: the user picks.
+        case ambiguous
+        /// Nobody does.
+        case new
+    }
+
+    public struct Match: Equatable, Sendable {
+        public let id: String
+        public let name: String
+
+        public init(id: String, name: String) {
+            self.id = id
+            self.name = name
+        }
+    }
+
+    public let name: String
+    public let state: State
+    public let matches: [Match]
+
+    public var id: String { name }
+
+    public init(name: String, state: State, matches: [Match]) {
+        self.name = name
+        self.state = state
+        self.matches = matches
+    }
+
+    /// The name a new person is created with: how it was typed, with a
+    /// lower-case handle (the server folds case) capitalised.
+    public var displayName: String {
+        name.contains(where: \.isUppercase)
+            ? name
+            : name.split(separator: " ").map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")
+    }
+}
+
+/// What the user chose for an ambiguous mention.
+public enum CmdMentionPick: Equatable, Sendable {
+    case person(id: String)
+    case createNew
+}
+
+/// Who a log line is linked to, settled from its mentions.
+public struct CmdPersonLinks: Equatable, Sendable {
+    public var ids: [String]
+    public var newNames: [String]
+
+    public init(ids: [String] = [], newNames: [String] = []) {
+        self.ids = ids
+        self.newNames = newNames
+    }
+
+    /// The first ambiguous mention nobody has picked for yet.
+    public static func unresolved(_ mentions: [CmdMention], picks: [String: CmdMentionPick]) -> CmdMention? {
+        mentions.first { $0.state == .ambiguous && picks[$0.name] == nil }
+    }
+
+    /// Existing and likely people link by id, nobody-matches become new
+    /// people, and an ambiguous mention uses the user's pick. Nil while one
+    /// is still unpicked.
+    public static func resolve(_ mentions: [CmdMention], picks: [String: CmdMentionPick]) -> CmdPersonLinks? {
+        guard unresolved(mentions, picks: picks) == nil else { return nil }
+        var links = CmdPersonLinks()
+        for mention in mentions {
+            switch mention.state {
+            case .existing, .likely:
+                if let match = mention.matches.first, !links.ids.contains(match.id) { links.ids.append(match.id) }
+            case .new:
+                links.addNew(mention.displayName)
+            case .ambiguous:
+                switch picks[mention.name] {
+                case .person(let id): if !links.ids.contains(id) { links.ids.append(id) }
+                case .createNew: links.addNew(mention.displayName)
+                case nil: break
+                }
+            }
+        }
+        return links
+    }
+
+    private mutating func addNew(_ name: String) {
+        if !newNames.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) { newNames.append(name) }
     }
 }

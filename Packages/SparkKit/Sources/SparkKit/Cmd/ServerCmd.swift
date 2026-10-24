@@ -23,12 +23,23 @@ public struct ServerCmdClassifier: CmdClassifying {
         guard let response = try? await apiClient.request(QuickLogIntentsEndpoint.classify(request)) else {
             return local
         }
+        let mentions = Self.mentions(from: response.people)
         guard let intent = Self.intent(from: response.intent), !response.needsChoice else {
             // `unsure`: keep the text, drop below the threshold so the app asks.
-            return CmdClassification(intent: local.intent, confidence: 0, text: response.text)
+            return CmdClassification(intent: local.intent, confidence: 0, text: response.text, mentions: mentions)
         }
         return CmdClassification(
-            intent: intent, confidence: response.confidence, text: response.text, isForced: response.confidence >= 1)
+            intent: intent, confidence: response.confidence, text: response.text,
+            isForced: response.confidence >= 1, mentions: mentions)
+    }
+
+    static func mentions(from people: [QuickLogIntentsEndpoint.Mention]) -> [CmdMention] {
+        people.compactMap { person in
+            guard let state = CmdMention.State(rawValue: person.state) else { return nil }
+            return CmdMention(
+                name: person.name, state: state,
+                matches: person.matches.map { CmdMention.Match(id: $0.id, name: $0.name) })
+        }
     }
 
     static func wire(_ intent: CmdIntent) -> String {
@@ -69,11 +80,12 @@ public struct ServerCmdSubmitter: CmdSubmitting {
     }
 
     /// A plain line becomes a reflection. Wine, beer and TV drafts go through
-    /// their own structured flow, not here. `@mentions` stay in the text; they
-    /// aren't linked to people yet.
+    /// their own structured flow, not here. `@mentions` stay in the text and
+    /// the people the app settled on are linked to the event.
     private func logReflection(_ entry: CmdEntry) async -> CmdSubmissionResult {
         let request = LogEndpoint.ReflectionRequest(
-            idempotencyKey: entry.id.uuidString, body: entry.text, occurredAt: entry.createdAt)
+            idempotencyKey: entry.id.uuidString, body: entry.text, occurredAt: entry.createdAt,
+            personIds: entry.personIds ?? [], newPeople: entry.newPeople ?? [])
         do {
             _ = try await apiClient.request(LogEndpoint.reflection(request))
             return .done(summary: "Logged", undoToken: nil)

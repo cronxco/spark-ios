@@ -24,15 +24,39 @@ public enum QuickLogIntentsEndpoint {
         }
     }
 
+    /// One `@mention` as the server's person matcher read it.
+    public struct Mention: Decodable, Equatable, Sendable {
+        public struct Match: Decodable, Equatable, Sendable {
+            public let id: String
+            public let name: String
+        }
+
+        public let name: String
+        /// `existing`, `likely`, `ambiguous` or `new`.
+        public let state: String
+        public let matches: [Match]
+    }
+
     public struct ClassifyResponse: Decodable, Equatable, Sendable {
         /// `log`, `flint_note`, `command`, `search` or `unsure`.
         public let intent: String
         public let confidence: Double
         public let needsChoice: Bool
         public let text: String
+        /// Every `@mention` except `@flint`, matched against the user's people.
+        public let people: [Mention]
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            intent = try container.decode(String.self, forKey: .intent)
+            confidence = try container.decode(Double.self, forKey: .confidence)
+            text = try container.decode(String.self, forKey: .text)
+            needsChoice = try container.decode(Bool.self, forKey: .needsChoice)
+            people = try container.decodeIfPresent([Mention].self, forKey: .people) ?? []
+        }
 
         enum CodingKeys: String, CodingKey {
-            case intent, confidence, text
+            case intent, confidence, text, people
             case needsChoice = "needs_choice"
         }
     }

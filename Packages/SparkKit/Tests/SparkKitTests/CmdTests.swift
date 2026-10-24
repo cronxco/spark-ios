@@ -103,6 +103,41 @@ struct CmdTests {
         #expect(json["idempotency_key"] as? String == "k")
     }
 
+    @Test("reflection request carries matched people by id and new people by name")
+    func reflectionPeople() throws {
+        let request = LogEndpoint.ReflectionRequest(
+            idempotencyKey: "k", body: "coffee with @dan", occurredAt: Date(timeIntervalSince1970: 0),
+            personIds: ["p1"], newPeople: ["Sam"])
+        let body = try #require(LogEndpoint.reflection(request).body)
+        let json = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        #expect(json["with_ids"] as? [String] == ["p1"])
+        #expect(json["with"] as? [String] == ["Sam"])
+    }
+
+    @Test("classify response decodes people and tolerates their absence")
+    func classifyPeople() throws {
+        let with = Data(
+            #"{"intent":"log","confidence":0.9,"needs_choice":false,"text":"x","people":[{"name":"dan","state":"likely","matches":[{"id":"p1","name":"Daniel"}]}]}"#
+                .utf8)
+        let decoded = try JSONDecoder().decode(QuickLogIntentsEndpoint.ClassifyResponse.self, from: with)
+        let mentions = ServerCmdClassifier.mentions(from: decoded.people)
+        #expect(mentions == [CmdMention(name: "dan", state: .likely, matches: [.init(id: "p1", name: "Daniel")])])
+        let without = Data(#"{"intent":"log","confidence":0.9,"needs_choice":false,"text":"x"}"#.utf8)
+        #expect(try JSONDecoder().decode(QuickLogIntentsEndpoint.ClassifyResponse.self, from: without).people.isEmpty)
+    }
+
+    @Test("mentions link likely people, create new ones and wait on ambiguous ones")
+    func personLinks() {
+        let dan = CmdMention(name: "dan", state: .likely, matches: [.init(id: "p1", name: "Daniel")])
+        let sam = CmdMention(name: "sam", state: .new, matches: [])
+        let al = CmdMention(name: "al", state: .ambiguous, matches: [.init(id: "a1", name: "Alan"), .init(id: "a2", name: "Alex")])
+        #expect(CmdPersonLinks.resolve([dan, sam], picks: [:]) == CmdPersonLinks(ids: ["p1"], newNames: ["Sam"]))
+        #expect(CmdPersonLinks.resolve([dan, al], picks: [:]) == nil)
+        #expect(CmdPersonLinks.unresolved([dan, al], picks: [:]) == al)
+        #expect(CmdPersonLinks.resolve([al], picks: ["al": .person(id: "a2")]) == CmdPersonLinks(ids: ["a2"]))
+        #expect(CmdPersonLinks.resolve([al], picks: ["al": .createNew]) == CmdPersonLinks(newNames: ["Al"]))
+    }
+
     @Test("override is detected")
     func override() {
         #expect(CmdEntry(intent: .search, text: "x", classifiedAs: .log).wasOverridden)

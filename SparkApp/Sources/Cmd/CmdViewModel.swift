@@ -21,6 +21,8 @@ final class CmdViewModel {
     /// Set when the user picks an intent on the chip or in the ask sheet.
     private(set) var override: CmdIntent?
     var isAsking = false
+    /// Set while an ambiguous `@mention` waits for the user to pick a person.
+    private(set) var pickingMention: CmdMention?
     var searchQuery: String?
     private(set) var receipt: Receipt?
     private(set) var recents: [CmdRecentStore.Item]
@@ -31,6 +33,8 @@ final class CmdViewModel {
     private let queue: CmdQueue
     private let recentStore: CmdRecentStore
     private var classifyTask: Task<Void, Never>?
+    private var mentionPicks: [String: CmdMentionPick] = [:]
+    private var pendingSend: (intent: CmdIntent, classification: CmdClassification)?
 
     init(
         classifier: any CmdClassifying = HeuristicCmdClassifier(),
@@ -69,6 +73,34 @@ final class CmdViewModel {
         isAsking = false
         guard let classification else { return }
         send(intent: intent, classification: classification)
+    }
+
+    /// One line under the input saying who a log will link to.
+    var mentionSummary: String? {
+        guard effectiveIntent == .log, let mentions = classification?.mentions, !mentions.isEmpty else { return nil }
+        let parts = mentions.map { mention -> String in
+            switch mention.state {
+            case .existing: return mention.matches.first?.name ?? mention.displayName
+            case .likely: return "\(mention.displayName) → \(mention.matches.first?.name ?? mention.displayName)"
+            case .ambiguous: return "\(mention.displayName)?"
+            case .new: return "\(mention.displayName) (new)"
+            }
+        }
+        return "With " + parts.joined(separator: ", ")
+    }
+
+    /// The pick sheet's answer for the mention it is showing.
+    func resolveMention(_ pick: CmdMentionPick) {
+        guard let mention = pickingMention, let pending = pendingSend else { return }
+        mentionPicks[mention.name] = pick
+        pickingMention = nil
+        pendingSend = nil
+        send(intent: pending.intent, classification: pending.classification)
+    }
+
+    func cancelMention() {
+        pickingMention = nil
+        pendingSend = nil
     }
 
     func openSearch(_ query: String = "") {
@@ -129,8 +161,19 @@ final class CmdViewModel {
             openSearch(text)
             return
         }
+        var links: CmdPersonLinks?
+        if intent == .log, !classification.mentions.isEmpty {
+            links = CmdPersonLinks.resolve(classification.mentions, picks: mentionPicks)
+            if links == nil {
+                // Several people fit: ask before saving, nothing is written yet.
+                pendingSend = (intent, classification)
+                pickingMention = CmdPersonLinks.unresolved(classification.mentions, picks: mentionPicks)
+                return
+            }
+        }
         let entry = CmdEntry(
-            intent: intent, text: text, classifiedAs: classification.intent, confidence: classification.confidence)
+            intent: intent, text: text, classifiedAs: classification.intent, confidence: classification.confidence,
+            personIds: links?.ids, newPeople: links?.newNames)
         recents = recentStore.record(text: text, intent: intent)
         reset()
         Task { await deliver(entry) }
@@ -156,6 +199,9 @@ final class CmdViewModel {
         input = ""
         override = nil
         isAsking = false
+        mentionPicks = [:]
+        pendingSend = nil
+        pickingMention = nil
     }
 
     private func reclassify() {
