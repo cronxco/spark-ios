@@ -20,7 +20,7 @@ struct CmdView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: SparkSpacing.md) {
-                    SparkMainPageHeader(title: "CMD")
+                    SparkMainPageHeader(title: "Command")
                         .padding(.horizontal, SparkSpacing.lg)
                         .padding(.top, SparkSpacing.md)
                     recentsList
