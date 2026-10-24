@@ -14,15 +14,20 @@ struct PersonTimelineSection: View {
     @State private var selectedDay: String?
     @State private var isLoading = true
     @State private var errorMessage: String?
+    @State private var activeLoadID = UUID()
 
     private static let monthKey: DateFormatter = {
         let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.calendar = Calendar(identifier: .iso8601)
         f.dateFormat = "yyyy-MM"
         return f
     }()
 
     private static let dayKey: DateFormatter = {
         let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.calendar = Calendar(identifier: .iso8601)
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()
@@ -135,16 +140,23 @@ struct PersonTimelineSection: View {
     }
 
     private func load() async {
+        let loadID = UUID()
+        activeLoadID = loadID
         isLoading = true
         errorMessage = nil
-        defer { isLoading = false }
+        defer {
+            if activeLoadID == loadID { isLoading = false }
+        }
         do {
-            timeline = try await apiClient.request(
+            let response = try await apiClient.request(
                 PeopleEndpoint.timeline(id: personID, month: Self.monthKey.string(from: month), date: selectedDay)
             )
+            guard activeLoadID == loadID else { return }
+            timeline = response
         } catch where error.isAPICancellation {
             return
         } catch {
+            guard activeLoadID == loadID else { return }
             errorMessage = "Couldn't load the timeline. Tap to retry."
         }
     }
