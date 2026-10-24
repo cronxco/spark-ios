@@ -15,17 +15,7 @@ final class CmdViewModel {
     }
 
     var input: String = "" {
-        didSet {
-            // A vertical-axis field can insert a newline for return instead of
-            // calling onSubmit; a lone inserted newline means send.
-            if input != oldValue, input.contains("\n"), input.replacingOccurrences(of: "\n", with: "") == oldValue.replacingOccurrences(of: "\n", with: ""),
-               input.filter({ $0 == "\n" }).count == oldValue.filter({ $0 == "\n" }).count + 1 {
-                input = oldValue
-                submit()
-                return
-            }
-            reclassify()
-        }
+        didSet { reclassify() }
     }
     private(set) var classification: CmdClassification?
     /// Set when the user picks an intent on the chip or in the ask sheet.
@@ -63,6 +53,18 @@ final class CmdViewModel {
 
     func choose(_ intent: CmdIntent) {
         override = intent
+    }
+
+    /// A vertical-axis field can insert a newline for return instead of calling
+    /// onSubmit. Call this after `input` changed: a lone inserted newline is
+    /// dropped and the line is sent. Runs from onChange so the field is cleared
+    /// after SwiftUI has applied the edit, not during it.
+    func inputChanged(from previous: String) {
+        let added = input.filter { $0 == "\n" }.count - previous.filter { $0 == "\n" }.count
+        guard added == 1, input.replacingOccurrences(of: "\n", with: "") == previous.replacingOccurrences(of: "\n", with: "")
+        else { return }
+        input = previous
+        submit()
     }
 
     func submit() {

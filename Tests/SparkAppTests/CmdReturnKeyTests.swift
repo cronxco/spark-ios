@@ -14,6 +14,7 @@ struct CmdReturnKeyTests {
             queue: CmdQueue(), recentStore: CmdRecentStore())
         model.input = "This is a test reflection"
         model.input = "This is a test reflection\n"
+        model.inputChanged(from: "This is a test reflection")
 
         #expect(model.input.isEmpty)
         #expect(!model.recents.isEmpty)

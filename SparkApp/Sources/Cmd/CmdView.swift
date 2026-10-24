@@ -113,6 +113,7 @@ struct CmdView: View {
                     .focused($focused)
                     .submitLabel(.send)
                     .onSubmit { viewModel.submit() }
+                    .onChange(of: viewModel.input) { old, _ in viewModel.inputChanged(from: old) }
                     .textInputAutocapitalization(.sentences)
 
                 intentChip
