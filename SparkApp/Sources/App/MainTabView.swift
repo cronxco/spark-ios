@@ -19,7 +19,7 @@ struct MainTabView: View {
             }
             .onChange(of: model.pendingSearchQuery, initial: true) { _, new in
                 guard new != nil else { return }
-                selection = .search
+                selection = .cmd
             }
     }
 
@@ -37,13 +37,13 @@ struct MainTabView: View {
             Tab("Flint", systemImage: "sparkles", value: AppTab.flint) {
                 FlintView()
             }
-            Tab(value: AppTab.search, role: .search) {
-                SearchView()
+            Tab("CMD", systemImage: "terminal", value: AppTab.cmd) {
+                CmdView(apiClient: model.apiClient)
             }
         }
     }
 }
 
 enum AppTab: Hashable {
-    case day, explore, knowledge, flint, search
+    case day, explore, knowledge, flint, cmd
 }

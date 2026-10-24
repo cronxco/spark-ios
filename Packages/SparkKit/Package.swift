@@ -19,7 +19,8 @@ let package = Package(
         .testTarget(
             name: "SparkKitTests",
             dependencies: ["SparkKit"],
-            path: "Tests/SparkKitTests"
+            path: "Tests/SparkKitTests",
+            resources: [.copy("Fixtures")]
         ),
     ]
 )
