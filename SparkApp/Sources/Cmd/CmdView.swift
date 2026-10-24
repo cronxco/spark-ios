@@ -44,6 +44,11 @@ struct CmdView: View {
             if phase == .active { Task { await viewModel.flushQueue() } }
         }
         .onChange(of: appModel.pendingSearchQuery) { _, _ in consumePendingSearch() }
+        .onChange(of: viewModel.pendingNavigation) { _, destination in
+            guard let destination else { return }
+            viewModel.pendingNavigation = nil
+            appModel.pendingDestination = destination
+        }
     }
 
     /// Siri and Spotlight hand a query over through `pendingSearchQuery`.

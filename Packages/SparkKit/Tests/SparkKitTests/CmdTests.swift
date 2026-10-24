@@ -92,6 +92,68 @@ struct CmdTests {
         #expect(!list.data[1].runsWithoutInput)
     }
 
+    @Test("navigation actions carry the screen they open")
+    func navigationDecoding() throws {
+        let json = Data(
+            #"{"data":[{"id":"nav.money","title":"Money","kind":"navigation","confirm":"none","target":{},"destination":{"route":"money","path":"/money","native":"explore.money"}}]}"#
+                .utf8)
+        let list = try JSONDecoder().decode(CmdActionsEndpoint.ListResponse.self, from: json)
+        #expect(CmdDestination(native: list.data[0].destination?.native) == .exploreMoney)
+        #expect(CmdDestination(native: "explore.unknown") == nil)
+        #expect(CmdDestination(native: nil) == nil)
+        #expect(CmdDestination.exploreMap.isExplore)
+        #expect(!CmdDestination.flint.isExplore)
+    }
+
+    @Test("a leading open, show or go to is dropped, nothing else")
+    func navigationLead() {
+        #expect(CmdCommandText.normalized("  Open   Money ") == "open money")
+        #expect(CmdCommandText.withoutNavigationLead("open money") == "money")
+        #expect(CmdCommandText.withoutNavigationLead("go to flint") == "flint")
+        #expect(CmdCommandText.withoutNavigationLead("sync monzo") == "sync monzo")
+        #expect(CmdCommandText.withoutNavigationLead("open ") == "open ")
+    }
+
+    @Test("a resolved target decodes, and ambiguity lists candidates")
+    func resolutionDecoding() throws {
+        let matched = Data(
+            #"{"data":{"status":"matched","label":"Monzo","target":{"integration_id":"abc"},"action":{"id":"integrations.sync","title":"Sync integration","kind":"safe","confirm":"none","target":{"integration_id":{"type":"uuid"}},"destination":null}}}"#
+                .utf8)
+        let resolved = try JSONDecoder().decode(CmdActionsEndpoint.ResolveResponse.self, from: matched).data
+        #expect(resolved.status == "matched")
+        #expect(resolved.action?.id == "integrations.sync")
+        #expect(resolved.target == ["integration_id": "abc"])
+
+        let ambiguous = Data(
+            #"{"data":{"status":"ambiguous","candidates":[{"label":"Monzo Pot","target":{"integration_id":"a"}},{"label":"Monzo Current","target":{"integration_id":"b"}}]}}"#
+                .utf8)
+        let choice = try JSONDecoder().decode(CmdActionsEndpoint.ResolveResponse.self, from: ambiguous).data
+        #expect(choice.candidates?.map(\.label) == ["Monzo Pot", "Monzo Current"])
+        #expect(choice.target == nil)
+    }
+
+    @Test("run sends the target only when there is one")
+    func runTargetEncoding() throws {
+        let plain = try #require(CmdActionsEndpoint.run(id: "a", confirmed: false, idempotencyKey: "k").body)
+        let plainJSON = try #require(JSONSerialization.jsonObject(with: plain) as? [String: Any])
+        #expect(plainJSON["target"] == nil)
+
+        let targeted = try #require(
+            CmdActionsEndpoint.run(id: "a", target: ["integration_id": "abc"], confirmed: true, idempotencyKey: "k").body)
+        let json = try #require(JSONSerialization.jsonObject(with: targeted) as? [String: Any])
+        #expect((json["target"] as? [String: String]) == ["integration_id": "abc"])
+        #expect(json["confirmed"] as? Bool == true)
+    }
+
+    @Test("targeted verbs are commands; plain words still log")
+    func targetedVerbs() {
+        #expect(HeuristicCmdClassifier.classifySync("pause monzo")?.intent == .command)
+        #expect(HeuristicCmdClassifier.classifySync("pause monzo")?.needsAsk == false)
+        #expect(HeuristicCmdClassifier.classifySync("go to money")?.needsAsk == false)
+        #expect(HeuristicCmdClassifier.classifySync("go for a run")?.needsAsk == true)
+        #expect(HeuristicCmdClassifier.classifySync("delete coffee")?.needsAsk == true)
+    }
+
     @Test("reflection request encodes kind, body and key")
     func reflectionEncoding() throws {
         let request = LogEndpoint.ReflectionRequest(

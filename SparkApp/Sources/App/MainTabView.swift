@@ -17,6 +17,19 @@ struct MainTabView: View {
                 default: selection = .day
                 }
             }
+            .onChange(of: model.pendingDestination, initial: true) { _, new in
+                guard let new else { return }
+                switch new {
+                case .day: selection = .day
+                case .flint: selection = .flint
+                case .knowledge: selection = .knowledge
+                // ExploreView picks the section, then clears the destination.
+                case .exploreHealth, .exploreMoney, .exploreMetrics, .exploreTags, .exploreMap:
+                    selection = .explore
+                    return
+                }
+                model.pendingDestination = nil
+            }
             .onChange(of: model.pendingSearchQuery, initial: true) { _, new in
                 guard new != nil else { return }
                 selection = .cmd
