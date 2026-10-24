@@ -5,8 +5,16 @@ import SwiftUI
 struct CmdView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.scenePhase) private var scenePhase
-    @State private var viewModel = CmdViewModel()
+    @State private var viewModel: CmdViewModel
     @FocusState private var focused: Bool
+
+    init(apiClient: APIClient) {
+        _viewModel = State(
+            initialValue: CmdViewModel(
+                classifier: ServerCmdClassifier(apiClient: apiClient),
+                submitter: ServerCmdSubmitter(apiClient: apiClient)
+            ))
+    }
 
     var body: some View {
         NavigationStack {

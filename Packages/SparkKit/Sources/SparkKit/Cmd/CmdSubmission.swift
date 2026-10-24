@@ -8,8 +8,14 @@ public struct CmdEntry: Codable, Equatable, Identifiable, Sendable {
     public let createdAt: Date
     /// What the classifier chose, kept so overrides can be measured.
     public let classifiedAs: CmdIntent?
+    /// The classifier's confidence in `classifiedAs`, sent as telemetry.
+    public let confidence: Double?
 
-    public init(id: UUID = UUID(), intent: CmdIntent, text: String, createdAt: Date = Date(), classifiedAs: CmdIntent?) {
+    public init(
+        id: UUID = UUID(), intent: CmdIntent, text: String, createdAt: Date = Date(),
+        classifiedAs: CmdIntent?, confidence: Double? = nil
+    ) {
+        self.confidence = confidence
         self.id = id
         self.intent = intent
         self.text = text

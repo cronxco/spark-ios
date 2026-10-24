@@ -56,7 +56,7 @@ public protocol CmdClassifying: Sendable {
 public enum CmdClassifier {
     /// Below this the app asks which intent before writing anything.
     /// Open question in the plan: tune against real entries.
-    public static let askThreshold = 0.6
+    public static let askThreshold = 0.7
 }
 
 /// Rules only: prefixes, `@flint`, a few command verbs, and a short-line

@@ -38,7 +38,7 @@ struct MainTabView: View {
                 FlintView()
             }
             Tab("CMD", systemImage: "terminal", value: AppTab.cmd) {
-                CmdView()
+                CmdView(apiClient: model.apiClient)
             }
         }
     }

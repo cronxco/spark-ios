@@ -64,6 +64,24 @@ struct CmdTests {
         #expect(later.load().isEmpty)
     }
 
+    @Test("wire names round-trip")
+    func wireNames() {
+        #expect(ServerCmdClassifier.wire(.flintNote) == "flint_note")
+        #expect(ServerCmdClassifier.intent(from: "flint_note") == .flintNote)
+        #expect(ServerCmdClassifier.intent(from: "unsure") == nil)
+    }
+
+    @Test("commit request encodes the contract keys")
+    func commitEncoding() throws {
+        let request = QuickLogIntentsEndpoint.CommitRequest(
+            idempotencyKey: "k", text: "t", intent: "flint_note", suggestedIntent: nil,
+            confidence: 1, occurredAt: Date(timeIntervalSince1970: 0))
+        let body = try #require(QuickLogIntentsEndpoint.commit(request).body)
+        let json = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        #expect(json["idempotency_key"] as? String == "k")
+        #expect(json["occurred_at"] as? String == "1970-01-01T00:00:00Z")
+    }
+
     @Test("override is detected")
     func override() {
         #expect(CmdEntry(intent: .search, text: "x", classifiedAs: .log).wasOverridden)

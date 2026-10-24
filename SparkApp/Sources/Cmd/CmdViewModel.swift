@@ -107,7 +107,8 @@ final class CmdViewModel {
             openSearch(text)
             return
         }
-        let entry = CmdEntry(intent: intent, text: text, classifiedAs: classification.intent)
+        let entry = CmdEntry(
+            intent: intent, text: text, classifiedAs: classification.intent, confidence: classification.confidence)
         recents = recentStore.record(text: text, intent: intent)
         reset()
         Task { await deliver(entry) }
@@ -140,9 +141,11 @@ final class CmdViewModel {
             override = nil
             return
         }
+        // The chip answers at once from the rules; the classifier refines it.
+        classification = HeuristicCmdClassifier.classifySync(text)
         classifyTask = Task { [classifier] in
             let result = await classifier.classify(text)
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, let result else { return }
             self.classification = result
         }
     }
