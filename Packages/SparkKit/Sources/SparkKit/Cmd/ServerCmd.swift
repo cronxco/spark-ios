@@ -40,10 +40,9 @@ public struct ServerCmdClassifier: CmdClassifying {
     }
 }
 
-/// Commits entries. A note for Flint is written by the server. Free-text
-/// log and commands have no write path yet (no `kind` for `POST /log`; the
-/// action registry is not wired in), so they are refused rather than
-/// reported as done.
+/// Commits entries. A note for Flint is written by the server and a command
+/// runs through the action registry. Free-text log has no write path yet
+/// (no `kind` for `POST /log`), so it is refused rather than reported as done.
 public struct ServerCmdSubmitter: CmdSubmitting {
     private let apiClient: APIClient
 
@@ -58,13 +57,53 @@ public struct ServerCmdSubmitter: CmdSubmitting {
         case .log:
             return .rejected(reason: "Free-text log isn't available yet")
         case .command:
-            return .rejected(reason: "Commands aren't available yet")
+            return await runCommand(entry)
         case .search:
             return .done(summary: "", undoToken: nil)
         }
     }
 
-    public func undo(token: String) async -> Bool { false }
+    public func undo(token: String) async -> Bool {
+        guard let receipt = try? await apiClient.request(CmdActionsEndpoint.undo(receiptId: token)) else { return false }
+        return receipt.status == "succeeded"
+    }
+
+    /// Finds the registry action named by the text and runs it. Navigation
+    /// and actions that need a target (an event, an integration) aren't
+    /// runnable from a typed line yet.
+    private func runCommand(_ entry: CmdEntry) async -> CmdSubmissionResult {
+        let found: [CmdActionsEndpoint.Action]
+        do {
+            found = try await apiClient.request(CmdActionsEndpoint.list(query: entry.text)).data
+        } catch {
+            return .retry
+        }
+        let query = entry.text.lowercased()
+        let match = found.first { $0.title.lowercased() == query } ?? found.first
+        guard let action = match else { return .rejected(reason: "No matching command") }
+        guard action.kind != "navigation", action.runsWithoutInput else {
+            return .rejected(reason: "Can't run that from here yet")
+        }
+
+        let confirmed = entry.confirmed ?? false
+        do {
+            let receipt = try await apiClient.request(
+                CmdActionsEndpoint.run(id: action.id, confirmed: confirmed, idempotencyKey: entry.id.uuidString))
+            if receipt.status == "failed" { return .rejected(reason: receipt.message ?? "Failed") }
+            let undoable = receipt.undo?.available == true
+            return .done(summary: receipt.message ?? action.title, undoToken: undoable ? receipt.receiptId : nil)
+        } catch let error as APIError {
+            switch error {
+            case .httpStatus(409, _, _): return .needsConfirmation(prompt: action.title)
+            case .httpStatus(403, _, _): return .rejected(reason: "Not allowed")
+            case .httpStatus(let code, _, _) where (400..<500).contains(code) && code != 408 && code != 429:
+                return .rejected(reason: "Couldn't run it")
+            default: return .retry
+            }
+        } catch {
+            return .retry
+        }
+    }
 
     private func commit(_ entry: CmdEntry) async -> CmdSubmissionResult {
         let request = QuickLogIntentsEndpoint.CommitRequest(

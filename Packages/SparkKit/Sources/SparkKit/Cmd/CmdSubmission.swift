@@ -10,17 +10,26 @@ public struct CmdEntry: Codable, Equatable, Identifiable, Sendable {
     public let classifiedAs: CmdIntent?
     /// The classifier's confidence in `classifiedAs`, sent as telemetry.
     public let confidence: Double?
+    /// The user confirmed a command that asks first.
+    public let confirmed: Bool?
 
     public init(
         id: UUID = UUID(), intent: CmdIntent, text: String, createdAt: Date = Date(),
-        classifiedAs: CmdIntent?, confidence: Double? = nil
+        classifiedAs: CmdIntent?, confidence: Double? = nil, confirmed: Bool? = nil
     ) {
         self.confidence = confidence
+        self.confirmed = confirmed
         self.id = id
         self.intent = intent
         self.text = text
         self.createdAt = createdAt
         self.classifiedAs = classifiedAs
+    }
+
+    public func confirming() -> CmdEntry {
+        CmdEntry(
+            id: id, intent: intent, text: text, createdAt: createdAt,
+            classifiedAs: classifiedAs, confidence: confidence, confirmed: true)
     }
 
     public var wasOverridden: Bool { classifiedAs != nil && classifiedAs != intent }
@@ -31,6 +40,8 @@ public enum CmdSubmissionResult: Equatable, Sendable {
     case done(summary: String, undoToken: String?)
     /// Recoverable failure (offline, 5xx): keep it in the queue.
     case retry
+    /// A costly command: ask first, then submit again with `confirmed`.
+    case needsConfirmation(prompt: String)
     /// The server will not take it: drop it and say why.
     case rejected(reason: String)
 }

@@ -10,6 +10,8 @@ final class CmdViewModel {
         let summary: String
         let undoToken: String?
         let isQueued: Bool
+        /// Set when the command asks first; the receipt shows Confirm.
+        var pendingConfirmation: CmdEntry? = nil
     }
 
     var input: String = "" {
@@ -84,6 +86,12 @@ final class CmdViewModel {
         Task { _ = await submitter.undo(token: token) }
     }
 
+    func confirmPending() {
+        guard let entry = receipt?.pendingConfirmation else { return }
+        receipt = nil
+        Task { await deliver(entry.confirming()) }
+    }
+
     func dismissReceipt() { receipt = nil }
 
     func flushQueue() async {
@@ -122,6 +130,9 @@ final class CmdViewModel {
             queue.enqueue(entry)
             queuedCount = queue.load().count
             receipt = Receipt(id: entry.id, summary: "Queued", undoToken: nil, isQueued: true)
+        case .needsConfirmation(let prompt):
+            receipt = Receipt(
+                id: entry.id, summary: prompt, undoToken: nil, isQueued: false, pendingConfirmation: entry)
         case .rejected(let reason):
             receipt = Receipt(id: entry.id, summary: reason, undoToken: nil, isQueued: false)
         }

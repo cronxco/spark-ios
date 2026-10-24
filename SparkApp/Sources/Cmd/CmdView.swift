@@ -147,6 +147,9 @@ struct CmdView: View {
         HStack {
             Text(receipt.summary)
             Spacer()
+            if receipt.pendingConfirmation != nil {
+                Button("Confirm") { viewModel.confirmPending() }
+            }
             if receipt.undoToken != nil {
                 Button("Undo") { viewModel.undo() }
             }

@@ -82,6 +82,16 @@ struct CmdTests {
         #expect(json["occurred_at"] as? String == "1970-01-01T00:00:00Z")
     }
 
+    @Test("registry actions decode and report whether they need input")
+    func actionDecoding() throws {
+        let json = Data(
+            #"{"data":[{"id":"sync-all","title":"Sync all","kind":"safe","confirm":"none","target":{}},{"id":"add-tag","title":"Tag event","kind":"data","confirm":"undo","target":{"event_id":{"type":"uuid"}}}]}"#
+                .utf8)
+        let list = try JSONDecoder().decode(CmdActionsEndpoint.ListResponse.self, from: json)
+        #expect(list.data[0].runsWithoutInput)
+        #expect(!list.data[1].runsWithoutInput)
+    }
+
     @Test("override is detected")
     func override() {
         #expect(CmdEntry(intent: .search, text: "x", classifiedAs: .log).wasOverridden)
