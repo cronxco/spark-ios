@@ -52,9 +52,18 @@ public extension LogEndpoint {
         }
     }
 
-    /// The reflection answer isn't read; any 2xx means it's saved (201 new,
-    /// 200 replay of the same key).
-    struct ReflectionResponse: Decodable, Sendable {}
+    /// Any 2xx means it's saved (201 new, 200 replay of the same key). The
+    /// receipt is the same shape as an action's and carries the Undo; it's
+    /// absent when the server can't offer one.
+    struct ReflectionResponse: Decodable, Sendable {
+        public let receipt: CmdActionsEndpoint.Receipt?
+
+        /// The receipt to hand `CmdActionsEndpoint.undo`, while Undo is open.
+        public var undoToken: String? {
+            guard let receipt, receipt.undo?.available == true else { return nil }
+            return receipt.receiptId
+        }
+    }
 
     static func reflection(_ request: ReflectionRequest) -> Endpoint<ReflectionResponse> {
         let encoder = JSONEncoder()
