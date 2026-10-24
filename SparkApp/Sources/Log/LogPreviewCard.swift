@@ -115,7 +115,14 @@ struct LogPreviewCard: View {
                 Button("Edit", action: onEdit)
                     .font(SparkTypography.bodySmall)
                 Spacer()
-                Button("Log", action: onLog)
+                Button("Log") {
+                    let person = newPerson.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !person.isEmpty {
+                        onAddPerson(person)
+                    }
+                    onLog()
+                    newPerson = ""
+                }
                     .buttonStyle(.borderedProminent)
                     .disabled(!canLog)
             }
