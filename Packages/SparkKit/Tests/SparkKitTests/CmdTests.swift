@@ -92,6 +92,17 @@ struct CmdTests {
         #expect(!list.data[1].runsWithoutInput)
     }
 
+    @Test("reflection request encodes kind, body and key")
+    func reflectionEncoding() throws {
+        let request = LogEndpoint.ReflectionRequest(
+            idempotencyKey: "k", body: "coffee with Dan", occurredAt: Date(timeIntervalSince1970: 0))
+        let body = try #require(LogEndpoint.reflection(request).body)
+        let json = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        #expect(json["kind"] as? String == "reflection")
+        #expect(json["body"] as? String == "coffee with Dan")
+        #expect(json["idempotency_key"] as? String == "k")
+    }
+
     @Test("override is detected")
     func override() {
         #expect(CmdEntry(intent: .search, text: "x", classifiedAs: .log).wasOverridden)

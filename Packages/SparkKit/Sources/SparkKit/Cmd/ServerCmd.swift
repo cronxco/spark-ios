@@ -41,8 +41,8 @@ public struct ServerCmdClassifier: CmdClassifying {
 }
 
 /// Commits entries. A note for Flint is written by the server and a command
-/// runs through the action registry. Free-text log has no write path yet
-/// (no `kind` for `POST /log`), so it is refused rather than reported as done.
+/// runs through the action registry. A free-text log
+/// is saved as a reflection.
 public struct ServerCmdSubmitter: CmdSubmitting {
     private let apiClient: APIClient
 
@@ -55,7 +55,7 @@ public struct ServerCmdSubmitter: CmdSubmitting {
         case .flintNote:
             return await commit(entry)
         case .log:
-            return .rejected(reason: "Free-text log isn't available yet")
+            return await logReflection(entry)
         case .command:
             return await runCommand(entry)
         case .search:
@@ -66,6 +66,31 @@ public struct ServerCmdSubmitter: CmdSubmitting {
     public func undo(token: String) async -> Bool {
         guard let receipt = try? await apiClient.request(CmdActionsEndpoint.undo(receiptId: token)) else { return false }
         return receipt.status == "succeeded"
+    }
+
+    /// A plain line becomes a reflection. Wine, beer and TV drafts go through
+    /// their own structured flow, not here. `@mentions` stay in the text; they
+    /// aren't linked to people yet.
+    private func logReflection(_ entry: CmdEntry) async -> CmdSubmissionResult {
+        let request = LogEndpoint.ReflectionRequest(
+            idempotencyKey: entry.id.uuidString, body: entry.text, occurredAt: entry.createdAt)
+        do {
+            _ = try await apiClient.request(LogEndpoint.reflection(request))
+            return .done(summary: "Logged", undoToken: nil)
+        } catch let error as APIError {
+            return Self.result(for: error, rejection: "Couldn't log")
+        } catch {
+            return .retry
+        }
+    }
+
+    private static func result(for error: APIError, rejection: String) -> CmdSubmissionResult {
+        switch error {
+        case .httpStatus(let code, _, _) where (400..<500).contains(code) && code != 408 && code != 429:
+            return .rejected(reason: rejection)
+        default:
+            return .retry
+        }
     }
 
     /// Finds the registry action named by the text and runs it. Navigation
