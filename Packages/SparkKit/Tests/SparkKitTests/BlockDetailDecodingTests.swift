@@ -26,6 +26,39 @@ struct BlockDetailDecodingTests {
         #expect(detail.aiSummary == nil)
     }
 
+    @Test("decodes the parent event carried by the flat payload")
+    func decodesParentEventFromFlatPayload() throws {
+        let json = """
+        {
+          "id": "block_tweet",
+          "block_type": "newsletter_summary_tweet",
+          "title": "Tweet Summary",
+          "time": "2026-10-19T16:00:00+00:00",
+          "content": "A Chinese crime ring reportedly hacked Staples.",
+          "event": {
+            "id": "event_post",
+            "time": "2026-10-19T16:00:00+00:00",
+            "service": "newsletter",
+            "domain": "knowledge",
+            "action": "received_post",
+            "display_with_object": true,
+            "target": {
+              "id": "object_publication",
+              "title": "Jason from 404 Media",
+              "concept": "publication",
+              "type": "newsletter_publication"
+            }
+          }
+        }
+        """
+
+        let detail = try makeDecoder().decode(BlockDetail.self, from: Data(json.utf8))
+
+        #expect(detail.id == "block_tweet")
+        #expect(detail.event?.id == "event_post")
+        #expect(detail.event?.target?.title == "Jason from 404 Media")
+    }
+
     @Test("decodes wrapped block detail payload")
     func decodesWrappedBlockDetailPayload() throws {
         let json = """

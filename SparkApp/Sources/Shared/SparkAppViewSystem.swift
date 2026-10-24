@@ -369,6 +369,10 @@ struct SparkSubViewToolbarModifier: ViewModifier {
     let refresh: () async -> Void
     let reprocess: (() async -> Void)?
     let flintNoteContext: FlintNoteContext?
+    /// Secondary entity actions. They sit in the ⋯ menu, so every detail
+    /// screen has the same Edit · Share · ⋯ toolbar.
+    let location: SparkSubViewMenuAction?
+    let delete: SparkSubViewMenuAction?
 
     @Environment(AppModel.self) private var appModel
     @State private var showShareSheet = false
@@ -390,6 +394,12 @@ struct SparkSubViewToolbarModifier: ViewModifier {
                     .accessibilityLabel("Share")
 
                     Menu {
+                        if let location {
+                            Button(action: location.perform) {
+                                Label(location.title, systemImage: "mappin.and.ellipse")
+                            }
+                            .disabled(!location.isEnabled)
+                        }
                         if flintNoteContext != nil {
                             Button {
                                 showFlintNoteComposer = true
@@ -428,6 +438,13 @@ struct SparkSubViewToolbarModifier: ViewModifier {
                             }
                             .disabled(rawPayload == nil)
                         #endif
+                        if let delete {
+                            Divider()
+                            Button(role: .destructive, action: delete.perform) {
+                                Label(delete.title, systemImage: "trash")
+                            }
+                            .disabled(!delete.isEnabled)
+                        }
                     } label: {
                         Image(systemName: "ellipsis.circle")
                             .symbolRenderingMode(.monochrome)
@@ -474,7 +491,9 @@ extension View {
         feedbackContext: SparkFeedbackContext? = nil,
         refresh: @escaping () async -> Void,
         reprocess: (() async -> Void)? = nil,
-        flintNoteContext: FlintNoteContext? = nil
+        flintNoteContext: FlintNoteContext? = nil,
+        location: SparkSubViewMenuAction? = nil,
+        delete: SparkSubViewMenuAction? = nil
     ) -> some View {
         modifier(SparkSubViewToolbarModifier(
             shareItems: shareItems,
@@ -483,9 +502,18 @@ extension View {
             feedbackContext: feedbackContext,
             refresh: refresh,
             reprocess: reprocess,
-            flintNoteContext: flintNoteContext
+            flintNoteContext: flintNoteContext,
+            location: location,
+            delete: delete
         ))
     }
+}
+
+/// An entity action offered from the sub-view ⋯ menu.
+struct SparkSubViewMenuAction {
+    let title: String
+    var isEnabled = true
+    let perform: @MainActor () -> Void
 }
 
 enum SparkPrettyJSON {

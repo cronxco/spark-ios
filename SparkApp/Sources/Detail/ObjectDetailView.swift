@@ -110,6 +110,7 @@ struct ObjectDetailView: View {
     @State private var showEditor = false
     @State private var showLocationEditor = false
     @State private var confirmDelete = false
+    @State private var relationships = RelationshipsStore()
 
     var body: some View {
         ScrollView {
@@ -131,19 +132,24 @@ struct ObjectDetailView: View {
             }
             .padding(.horizontal, SparkSpacing.lg)
             .padding(.top, SparkSpacing.xxl)
-            .padding(.bottom, SparkSpacing.xl)
+            .padding(.bottom, SparkSpacing.xxl)
         }
+        .sparkDetailInlineTitle(inlineTitle)
         .sparkAppBackground()
-        .navigationTitle(isPerson ? "Person" : "Object")
-        .navigationBarTitleDisplayMode(.inline)
         .sparkSubViewToolbar(
             shareItems: objectShareItems,
             rawTitle: "Raw object",
             rawPayload: objectRawPayload,
             feedbackContext: objectFeedbackContext,
-            refresh: { await viewModel?.load() }
+            refresh: { await viewModel?.load() },
+            location: SparkSubViewMenuAction(title: hasLocation ? "Edit location" : "Add location", isEnabled: isLoaded) { showLocationEditor = true },
+            delete: SparkSubViewMenuAction(title: "Delete object", isEnabled: isLoaded) { confirmDelete = true }
         )
-        .toolbar { ToolbarItemGroup(placement: .topBarTrailing) { Button("Edit") { showEditor = true }.disabled(!isLoaded); Button { showLocationEditor = true } label: { Image(systemName: "mappin.and.ellipse") }.accessibilityLabel("Edit location").disabled(!isLoaded); Button(role: .destructive) { confirmDelete = true } label: { Image(systemName: "trash") }.accessibilityLabel("Delete object").disabled(!isLoaded) } }
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Edit") { showEditor = true }.disabled(!isLoaded) } }
+        .sparkRelationshipsHost(relationships, kind: .objects, entityID: objectId, apiClient: appModel.apiClient) { request in
+            guard let viewModel else { throw TagMutationError.missingETag }
+            return try await viewModel.createRelationship(request)
+        }
         .sparkDeleteWithUndo(
             noun: "object",
             isDeleted: viewModel?.isDeleted == true,
@@ -163,7 +169,7 @@ struct ObjectDetailView: View {
             }
         }
         .sheet(isPresented: $showEditor) { if case .loaded(let detail) = viewModel?.state { EntityEditorSheet(title: "Object", initial: ["title": detail.object.title, "type": detail.object.type, "concept": detail.object.concept, "url": detail.object.url ?? ""]) { try await viewModel?.update($0) } } }
-        .sheet(isPresented: $showLocationEditor) { LocationEditorSheet(hasLocation: { if case .loaded(let detail) = viewModel?.state { return detail.location != nil }; return false }(), geocode: { try await viewModel?.geocode(address: $0) }, coordinates: { try await viewModel?.setLocation($0) }, clear: { try await viewModel?.clearLocation() }) }
+        .sheet(isPresented: $showLocationEditor) { LocationEditorSheet(hasLocation: hasLocation, geocode: { try await viewModel?.geocode(address: $0) }, coordinates: { try await viewModel?.setLocation($0) }, clear: { try await viewModel?.clearLocation() }) }
         .confirmationDialog(
             "Remove tag?",
             isPresented: Binding(get: { tagPendingRemoval != nil }, set: { if !$0 { tagPendingRemoval = nil } })
@@ -192,10 +198,14 @@ struct ObjectDetailView: View {
         return ["Spark Object: \(detail.object.title)"]
     }
 
-    /// People get the person layout: avatar header, their events and connections.
-    private var isPerson: Bool {
-        if case .loaded(let detail) = viewModel?.state { return detail.object.isPerson }
+    private var hasLocation: Bool {
+        if case .loaded(let detail) = viewModel?.state { return detail.location != nil }
         return false
+    }
+
+    private var inlineTitle: String {
+        if case .loaded(let detail) = viewModel?.state { return detail.object.title }
+        return ""
     }
 
     private var isLoaded: Bool {
@@ -222,6 +232,9 @@ struct ObjectDetailView: View {
         return SparkFeedbackContext(entityType: "object", entityId: objectId, title: objectId)
     }
 
+    /// People get the person layout: avatar header, their events and
+    /// connections. Like events, content comes first and empty tags and
+    /// relationships fold into the Add row.
     @ViewBuilder
     private func content(for detail: ObjectDetail) -> some View {
         if detail.object.isPerson {
@@ -234,36 +247,10 @@ struct ObjectDetailView: View {
             SparkDetailInsightCard(label: "Insight", text: summary)
         }
 
-        tagSection(for: detail)
-
-        RelationshipsSection(
-            title: detail.object.isPerson ? "Connections" : "Relationships",
-            kind: .objects,
-            entityID: detail.id,
-            apiClient: appModel.apiClient,
-            create: { request in
-                guard let viewModel else { throw TagMutationError.missingETag }
-                return try await viewModel.createRelationship(request)
-            },
-            delete: { relationship in
-                guard let viewModel else { throw TagMutationError.missingETag }
-                try await viewModel.deleteRelationship(relationship)
-            }
-        )
-
-        if !detail.relatedObjects.isEmpty {
-            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                SparkDetailSectionHeader("Related", trailing: "\(detail.relatedObjects.count) objects")
-                ForEach(detail.relatedObjects) { rel in
-                    relatedObjectRow(rel)
-                }
-            }
-        }
-
         if !detail.recentEvents.isEmpty {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                 SparkDetailSectionHeader(
-                    detail.object.isPerson ? "With \(detail.object.title)" : "Recent events",
+                    recentEventsTitle(for: detail.object),
                     trailing: "\(detail.recentEvents.count) events"
                 )
                 ForEach(detail.recentEvents) { event in
@@ -276,11 +263,48 @@ struct ObjectDetailView: View {
                 }
             }
         }
+
+        if !detail.relatedObjects.isEmpty {
+            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                SparkDetailSectionHeader("Related", trailing: "\(detail.relatedObjects.count) objects")
+                ForEach(detail.relatedObjects) { rel in
+                    relatedObjectRow(rel)
+                }
+            }
+        }
+
+        if !detail.tags.isEmpty {
+            tagSection(for: detail)
+        }
+
+        if relationships.hasContent {
+            RelationshipsSection(
+                title: detail.object.isPerson ? "Connections" : "Relationships",
+                store: relationships,
+                kind: .objects,
+                entityID: detail.id,
+                apiClient: appModel.apiClient,
+                delete: { relationship in
+                    guard let viewModel else { throw TagMutationError.missingETag }
+                    try await viewModel.deleteRelationship(relationship)
+                }
+            )
+        }
+
+        SparkDetailAddRow(actions: [
+            SparkDetailAddRow.Action(title: "Tag", systemImage: "tag") { showTagPicker = true },
+            SparkDetailAddRow.Action(title: "Link", systemImage: "link") { relationships.isAdding = true },
+        ])
+    }
+
+    private func recentEventsTitle(for object: EventObject) -> String {
+        if object.isPerson { return "With \(object.title)" }
+        return object.isAccountOwner ? "Your recent events" : "Recent events"
     }
 
     private func tagSection(for detail: ObjectDetail) -> some View {
         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-            SectionLabel("Tags")
+            SparkDetailSectionHeader("Tags")
             FlowLayout(spacing: SparkSpacing.xs + 2) {
                 ForEach(detail.tags) { tag in
                     NavigationLink(value: DetailRoute.tag(id: tag.tagID, name: tag.name, type: tag.type)) {
@@ -293,9 +317,6 @@ struct ObjectDetailView: View {
                         }
                     }
                 }
-                Button { showTagPicker = true } label: { TagChip("+", isGhost: true) }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Add tag")
             }
         }
     }
@@ -312,21 +333,22 @@ struct ObjectDetailView: View {
     private func heroSection(for detail: ObjectDetail) -> some View {
         SparkDetailHero(
             eyebrow: objectEyebrow(for: detail.object),
-            status: detail.object.type.humanisedAction,
+            status: nil,
             title: detail.object.title,
             subtitle: objectSubtitle(for: detail.object),
             value: nil
         )
     }
 
+    /// "TV episode — first seen 24 Aug 2026". The owner's own account object
+    /// reads "You — Manual log account".
     private func objectEyebrow(for object: EventObject) -> String {
-        var parts = [
-            object.concept.sparkSentenceCase,
-            object.type.sparkSentenceCase
-        ]
+        var parts = [object.typeName]
+        if object.isAccountOwner {
+            parts.insert("You", at: 0)
+        }
         if let time = object.time {
-            parts.append(SparkDetailFormatters.shortDate.string(from: time))
-            parts.append(SparkDetailFormatters.shortTime.string(from: time))
+            parts.append("first seen \(SparkDetailFormatters.shortDate.string(from: time))")
         }
         return parts.joined(separator: " — ")
     }
@@ -344,8 +366,9 @@ struct ObjectDetailView: View {
     private func relatedObjectRow(_ rel: ObjectDetail.Related) -> some View {
         SparkDetailLinkedRow(
             title: rel.title,
-            subtitle: rel.concept,
-            trailing: rel.relationship
+            subtitle: EntityTypeName.display(type: nil, concept: rel.concept),
+            trailing: rel.relationship?.sparkSentenceCase,
+            icon: ObjectTypeGlyph.symbol(type: nil, concept: rel.concept)
         )
     }
 
@@ -354,7 +377,8 @@ struct ObjectDetailView: View {
             title: eventTitle(for: event),
             subtitle: event.time.map { SparkDetailFormatters.compactDateTime.string(from: $0) },
             trailing: event.displayValue?.sparkPlainTextFromHTMLFragment ?? event.value?.sparkPlainTextFromHTMLFragment,
-            tint: Color.domainTint(for: event.domain)
+            tint: Color.domainTint(for: event.domain),
+            icon: EntityPresentation.icon(domain: event.domain, service: event.service, action: event.action, type: "event")
         )
     }
 
