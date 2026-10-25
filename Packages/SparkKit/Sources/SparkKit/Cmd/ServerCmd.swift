@@ -52,8 +52,8 @@ public struct ServerCmdClassifier: CmdClassifying {
 }
 
 /// Commits entries. A note for Flint is written by the server and a command
-/// runs through the action registry. A free-text log
-/// is saved as a reflection.
+/// runs through the action registry (or opens a screen). A free-text log is
+/// saved as a reflection.
 public struct ServerCmdSubmitter: CmdSubmitting {
     private let apiClient: APIClient
 
@@ -126,38 +126,68 @@ public struct ServerCmdSubmitter: CmdSubmitting {
         }
     }
 
-    /// Finds the registry action named by the text and runs it. Navigation
-    /// and actions that need a target (an event, an integration) aren't
-    /// runnable from a typed line yet.
+    /// Runs the command a typed line names. A title that matches exactly runs
+    /// (or opens a screen); otherwise the server resolves a verb and a name,
+    /// such as "sync monzo", to one action and one target. Anything it can't
+    /// pin to a single action and target is not run.
     private func runCommand(_ entry: CmdEntry) async -> CmdSubmissionResult {
-        guard !entry.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return .rejected(reason: "No matching command")
-        }
+        let line = CmdCommandText.normalized(entry.text)
+        guard !line.isEmpty else { return .rejected(reason: "No matching command") }
+        let query = CmdCommandText.withoutNavigationLead(line)
+
         let found: [CmdActionsEndpoint.Action]
         do {
-            found = try await apiClient.request(CmdActionsEndpoint.list(query: entry.text)).data
+            found = try await apiClient.request(CmdActionsEndpoint.list(query: query)).data
         } catch {
             return .retry
         }
         // Exact title only: a fuzzy first hit could run the wrong action.
-        let query = entry.text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !query.isEmpty, let action = found.first(where: { $0.title.lowercased() == query }) else {
-            return .rejected(reason: "No matching command")
-        }
-        guard action.kind != "navigation", action.runsWithoutInput else {
-            return .rejected(reason: "Can't run that from here yet")
+        if let action = found.first(where: { $0.title.lowercased() == query || $0.title.lowercased() == line }) {
+            if action.kind == "navigation" {
+                guard let destination = CmdDestination(native: action.destination?.native) else {
+                    return .rejected(reason: "Can't open that here")
+                }
+                return .navigate(destination)
+            }
+            guard action.runsWithoutInput else { return .rejected(reason: "Name what to \(action.title.lowercased())") }
+            return await run(action, target: [:], label: nil, entry: entry)
         }
 
+        let resolution: CmdActionsEndpoint.Resolution
+        do {
+            resolution = try await apiClient.request(CmdActionsEndpoint.resolve(query: line)).data
+        } catch {
+            return .retry
+        }
+        switch resolution.status {
+        case "matched":
+            guard let action = resolution.action, let target = resolution.target else {
+                return .rejected(reason: "No matching command")
+            }
+            return await run(action, target: target, label: resolution.label, entry: entry)
+        case "ambiguous":
+            let names = (resolution.candidates ?? []).map(\.label).joined(separator: ", ")
+            return .rejected(reason: "Which one? \(names)")
+        default:
+            return .rejected(reason: resolution.message ?? "No matching command")
+        }
+    }
+
+    private func run(
+        _ action: CmdActionsEndpoint.Action, target: [String: String], label: String?, entry: CmdEntry
+    ) async -> CmdSubmissionResult {
         let confirmed = entry.confirmed ?? false
         do {
             let receipt = try await apiClient.request(
-                CmdActionsEndpoint.run(id: action.id, confirmed: confirmed, idempotencyKey: entry.id.uuidString))
+                CmdActionsEndpoint.run(
+                    id: action.id, target: target, confirmed: confirmed, idempotencyKey: entry.id.uuidString))
             if receipt.status == "failed" { return .rejected(reason: receipt.message ?? "Failed") }
             let undoable = receipt.undo?.available == true
             return .done(summary: receipt.message ?? action.title, undoToken: undoable ? receipt.receiptId : nil)
         } catch let error as APIError {
             switch error {
-            case .httpStatus(409, _, _): return .needsConfirmation(prompt: action.title)
+            case .httpStatus(409, _, _):
+                return .needsConfirmation(prompt: label.map { "\(action.title): \($0)" } ?? action.title)
             case .httpStatus(403, _, _): return .rejected(reason: "Not allowed")
             case .httpStatus(let code, _, _) where (400..<500).contains(code) && code != 408 && code != 429:
                 return .rejected(reason: "Couldn't run it")

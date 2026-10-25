@@ -25,6 +25,8 @@ final class CmdViewModel {
     var logPrefill: LogPrefill?
     var searchQuery: String?
     private(set) var receipt: Receipt?
+    /// Set by a navigation command; CmdView hands it to the app and clears it.
+    var pendingNavigation: CmdDestination?
     private(set) var recents: [CmdRecentStore.Item]
     private(set) var queuedCount: Int
 
@@ -146,7 +148,7 @@ final class CmdViewModel {
                     id: entry.id, summary: prompt, undoToken: nil, isQueued: false, pendingConfirmation: entry)
             case .rejected(let reason):
                 receipt = Receipt(id: entry.id, summary: reason, undoToken: nil, isQueued: false)
-            case .done, .retry:
+            case .done, .retry, .navigate:
                 break
             }
         }
@@ -216,6 +218,9 @@ final class CmdViewModel {
                 id: entry.id, summary: prompt, undoToken: nil, isQueued: false, pendingConfirmation: entry)
         case .rejected(let reason):
             receipt = Receipt(id: entry.id, summary: reason, undoToken: nil, isQueued: false)
+        case .navigate(let destination):
+            receipt = nil
+            pendingNavigation = destination
         }
     }
 

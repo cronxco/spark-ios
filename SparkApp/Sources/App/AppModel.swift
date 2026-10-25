@@ -64,6 +64,9 @@ final class AppModel {
     var onboardingComplete: Bool
     var lastError: String?
     var pendingRoute: AppRoute?
+    /// Screen a CMD navigation command asked to open; MainTabView and
+    /// ExploreView consume it.
+    var pendingDestination: CmdDestination?
     /// Query handed over by the Search Spark intent, applied by SearchView.
     var pendingSearchQuery: String?
     private(set) var lastSyncAt: Date = .distantPast

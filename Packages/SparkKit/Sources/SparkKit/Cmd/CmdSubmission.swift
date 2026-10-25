@@ -55,6 +55,8 @@ public enum CmdSubmissionResult: Equatable, Sendable {
     case needsConfirmation(prompt: String)
     /// The server will not take it: drop it and say why.
     case rejected(reason: String)
+    /// A navigation command: the app opens the screen, nothing is written.
+    case navigate(CmdDestination)
 }
 
 /// Contract with the backend. WS1 (action registry), WS3 (quick log) and

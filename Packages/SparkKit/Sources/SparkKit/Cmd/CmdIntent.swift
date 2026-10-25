@@ -68,8 +68,8 @@ public enum CmdClassifier {
 /// Rules only: prefixes, `@flint`, a few command verbs, and a short-line
 /// default to Log. Anything else lands under the threshold and asks.
 public struct HeuristicCmdClassifier: CmdClassifying {
-    private static let commandVerbs: Set<String> = ["sync", "refresh", "open", "show"]
-    private static let ambiguousVerbs: Set<String> = ["run", "tag"]
+    private static let commandVerbs: Set<String> = ["sync", "refresh", "open", "show", "pause", "resume", "reprocess"]
+    private static let ambiguousVerbs: Set<String> = ["run", "tag", "delete", "go"]
 
     public init() {}
 
@@ -95,6 +95,9 @@ public struct HeuristicCmdClassifier: CmdClassifying {
 
         let words = trimmed.split(whereSeparator: \.isWhitespace)
         let first = words.first?.lowercased() ?? ""
+        if words.count >= 3, first == "go", words[1].lowercased() == "to" {
+            return CmdClassification(intent: .command, confidence: 0.8, text: trimmed)
+        }
         if words.count >= 2, commandVerbs.contains(first) {
             return CmdClassification(intent: .command, confidence: 0.8, text: trimmed)
         }

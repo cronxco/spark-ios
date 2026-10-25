@@ -1,7 +1,9 @@
+import SparkKit
 import SparkUI
 import SwiftUI
 
 struct ExploreView: View {
+    @Environment(AppModel.self) private var appModel
     @State private var section: ExploreSection = .health
     @State private var path: [DetailRoute] = []
 
@@ -18,6 +20,11 @@ struct ExploreView: View {
             .sparkMainNavigationTitle("Explore")
             .sparkDetailDestinations()
             .sparkMainAppToolbar()
+        }
+        .onChange(of: appModel.pendingDestination, initial: true) { _, destination in
+            guard let destination, let target = ExploreSection(destination: destination) else { return }
+            section = target
+            appModel.pendingDestination = nil
         }
     }
 
@@ -42,6 +49,17 @@ struct ExploreView: View {
 /// one section you swipe into but leave with the picker.
 enum ExploreSection: CaseIterable, Hashable {
     case health, money, metrics, tags, map
+
+    init?(destination: CmdDestination) {
+        switch destination {
+        case .exploreHealth: self = .health
+        case .exploreMoney: self = .money
+        case .exploreMetrics: self = .metrics
+        case .exploreTags: self = .tags
+        case .exploreMap: self = .map
+        case .day, .flint, .knowledge: return nil
+        }
+    }
 
     var label: String {
         switch self {
