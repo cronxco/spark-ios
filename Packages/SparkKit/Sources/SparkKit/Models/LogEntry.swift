@@ -7,6 +7,8 @@ public enum LogKind: String, Codable, Sendable, CaseIterable, Hashable {
     case tv
     case cinema
     case boardGame = "board_game"
+    /// Anything else: the line is kept as written, as a reflection.
+    case reflection
 }
 
 /// How a beer was served. Matches `AlcoholUnits::SERVING_ML` on the backend.
@@ -43,6 +45,8 @@ public struct LogRequest: Codable, Sendable, Hashable {
     public var dryRun: Bool?
     /// The Vivino or Untappd card the user picked in the preview, so enrichment follows their choice.
     public var matchURL: String?
+    /// Reflections only: the line as written. The backend titles it from the first line.
+    public var body: String?
 
     public init(
         kind: LogKind,
@@ -60,8 +64,10 @@ public struct LogRequest: Codable, Sendable, Hashable {
         tvdbID: Int? = nil,
         people: [String]? = nil,
         dryRun: Bool? = nil,
-        matchURL: String? = nil
+        matchURL: String? = nil,
+        body: String? = nil
     ) {
+        self.body = body
         self.kind = kind
         self.idempotencyKey = idempotencyKey
         self.title = title
@@ -97,6 +103,7 @@ public struct LogRequest: Codable, Sendable, Hashable {
         case people = "with"
         case dryRun = "dry_run"
         case matchURL = "match_url"
+        case body
     }
 }
 

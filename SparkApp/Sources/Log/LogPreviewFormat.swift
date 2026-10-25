@@ -3,13 +3,32 @@ import SparkKit
 
 /// The words the preview uses for what was understood.
 enum LogPreviewFormat {
+    /// The Type switcher's order: a plain note first, then the kinds that are matched and enriched.
+    static let kindOrder: [LogKind] = [.reflection, .tv, .cinema, .wine, .beer, .boardGame]
+
+    /// Episode numbers from "7, 8", "7 and 8" or "7-9". Nil when none are given.
+    static func episodeNumbers(from text: String) -> [Int]? {
+        var numbers: [Int] = []
+        for part in text.split(whereSeparator: { $0 == "," || $0 == " " }) {
+            let bounds = part.split(whereSeparator: { $0 == "-" || $0 == "–" }).compactMap { Int($0) }
+            if bounds.count == 2, bounds[0] <= bounds[1], bounds[1] - bounds[0] < 50 {
+                numbers.append(contentsOf: bounds[0]...bounds[1])
+            } else if bounds.count == 1 {
+                numbers.append(bounds[0])
+            }
+        }
+        let valid = Array(Set(numbers.filter { (1...999).contains($0) })).sorted().prefix(50)
+        return valid.isEmpty ? nil : Array(valid)
+    }
+
     static func kindName(_ kind: LogKind) -> String {
         switch kind {
         case .wine: "Wine"
         case .beer: "Beer"
         case .tv: "TV"
-        case .cinema: "Cinema"
+        case .cinema: "Film"
         case .boardGame: "Board game"
+        case .reflection: "Note"
         }
     }
 
@@ -20,6 +39,7 @@ enum LogPreviewFormat {
         case .tv: "tv"
         case .cinema: "film"
         case .boardGame: "dice"
+        case .reflection: "text.quote"
         }
     }
 

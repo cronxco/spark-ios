@@ -23,12 +23,23 @@ public struct ServerCmdClassifier: CmdClassifying {
         guard let response = try? await apiClient.request(QuickLogIntentsEndpoint.classify(request)) else {
             return local
         }
+        let mentions = Self.mentions(from: response.people)
         guard let intent = Self.intent(from: response.intent), !response.needsChoice else {
             // `unsure`: keep the text, drop below the threshold so the app asks.
-            return CmdClassification(intent: local.intent, confidence: 0, text: response.text)
+            return CmdClassification(intent: local.intent, confidence: 0, text: response.text, mentions: mentions)
         }
         return CmdClassification(
-            intent: intent, confidence: response.confidence, text: response.text, isForced: response.confidence >= 1)
+            intent: intent, confidence: response.confidence, text: response.text,
+            isForced: response.confidence >= 1, mentions: mentions)
+    }
+
+    static func mentions(from people: [QuickLogIntentsEndpoint.Mention]) -> [CmdMention] {
+        people.compactMap { person in
+            guard let state = CmdMention.State(rawValue: person.state) else { return nil }
+            return CmdMention(
+                name: person.name, state: state,
+                matches: person.matches.map { CmdMention.Match(id: $0.id, name: $0.name) })
+        }
     }
 
     static func wire(_ intent: CmdIntent) -> String {
@@ -55,6 +66,7 @@ public struct ServerCmdSubmitter: CmdSubmitting {
         case .flintNote:
             return await commit(entry)
         case .log:
+            if let log = entry.log { return await submitLog(log, id: entry.id) }
             return await logReflection(entry)
         case .command:
             return await runCommand(entry)
@@ -69,14 +81,35 @@ public struct ServerCmdSubmitter: CmdSubmitting {
     }
 
     /// A plain line becomes a reflection. Wine, beer and TV drafts go through
-    /// their own structured flow, not here. `@mentions` stay in the text; they
-    /// aren't linked to people yet.
+    /// their own structured flow, not here. `@mentions` stay in the text and
+    /// the people the app settled on are linked to the event.
     private func logReflection(_ entry: CmdEntry) async -> CmdSubmissionResult {
         let request = LogEndpoint.ReflectionRequest(
-            idempotencyKey: entry.id.uuidString, body: entry.text, occurredAt: entry.createdAt)
+            idempotencyKey: entry.id.uuidString, body: entry.text, occurredAt: entry.createdAt,
+            personIds: entry.personIds ?? [], newPeople: entry.newPeople ?? [])
         do {
             _ = try await apiClient.request(LogEndpoint.reflection(request))
             return .done(summary: "Logged", undoToken: nil)
+        } catch let error as APIError {
+            return Self.result(for: error, rejection: "Couldn't log")
+        } catch {
+            return .retry
+        }
+    }
+
+    /// A log checked on the confirmation sheet that couldn't be sent then. The entry id is the idempotency key,
+    /// so a retry replays the first write. A TV question can't be asked from the queue, so it is turned down.
+    private func submitLog(_ log: LogRequest, id: UUID) async -> CmdSubmissionResult {
+        var request = log
+        request.idempotencyKey = id.uuidString
+        request.dryRun = nil
+        do {
+            switch try await apiClient.request(LogEndpoint.submit(request)) {
+            case .logged:
+                return .done(summary: "Logged", undoToken: nil)
+            case .needsClarification, .preview:
+                return .rejected(reason: "Couldn't log \(log.kind == .reflection ? "that" : log.title): open Log to finish it")
+            }
         } catch let error as APIError {
             return Self.result(for: error, rejection: "Couldn't log")
         } catch {

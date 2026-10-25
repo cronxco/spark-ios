@@ -9,6 +9,7 @@ struct LogPreviewCard: View {
     let match: LogViewModel.MatchState
     let chosenCard: LogMatch.Card?
     let canLog: Bool
+    let onChangeKind: (LogKind) -> Void
     let onAnswerQuestion: (LogClarification.Option) -> Void
     let onChooseMatch: (LogMatch.Card?) -> Void
     let personCheck: (String) -> LogPersonCheck?
@@ -21,20 +22,45 @@ struct LogPreviewCard: View {
     let onLog: () -> Void
 
     @State private var newPerson = ""
+    /// The episodes as typed, "7, 8" or "7-8"; read into numbers as they change.
+    @State private var episodesText = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.lg) {
             LogPreviewRow(index: 0, symbol: LogPreviewFormat.kindSymbol(draft.kind), label: "Type") {
-                Text(LogPreviewFormat.kindName(draft.kind))
-                    .font(SparkTypography.bodyStrong)
+                Menu {
+                    ForEach(LogPreviewFormat.kindOrder, id: \.self) { kind in
+                        Button {
+                            onChangeKind(kind)
+                        } label: {
+                            Label(LogPreviewFormat.kindName(kind), systemImage: LogPreviewFormat.kindSymbol(kind))
+                        }
+                    }
+                } label: {
+                    HStack(spacing: SparkSpacing.xs) {
+                        Text(LogPreviewFormat.kindName(draft.kind))
+                            .font(SparkTypography.bodyStrong)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(SparkTypography.caption)
+                    }
+                }
+                .accessibilityLabel("Type: \(LogPreviewFormat.kindName(draft.kind))")
             }
 
-            LogPreviewRow(index: 1, symbol: "textformat", label: "Name") {
-                TextField("Name", text: $draft.title)
-                    .font(SparkTypography.body)
+            if draft.kind == .reflection {
+                LogPreviewRow(index: 1, symbol: "text.quote", label: "Note") {
+                    TextField("Note", text: noteText, axis: .vertical)
+                        .font(SparkTypography.body)
+                        .lineLimit(1...6)
+                }
+            } else {
+                LogPreviewRow(index: 1, symbol: "textformat", label: "Name") {
+                    TextField("Name", text: $draft.title)
+                        .font(SparkTypography.body)
+                }
             }
 
-            if draft.kind != .cinema, draft.kind != .boardGame {
+            if draft.kind != .cinema, draft.kind != .boardGame, draft.kind != .reflection {
                 LogPreviewRow(index: 2, symbol: "sparkle.magnifyingglass", label: "Match") {
                     LogMatchView(
                         kind: draft.kind,
@@ -53,8 +79,13 @@ struct LogPreviewCard: View {
                         .foregroundStyle(draft.season == nil ? .secondary : .primary)
                 }
                 LogPreviewRow(index: 4, symbol: "list.number", label: "Episodes") {
-                    Text(LogPreviewFormat.episodes(draft.episodes ?? []))
+                    TextField("7, 8", text: $episodesText)
                         .font(SparkTypography.body)
+                        .keyboardType(.numbersAndPunctuation)
+                        .onAppear { episodesText = (draft.episodes ?? []).map(String.init).joined(separator: ", ") }
+                        .onChange(of: episodesText) { _, text in
+                            draft.episodes = LogPreviewFormat.episodeNumbers(from: text)
+                        }
                 }
             } else if draft.kind == .wine || draft.kind == .beer {
                 LogPreviewRow(index: 3, symbol: "scalemass", label: "Amount") {
@@ -107,8 +138,10 @@ struct LogPreviewCard: View {
                 .animation(.spring(duration: 0.35, bounce: 0.25), value: draft.people)
             }
 
-            LogPreviewRow(index: 7, symbol: "star", label: "Rating") {
-                LogStarRating(rating: $draft.rating)
+            if draft.kind != .reflection {
+                LogPreviewRow(index: 7, symbol: "star", label: "Rating") {
+                    LogStarRating(rating: $draft.rating)
+                }
             }
 
             HStack {
@@ -137,6 +170,13 @@ struct LogPreviewCard: View {
         Binding(
             get: { draft.quantity ?? 1 },
             set: { draft.quantity = $0 }
+        )
+    }
+
+    private var noteText: Binding<String> {
+        Binding(
+            get: { draft.body ?? "" },
+            set: { draft.body = $0 }
         )
     }
 

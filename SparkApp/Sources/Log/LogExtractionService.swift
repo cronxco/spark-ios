@@ -11,12 +11,13 @@ enum LogExtractionError: Error, Equatable {
 enum LogExtractionService {
     static let instructions = """
     You turn one short line the user typed into a log entry for wine, beer, TV, cinema or board games.
+    If the line is not about wine, beer, TV, cinema or board games, the kind is none and the title is empty. Still read when and people for it.
     Copy only what the user said. Never invent a season, an episode, a quantity or a time.
     The title is the name of the thing, spelled as the user wrote it, without quantity, serving, verbs or episode numbers.
     "Half a bottle" is quantity 0.5 of a bottle. "A can of" is one beer served as a can. "A pint" is one beer, draft, 568 millilitres.
     Put the words for when it happened in when, as written: "yesterday at 8pm", "last night", "this morning". Leave when empty for now.
     Only set rating when the user gave one, as stars out of 5.
-    "With Dan and Sam" puts Dan and Sam in people. Leave people empty if nobody is named.
+    "With Dan and Sam" puts Dan and Sam in people, and so does "@dan and @sam". Leave people empty if nobody is named.
     "Episodes 1 and 2 of The Diplomat" is tv, title The Diplomat, episodes [1, 2], no season.
     """
 

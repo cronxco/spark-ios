@@ -36,6 +36,11 @@ struct CmdView: View {
             SearchView(initialQuery: query.text)
         }
         .sheet(isPresented: $viewModel.isAsking) { askSheet }
+        .sheet(item: $viewModel.logPrefill) { prefill in
+            LogSheetView(apiClient: appModel.apiClient, prefill: prefill) { request in
+                viewModel.queueLog(request, text: prefill.text)
+            }
+        }
         .task {
             consumePendingSearch()
             await viewModel.flushQueue()
@@ -95,6 +100,12 @@ struct CmdView: View {
     private var inputBar: some View {
         VStack(spacing: SparkSpacing.sm) {
             if let receipt = viewModel.receipt { receiptRow(receipt) }
+            if let summary = viewModel.mentionSummary {
+                Text(summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
             if viewModel.queuedCount > 0 {
                 Text("\(viewModel.queuedCount) queued")
                     .font(.caption)

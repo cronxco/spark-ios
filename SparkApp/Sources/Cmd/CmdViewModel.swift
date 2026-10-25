@@ -21,6 +21,8 @@ final class CmdViewModel {
     /// Set when the user picks an intent on the chip or in the ask sheet.
     private(set) var override: CmdIntent?
     var isAsking = false
+    /// Set once a log line has been read: the confirmation sheet opens on what was understood.
+    var logPrefill: LogPrefill?
     var searchQuery: String?
     private(set) var receipt: Receipt?
     private(set) var recents: [CmdRecentStore.Item]
@@ -30,14 +32,26 @@ final class CmdViewModel {
     private let submitter: any CmdSubmitting
     private let queue: CmdQueue
     private let recentStore: CmdRecentStore
+    private let structuredLog: @Sendable (String) async -> LogRequest?
     private var classifyTask: Task<Void, Never>?
+    /// The log read that may open the sheet. A newer line replaces it, so a slow older read can't overwrite it.
+    private var logReadID: UUID?
+
+    /// Reads a line with the on-device model: TV, wine, beer, film or a board game, else a note, with the time
+    /// and people it names. Nil when the model can't serve it.
+    static let readStructuredLog: @Sendable (String) async -> LogRequest? = { text in
+        guard let draft = try? await LogExtractionService.extract(from: text) else { return nil }
+        return try? draft.request(text: text)
+    }
 
     init(
         classifier: any CmdClassifying = HeuristicCmdClassifier(),
         submitter: any CmdSubmitting = StubCmdSubmitter(),
         queue: CmdQueue = CmdQueue(),
-        recentStore: CmdRecentStore = CmdRecentStore()
+        recentStore: CmdRecentStore = CmdRecentStore(),
+        structuredLog: @escaping @Sendable (String) async -> LogRequest? = CmdViewModel.readStructuredLog
     ) {
+        self.structuredLog = structuredLog
         self.classifier = classifier
         self.submitter = submitter
         self.queue = queue
@@ -69,6 +83,30 @@ final class CmdViewModel {
         isAsking = false
         guard let classification else { return }
         send(intent: intent, classification: classification)
+    }
+
+    /// One line under the input saying who a log will link to.
+    var mentionSummary: String? {
+        guard effectiveIntent == .log, let mentions = classification?.mentions, !mentions.isEmpty else { return nil }
+        let parts = mentions.map { mention -> String in
+            switch mention.state {
+            case .existing: return mention.matches.first?.name ?? mention.displayName
+            case .likely: return "\(mention.displayName) → \(mention.matches.first?.name ?? mention.displayName)"
+            case .ambiguous: return "\(mention.displayName)?"
+            case .new: return "\(mention.displayName) (new)"
+            }
+        }
+        return "With " + parts.joined(separator: ", ")
+    }
+
+    /// The confirmation sheet couldn't send a checked log: keep it and send it with the rest of the queue.
+    /// Its idempotency key becomes the entry id, so a write that did land is replayed, not repeated.
+    func queueLog(_ request: LogRequest, text: String) {
+        let entry = CmdEntry(
+            id: UUID(uuidString: request.idempotencyKey) ?? UUID(), intent: .log, text: text,
+            classifiedAs: .log, log: request)
+        queue.enqueue(entry)
+        queuedCount = queue.load().count
     }
 
     func openSearch(_ query: String = "") {
@@ -129,11 +167,40 @@ final class CmdViewModel {
             openSearch(text)
             return
         }
-        let entry = CmdEntry(
-            intent: intent, text: text, classifiedAs: classification.intent, confidence: classification.confidence)
         recents = recentStore.record(text: text, intent: intent)
         reset()
+        if intent == .log {
+            Task { await readLog(text, mentions: classification.mentions) }
+            return
+        }
+        let entry = CmdEntry(
+            intent: intent, text: text, classifiedAs: classification.intent, confidence: classification.confidence)
         Task { await deliver(entry) }
+    }
+
+    /// Every log line opens the confirmation sheet before anything is written. The model reads what it was
+    /// (a note, TV, wine, beer, film, a board game), when, and who with; the sheet checks the names and any
+    /// match. When the model can't serve it, the line is a note with its `@mentions` as the people.
+    private func readLog(_ text: String, mentions: [CmdMention]) async {
+        let id = UUID()
+        logReadID = id
+        receipt = Receipt(id: id, summary: "Reading", undoToken: nil, isQueued: false)
+        let request = await structuredLog(text) ?? Self.note(text, mentions: mentions)
+        guard logReadID == id else { return }
+        logReadID = nil
+        if receipt?.id == id { receipt = nil }
+        logPrefill = LogPrefill(text: text, request: request)
+    }
+
+    static func note(_ text: String, mentions: [CmdMention]) -> LogRequest {
+        var names: [String] = []
+        for mention in mentions {
+            let name = mention.state == .existing || mention.state == .likely
+                ? mention.matches.first?.name ?? mention.displayName
+                : mention.displayName
+            if !names.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) { names.append(name) }
+        }
+        return LogRequest(kind: .reflection, title: "", people: names.isEmpty ? nil : names, body: text)
     }
 
     private func deliver(_ entry: CmdEntry) async {
