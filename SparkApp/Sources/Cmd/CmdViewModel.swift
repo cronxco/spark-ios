@@ -34,6 +34,8 @@ final class CmdViewModel {
     private let recentStore: CmdRecentStore
     private let structuredLog: @Sendable (String) async -> LogRequest?
     private var classifyTask: Task<Void, Never>?
+    /// The log read that may open the sheet. A newer line replaces it, so a slow older read can't overwrite it.
+    private var logReadID: UUID?
 
     /// Reads a line with the on-device model: TV, wine, beer, film or a board game, else a note, with the time
     /// and people it names. Nil when the model can't serve it.
@@ -181,8 +183,11 @@ final class CmdViewModel {
     /// match. When the model can't serve it, the line is a note with its `@mentions` as the people.
     private func readLog(_ text: String, mentions: [CmdMention]) async {
         let id = UUID()
+        logReadID = id
         receipt = Receipt(id: id, summary: "Reading", undoToken: nil, isQueued: false)
         let request = await structuredLog(text) ?? Self.note(text, mentions: mentions)
+        guard logReadID == id else { return }
+        logReadID = nil
         if receipt?.id == id { receipt = nil }
         logPrefill = LogPrefill(text: text, request: request)
     }

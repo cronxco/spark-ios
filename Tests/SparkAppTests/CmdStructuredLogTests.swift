@@ -116,6 +116,24 @@ struct CmdStructuredLogTests {
         #expect(model.queuedCount == 1)
     }
 
+    @Test("a slow read of an older line doesn't replace the newer one")
+    func staleReadIsIgnored() async {
+        let submitter = RecordingSubmitter()
+        let model = makeModel(submitter: submitter) { text in
+            if text.hasPrefix("First") { try? await Task.sleep(for: .milliseconds(150)) }
+            return LogRequest(kind: .reflection, title: "", body: text)
+        }
+
+        model.input = "First line"
+        model.submit()
+        model.input = "Second line"
+        model.submit()
+        await settle(model) { model.logPrefill != nil }
+        try? await Task.sleep(for: .milliseconds(300))
+
+        #expect(model.logPrefill?.text == "Second line")
+    }
+
     @Test("a note for Flint is never read as a log")
     func flintNoteSkipsReading() async {
         let submitter = RecordingSubmitter()
