@@ -66,6 +66,7 @@ public struct ServerCmdSubmitter: CmdSubmitting {
         case .flintNote:
             return await commit(entry)
         case .log:
+            if let log = entry.log { return await submitLog(log, id: entry.id) }
             return await logReflection(entry)
         case .command:
             return await runCommand(entry)
@@ -89,6 +90,26 @@ public struct ServerCmdSubmitter: CmdSubmitting {
         do {
             _ = try await apiClient.request(LogEndpoint.reflection(request))
             return .done(summary: "Logged", undoToken: nil)
+        } catch let error as APIError {
+            return Self.result(for: error, rejection: "Couldn't log")
+        } catch {
+            return .retry
+        }
+    }
+
+    /// A log checked on the confirmation sheet that couldn't be sent then. The entry id is the idempotency key,
+    /// so a retry replays the first write. A TV question can't be asked from the queue, so it is turned down.
+    private func submitLog(_ log: LogRequest, id: UUID) async -> CmdSubmissionResult {
+        var request = log
+        request.idempotencyKey = id.uuidString
+        request.dryRun = nil
+        do {
+            switch try await apiClient.request(LogEndpoint.submit(request)) {
+            case .logged:
+                return .done(summary: "Logged", undoToken: nil)
+            case .needsClarification, .preview:
+                return .rejected(reason: "Couldn't log \(log.kind == .reflection ? "that" : log.title): open Log to finish it")
+            }
         } catch let error as APIError {
             return Self.result(for: error, rejection: "Couldn't log")
         } catch {

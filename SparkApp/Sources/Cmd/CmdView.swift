@@ -37,9 +37,10 @@ struct CmdView: View {
         }
         .sheet(isPresented: $viewModel.isAsking) { askSheet }
         .sheet(item: $viewModel.logPrefill) { prefill in
-            LogSheetView(apiClient: appModel.apiClient, prefill: prefill)
+            LogSheetView(apiClient: appModel.apiClient, prefill: prefill) { request in
+                viewModel.queueLog(request, text: prefill.text)
+            }
         }
-        .sheet(item: mentionBinding) { mention in personSheet(mention) }
         .task {
             consumePendingSearch()
             await viewModel.flushQueue()
@@ -61,13 +62,6 @@ struct CmdView: View {
         Binding(
             get: { viewModel.searchQuery.map(SearchRequest.init(text:)) },
             set: { if $0 == nil { viewModel.searchQuery = nil } }
-        )
-    }
-
-    private var mentionBinding: Binding<CmdMention?> {
-        Binding(
-            get: { viewModel.pickingMention },
-            set: { if $0 == nil { viewModel.cancelMention() } }
         )
     }
 
@@ -202,34 +196,6 @@ struct CmdView: View {
                 }
                 .buttonStyle(.bordered)
             }
-        }
-        .padding(SparkSpacing.lg)
-        .presentationDetents([.medium])
-    }
-}
-
-extension CmdView {
-    /// Several people fit an `@mention`: nothing is written until one is picked.
-    private func personSheet(_ mention: CmdMention) -> some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.md) {
-            Text("Which \(mention.displayName)?")
-                .font(.headline)
-            ForEach(mention.matches, id: \.id) { match in
-                Button {
-                    viewModel.resolveMention(.person(id: match.id))
-                } label: {
-                    Label(match.name, systemImage: "person")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.bordered)
-            }
-            Button {
-                viewModel.resolveMention(.createNew)
-            } label: {
-                Label("New \(mention.displayName)", systemImage: "person.badge.plus")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.bordered)
         }
         .padding(SparkSpacing.lg)
         .presentationDetents([.medium])

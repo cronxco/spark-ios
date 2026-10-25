@@ -16,6 +16,8 @@ struct LogSheetView: View {
     let apiClient: APIClient
     /// A line already read elsewhere (the CMD tab): the sheet opens on its preview.
     var prefill: LogPrefill?
+    /// Set by CMD: a log that can't be sent now goes to its offline queue.
+    var onQueue: ((LogRequest) -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @State private var model = LogViewModel()
@@ -62,6 +64,7 @@ struct LogSheetView: View {
                 }
             }
             .onAppear {
+                model.onQueue = onQueue
                 if let prefill {
                     model.start(text: prefill.text, request: prefill.request)
                 } else {
@@ -97,6 +100,7 @@ struct LogSheetView: View {
                 match: model.matchState,
                 chosenCard: model.chosenCard,
                 canLog: model.canConfirm && !model.hasUnresolvedPeople,
+                onChangeKind: { model.changeKind($0) },
                 onAnswerQuestion: { model.answerMatchQuestion($0) },
                 onChooseMatch: { model.chooseMatch($0) },
                 personCheck: { model.personCheck(for: $0) },
@@ -122,6 +126,10 @@ struct LogSheetView: View {
             LogOutcomeCard(outcome: outcome, undoError: model.undoError) {
                 Task { await model.undo(using: apiClient) }
             }
+        case .queued:
+            Label("Offline. It will log when you’re back.", systemImage: "tray.and.arrow.down")
+                .font(SparkTypography.bodySmall)
+                .foregroundStyle(.secondary)
         case .undone:
             HStack {
                 Label("Removed", systemImage: "arrow.uturn.backward")
@@ -156,7 +164,7 @@ struct LogSheetView: View {
 
     private var isFinished: Bool {
         switch model.phase {
-        case .logged, .undone: true
+        case .logged, .queued, .undone: true
         default: false
         }
     }

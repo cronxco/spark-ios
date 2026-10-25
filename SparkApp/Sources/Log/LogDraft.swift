@@ -9,7 +9,7 @@ struct LogDraft {
     @Guide(description: "What it was. Exactly one of: wine, beer, tv, cinema, boardGame, none. none if the line is about something else.")
     var kind: String
 
-    @Guide(description: "Only the name of the wine, beer, show, film or game. No quantity, serving, verbs or episode numbers.")
+    @Guide(description: "Only the name of the wine, beer, show, film or game. No quantity, serving, verbs or episode numbers. Empty for none.")
     var title: String
 
     @Guide(description: "How many were had. 1 if unsaid, 0.5 for half. Empty for tv, cinema and boardGame.")
@@ -53,10 +53,23 @@ enum LogDraftIssue: Error, Equatable {
 extension LogDraft {
     /// The request for the backend, or the reason the draft is not enough.
     /// Values the backend would reject are dropped here rather than failing the whole entry.
-    func request(now: Date = .now, idempotencyKey: String = UUID().uuidString) throws -> LogRequest {
+    /// A line about anything else becomes a reflection of `text`, as typed, with the time and people read from it.
+    func request(text: String = "", now: Date = .now, idempotencyKey: String = UUID().uuidString) throws -> LogRequest {
+        let line = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if kind.lowercased().filter(\.isLetter) == "none" {
+            guard !line.isEmpty else { throw LogDraftIssue.unknownKind }
+            return LogRequest(
+                kind: .reflection,
+                idempotencyKey: idempotencyKey,
+                title: "",
+                occurredAt: occurredAt(now: now),
+                people: names.isEmpty ? nil : names,
+                body: line
+            )
+        }
         let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { throw LogDraftIssue.missingTitle }
-        guard let logKind = LogKind(modelValue: kind) else { throw LogDraftIssue.unknownKind }
+        guard let logKind = LogKind(modelValue: kind), logKind != .reflection else { throw LogDraftIssue.unknownKind }
         var episodeNumbers: [Int]?
         if logKind == .tv {
             let numbers = Array(Set((episodes ?? []).filter { (1...999).contains($0) })).sorted().prefix(50)
@@ -80,14 +93,20 @@ extension LogDraft {
         )
     }
 
-    /// The people named, trimmed and without repeats, in the order said.
+    /// The people named, trimmed and without repeats, in the order said. An `@dan` handle is Dan.
     var names: [String] {
         var seen = Set<String>()
         return (people ?? [])
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .map { $0.hasPrefix("@") ? Self.capitalisedHandle(String($0.dropFirst())) : $0 }
             .filter { !$0.isEmpty && $0.count <= 100 && seen.insert($0.lowercased()).inserted }
             .prefix(10)
             .map { $0 }
+    }
+
+    /// `dan` typed as a handle is the person Dan; a handle with capitals is kept as typed.
+    private static func capitalisedHandle(_ handle: String) -> String {
+        handle.contains(where: \.isUppercase) ? handle : handle.prefix(1).uppercased() + handle.dropFirst()
     }
 
     /// When it happened: the words the user used if they can be read, otherwise the minutes the model counted.

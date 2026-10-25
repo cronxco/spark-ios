@@ -21,10 +21,8 @@ final class CmdViewModel {
     /// Set when the user picks an intent on the chip or in the ask sheet.
     private(set) var override: CmdIntent?
     var isAsking = false
-    /// Set when a log line reads as TV, wine, beer, cinema or a board game: the Log sheet opens on its preview.
+    /// Set once a log line has been read: the confirmation sheet opens on what was understood.
     var logPrefill: LogPrefill?
-    /// Set while an ambiguous `@mention` waits for the user to pick a person.
-    private(set) var pickingMention: CmdMention?
     var searchQuery: String?
     private(set) var receipt: Receipt?
     private(set) var recents: [CmdRecentStore.Item]
@@ -36,13 +34,12 @@ final class CmdViewModel {
     private let recentStore: CmdRecentStore
     private let structuredLog: @Sendable (String) async -> LogRequest?
     private var classifyTask: Task<Void, Never>?
-    private var mentionPicks: [String: CmdMentionPick] = [:]
-    private var pendingSend: (intent: CmdIntent, classification: CmdClassification)?
 
-    /// Reads a line with the on-device model. Nil when it isn't something with its own flow, or the model can't serve it.
+    /// Reads a line with the on-device model: TV, wine, beer, film or a board game, else a note, with the time
+    /// and people it names. Nil when the model can't serve it.
     static let readStructuredLog: @Sendable (String) async -> LogRequest? = { text in
         guard let draft = try? await LogExtractionService.extract(from: text) else { return nil }
-        return try? draft.request()
+        return try? draft.request(text: text)
     }
 
     init(
@@ -100,18 +97,14 @@ final class CmdViewModel {
         return "With " + parts.joined(separator: ", ")
     }
 
-    /// The pick sheet's answer for the mention it is showing.
-    func resolveMention(_ pick: CmdMentionPick) {
-        guard let mention = pickingMention, let pending = pendingSend else { return }
-        mentionPicks[mention.name] = pick
-        pickingMention = nil
-        pendingSend = nil
-        send(intent: pending.intent, classification: pending.classification)
-    }
-
-    func cancelMention() {
-        pickingMention = nil
-        pendingSend = nil
+    /// The confirmation sheet couldn't send a checked log: keep it and send it with the rest of the queue.
+    /// Its idempotency key becomes the entry id, so a write that did land is replayed, not repeated.
+    func queueLog(_ request: LogRequest, text: String) {
+        let entry = CmdEntry(
+            id: UUID(uuidString: request.idempotencyKey) ?? UUID(), intent: .log, text: text,
+            classifiedAs: .log, log: request)
+        queue.enqueue(entry)
+        queuedCount = queue.load().count
     }
 
     func openSearch(_ query: String = "") {
@@ -172,40 +165,37 @@ final class CmdViewModel {
             openSearch(text)
             return
         }
-        var links: CmdPersonLinks?
-        if intent == .log, !classification.mentions.isEmpty {
-            links = CmdPersonLinks.resolve(classification.mentions, picks: mentionPicks)
-            if links == nil {
-                // Several people fit: ask before saving, nothing is written yet.
-                pendingSend = (intent, classification)
-                pickingMention = CmdPersonLinks.unresolved(classification.mentions, picks: mentionPicks)
-                return
-            }
-        }
-        let entry = CmdEntry(
-            intent: intent, text: text, classifiedAs: classification.intent, confidence: classification.confidence,
-            personIds: links?.ids, newPeople: links?.newNames)
         recents = recentStore.record(text: text, intent: intent)
         reset()
-        Task {
-            if intent == .log {
-                await deliverLog(entry)
-            } else {
-                await deliver(entry)
-            }
+        if intent == .log {
+            Task { await readLog(text, mentions: classification.mentions) }
+            return
         }
+        let entry = CmdEntry(
+            intent: intent, text: text, classifiedAs: classification.intent, confidence: classification.confidence)
+        Task { await deliver(entry) }
     }
 
-    /// A line about something with its own flow (TV, wine, beer, cinema, board games) goes to the Log preview,
-    /// where it is matched and its people are checked. Anything else is saved as a reflection.
-    private func deliverLog(_ entry: CmdEntry) async {
-        receipt = Receipt(id: entry.id, summary: "Reading", undoToken: nil, isQueued: false)
-        if let request = await structuredLog(entry.text) {
-            receipt = nil
-            logPrefill = LogPrefill(text: entry.text, request: request)
-        } else {
-            await deliver(entry)
+    /// Every log line opens the confirmation sheet before anything is written. The model reads what it was
+    /// (a note, TV, wine, beer, film, a board game), when, and who with; the sheet checks the names and any
+    /// match. When the model can't serve it, the line is a note with its `@mentions` as the people.
+    private func readLog(_ text: String, mentions: [CmdMention]) async {
+        let id = UUID()
+        receipt = Receipt(id: id, summary: "Reading", undoToken: nil, isQueued: false)
+        let request = await structuredLog(text) ?? Self.note(text, mentions: mentions)
+        if receipt?.id == id { receipt = nil }
+        logPrefill = LogPrefill(text: text, request: request)
+    }
+
+    static func note(_ text: String, mentions: [CmdMention]) -> LogRequest {
+        var names: [String] = []
+        for mention in mentions {
+            let name = mention.state == .existing || mention.state == .likely
+                ? mention.matches.first?.name ?? mention.displayName
+                : mention.displayName
+            if !names.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) { names.append(name) }
         }
+        return LogRequest(kind: .reflection, title: "", people: names.isEmpty ? nil : names, body: text)
     }
 
     private func deliver(_ entry: CmdEntry) async {
@@ -228,9 +218,6 @@ final class CmdViewModel {
         input = ""
         override = nil
         isAsking = false
-        mentionPicks = [:]
-        pendingSend = nil
-        pickingMention = nil
     }
 
     private func reclassify() {

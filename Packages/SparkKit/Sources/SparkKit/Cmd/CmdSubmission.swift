@@ -16,12 +16,15 @@ public struct CmdEntry: Codable, Equatable, Identifiable, Sendable {
     public let personIds: [String]?
     /// People to create for `@mentions` nobody matched.
     public let newPeople: [String]?
+    /// A log the user checked on the confirmation sheet, kept here when it couldn't be sent yet.
+    public let log: LogRequest?
 
     public init(
         id: UUID = UUID(), intent: CmdIntent, text: String, createdAt: Date = Date(),
         classifiedAs: CmdIntent?, confidence: Double? = nil, confirmed: Bool? = nil,
-        personIds: [String]? = nil, newPeople: [String]? = nil
+        personIds: [String]? = nil, newPeople: [String]? = nil, log: LogRequest? = nil
     ) {
+        self.log = log
         self.personIds = personIds
         self.newPeople = newPeople
         self.confidence = confidence
@@ -37,7 +40,7 @@ public struct CmdEntry: Codable, Equatable, Identifiable, Sendable {
         CmdEntry(
             id: id, intent: intent, text: text, createdAt: createdAt,
             classifiedAs: classifiedAs, confidence: confidence, confirmed: true,
-            personIds: personIds, newPeople: newPeople)
+            personIds: personIds, newPeople: newPeople, log: log)
     }
 
     public var wasOverridden: Bool { classifiedAs != nil && classifiedAs != intent }

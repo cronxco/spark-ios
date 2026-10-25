@@ -253,4 +253,31 @@ struct LogEndpointTests {
             try JSONDecoder().decode(LogResponse.self, from: Data(json.utf8))
         }
     }
+
+    @Test("a note is sent as a reflection with its body, time and people")
+    func submitEncodesReflection() throws {
+        let occurredAt = try #require(ISO8601DateFormatter().date(from: "2026-10-24T19:00:00Z"))
+        let endpoint = LogEndpoint.submit(LogRequest(
+            kind: .reflection, idempotencyKey: "key-r", title: "", occurredAt: occurredAt, people: ["Dan"],
+            body: "Went to Drop Project with Dan"
+        ))
+
+        let body = try #require(endpoint.body)
+        let object = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+
+        #expect(object["kind"] as? String == "reflection")
+        #expect(object["body"] as? String == "Went to Drop Project with Dan")
+        #expect(object["with"] as? [String] == ["Dan"])
+        #expect(object["occurred_at"] != nil)
+    }
+
+    @Test("other kinds send no body")
+    func submitOmitsBody() throws {
+        let endpoint = LogEndpoint.submit(LogRequest(kind: .wine, idempotencyKey: "key-w", title: "Rioja"))
+
+        let body = try #require(endpoint.body)
+        let object = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+
+        #expect(object["body"] == nil)
+    }
 }

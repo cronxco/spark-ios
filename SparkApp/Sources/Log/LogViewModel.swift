@@ -17,6 +17,8 @@ final class LogViewModel {
         case preview
         case question(LogClarification)
         case logged(Outcome)
+        /// Couldn't reach the backend; CMD keeps it and sends it when it can.
+        case queued
         case undone
         case failed(String)
     }
@@ -50,6 +52,9 @@ final class LogViewModel {
 
     /// The request waiting on an answer. Answers amend it and resend under the same idempotency key.
     private var pending: LogRequest?
+
+    /// Set by CMD: a checked log that can't be sent now is handed over to its offline queue instead of failing.
+    var onQueue: ((LogRequest) -> Void)?
 
     private let extract: @Sendable (String) async throws -> LogDraft
 
@@ -95,7 +100,44 @@ final class LogViewModel {
         newPeople.contains(name.lowercased())
     }
 
-    var canConfirm: Bool { !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var canConfirm: Bool {
+        switch draft.kind {
+        case .reflection: !(draft.body ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .tv: !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !(draft.episodes ?? []).isEmpty
+        default: !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
+    /// The Type switcher: the line was misread, or the user wants it logged as something else.
+    /// Fields that only belong to the old kind are dropped; the typed line comes back as a note's text.
+    func changeKind(_ kind: LogKind) {
+        guard kind != draft.kind else { return }
+        var next = LogRequest(
+            kind: kind,
+            idempotencyKey: draft.idempotencyKey,
+            title: kind == .reflection ? "" : draft.title,
+            occurredAt: draft.occurredAt,
+            rating: kind == .reflection ? nil : draft.rating,
+            people: draft.people
+        )
+        switch kind {
+        case .reflection:
+            next.body = draft.body ?? trimmedText
+        case .tv:
+            next.season = draft.season
+            next.episodes = draft.episodes
+        case .wine, .beer:
+            next.quantity = draft.quantity
+            next.unit = kind == .wine ? draft.unit : nil
+            next.serving = kind == .beer ? draft.serving : nil
+            next.volumeML = draft.volumeML
+        case .cinema, .boardGame:
+            break
+        }
+        draft = next
+        matchState = .idle
+        chosenCard = nil
+    }
 
     func updateText(_ value: String) {
         text = String(value.prefix(Self.characterLimit))
@@ -109,7 +151,7 @@ final class LogViewModel {
         let request: LogRequest
         do {
             let draft = try await extract(trimmedText)
-            request = try draft.request(now: now)
+            request = try draft.request(text: trimmedText, now: now)
         } catch LogExtractionError.unavailable {
             phase = .failed("Apple Intelligence isn’t available.")
             return
@@ -147,7 +189,7 @@ final class LogViewModel {
     func refreshMatch(using apiClient: APIClient) async {
         guard case .preview = phase, canConfirm else { return }
 
-        guard draft.kind != .cinema, draft.kind != .boardGame else {
+        guard draft.kind != .cinema, draft.kind != .boardGame, draft.kind != .reflection else {
             matchState = .loaded(nil)
             return
         }
@@ -202,6 +244,7 @@ final class LogViewModel {
 
         var request = draft
         request.title = request.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        request.body = request.body?.trimmingCharacters(in: .whitespacesAndNewlines)
         await send(request, using: apiClient)
     }
 
@@ -224,7 +267,8 @@ final class LogViewModel {
             return
         }
 
-        var request = LogRequest(kind: .cinema, title: draft.title, people: names)
+        // A reflection dry run looks nothing up, so only the people are checked whatever the kind.
+        var request = LogRequest(kind: .reflection, title: "", people: names, body: "people check")
         request.dryRun = true
         do {
             let response = try await apiClient.request(LogEndpoint.submit(request))
@@ -346,9 +390,27 @@ final class LogViewModel {
             }
         } catch where error.isAPICancellation {
             phase = .idle
+        } catch where onQueue != nil && Self.isRetryable(error) {
+            pending = nil
+            onQueue?(request)
+            phase = .queued
         } catch {
             SparkObservability.captureHandled(error)
             phase = .failed(Self.userFacingError(error))
+        }
+    }
+
+    /// Offline, timed out or a server error: worth sending again later. A 4xx is the request's fault and isn't.
+    static func isRetryable(_ error: Error) -> Bool {
+        if error is URLError { return true }
+        guard let apiError = error as? APIError else { return false }
+        switch apiError {
+        case .transport:
+            return true
+        case .httpStatus(let code, _, _):
+            return code >= 500 || code == 408 || code == 429
+        default:
+            return false
         }
     }
 

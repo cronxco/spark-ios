@@ -53,6 +53,18 @@ struct CmdTests {
         #expect(queue.load().isEmpty)
     }
 
+    @Test("a checked log survives the queue")
+    func queuedLogRoundTrips() {
+        let defaults = UserDefaults(suiteName: "cmd-tests-\(UUID().uuidString)")!
+        let queue = CmdQueue(defaults: defaults)
+        let log = LogRequest(kind: .tv, title: "The Diplomat", season: 3, episodes: [7, 8], people: ["Dan"])
+        let entry = CmdEntry(intent: .log, text: "Diplomat 7 and 8", classifiedAs: .log, log: log)
+
+        queue.enqueue(entry)
+
+        #expect(queue.load().first?.log == log)
+    }
+
     @Test("recents dedupe, cap and expire")
     func recents() {
         let defaults = UserDefaults(suiteName: "cmd-tests-\(UUID().uuidString)")!
