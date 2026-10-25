@@ -30,17 +30,28 @@ public extension LogEndpoint {
         public let idempotencyKey: String
         public let body: String
         public let occurredAt: Date
+        /// People the server already matched, linked by id.
+        public let personIds: [String]
+        /// People with no match, named so the server creates them.
+        public let newPeople: [String]
 
-        public init(idempotencyKey: String, body: String, occurredAt: Date) {
+        public init(
+            idempotencyKey: String, body: String, occurredAt: Date,
+            personIds: [String] = [], newPeople: [String] = []
+        ) {
             self.idempotencyKey = idempotencyKey
             self.body = body
             self.occurredAt = occurredAt
+            self.personIds = personIds
+            self.newPeople = newPeople
         }
 
         enum CodingKeys: String, CodingKey {
             case kind, body
             case idempotencyKey = "idempotency_key"
             case occurredAt = "occurred_at"
+            case personIds = "with_ids"
+            case newPeople = "with"
         }
 
         public func encode(to encoder: Encoder) throws {
@@ -49,6 +60,8 @@ public extension LogEndpoint {
             try container.encode(body, forKey: .body)
             try container.encode(idempotencyKey, forKey: .idempotencyKey)
             try container.encode(occurredAt, forKey: .occurredAt)
+            if !personIds.isEmpty { try container.encode(personIds, forKey: .personIds) }
+            if !newPeople.isEmpty { try container.encode(newPeople, forKey: .newPeople) }
         }
     }
 

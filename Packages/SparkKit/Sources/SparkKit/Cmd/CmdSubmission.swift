@@ -12,11 +12,18 @@ public struct CmdEntry: Codable, Equatable, Identifiable, Sendable {
     public let confidence: Double?
     /// The user confirmed a command that asks first.
     public let confirmed: Bool?
+    /// People the line is linked to by id, settled before it was queued.
+    public let personIds: [String]?
+    /// People to create for `@mentions` nobody matched.
+    public let newPeople: [String]?
 
     public init(
         id: UUID = UUID(), intent: CmdIntent, text: String, createdAt: Date = Date(),
-        classifiedAs: CmdIntent?, confidence: Double? = nil, confirmed: Bool? = nil
+        classifiedAs: CmdIntent?, confidence: Double? = nil, confirmed: Bool? = nil,
+        personIds: [String]? = nil, newPeople: [String]? = nil
     ) {
+        self.personIds = personIds
+        self.newPeople = newPeople
         self.confidence = confidence
         self.confirmed = confirmed
         self.id = id
@@ -29,7 +36,8 @@ public struct CmdEntry: Codable, Equatable, Identifiable, Sendable {
     public func confirming() -> CmdEntry {
         CmdEntry(
             id: id, intent: intent, text: text, createdAt: createdAt,
-            classifiedAs: classifiedAs, confidence: confidence, confirmed: true)
+            classifiedAs: classifiedAs, confidence: confidence, confirmed: true,
+            personIds: personIds, newPeople: newPeople)
     }
 
     public var wasOverridden: Bool { classifiedAs != nil && classifiedAs != intent }
