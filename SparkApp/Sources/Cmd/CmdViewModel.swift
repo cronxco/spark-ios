@@ -71,6 +71,18 @@ final class CmdViewModel {
         override = intent
     }
 
+    /// A vertical-axis field can insert a newline for return instead of calling
+    /// onSubmit. Call this after `input` changed: a lone inserted newline is
+    /// dropped and the line is sent. Runs from onChange so the field is cleared
+    /// after SwiftUI has applied the edit, not during it.
+    func inputChanged(from previous: String) {
+        let added = input.filter { $0 == "\n" }.count - previous.filter { $0 == "\n" }.count
+        guard added == 1, input.replacingOccurrences(of: "\n", with: "") == previous.replacingOccurrences(of: "\n", with: "")
+        else { return }
+        input = previous
+        submit()
+    }
+
     func submit() {
         guard let classification else { return }
         if override == nil, classification.needsAsk {

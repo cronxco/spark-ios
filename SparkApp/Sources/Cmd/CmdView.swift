@@ -20,7 +20,7 @@ struct CmdView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: SparkSpacing.md) {
-                    SparkMainPageHeader(title: "CMD")
+                    SparkMainPageHeader(title: "Command")
                         .padding(.horizontal, SparkSpacing.lg)
                         .padding(.top, SparkSpacing.md)
                     recentsList
@@ -129,6 +129,7 @@ struct CmdView: View {
                     .focused($focused)
                     .submitLabel(.send)
                     .onSubmit { viewModel.submit() }
+                    .onChange(of: viewModel.input) { old, _ in viewModel.inputChanged(from: old) }
                     .textInputAutocapitalization(.sentences)
 
                 intentChip
