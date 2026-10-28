@@ -267,6 +267,7 @@ All targets using the same schema must depend on `SparkKit` package (enforced by
 | `Packages/SparkKit/Sources/SparkKit/Auth/AuthenticationService.swift` | OAuth flow orchestration |
 | `Packages/SparkKit/Sources/SparkKit/Persistence/SparkDataStore.swift` | SwiftData container factory |
 | `Packages/SparkKit/Sources/SparkKit/Sync/DeltaApplier.swift` | Applies `/sync/delta` responses to SwiftData |
+| `docs/design-language.md` | Shared web + iOS design language: colour roles, domain tints, glyphs, card anatomy, block/event patterns. Follow it for all UI work |
 | `Packages/SparkUI/Sources/SparkUI/Theme/` | Design tokens split across `Color+Spark.swift`, `Typography.swift`, `Spacing.swift`, `Radii.swift` |
 | `Packages/SparkUI/Sources/SparkUI/Materials/LiquidGlass.swift` | Liquid Glass effect modifiers |
 | `Project.swift` | Tuist project definition (targets, dependencies, schemes) |
