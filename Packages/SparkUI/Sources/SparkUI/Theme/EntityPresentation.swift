@@ -17,6 +17,19 @@ public enum EntityPresentation {
         }
     }
 
+    /// The text-safe ink for a domain, for tinted text such as a prose
+    /// highlight. Domains without an ink step stay `.primary`.
+    public static func ink(domain: String?) -> Color {
+        switch (domain ?? "").lowercased() {
+        case "health": .domainHealthInk
+        case "activity": .domainActivityInk
+        case "money": .domainMoneyInk
+        case "media": .domainMediaInk
+        case "knowledge": .domainKnowledgeInk
+        default: .primary
+        }
+    }
+
     /// Action-keyword matching takes priority (preserves prior
     /// `MetricPresentation.icon` behaviour exactly), then domain, then a
     /// generic per-entity-type fallback for references that carry no action.
