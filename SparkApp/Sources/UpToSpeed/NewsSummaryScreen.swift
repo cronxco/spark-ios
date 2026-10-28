@@ -209,14 +209,8 @@ struct NewsSummaryScreen: View {
     /// target object, then the event's target. Lifted unchanged from the sheet
     /// this disclosure replaced.
     static func articleBodyContent(_ detail: EventDetail, objectDetail: ObjectDetail?) -> String? {
-        let service = detail.event.service
-
         if let block = detail.blocks.first(where: { block in
-            !isRawBlock(block)
-                && nonEmpty(block.content) != nil
-                && (blockType(block, matches: "\(service)_content")
-                    || blockType(block, matches: "content")
-                    || block.blockType.lowercased().hasSuffix("_content"))
+            block.kind == .content && nonEmpty(block.content) != nil
         }), let text = nonEmpty(block.content) {
             return text
         }
@@ -226,14 +220,6 @@ struct NewsSummaryScreen: View {
         }
 
         return nonEmpty(detail.target?.content)
-    }
-
-    private static func isRawBlock(_ block: Block) -> Bool {
-        block.blockType.localizedCaseInsensitiveContains("raw")
-    }
-
-    private static func blockType(_ block: Block, matches expected: String) -> Bool {
-        block.blockType.caseInsensitiveCompare(expected) == .orderedSame
     }
 
     private static func nonEmpty(_ text: String?) -> String? {

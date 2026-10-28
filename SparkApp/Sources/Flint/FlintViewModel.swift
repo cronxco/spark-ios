@@ -475,19 +475,15 @@ final class FlintViewModel {
         if block.isQuestion {
             return 0
         }
-        if block.blockType == "flint_editorial_note" {
-            return 50
-        }
-
         // Registered types only. The previous table ranked a dozen blocks the
         // backend has never written and left the real ones on the default.
-        switch block.blockType {
-        case "flint_day_context":
+        switch block.kind {
+        case .flintEditorialNote:
+            return 50
+        case .flintDayContext:
             return 10
-        case "flint_insight", "flint_health_insight":
+        case .flintInsight, .flintHealthInsight:
             return 20
-        case "flint_news", "flint_reading_pick", "flint_reading_drop":
-            return 30
         default:
             return 30
         }

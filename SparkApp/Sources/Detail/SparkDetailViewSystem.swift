@@ -117,38 +117,6 @@ struct SparkDetailInsightCard: View {
     }
 }
 
-struct SparkDetailValueTile: View {
-    let label: String
-    let value: String
-    var subtitle: String?
-    var tint: Color = .sparkAccent
-
-    var body: some View {
-        GlassCard(radius: SparkRadii.md, padding: SparkSpacing.md) {
-            VStack(alignment: .leading, spacing: SparkSpacing.xs) {
-                Text(label)
-                    .font(SparkTypography.monoSmall)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-
-                Text(value)
-                    .font(SparkFonts.display(.title2, weight: .bold))
-                    .foregroundStyle(tint)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-
-                if let subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(SparkTypography.bodySmall)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-            }
-        }
-        .accessibilityElement(children: .combine)
-    }
-}
-
 struct SparkDetailLinkedRow: View {
     let title: String
     let subtitle: String?
@@ -187,40 +155,6 @@ struct SparkDetailLinkedRow: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                 }
-
-                Image(systemName: "chevron.right")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .accessibilityElement(children: .combine)
-    }
-}
-
-/// A text block as a row: its title and the start of its content, so you can
-/// tell which one to open. Numeric blocks keep `SparkDetailValueTile`.
-struct SparkDetailBlockRow: View {
-    let title: String
-    let preview: String?
-
-    var body: some View {
-        GlassCard(radius: SparkRadii.md, padding: SparkSpacing.md) {
-            HStack(alignment: .center, spacing: SparkSpacing.md) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title)
-                        .font(SparkTypography.bodyStrong)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-
-                    if let preview, !preview.isEmpty {
-                        Text(preview)
-                            .font(SparkTypography.bodySmall)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                    }
-                }
-
-                Spacer(minLength: 0)
 
                 Image(systemName: "chevron.right")
                     .font(.caption2)

@@ -19,7 +19,7 @@ struct DigestSupplementView: View {
                 }
             }
             let notes = digest.blocks.filter {
-                $0.blockType == "flint_editorial_note" && $0.content?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                $0.kind == .flintEditorialNote && $0.content?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
             }
             if !notes.isEmpty {
                 DisclosureGroup("Editorial note", isExpanded: viewModel.disclosureBinding("\(item.id)-editorial")) {

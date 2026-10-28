@@ -161,11 +161,7 @@ struct BlockDetailView: View {
     private func content(for detail: BlockDetail) -> some View {
         heroSection(for: detail)
 
-        if let body = detail.block.content, !body.isEmpty {
-            GlassCard(radius: SparkRadii.lg, padding: SparkSpacing.lg) {
-                SparkLongFormContentView(text: body, paragraphFont: SparkTypography.longFormBody)
-            }
-        }
+        BlockCard(detail.block, size: .full)
 
         if let summary = detail.aiSummary, !summary.isEmpty {
             SparkDetailInsightCard(label: "Insight", text: summary)
