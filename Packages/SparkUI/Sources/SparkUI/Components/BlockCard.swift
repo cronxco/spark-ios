@@ -45,7 +45,7 @@ public struct BlockCard: View {
         GlassCard(radius: SparkRadii.md, padding: SparkSpacing.md) {
             HStack(alignment: .center, spacing: SparkSpacing.md) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(block.title)
+                    Text(heading)
                         .font(SparkTypography.bodyStrong)
                         .foregroundStyle(.primary)
                         .lineLimit(1)
@@ -71,7 +71,7 @@ public struct BlockCard: View {
     private var compact: some View {
         GlassCard(radius: SparkRadii.md, padding: SparkSpacing.md) {
             VStack(alignment: .leading, spacing: SparkSpacing.xs) {
-                Text(block.title)
+                Text(heading)
                     .font(SparkTypography.monoSmall)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -96,7 +96,7 @@ public struct BlockCard: View {
     private var card: some View {
         GlassCard(radius: SparkRadii.lg, padding: SparkSpacing.lg) {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                SectionLabel(block.title, style: .dayHeading)
+                SectionLabel(heading, style: .dayHeading)
 
                 if let content = nonEmpty(block.content) {
                     SparkLongFormContentView(text: content, paragraphFont: SparkTypography.body)
@@ -119,6 +119,11 @@ public struct BlockCard: View {
                 SparkLongFormContentView(text: content, paragraphFont: SparkTypography.longFormBody)
             }
         }
+    }
+
+    /// The block's title, or its type in words when the title is blank.
+    private var heading: String {
+        nonEmpty(block.title) ?? block.blockType.replacingOccurrences(of: "_", with: " ").capitalized
     }
 
     private var valueText: String? {
