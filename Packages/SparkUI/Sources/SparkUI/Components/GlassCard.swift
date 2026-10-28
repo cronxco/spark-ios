@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// Card wrapper that applies the standard Spark glass treatment with hero or
-/// regular radii. Use for Today, detail-screen sections, anywhere a grouped
-/// surface needs a subtle glass shell.
+/// Card wrapper for content with hero or regular radii. Use for Today,
+/// detail-screen sections, anywhere content needs a grouped surface. The name
+/// predates the design language: content cards are opaque
+/// (`sparkContentSurface`), and glass is kept for controls.
 public struct GlassCard<Content: View>: View {
     let radius: CGFloat
     let padding: CGFloat
@@ -25,7 +26,7 @@ public struct GlassCard<Content: View>: View {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .sparkGlass(.roundedRect(radius), tint: tint)
+            .sparkContentSurface(radius: radius, tint: tint)
     }
 }
 

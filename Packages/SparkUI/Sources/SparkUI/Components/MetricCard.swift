@@ -51,7 +51,7 @@ public struct MetricCard: View {
         }
         .padding(SparkSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .sparkGlass(.roundedRect(SparkRadii.lg))
+        .sparkContentSurface(radius: SparkRadii.lg)
     }
 }
 
