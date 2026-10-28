@@ -6,17 +6,18 @@ import SwiftUI
 /// Screens decide which blocks to show and in what order; `BlockCard`
 /// decides how each one looks, from its `BlockKind` and the size it's given.
 /// Layouts for a particular kind belong here, so the event screen, Knowledge
-/// and the block screen pick them up together.
+/// and the block screen pick them up together. The sizes are the ones in
+/// `docs/design-language.md` §7.2.
 public struct BlockCard: View {
     public enum Size: Sendable {
         /// A text block in a list: its title and the start of its content,
         /// so you can tell which one to open.
         case row
         /// A block with a value, in a grid: label, value and unit.
-        case tile
+        case compact
         /// A block read in place, inside an event or Knowledge item: its
         /// title over its full content.
-        case inline
+        case card
         /// The block's own screen, below the hero: its full content.
         case full
     }
@@ -34,8 +35,8 @@ public struct BlockCard: View {
     public var body: some View {
         switch size {
         case .row: row
-        case .tile: tile
-        case .inline: inline
+        case .compact: compact
+        case .card: card
         case .full: full
         }
     }
@@ -67,7 +68,7 @@ public struct BlockCard: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var tile: some View {
+    private var compact: some View {
         GlassCard(radius: SparkRadii.md, padding: SparkSpacing.md) {
             VStack(alignment: .leading, spacing: SparkSpacing.xs) {
                 Text(block.title)
@@ -92,7 +93,7 @@ public struct BlockCard: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var inline: some View {
+    private var card: some View {
         GlassCard(radius: SparkRadii.lg, padding: SparkSpacing.lg) {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                 SectionLabel(block.title, style: .dayHeading)

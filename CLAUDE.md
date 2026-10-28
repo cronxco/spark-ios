@@ -365,7 +365,7 @@ Blocks are drawn by one view, `BlockCard` (`Packages/SparkUI/Sources/SparkUI/Com
 
 1. **Add a case** to `BlockKind` and map its `block_type` in `exactTypes` (or a suffix rule).
 2. **Give it a glyph and tint** in `BlockKind+Presentation.swift`.
-3. **Draw it** in `BlockCard` for the sizes it needs (`.row`, `.tile`, `.inline`, `.full`). Screens only decide order and grouping.
+3. **Draw it** in `BlockCard` for the sizes it needs (`.compact`, `.row`, `.card`, `.full`, as in `docs/design-language.md` §7.2). Screens only decide order and grouping.
 4. **Test** the parsing in `BlockKindTests`.
 
 ### Adding a Widget

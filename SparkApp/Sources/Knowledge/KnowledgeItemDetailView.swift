@@ -265,7 +265,7 @@ struct KnowledgeItemDetailView: View {
                 }
             }
         } else {
-            BlockCard(block, size: .inline, tint: .domainKnowledge)
+            BlockCard(block, size: .card, tint: .domainKnowledge)
         }
     }
 

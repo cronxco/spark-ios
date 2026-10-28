@@ -446,7 +446,7 @@ struct EventDetailView: View {
             NavigationLink {
                 BlockDetailView(blockId: block.id, parent: loadedEvent)
             } label: {
-                BlockCard(block, size: .inline)
+                BlockCard(block, size: .card)
             }
             .buttonStyle(.plain)
         }
@@ -490,7 +490,7 @@ struct EventDetailView: View {
                     NavigationLink {
                         BlockDetailView(blockId: block.id, parent: loadedEvent)
                     } label: {
-                        BlockCard(block, size: .tile)
+                        BlockCard(block, size: .compact)
                     }
                     .buttonStyle(.plain)
                 }
