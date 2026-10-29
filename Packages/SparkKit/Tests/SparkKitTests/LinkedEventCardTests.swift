@@ -26,7 +26,7 @@ struct LinkedEventCardTests {
         {
           "kind": "oura.slept_for",
           "event": {"id": "\(sleepID)", "time": "2026-10-27T20:45:58+00:00", "service": "oura", "domain": "health", "action": "slept_for", "value": 28500, "unit": "seconds", "display_value": "7h55m", "display_name": "Sleep"},
-          "context": {"direction": "up", "valence": "good", "within_usual_range": true, "text": "12m above your 30d trend"},
+          "context": {"direction": "up", "valence": "good", "within_usual_range": true, "text": "35m above 30d avg", "mean": 26400},
           "at_digest": null
         },
         {
@@ -86,6 +86,19 @@ struct LinkedEventCardTests {
         #expect(cards[1].heroValue == "80")
         #expect(cards[1].updatedFromText == "Updated from 66")
         #expect(cards[0].updatedFromText == nil)
+    }
+
+    @Test("durations and counts sit on a bar against the 30d mean; scores do not")
+    func meanBar() throws {
+        let cards = try summary().linkedEvents
+
+        #expect(cards[0].context?.mean == 26400)
+        let fraction = try #require(cards[0].meanBarFraction)
+        #expect(abs(fraction - 28500.0 / 39600.0) < 0.0001)
+        #expect(cards[1].meanBarFraction == nil)
+        #expect(EventKind.steps.drawsAgainstMean)
+        #expect(!EventKind.sleepScore.drawsAgainstMean)
+        #expect(abs(LinkedEventCard.meanBarMarker - 2.0 / 3.0) < 0.0001)
     }
 
     @Test("durations read 7h 55m, 42m and 1m 05s")

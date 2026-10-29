@@ -62,6 +62,15 @@ public enum EventKind: Hashable, Sendable {
         }
     }
 
+    /// Whether the compact card draws the value as a bar against the
+    /// reader's 30d average (design language §8, "against the mean").
+    public var drawsAgainstMean: Bool {
+        switch self {
+        case .sleepDuration, .steps, .exerciseTime: true
+        default: false
+        }
+    }
+
     /// The short eyebrow label. `nil` for `.generic`, which uses the
     /// backend's `display_name` instead of guessing one.
     public var shortLabel: String? {
