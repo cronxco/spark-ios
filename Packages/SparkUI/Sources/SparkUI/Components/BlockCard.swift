@@ -106,10 +106,10 @@ public struct BlockCard: View {
                 eyebrow
 
                 if let value = block.displayValue {
-                    HStack(alignment: .center, spacing: SparkSpacing.sm) {
-                        if let fraction = value.fraction {
-                            ring(fraction)
-                        }
+                    if let fraction = value.fraction {
+                        ring(value, fraction: fraction, diameter: 64)
+                            .frame(maxWidth: .infinity)
+                    } else {
                         valueLabel(value, font: SparkFonts.display(.title2, weight: .bold))
                             .lineLimit(1)
                             .minimumScaleFactor(0.6)
@@ -148,7 +148,12 @@ public struct BlockCard: View {
                 }
 
                 if let value = block.displayValue {
-                    valueLabel(value, font: SparkTypography.bodyStrong)
+                    if let fraction = value.fraction {
+                        ring(value, fraction: fraction, diameter: 128)
+                            .frame(maxWidth: .infinity)
+                    } else {
+                        valueLabel(value, font: SparkTypography.bodyStrong)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -210,17 +215,24 @@ public struct BlockCard: View {
         return [value.text, value.unit].compactMap { $0 }.joined(separator: " ")
     }
 
-    /// A ratio with a known maximum (§8): the track at 15%, the stroke in the
-    /// kind's fill.
-    private func ring(_ fraction: Double) -> some View {
-        Gauge(value: fraction) {
-            EmptyView()
-        }
-        .gaugeStyle(.accessoryCircularCapacity)
-        .tint(glyphTint)
-        .scaleEffect(0.6)
-        .frame(width: 34, height: 34)
-        .accessibilityHidden(true)
+    /// A ratio with a known maximum (§8), as the card's hero.
+    private func ring(_ value: BlockValue, fraction: Double, diameter: CGFloat) -> some View {
+        ScoreRing(
+            fraction: fraction,
+            text: value.text,
+            tint: glyphTint,
+            diameter: diameter,
+            threshold: excellentThreshold(for: value)
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(spokenValue(value))
+    }
+
+    /// The provider's "excellent" line, as a share of the maximum. Oura
+    /// contributors are scores out of 100 with the line at 85.
+    private func excellentThreshold(for value: BlockValue) -> Double? {
+        guard kind == .contributor, let maximum = value.maximum, maximum > 0 else { return nil }
+        return 85 / maximum
     }
 
     private func glyphChip(size: CGFloat) -> some View {
