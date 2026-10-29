@@ -20,7 +20,7 @@ public struct LinkedEventCard: Codable, Sendable, Hashable, Identifiable {
     public var id: String { event.id }
     public var kind: EventKind { EventKind(kindKey) }
 
-    /// One line comparing the live value with the reader's usual.
+    /// One line comparing the live value with the reader's 30d trend.
     public struct Context: Codable, Sendable, Hashable {
         public enum Direction: String, Codable, Sendable, Hashable {
             case up, down, flat

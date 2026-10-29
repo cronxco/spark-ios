@@ -149,7 +149,7 @@ public struct EventCard: View {
         }
     }
 
-    /// One VoiceOver element: "Sleep score, 66, 12 below your usual".
+    /// One VoiceOver element: "Sleep score, 66, 12 below your 30d trend".
     /// Scores carry "out of 100" here and nowhere else (§9).
     private var accessibilityText: String {
         var parts = [card.label]

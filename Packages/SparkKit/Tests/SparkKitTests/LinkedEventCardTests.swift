@@ -26,7 +26,7 @@ struct LinkedEventCardTests {
         {
           "kind": "oura.slept_for",
           "event": {"id": "\(sleepID)", "time": "2026-10-27T20:45:58+00:00", "service": "oura", "domain": "health", "action": "slept_for", "value": 28500, "unit": "seconds", "display_value": "7h55m", "display_name": "Sleep"},
-          "context": {"direction": "up", "valence": "good", "within_usual_range": true, "text": "12m above your 30-day usual"},
+          "context": {"direction": "up", "valence": "good", "within_usual_range": true, "text": "12m above your 30d trend"},
           "at_digest": null
         },
         {
