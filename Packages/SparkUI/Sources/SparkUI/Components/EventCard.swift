@@ -33,6 +33,9 @@ public struct EventCard: View {
     let size: Size
 
     @Environment(\.colorSchemeContrast) private var contrast
+    /// §4: a 24pt compact hero with its unit at about 55%, scaling together.
+    @ScaledMetric(relativeTo: .title2) private var heroSize: CGFloat = 24
+    @ScaledMetric(relativeTo: .title2) private var unitSize: CGFloat = 13
 
     public init(_ card: LinkedEventCard, size: Size = .compact) {
         self.card = card
@@ -88,12 +91,19 @@ public struct EventCard: View {
                 .frame(maxWidth: .infinity)
         } else {
             VStack(alignment: .leading, spacing: SparkSpacing.xs) {
-                Text(card.heroValue)
-                    .font(SparkFonts.display(.title2, weight: .bold))
-                    .monospacedDigit()
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
+                HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.xxs) {
+                    Text(card.heroValue)
+                        .font(SparkFonts.display(size: heroSize, weight: .bold))
+                        .monospacedDigit()
+                        .foregroundStyle(.primary)
+                    if let unit = kind.heroUnit, card.liveValue != nil {
+                        Text(unit)
+                            .font(SparkFonts.display(size: unitSize, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
                 if let fraction = card.meanBarFraction {
                     MeanBar(fraction: fraction, fill: fill)
                 }
@@ -148,7 +158,7 @@ public struct EventCard: View {
         if let maximum = kind.ringMaximum, card.liveValue != nil {
             parts.append("\(card.heroValue) out of \(Int(maximum))")
         } else {
-            parts.append(card.heroValue)
+            parts.append([card.heroValue, card.liveValue == nil ? nil : kind.heroUnit].compactMap { $0 }.joined(separator: " "))
         }
         if let line = contextLine { parts.append(line.text) }
         if card.meanBarFraction != nil, let mean = card.context?.mean {

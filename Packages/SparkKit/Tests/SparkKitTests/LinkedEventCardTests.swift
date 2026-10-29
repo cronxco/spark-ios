@@ -97,6 +97,8 @@ struct LinkedEventCardTests {
         #expect(abs(fraction - 28500.0 / 39600.0) < 0.0001)
         #expect(cards[1].meanBarFraction == nil)
         #expect(EventKind.steps.drawsAgainstMean)
+        #expect(EventKind.steps.heroUnit == "steps")
+        #expect(EventKind.sleepDuration.heroUnit == nil)
         #expect(!EventKind.sleepScore.drawsAgainstMean)
         #expect(abs(LinkedEventCard.meanBarMarker - 2.0 / 3.0) < 0.0001)
     }

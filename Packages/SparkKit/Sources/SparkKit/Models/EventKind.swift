@@ -71,6 +71,16 @@ public enum EventKind: Hashable, Sendable {
         }
     }
 
+    /// The unit written after the hero value, in the display face at about
+    /// 55% of its size (design language §4): `8,412 steps`. Durations carry
+    /// their own units and the generic kind keeps the server's formatting.
+    public var heroUnit: String? {
+        switch self {
+        case .steps: "steps"
+        default: nil
+        }
+    }
+
     /// The short eyebrow label. `nil` for `.generic`, which uses the
     /// backend's `display_name` instead of guessing one.
     public var shortLabel: String? {
