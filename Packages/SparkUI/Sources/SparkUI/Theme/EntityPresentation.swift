@@ -17,8 +17,9 @@ public enum EntityPresentation {
         }
     }
 
-    /// The text-safe ink for a domain, for tinted text such as a prose
-    /// highlight. Domains without an ink step stay `.primary`.
+    /// The text-safe ink for a domain, for text that carries its domain, such
+    /// as a tinted hero value. Prose highlights use `Color.sparkHighlight`
+    /// instead. Domains without an ink step stay `.primary`.
     public static func ink(domain: String?) -> Color {
         switch (domain ?? "").lowercased() {
         case "health": .domainHealthInk

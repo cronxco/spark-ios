@@ -95,10 +95,8 @@ struct FlintParagraphPage: View {
 /// A briefing paragraph with cards for the metric events it links to,
 /// underneath, in the order it mentions them (design language §7.3).
 ///
-/// The highlighted phrases and their cards share one domain ink so the eye
-/// can pair them. Highlights used to be spark-5 amber text, which is about
-/// 1.6:1 on the light wash; the accent ink is the fallback when the cards
-/// span domains or there are none.
+/// Highlighted phrases take the one highlight token (design language §3.3).
+/// They used to be spark-5 amber text, which is about 1.6:1 on the light wash.
 struct LinkedParagraph: View {
     let text: String
     let linkedEvents: [LinkedEventCard]
@@ -109,18 +107,11 @@ struct LinkedParagraph: View {
         LinkedEventCard.cards(linkedFrom: text, in: linkedEvents)
     }
 
-    private var highlightInk: Color {
-        let domains = Set(cards.map { $0.event.domain.lowercased() })
-        guard domains.count == 1, let domain = domains.first else { return .sparkAccentInk }
-        let ink = EntityPresentation.ink(domain: domain)
-        return ink == .primary ? .sparkAccentInk : ink
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.lg) {
             SparkLongFormContentView(
                 text: text,
-                tint: highlightInk,
+                tint: .sparkHighlight,
                 paragraphFont: SparkTypography.longFormBody
             )
 

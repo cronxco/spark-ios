@@ -144,21 +144,22 @@ public extension Color {
     static let domainAnomaly = Color.sparkWarning
 }
 
-// MARK: - Domain ink
+// MARK: - Highlight and domain ink
 //
-// Tinted text (design language §3.2). The domain fills above are for glyphs,
-// rings and 10–15% backgrounds; as text on the light wash most of them fail
-// contrast (spark-5 amber is about 1.6:1), so text uses the ink step instead.
+// Tinted text (design language §3.2, §3.3). The domain fills above are for
+// glyphs, rings and 10–15% backgrounds; as text on the light wash most of
+// them fail contrast (spark-5 amber is about 1.6:1), so text uses an ink.
 
 public extension Color {
-    /// Accent-coloured text: spark-8 on light grounds (7.8:1), spark-5 on dark.
-    static let sparkAccentInk = Color.spark8.fallback(light: .spark8, dark: .spark5)
+    /// Facts picked out in Flint and summary prose, whatever their domain:
+    /// ocean-5 in light (8.1:1 on ash-1), spark-5 in dark (11.1:1 on slate-5).
+    static let sparkHighlight = Color.ocean5.fallback(light: .ocean5, dark: .spark5)
     static let domainHealthInk = Color.sparkSuccess.fallback(
         light: Color(red: 0.043, green: 0.169, blue: 0.137), // #0B2B23, success-content
         dark: Color(red: 0.702, green: 0.847, blue: 0.788) // #B3D8C9
     )
     static let domainActivityInk = Color.ember7.fallback(light: .ember7, dark: .ember5)
-    static let domainMoneyInk = sparkAccentInk
+    static let domainMoneyInk = Color.spark8.fallback(light: .spark8, dark: .spark5)
     static let domainMediaInk = Color.flame7.fallback(light: .flame7, dark: .flame5)
     static let domainKnowledgeInk = Color.sky6.fallback(light: .sky6, dark: .sky3)
 }

@@ -41,7 +41,6 @@ public struct EventCard: View {
 
     private var kind: EventKind { card.kind }
     private var fill: Color { EntityPresentation.tint(domain: card.event.domain) }
-    private var ink: Color { EntityPresentation.ink(domain: card.event.domain) }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
@@ -77,7 +76,7 @@ public struct EventCard: View {
                 .foregroundStyle(fill)
             Text(card.label)
                 .font(SparkTypography.captionStrong)
-                .foregroundStyle(ink == .primary ? Color.secondary : ink)
+                .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
     }
