@@ -28,11 +28,18 @@ public struct BlockCard: View {
     let block: Block
     let size: Size
     let tint: Color
+    let eventID: String?
 
-    public init(_ block: Block, size: Size, tint: Color = .sparkAccent) {
+    @Environment(\.openURL) private var openURL
+
+    /// - Parameter eventID: the event the block belongs to, for the
+    ///   long-press menu's "Open event". Leave it out when the screen already
+    ///   is that event.
+    public init(_ block: Block, size: Size, tint: Color = .sparkAccent, eventID: String? = nil) {
         self.block = block
         self.size = size
         self.tint = tint
+        self.eventID = eventID
     }
 
     public var body: some View {
@@ -40,7 +47,7 @@ public struct BlockCard: View {
         case .row: withMenu(row)
         case .compact: withMenu(compact)
         case .card: withMenu(card)
-        case .full: full
+        case .full: withMenu(full)
         }
     }
 
@@ -52,7 +59,7 @@ public struct BlockCard: View {
     }
 
     private var row: some View {
-        GlassCard(radius: SparkRadii.md, padding: SparkSpacing.md) {
+        surface(radius: SparkRadii.md, padding: SparkSpacing.md) {
             HStack(alignment: .center, spacing: SparkSpacing.md) {
                 if let url = mediaURL {
                     thumbnail(url)
@@ -94,7 +101,7 @@ public struct BlockCard: View {
     }
 
     private var compact: some View {
-        GlassCard(radius: SparkRadii.md, padding: SparkSpacing.md) {
+        surface(radius: SparkRadii.md, padding: SparkSpacing.md) {
             VStack(alignment: .leading, spacing: SparkSpacing.xs) {
                 eyebrow
 
@@ -118,11 +125,7 @@ public struct BlockCard: View {
     }
 
     private var card: some View {
-        GlassCard(
-            radius: SparkRadii.lg,
-            padding: SparkSpacing.lg,
-            tint: kind.isAIWritten ? Color.sparkAccent.opacity(0.06) : nil
-        ) {
+        surface(radius: SparkRadii.lg, padding: SparkSpacing.lg) {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                 HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.xs) {
                     Image(systemName: kind.systemImage)
@@ -155,7 +158,7 @@ public struct BlockCard: View {
     @ViewBuilder
     private var full: some View {
         if let content = nonEmpty(block.content) {
-            GlassCard(radius: SparkRadii.lg, padding: SparkSpacing.lg) {
+            surface(radius: SparkRadii.lg, padding: SparkSpacing.lg) {
                 SparkLongFormContentView(text: content, paragraphFont: SparkTypography.longFormBody)
             }
         }
@@ -176,12 +179,11 @@ public struct BlockCard: View {
         .font(SparkTypography.captionStrong)
     }
 
-    /// Generated text says so in words as well as with the glyph (§3.4).
+    /// Generated text says so in words beside its sparkles glyph (§3.5).
     private var summaryMarker: some View {
-        Label("Summary", systemImage: "sparkles")
+        Text("Summary")
             .font(SparkTypography.captionStrong)
             .foregroundStyle(.secondary)
-            .labelStyle(.titleAndIcon)
     }
 
     /// The hero value with its unit smaller beside it, baseline-aligned (§3.3).
@@ -285,19 +287,55 @@ public struct BlockCard: View {
         return URL(string: raw)
     }
 
-    /// Secondary actions live in a long-press menu, not on the card (§7.1).
+    /// Generated text sits on the generated surface (§3.5); everything else
+    /// on the opaque content surface.
     @ViewBuilder
-    private func withMenu(_ card: some View) -> some View {
+    private func surface<Content: View>(
+        radius: CGFloat,
+        padding: CGFloat,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        if kind.isAIWritten {
+            content()
+                .padding(padding)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .sparkGeneratedSurface(radius: radius)
+        } else {
+            GlassCard(radius: radius, padding: padding, content: content)
+        }
+    }
+
+    /// Secondary actions live in a long-press menu with a preview of the
+    /// card, on every size (§7.1). There is no visible menu button on iOS.
+    @ViewBuilder
+    private func withMenu(_ view: some View) -> some View {
         #if os(iOS)
-        card.contextMenu { menu }
+        view.contextMenu {
+            menu
+        } preview: {
+            card
+                .frame(width: 320)
+                .padding(SparkSpacing.sm)
+        }
         #else
-        card
+        view
         #endif
     }
 
     #if os(iOS)
+    /// The same items as the web card's menu: open event, open block, open
+    /// source, copy.
     @ViewBuilder
     private var menu: some View {
+        if let eventID, let url = URL(string: "https://spark.cronx.co/events/\(eventID)") {
+            Button("Open event", systemImage: "calendar") { openURL(url) }
+        }
+        if size != .full, let url = URL(string: "https://spark.cronx.co/blocks/\(block.id)") {
+            Button("Open block", systemImage: "square.stack") { openURL(url) }
+        }
+        if let url = mediaURL {
+            Button("Open source", systemImage: "safari") { openURL(url) }
+        }
         if let value = block.displayValue {
             Button("Copy value", systemImage: "doc.on.doc") {
                 UIPasteboard.general.string = [value.text, value.unit].compactMap { $0 }.joined(separator: " ")
@@ -307,9 +345,6 @@ public struct BlockCard: View {
             Button("Copy text", systemImage: "doc.on.doc") {
                 UIPasteboard.general.string = text
             }
-        }
-        if let url = mediaURL {
-            ShareLink(item: url)
         }
     }
     #endif

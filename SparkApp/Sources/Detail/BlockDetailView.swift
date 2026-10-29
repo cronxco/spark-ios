@@ -161,7 +161,7 @@ struct BlockDetailView: View {
     private func content(for detail: BlockDetail) -> some View {
         heroSection(for: detail)
 
-        BlockCard(detail.block, size: .full)
+        BlockCard(detail.block, size: .full, eventID: detail.event?.id)
 
         if let summary = detail.aiSummary, !summary.isEmpty {
             SparkDetailInsightCard(label: "Insight", text: summary)
