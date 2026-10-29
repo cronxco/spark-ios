@@ -142,6 +142,36 @@ public extension Color {
     static let domainMedia = Color.flame5
     static let domainKnowledge = Color.sky5
     static let domainAnomaly = Color.sparkWarning
+    /// Ocean in light, sky-3 in dark: the `accent` hue, so an online tint is
+    /// always paired with its `globe` glyph and a label (§3.2).
+    static let domainOnline = Color.adaptive(light: .ocean5, dark: .sky3)
+}
+
+// MARK: - Domain inks and hero values
+//
+// Ink is the domain's text step (§3.2): it reads at 4.5:1 or better on the
+// surface, where the fill may not. Domains without one return nil and text
+// stays primary.
+
+public extension Color {
+    static func domainInk(for domain: String?) -> Color? {
+        switch (domain ?? "").lowercased() {
+        case "health": .adaptive(light: Color(red: 0.000, green: 0.172, blue: 0.131), dark: Color(red: 0.702, green: 0.847, blue: 0.788))
+        case "activity": .adaptive(light: .ember7, dark: .ember5)
+        case "money": .adaptive(light: .spark8, dark: .spark5)
+        case "media": .adaptive(light: .flame7, dark: .flame5)
+        case "knowledge": .adaptive(light: .sky6, dark: .sky3)
+        case "online": .domainOnline
+        case "anomaly": .adaptive(light: .primary, dark: Color(red: 0.824, green: 0.671, blue: 0.733))
+        default: nil
+        }
+    }
+
+    /// The hero value colour (§3.6): the domain's ink in light mode, primary
+    /// when there is none, and spark amber in dark mode whatever the domain.
+    static func sparkHero(domain: String?) -> Color {
+        .adaptive(light: domainInk(for: domain) ?? .primary, dark: .spark5)
+    }
 }
 
 // MARK: - Tag type tints
@@ -177,6 +207,15 @@ public extension Color {
     /// Stays dark in both schemes: white on spark-5 or the health green is
     /// unreadable, and those fills do not change with the scheme.
     static let sparkOnAccent = Color.slate5
+}
+
+extension Color {
+    /// A colour that resolves per scheme.
+    static func adaptive(light: Color, dark: Color) -> Color {
+        Color(UIColor { trait in
+            trait.userInterfaceStyle == .dark ? UIColor(dark) : UIColor(light)
+        })
+    }
 }
 
 private extension Color {

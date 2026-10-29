@@ -68,6 +68,27 @@ public extension BlockKind {
         }
     }
 
+    /// The domain whose ink colours the hero value (§3.6), or nil.
+    var domain: String? {
+        switch self {
+        case .energy, .intensity, .activityMetric, .workoutMetric, .exercise, .exerciseSummary,
+             .coachRecommendation, .distance:
+            "activity"
+        case .heartRate, .duration, .sleepStage, .biometrics, .mentalEnergy, .physicalEnergy, .contributor,
+             .flintHealthInsight:
+            "health"
+        case .albumArt, .track, .artist, .image, .immichPhoto, .clusterSummary, .clusterPeople:
+            "media"
+        case .bankTransfer, .potTransfer, .balanceChange, .balanceSnapshot, .foreignExchange,
+             .virtualCard, .merchant, .spentToday, .receiptLineItem, .receiptTaxSummary,
+             .receiptPaymentMethod:
+            "money"
+        case .book, .bookAuthor, .bookCover, .bookmarkMetadata, .content, .url:
+            "knowledge"
+        default: nil
+        }
+    }
+
     var tint: Color {
         switch self {
         case .heartRate: .sparkError

@@ -13,6 +13,7 @@ public enum EntityPresentation {
         case "media": .domainMedia
         case "knowledge": .domainKnowledge
         case "anomaly": .domainAnomaly
+        case "online": .domainOnline
         default: .sparkAccent
         }
     }

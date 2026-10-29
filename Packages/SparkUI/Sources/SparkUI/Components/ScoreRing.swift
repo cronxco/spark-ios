@@ -13,17 +13,20 @@ public struct ScoreRing: View {
     let tint: Color
     let diameter: CGFloat
     let threshold: Double?
+    let valueColor: Color
 
     /// - Parameters:
     ///   - fraction: the share of the maximum reached, 0...1.
     ///   - text: the number shown inside, already formatted.
     ///   - threshold: the "excellent" line as a share of the maximum, 0...1.
-    public init(fraction: Double, text: String, tint: Color, diameter: CGFloat = 128, threshold: Double? = nil) {
+    ///   - valueColor: the number's colour; the stroke keeps `tint` (§3.6).
+    public init(fraction: Double, text: String, tint: Color, diameter: CGFloat = 128, threshold: Double? = nil, valueColor: Color = .primary) {
         self.fraction = min(max(fraction, 0), 1)
         self.text = text
         self.tint = tint
         self.diameter = diameter
         self.threshold = threshold.map { min(max($0, 0), 1) }
+        self.valueColor = valueColor
     }
 
     private var lineWidth: CGFloat { max(6, diameter * 0.09) }
@@ -46,6 +49,7 @@ public struct ScoreRing: View {
             Text(text)
                 .font(diameter >= 100 ? SparkFonts.display(.largeTitle, weight: .bold) : SparkFonts.display(.title3, weight: .bold))
                 .monospacedDigit()
+                .foregroundStyle(valueColor)
                 .minimumScaleFactor(0.5)
                 .lineLimit(1)
                 .padding(lineWidth + 2)
