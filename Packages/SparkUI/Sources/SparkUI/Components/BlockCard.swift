@@ -88,7 +88,7 @@ public struct BlockCard: View {
                 Spacer(minLength: 0)
 
                 if let value = block.displayValue {
-                    valueLabel(value, font: SparkTypography.bodyStrong)
+                    valueLabel(value, font: SparkTypography.bodyStrong, unitFont: SparkTypography.bodySmall)
                 }
 
                 Image(systemName: "chevron.right")
@@ -110,13 +110,13 @@ public struct BlockCard: View {
                         ring(value, fraction: fraction, diameter: 64)
                             .frame(maxWidth: .infinity)
                     } else {
-                        valueLabel(value, font: SparkFonts.display(.title2, weight: .bold))
+                        valueLabel(value, font: SparkTypography.compactValue, unitFont: SparkTypography.compactUnit)
                             .lineLimit(1)
                             .minimumScaleFactor(0.6)
                     }
                 } else {
                     Text("—")
-                        .font(SparkFonts.display(.title2, weight: .bold))
+                        .font(SparkTypography.compactValue)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -152,7 +152,7 @@ public struct BlockCard: View {
                         ring(value, fraction: fraction, diameter: 128)
                             .frame(maxWidth: .infinity)
                     } else {
-                        valueLabel(value, font: SparkTypography.bodyStrong)
+                        valueLabel(value, font: SparkTypography.cardValue, unitFont: SparkTypography.cardUnit)
                     }
                 }
             }
@@ -191,8 +191,8 @@ public struct BlockCard: View {
             .foregroundStyle(.secondary)
     }
 
-    /// The hero value with its unit smaller beside it, baseline-aligned (§3.3).
-    private func valueLabel(_ value: BlockValue, font: Font) -> some View {
+    /// The value with its unit beside it at about 55% of its size, baseline-aligned (§4).
+    private func valueLabel(_ value: BlockValue, font: Font, unitFont: Font) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 3) {
             Text(value.text)
                 .font(font)
@@ -200,7 +200,7 @@ public struct BlockCard: View {
                 .foregroundStyle(.primary)
             if let unit = value.unit {
                 Text(unit)
-                    .font(SparkTypography.bodySmall)
+                    .font(unitFont)
                     .foregroundStyle(.secondary)
             }
         }

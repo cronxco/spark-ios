@@ -31,6 +31,12 @@ public enum SparkFonts {
         Font.custom(displayPostScriptName, size: size).weight(weight)
     }
 
+    /// Comfortaa at a design point size that still scales with Dynamic Type
+    /// against `style`.
+    public static func display(size: CGFloat, relativeTo style: Font.TextStyle, weight: Font.Weight = .bold) -> Font {
+        Font.custom(displayPostScriptName, size: size, relativeTo: style).weight(weight)
+    }
+
     /// PT Mono at the given style. Good for timestamps, IDs, hex codes.
     public static func mono(_ style: Font.TextStyle = .footnote) -> Font {
         Font.custom(monoPostScriptName, size: pointSize(for: style), relativeTo: style)
