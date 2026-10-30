@@ -9,8 +9,9 @@ public enum SparkFonts {
     /// Postscript names (what `Font.custom(...)` looks up after registration).
     public static let displayPostScriptName = "Comfortaa"
     public static let monoPostScriptName = "PTMono-Regular"
-    /// Font Awesome Solid, cut down to the glyphs in `icons.json`.
-    public static let iconPostScriptName = "FontAwesome6Free-Solid"
+    /// Font Awesome Solid, cut down to the glyphs in `icons.json` and renamed
+    /// "Spark Icons", because the OFL reserves the "Font Awesome" name.
+    public static let iconPostScriptName = "SparkIcons-Solid"
 
     /// Register the bundled fonts with Core Text. Call once at app launch
     /// before any view that depends on them renders. Idempotent.
@@ -18,7 +19,7 @@ public enum SparkFonts {
         guard !hasRegistered else { return }
         register("Comfortaa-VariableFont_wght", ext: "ttf")
         register("PTMono-Regular", ext: "ttf")
-        register("FontAwesome6Free-Solid-Spark", ext: "ttf")
+        register("SparkIcons-Solid", ext: "ttf")
         hasRegistered = true
     }
 

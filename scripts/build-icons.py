@@ -3,7 +3,7 @@
 
 Writes two files:
   - Packages/SparkUI/Sources/SparkUI/Theme/SparkIcon.swift (the enum)
-  - Packages/SparkUI/Sources/SparkUI/Resources/Fonts/FontAwesome6Free-Solid-Spark.ttf
+  - Packages/SparkUI/Sources/SparkUI/Resources/Fonts/SparkIcons-Solid.ttf
     (the Solid font, cut down to the glyphs the manifest names)
 
 Usage:
@@ -24,7 +24,27 @@ from fontTools import subset
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "Packages/SparkUI/icons.json"
 SWIFT_OUT = ROOT / "Packages/SparkUI/Sources/SparkUI/Theme/SparkIcon.swift"
-FONT_OUT = ROOT / "Packages/SparkUI/Sources/SparkUI/Resources/Fonts/FontAwesome6Free-Solid-Spark.ttf"
+FONT_OUT = ROOT / "Packages/SparkUI/Sources/SparkUI/Resources/Fonts/SparkIcons-Solid.ttf"
+
+
+# "Font Awesome" is a Reserved Font Name under the OFL, so a modified copy
+# such as this subset must not use it. Copyright and licence records stay.
+FAMILY = "Spark Icons"
+POSTSCRIPT_NAME = "SparkIcons-Solid"
+
+
+def rename(font):
+    names = font["name"]
+    for record in list(names.names):
+        if record.nameID in (1, 3, 4, 6, 16, 17, 18, 21, 22):
+            names.removeNames(nameID=record.nameID)
+    names.setName(FAMILY, 1, 3, 1, 0x409)
+    names.setName("Regular", 2, 3, 1, 0x409)
+    names.setName(f"{POSTSCRIPT_NAME};{FAMILY}", 3, 3, 1, 0x409)
+    names.setName(f"{FAMILY} Solid", 4, 3, 1, 0x409)
+    names.setName(POSTSCRIPT_NAME, 6, 3, 1, 0x409)
+    if "CFF " in font:
+        font["CFF "].cff.fontNames = [POSTSCRIPT_NAME]
 
 
 def main() -> None:
@@ -52,6 +72,7 @@ def main() -> None:
     subsetter = subset.Subsetter(options)
     subsetter.populate(unicodes=sorted({int(code, 16) for _, code in codepoints.values()}))
     subsetter.subset(font)
+    rename(font)
     cmap = font.getBestCmap()
     missing = [c for c, (_, code) in codepoints.items() if int(code, 16) not in cmap]
     if missing:

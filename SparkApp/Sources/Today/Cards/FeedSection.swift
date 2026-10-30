@@ -296,7 +296,9 @@ private struct TimelineRow: View {
                     .lineLimit(1)
                     .frame(maxWidth: 180, alignment: .leading)
             }
-            ForEach(event.decodedTags) { tag in
+            // By position: the cache keeps no tag IDs, so two tags with the
+            // same name and type would otherwise share an identity.
+            ForEach(Array(event.decodedTags.enumerated()), id: \.offset) { _, tag in
                 TagChip(tag)
             }
         }

@@ -288,7 +288,7 @@ public struct FlowLayout: Layout {
         var totalWidth: CGFloat = 0
 
         for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
+            let size = subview.sizeThatFits(Self.proposal(maxWidth))
             if origin.x + size.width > maxWidth, origin.x > 0 {
                 origin.x = 0
                 origin.y += lineHeight + spacing
@@ -308,7 +308,7 @@ public struct FlowLayout: Layout {
         var lineHeight: CGFloat = 0
 
         for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
+            let size = subview.sizeThatFits(Self.proposal(maxWidth))
             if origin.x + size.width > bounds.maxX, origin.x > bounds.origin.x {
                 origin.x = bounds.origin.x
                 origin.y += lineHeight + spacing
@@ -317,7 +317,12 @@ public struct FlowLayout: Layout {
             subview.place(at: origin, proposal: ProposedViewSize(size))
             origin.x += size.width + spacing
             lineHeight = max(lineHeight, size.height)
-            _ = maxWidth
         }
+    }
+
+    /// Each item gets its ideal size, but no wider than a line, so a long
+    /// text wraps inside the line instead of running past it.
+    private static func proposal(_ maxWidth: CGFloat) -> ProposedViewSize {
+        maxWidth.isFinite ? ProposedViewSize(width: maxWidth, height: nil) : .unspecified
     }
 }

@@ -71,7 +71,10 @@ struct MetricReading: Sendable, Hashable {
         guard let baseline else { return nil }
         let difference = value - baseline
         let text = amount(abs(difference))
-        if difference == 0 || text.allSatisfy({ $0 == "0" || !$0.isNumber && !$0.isLetter }) {
+        // "0 steps" or "£0.00": the difference rounds away at the precision
+        // shown, so it reads as on trend rather than "0 above".
+        let digits = text.filter(\.isNumber)
+        if difference == 0 || (!digits.isEmpty && digits.allSatisfy { $0 == "0" }) {
             return MetricComparison(direction: .steady, text: "On \(window) trend", isGood: nil)
         }
         let isUp = difference > 0
@@ -408,7 +411,7 @@ struct DayMetrics: Sendable {
             // Less spent is the good direction. The server's spend baseline
             // is its own 60-day window, not the metrics' 90.
             card.comparison = spend.comparison(higherIsBetter: false, window: "60d") {
-                Self.currency($0.rounded(), code: currency)
+                Self.currency($0, code: currency)
             }
         }
         return card

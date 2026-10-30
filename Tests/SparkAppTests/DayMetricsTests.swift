@@ -83,6 +83,14 @@ struct MetricReadingTests {
         #expect(level.direction == .steady)
         #expect(level.isGood == nil)
     }
+
+    @Test("a difference that rounds to zero with its unit still reads as on trend")
+    func zeroWithUnit() throws {
+        let steps = try #require(MetricReading(value: 8000.2, vsBaselinePct: 0.001)
+            .comparison(higherIsBetter: true, window: "90d") { "\(Int($0.rounded())) steps" })
+        #expect(steps.text == "On 90d trend")
+        #expect(steps.direction == .steady)
+    }
 }
 
 @Suite("Day metric grid")
