@@ -9,6 +9,12 @@ public enum SparkTypography {
     public static let hero = SparkFonts.display(.title, weight: .bold)
     public static let heroSmall = SparkFonts.display(.title2, weight: .bold)
 
+    // Card values (§4): the unit is about 55% of its value, same face, secondary colour.
+    public static let cardValue = SparkFonts.display(size: 44, relativeTo: .largeTitle, weight: .bold)
+    public static let cardUnit = SparkFonts.display(size: 24, relativeTo: .title2, weight: .bold)
+    public static let compactValue = SparkFonts.display(size: 24, relativeTo: .title2, weight: .bold)
+    public static let compactUnit = SparkFonts.display(size: 13, relativeTo: .footnote, weight: .bold)
+
     // Backwards-compat aliases used by Phase 1 components.
     public static let displayLarge = heroXL
     public static let display = hero

@@ -22,16 +22,11 @@ public struct DomainChip: View {
             }
         }
 
-        public var tint: Color {
-            switch self {
-            case .health: .red
-            case .activity: .green
-            case .money: .sparkAccent
-            case .media: .purple
-            case .knowledge: .blue
-            case .online: .teal
-            }
-        }
+        /// The domain fill (§3.2), for the glyph and the chip's ground.
+        public var tint: Color { EntityPresentation.tint(domain: rawValue) }
+
+        /// The domain ink (§3.2), for the label on an unselected chip.
+        public var ink: Color { Color.domainInk(for: rawValue) ?? .primary }
     }
 
     let domain: Domain
@@ -45,12 +40,13 @@ public struct DomainChip: View {
     public var body: some View {
         HStack(spacing: SparkSpacing.xs) {
             Image(systemName: domain.icon)
+                .foregroundStyle(isSelected ? Color.white : domain.tint)
             Text(domain.label)
+                .foregroundStyle(isSelected ? Color.white : domain.ink)
         }
         .font(SparkTypography.captionStrong)
         .padding(.horizontal, SparkSpacing.md)
         .padding(.vertical, SparkSpacing.sm)
-        .foregroundStyle(isSelected ? Color.white : domain.tint)
         .sparkGlass(.capsule, tint: isSelected ? domain.tint : domain.tint.opacity(0.15))
     }
 }

@@ -192,9 +192,8 @@ struct KnowledgeItemDetailView: View {
     private func contentCards(for payload: KnowledgeDetailPayload) -> some View {
         let detail = payload.eventDetail
         let blocks = detail.blocks
-        let service = detail.event.service
-        let summaryBlock = summaryBlock(service: service, blocks: blocks)
-        let articleBody = articleBodyContent(payload: payload, service: service, blocks: blocks)
+        let summaryBlock = summaryBlock(blocks: blocks)
+        let articleBody = articleBodyContent(payload: payload, blocks: blocks)
 
         if let summary = summaryText(payload: payload, summaryBlock: summaryBlock, articleBody: articleBody) {
             summaryCallout(summary)
@@ -266,24 +265,7 @@ struct KnowledgeItemDetailView: View {
                 }
             }
         } else {
-            GlassCard {
-                VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                    GlassCardHeader(
-                        icon: "square.stack.3d.up",
-                        tint: .domainKnowledge,
-                        title: displayTitle(for: block),
-                        trailing: displayType(for: block)
-                    )
-                    if let content = nonEmpty(block.content) {
-                        SparkLongFormContentView(text: content, paragraphFont: SparkTypography.longFormBody)
-                    }
-                    if let value = nonEmpty(block.value) {
-                        Text([value, block.unit].compactMap(nonEmpty).joined(separator: " "))
-                            .font(SparkTypography.bodyStrong)
-                            .foregroundStyle(.primary)
-                    }
-                }
-            }
+            BlockCard(block, size: .card, tint: .domainKnowledge)
         }
     }
 
@@ -303,12 +285,12 @@ struct KnowledgeItemDetailView: View {
         return candidates.first { !looksTruncated($0) } ?? candidates.first
     }
 
-    private func summaryBlock(service: String, blocks: [Block]) -> Block? {
+    private func summaryBlock(blocks: [Block]) -> Block? {
         blocks
             .filter { block in
                 !isRawBlock(block)
                     && nonEmpty(block.content) != nil
-                    && isSummaryBlock(block, service: service)
+                    && isSummaryBlock(block)
             }
             .sorted { lhs, rhs in
                 summaryRank(lhs) > summaryRank(rhs)
@@ -316,13 +298,11 @@ struct KnowledgeItemDetailView: View {
             .first
     }
 
-    private func articleBodyContent(payload: KnowledgeDetailPayload, service: String, blocks: [Block]) -> KnowledgeArticleBodyContent? {
+    private func articleBodyContent(payload: KnowledgeDetailPayload, blocks: [Block]) -> KnowledgeArticleBodyContent? {
         if let block = blocks.first(where: { block in
             !isRawBlock(block)
                 && nonEmpty(block.content) != nil
-                && (blockType(block, matches: "\(service)_content")
-                    || blockType(block, matches: "content")
-                    || block.blockType.lowercased().hasSuffix("_content"))
+                && block.kind == .content
         }), let text = nonEmpty(block.content) {
             return KnowledgeArticleBodyContent(text: text, blockID: block.id)
         }
@@ -348,25 +328,15 @@ struct KnowledgeItemDetailView: View {
     }
 
     private func isRawBlock(_ block: Block) -> Bool {
-        block.blockType.localizedCaseInsensitiveContains("raw")
+        block.kind == .raw
     }
 
     private func isKeyTakeawaysBlock(_ block: Block) -> Bool {
-        let type = block.blockType.lowercased()
-        return type == "key_takeaways" || type.hasSuffix("_key_takeaways")
+        block.kind == .takeaways
     }
 
-    private func blockType(_ block: Block, matches expected: String) -> Bool {
-        block.blockType.caseInsensitiveCompare(expected) == .orderedSame
-    }
-
-    private func isSummaryBlock(_ block: Block, service: String) -> Bool {
-        let type = block.blockType.lowercased()
-        return blockType(block, matches: "\(service)_summary_paragraph")
-            || blockType(block, matches: "summary_paragraph")
-            || blockType(block, matches: "paragraph_summary")
-            || type.hasSuffix("_summary_paragraph")
-            || type.contains("summary")
+    private func isSummaryBlock(_ block: Block) -> Bool {
+        block.kind == .aiSummary
     }
 
     private func summaryRank(_ block: Block) -> Int {
@@ -385,16 +355,6 @@ struct KnowledgeItemDetailView: View {
             score += 100
         }
         return score
-    }
-
-    private func displayTitle(for block: Block) -> String {
-        nonEmpty(block.title) ?? displayType(for: block)
-    }
-
-    private func displayType(for block: Block) -> String {
-        block.blockType
-            .replacingOccurrences(of: "_", with: " ")
-            .capitalized
     }
 
     private func nonEmpty(_ text: String?) -> String? {

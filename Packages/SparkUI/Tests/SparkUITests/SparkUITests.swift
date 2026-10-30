@@ -463,3 +463,36 @@ struct StoryProgressBarTests {
         #expect(StoryProgressBar.compactFillFraction(start: 0, segments: 0, currentIndex: 0, segmentProgress: 1) == 0)
     }
 }
+
+#if canImport(UIKit) && os(iOS)
+@Suite("Hero values and domain inks")
+struct HeroColourTests {
+    @Test("hero values take the domain ink in light mode and amber in dark")
+    func heroFollowsTheScheme() {
+        #expect(Self.hex(.sparkHero(domain: "money"), .light) == "664D00")
+        #expect(Self.hex(.sparkHero(domain: "money"), .dark) == "FFBF00")
+        #expect(Self.hex(.sparkHero(domain: "media"), .dark) == "FFBF00")
+        #expect(Self.hex(.sparkHero(domain: "online"), .light) == "244F83")
+    }
+
+    @Test("a card with no domain keeps primary text in light mode")
+    func heroWithoutADomainIsPrimary() {
+        #expect(Self.hex(.sparkHero(domain: nil), .light) == Self.hex(.primary, .light))
+        #expect(Self.hex(.sparkHero(domain: "unknown"), .dark) == "FFBF00")
+    }
+
+    @Test("online has its own tint: ocean in light, sky-3 in dark")
+    func onlineIsOcean() {
+        #expect(Self.hex(EntityPresentation.tint(domain: "online"), .light) == "244F83")
+        #expect(Self.hex(EntityPresentation.tint(domain: "online"), .dark) == "8DB9DD")
+        #expect(Self.hex(DomainChip.Domain.online.ink, .light) == "244F83")
+    }
+
+    private static func hex(_ color: Color, _ style: UIUserInterfaceStyle) -> String {
+        let resolved = UIColor(color).resolvedColor(with: UITraitCollection(userInterfaceStyle: style))
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        resolved.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        return String(format: "%02X%02X%02X", Int((red * 255).rounded()), Int((green * 255).rounded()), Int((blue * 255).rounded()))
+    }
+}
+#endif

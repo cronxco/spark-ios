@@ -215,7 +215,7 @@ struct FlintView: View {
     private func leadingInsight(in digest: FlintDigest?) -> FlintDigestBlock? {
         digest?.blocks.first {
             !$0.isQuestion
-                && !["flint_editorial_note", "flint_day_context", "flint_news", "flint_reading_pick", "flint_reading_drop"].contains($0.blockType)
+                && ![BlockKind.flintEditorialNote, .flintDayContext, .flintNews, .flintReadingPick, .flintReadingDrop].contains($0.kind)
         }
     }
 
@@ -981,7 +981,7 @@ private struct FlintDigestSection: View {
                 SparkLongFormContentView(text: summary, tint: .sparkAccent)
             }
             ForEach(digest.blocks) { block in
-                if block.blockType != "flint_day_context" {
+                if block.kind != .flintDayContext {
                     FlintBlockSurface(
                         block: block,
                         question: viewModel.question(id: block.id),
@@ -1155,7 +1155,7 @@ private struct FlintBlockSurface: View {
                         .foregroundStyle(.secondary)
                 }
             } else if let content = block.content, !content.isEmpty {
-                if block.blockType == "flint_editorial_note" {
+                if block.kind == .flintEditorialNote {
                     DisclosureGroup("Read note", isExpanded: $isEditorialExpanded) {
                         SparkLongFormContentView(text: content, paragraphFont: SparkTypography.longFormBodySmall)
                             .padding(.top, SparkSpacing.sm)
@@ -1176,25 +1176,14 @@ private struct FlintBlockSurface: View {
         .flintCardSurface()
     }
 
+    // A block type Flint doesn't register keeps Flint's own mark rather
+    // than borrowing the generic block glyph.
     private var icon: String {
-        switch block.blockType {
-        case "flint_user_question": "questionmark.circle.fill"
-        case "flint_editorial_note": "pencil.and.scribble"
-        case "flint_health_insight": "heart.fill"
-        case "flint_news": "newspaper.fill"
-        case "flint_reading_pick": "book.fill"
-        case "flint_reading_drop": "trash"
-        default: "sparkles"
-        }
+        block.kind.isFlint ? block.kind.systemImage : "sparkles"
     }
 
     private var tint: Color {
-        switch block.blockType {
-        case "flint_health_insight": .sparkSuccess
-        case "flint_news", "flint_reading_pick": .sparkOcean
-        case "flint_reading_drop": .sparkTextSecondary
-        default: .sparkAccent
-        }
+        block.kind.isFlint ? block.kind.tint : .sparkAccent
     }
 }
 

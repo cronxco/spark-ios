@@ -954,7 +954,7 @@ final class UpToSpeedViewModel {
             return $0.id < $1.id
         }.flatMap { digest in
             digest.blocks.compactMap { block -> FlintDayContext? in
-                guard block.blockType == "flint_day_context", let context = block.dayContext else { return nil }
+                guard block.kind == .flintDayContext, let context = block.dayContext else { return nil }
                 let dated = FlintDayContext(date: context.date ?? digest.date, calendar: context.calendar, birthdays: context.birthdays, weather: context.weather)
                 guard let day = dated.day(in: calendar),
                       calendar.isDate(day, inSameDayAs: now) || calendar.isDate(day, inSameDayAs: tomorrow) else { return nil }
@@ -988,7 +988,7 @@ final class UpToSpeedViewModel {
 
         if let digest {
             let insights = digest.blocks.filter {
-                !$0.isQuestion && $0.blockType != "flint_editorial_note" && $0.blockType != "flint_day_context"
+                !$0.isQuestion && $0.kind != .flintEditorialNote && $0.kind != .flintDayContext
             }
             let questions = digest.blocks.filter { $0.isQuestion }
             for block in insights { pages.append(.flintInsight(item, block)) }
@@ -1054,10 +1054,10 @@ final class UpToSpeedViewModel {
         guard let digest else { return false }
         let contentBlocks = digest.blocks.filter {
             !$0.isQuestion
-                && $0.blockType != "flint_editorial_note"
-                && $0.blockType != "flint_day_context"
+                && $0.kind != .flintEditorialNote
+                && $0.kind != .flintDayContext
         }
-        return !contentBlocks.isEmpty && contentBlocks.allSatisfy { $0.blockType == "flint_news" }
+        return !contentBlocks.isEmpty && contentBlocks.allSatisfy { $0.kind == .flintNews }
     }
 
     private func isReadingListDigest(item: UpToSpeedItem, title: String, digest: FlintDigest?) -> Bool {
@@ -1065,7 +1065,7 @@ final class UpToSpeedViewModel {
 
         let lowered = title.lowercased()
         if lowered.contains("reading list") || lowered.contains("saved to read") { return true }
-        if let digest, digest.blocks.contains(where: { $0.blockType == "flint_reading_pick" }) { return true }
+        if let digest, digest.blocks.contains(where: { $0.kind == .flintReadingPick }) { return true }
         return lowered.contains("reading") && (digest?.blocks.isEmpty ?? true)
     }
 

@@ -360,6 +360,15 @@ For local development, see "Environment Overrides" above to point to `http://loc
 6. **Wire into TodayView**: Import component, render from `@Query var cachedThings`
 7. **Test**: Unit test model, snapshot test component, integration test full flow
 
+### Adding a Block Layout
+
+Blocks are drawn by one view, `BlockCard` (`Packages/SparkUI/Sources/SparkUI/Components/BlockCard.swift`), which picks its layout from `BlockKind` (`Packages/SparkKit/Sources/SparkKit/Models/BlockKind.swift`), parsed once from `block_type`. Don't match substrings of `block_type` in screens.
+
+1. **Add a case** to `BlockKind` and map its `block_type` in `exactTypes` (or a suffix rule).
+2. **Give it a glyph and tint** in `BlockKind+Presentation.swift`.
+3. **Draw it** in `BlockCard` for the sizes it needs: `.compact` (a value tile in a grid), `.row` (a list row with a preview), `.card` (a section with its content and value) and `.full` (the block screen's body). The shared design language (`docs/design-language.md` §7.2) defines them. Screens only decide order and grouping.
+4. **Test** the parsing in `BlockKindTests`.
+
 ### Adding a Widget
 
 1. **Create target**: Add to `Extensions/SparkWidgets/Sources/` folder

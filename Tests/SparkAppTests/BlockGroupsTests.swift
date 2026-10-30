@@ -34,9 +34,13 @@ struct BlockGroupsTests {
         #expect(groups.summaries.isEmpty)
     }
 
-    @Test("previews drop markdown and join lines")
-    func previewIsPlainText() {
-        let block = Block(id: "1", blockType: "note", title: "Note", content: "## Heading\n\n**Bold** line\n- item")
-        #expect(BlockGroups.preview(for: block) == "Heading Bold line - item")
+    @Test("summaries a model didn't write stay as rows")
+    func nonAISummariesAreRows() {
+        let groups = BlockGroups([
+            Block(id: "1", blockType: "receipt_tax_summary", title: "VAT", content: "VAT 20%"),
+            Block(id: "2", blockType: "cluster_summary", title: "Photos", content: "12 photos"),
+        ])
+        #expect(groups.rows.map(\.id) == ["1", "2"])
+        #expect(groups.summaries.isEmpty)
     }
 }

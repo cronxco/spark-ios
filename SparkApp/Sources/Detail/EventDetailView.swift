@@ -446,13 +446,7 @@ struct EventDetailView: View {
             NavigationLink {
                 BlockDetailView(blockId: block.id, parent: loadedEvent)
             } label: {
-                GlassCard(radius: SparkRadii.lg, padding: SparkSpacing.lg) {
-                    VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                        SectionLabel(block.title, style: .dayHeading)
-                        SparkLongFormContentView(text: block.content ?? "", paragraphFont: SparkTypography.body)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                BlockCard(block, size: .card)
             }
             .buttonStyle(.plain)
         }
@@ -496,12 +490,7 @@ struct EventDetailView: View {
                     NavigationLink {
                         BlockDetailView(blockId: block.id, parent: loadedEvent)
                     } label: {
-                        SparkDetailValueTile(
-                            label: block.title,
-                            value: block.value?.sparkPlainTextFromHTMLFragment ?? "",
-                            subtitle: block.unit,
-                            tint: Color.sparkAccent
-                        )
+                        BlockCard(block, size: .compact)
                     }
                     .buttonStyle(.plain)
                 }
@@ -513,7 +502,7 @@ struct EventDetailView: View {
         NavigationLink {
             BlockDetailView(blockId: block.id, parent: loadedEvent)
         } label: {
-            SparkDetailBlockRow(title: block.title, preview: BlockGroups.preview(for: block))
+            BlockCard(block, size: .row)
         }
         .buttonStyle(.plain)
     }
@@ -685,7 +674,9 @@ private struct LinkedEventObject: Identifiable {
     let icon: String
 }
 
-/// Sorts an event's blocks by how the detail screen shows them.
+/// Sorts an event's blocks by how the detail screen shows them. Which
+/// group a block lands in comes from its `BlockKind`; how it looks there is
+/// `BlockCard`'s job.
 struct BlockGroups {
     var takeaways = [Block]()
     var rows = [Block]()
@@ -694,29 +685,18 @@ struct BlockGroups {
 
     init(_ blocks: [Block]) {
         for block in blocks {
-            let type = block.blockType.lowercased()
             if let value = block.value, !value.isEmpty {
                 values.append(block)
-            } else if type.contains("takeaway"), block.content?.isEmpty == false {
+                continue
+            }
+            switch block.kind {
+            case .takeaways where block.content?.isEmpty == false:
                 takeaways.append(block)
-            } else if type.contains("summary") || type.contains("tldr") {
+            case .aiSummary:
                 summaries.append(block)
-            } else {
+            default:
                 rows.append(block)
             }
         }
-    }
-
-    /// The first couple of lines of a block's text, without markup.
-    static func preview(for block: Block) -> String? {
-        guard let content = block.content?.sparkPlainTextFromHTMLFragment else { return nil }
-        let collapsed = content
-            .replacingOccurrences(of: "[#*_>`]", with: "", options: .regularExpression)
-            .split(whereSeparator: \.isNewline)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-        guard !collapsed.isEmpty else { return nil }
-        return collapsed.count > 220 ? String(collapsed.prefix(220)) + "…" : collapsed
     }
 }

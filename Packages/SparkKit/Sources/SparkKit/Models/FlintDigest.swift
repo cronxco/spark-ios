@@ -115,7 +115,7 @@ public struct FlintDigestBlock: Codable, Sendable, Hashable, Identifiable {
     /// Estimated read time in whole minutes, for a reading pick.
     public let minutes: Int?
 
-    public var isQuestion: Bool { blockType == "flint_user_question" }
+    public var isQuestion: Bool { kind == .flintQuestion }
 
     enum CodingKeys: String, CodingKey {
         case id, title, time, content, question, topic, priority, answer, answered, references

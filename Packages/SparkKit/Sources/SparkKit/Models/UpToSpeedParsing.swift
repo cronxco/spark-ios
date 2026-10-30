@@ -57,7 +57,7 @@ public enum UpToSpeedParsing {
         blocks: [FlintDigestBlock],
         summary: String
     ) -> [NewsRoundupSection] {
-        let stories = blocks.filter { $0.blockType == "flint_news" }
+        let stories = blocks.filter { $0.kind == .flintNews }
 
         guard !stories.isEmpty else {
             return newsRoundupSections(from: summary)
@@ -227,7 +227,7 @@ public enum UpToSpeedParsing {
         blocks: [FlintDigestBlock],
         summary: String
     ) -> [ReadingItem] {
-        let picks = blocks.filter { $0.blockType == "flint_reading_pick" }
+        let picks = blocks.filter { $0.kind == .flintReadingPick }
 
         guard !picks.isEmpty else {
             return readingItem(from: summary).map { [$0] } ?? []
