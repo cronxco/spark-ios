@@ -9,6 +9,8 @@ public enum SparkFonts {
     /// Postscript names (what `Font.custom(...)` looks up after registration).
     public static let displayPostScriptName = "Comfortaa"
     public static let monoPostScriptName = "PTMono-Regular"
+    /// Font Awesome Solid, cut down to the glyphs in `icons.json`.
+    public static let iconPostScriptName = "FontAwesome6Free-Solid"
 
     /// Register the bundled fonts with Core Text. Call once at app launch
     /// before any view that depends on them renders. Idempotent.
@@ -16,6 +18,7 @@ public enum SparkFonts {
         guard !hasRegistered else { return }
         register("Comfortaa-VariableFont_wght", ext: "ttf")
         register("PTMono-Regular", ext: "ttf")
+        register("FontAwesome6Free-Solid-Spark", ext: "ttf")
         hasRegistered = true
     }
 
@@ -40,6 +43,12 @@ public enum SparkFonts {
     /// PT Mono at the given style. Good for timestamps, IDs, hex codes.
     public static func mono(_ style: Font.TextStyle = .footnote) -> Font {
         Font.custom(monoPostScriptName, size: pointSize(for: style), relativeTo: style)
+    }
+
+    /// The Font Awesome face at a design size that scales with Dynamic Type
+    /// against `style`, so a glyph keeps pace with the text beside it.
+    public static func icon(size: CGFloat, relativeTo style: Font.TextStyle = .body) -> Font {
+        Font.custom(iconPostScriptName, size: size, relativeTo: style)
     }
 
     // MARK: - Private
