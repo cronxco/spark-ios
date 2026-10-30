@@ -131,20 +131,31 @@ public struct TagChip: View {
         }
     }
 
+    /// An outline pill (`docs/design-language.md` section 7.5): border and
+    /// text in the tag type's role colour, no fill, with the type's glyph at
+    /// 70%. Text takes the role's ink so it clears 4.5:1 in light mode.
     @ViewBuilder
     private func typedBody(tag: EventTag, onTap: (() -> Void)?) -> some View {
-        let tint = tag.tagTint
-        let chip = Text(tag.name)
-            .font(SparkTypography.captionStrong)
-            .foregroundStyle(tint)
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .frame(maxWidth: 160, alignment: .leading)
-            .padding(.horizontal, SparkSpacing.md - 2)
-            .padding(.vertical, SparkSpacing.xs + 1)
-            .sparkGlass(.capsule, tint: tint.opacity(0.15))
-            .accessibilityLabel(accessibilityLabel(for: tag))
-            .accessibilityAddTraits(onTap != nil ? .isButton : [])
+        let role = SparkRole.forTagType(tag.type)
+        let chip = HStack(spacing: SparkSpacing.xs) {
+            SparkGlyph(Self.icon(forType: tag.type), size: 10, relativeTo: .caption)
+                .opacity(0.7)
+            Text(tag.name)
+                .font(SparkTypography.caption.weight(.medium))
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .foregroundStyle(role.ink)
+        .frame(maxWidth: 160, alignment: .leading)
+        .padding(.horizontal, SparkSpacing.sm)
+        .padding(.vertical, SparkSpacing.xxs)
+        .overlay {
+            Capsule().strokeBorder(role.fill, lineWidth: 1)
+        }
+        .contentShape(.capsule)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel(for: tag))
+        .accessibilityAddTraits(onTap != nil ? .isButton : [])
 
         if let onTap {
             Button(action: onTap) { chip }
@@ -152,6 +163,14 @@ public struct TagChip: View {
         } else {
             chip
         }
+    }
+
+    private static func icon(forType type: String?) -> SparkIcon {
+        let type = (type ?? "").lowercased()
+        if type.contains("artist") { return .artist }
+        if type.contains("album") { return .album }
+        if type.contains("person") { return .person }
+        return .tag
     }
 
     private func accessibilityLabel(for tag: EventTag) -> String {

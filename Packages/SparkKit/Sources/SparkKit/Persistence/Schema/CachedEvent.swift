@@ -84,16 +84,32 @@ public final class CachedEvent {
 }
 
 public extension CachedEvent {
-    var decodedTagNames: [String] {
+    /// The event's tags. Each is stored as its name and type split by U+1E,
+    /// and tags are split by U+1F, so the store needs no schema change.
+    /// Rows written before types were kept decode with no type.
+    var decodedTags: [EventTag] {
         guard let tagNames else { return [] }
         return tagNames
             .split(separator: "\u{1F}")
-            .map(String.init)
-            .filter { !$0.isEmpty }
+            .compactMap { entry in
+                let parts = entry.split(separator: "\u{1E}", maxSplits: 1, omittingEmptySubsequences: false)
+                guard let name = parts.first.map(String.init), !name.isEmpty else { return nil }
+                let type = parts.count > 1 ? String(parts[1]) : ""
+                return EventTag(name: name, type: type.isEmpty ? nil : type)
+            }
+    }
+
+    var decodedTagNames: [String] {
+        decodedTags.map(\.name)
     }
 
     static func encodeTagNames(_ tags: [EventTag]) -> String? {
-        let names = tags.map(\.name).filter { !$0.isEmpty }
-        return names.isEmpty ? nil : names.joined(separator: "\u{1F}")
+        let entries = tags
+            .filter { !$0.name.isEmpty }
+            .map { tag in
+                guard let type = tag.type, !type.isEmpty else { return tag.name }
+                return "\(tag.name)\u{1E}\(type)"
+            }
+        return entries.isEmpty ? nil : entries.joined(separator: "\u{1F}")
     }
 }
