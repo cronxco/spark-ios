@@ -147,7 +147,7 @@ private enum TimelineEntry: Identifiable {
 /// timeline by `FeedSection`; this places a row's node on it, masked by the
 /// page colour so the line appears to pass behind.
 private struct SpineColumn<Node: View>: View {
-    static var width: CGFloat { 26 }
+    static var width: CGFloat { 30 }
 
     @ViewBuilder var node: () -> Node
 
@@ -161,21 +161,23 @@ private struct TimelineHourMarker: View {
     let hour: Int
 
     var body: some View {
-        HStack(alignment: .top, spacing: SparkSpacing.md) {
+        HStack(alignment: .center, spacing: SparkSpacing.md) {
             SpineColumn {
-                Text(String(format: "%02d", hour))
-                    .font(SparkTypography.caption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .frame(width: 22, height: 22)
+                Circle()
+                    .fill(Color.secondary.opacity(0.5))
+                    .frame(width: 7, height: 7)
+                    .padding(3)
                     .background(Color.sparkSurface, in: .circle)
-                    .overlay { Circle().stroke(Color.primary.opacity(0.13), lineWidth: 1) }
-                    .offset(y: 4)
             }
+            Text(String(format: "%02d:00", hour))
+                .font(SparkTypography.captionStrong)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
             Spacer(minLength: 0)
         }
-        .frame(height: 42)
-        .accessibilityLabel("\(hour) hundred hours")
+        .frame(height: 30)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String(format: "%02d:00", hour))
     }
 }
 
@@ -228,96 +230,76 @@ private struct TimelineRow: View {
         HStack(alignment: .top, spacing: SparkSpacing.md) {
             SpineColumn {
                 if !isChild {
-                    Image(systemName: domainIcon(event.domain))
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color.domainTint(for: event.domain))
-                        .frame(width: 26, height: 26)
-                        .background(Color.sparkSurface, in: .circle)
-                        .overlay {
-                            Circle().stroke(
-                                Color.domainTint(for: event.domain).opacity(0.35),
-                                lineWidth: 1.5
-                            )
-                        }
-                        .offset(y: 2)
+                    DomainGlyph(
+                        SparkIcon.domain(event.domain),
+                        tint: EntityPresentation.tint(domain: event.domain),
+                        size: 30,
+                        backing: .sparkSurface
+                    )
                 }
             }
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: SparkSpacing.xs) {
                 sentence
                 meta
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 3)
-            .padding(.bottom, SparkSpacing.sm)
+            .padding(.top, 4)
 
             if let value = signedValue(for: event) {
                 Text(value)
                     .font(SparkFonts.display(.body, weight: .bold))
                     .foregroundStyle(.primary)
+                    .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
-                    .padding(.top, 4)
+                    .padding(.top, 5)
             }
         }
+        .padding(.vertical, SparkSpacing.sm)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
     }
 
-    /// "Paid Brother Marcus + 2 others" — the action in ink, its object in the
-    /// link colour, the surplus count quiet.
-    ///
-    /// Built by interpolating styled `Text` into `Text`: concatenating with
-    /// `+` is deprecated on this SDK, and warnings are errors.
-    private var sentence: Text {
-        var line = Text(actionTitle(for: event)).fontWeight(.semibold)
-        if event.displayWithObject,
-           let target = event.targetTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !target.isEmpty {
-            let object = Text(target)
-                .fontWeight(.semibold)
-                .foregroundStyle(Color.sparkOcean)
-            line = Text("\(line) \(object)")
-        }
-        if surplus > 0 {
-            let others = "+ \(surplus) other" + (surplus == 1 ? "" : "s")
-            let more = Text(others).foregroundStyle(Color.secondary)
-            line = Text("\(line) \(more)")
-        }
-        return line
-    }
-
-    @ViewBuilder
-    private var meta: some View {
-        HStack(spacing: 4) {
-            // Relative only. The absolute time is on the event's own screen,
-            // one tap away, and in this row's accessible name.
-            if let time = event.time {
-                Text(Self.relative.localizedString(for: time, relativeTo: .now))
-                    .font(SparkTypography.caption)
+    /// "Paid [Brother Marcus] + 2 others": the action, its object as a
+    /// reference pill showing the title only (`docs/design-language.md`
+    /// section 7.5), and the surplus count quiet.
+    private var sentence: some View {
+        FlowLayout(spacing: SparkSpacing.xs) {
+            Text(actionTitle(for: event))
+                .font(SparkTypography.body)
+                .foregroundStyle(.primary)
+            if event.displayWithObject,
+               let target = event.targetTitle?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty {
+                ObjectRefPill(title: target, type: event.targetType)
+            }
+            if surplus > 0 {
+                Text("+ \(surplus) other" + (surplus == 1 ? "" : "s"))
+                    .font(SparkTypography.body)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    /// The time (relative, exact on a tap), the actor, and every tag as an
+    /// outline pill. No dividers between them: the spacing separates.
+    private var meta: some View {
+        FlowLayout(spacing: SparkSpacing.sm) {
+            if let time = event.time {
+                SparkTimeText(time)
+            }
             if let source = metaLine(for: event).nilIfEmpty {
-                Text("·").font(SparkTypography.caption).foregroundStyle(.tertiary)
                 Text(source)
                     .font(SparkTypography.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .frame(maxWidth: 180, alignment: .leading)
             }
-            ForEach(event.decodedTagNames.prefix(2), id: \.self) { tag in
-                Text("·").font(SparkTypography.caption).foregroundStyle(.tertiary)
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(Color.sparkTagTopic)
-                        .frame(width: 5, height: 5)
-                    Text(tag)
-                        .font(SparkTypography.caption)
-                        .foregroundStyle(.secondary)
-                }
+            ForEach(event.decodedTags) { tag in
+                TagChip(tag)
             }
         }
-        .lineLimit(1)
     }
 
     private var accessibilityLabel: String {
@@ -325,21 +307,55 @@ private struct TimelineRow: View {
         if surplus > 0 { parts.append("and \(surplus) more") }
         if let time = event.time { parts.append(Self.absolute.string(from: time)) }
         if let value = signedValue(for: event) { parts.append(value) }
+        let tags = event.decodedTagNames
+        if !tags.isEmpty { parts.append("tagged " + tags.joined(separator: ", ")) }
         return parts.joined(separator: ", ")
     }
 
-    private static let relative: RelativeDateTimeFormatter = {
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .full
-        return f
-    }()
-
     private static let absolute: DateFormatter = {
         let f = DateFormatter()
-        f.timeStyle = .short
-        f.dateStyle = .none
+        f.locale = Locale(identifier: "en_GB")
+        f.dateFormat = "HH:mm"
         return f
     }()
+}
+
+/// An object reference: the title only, in its concept's role colour, on a
+/// 10% fill with a 20% border. Text takes the role's ink.
+private struct ObjectRefPill: View {
+    let title: String
+    let type: String?
+
+    var body: some View {
+        let role = SparkRole.forObjectType(type)
+        HStack(spacing: SparkSpacing.xs) {
+            SparkGlyph(Self.icon(forType: type), size: 11, relativeTo: .subheadline)
+                .opacity(0.8)
+            Text(title)
+                .font(SparkTypography.bodySmall.weight(.medium))
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .foregroundStyle(role.ink)
+        .padding(.horizontal, SparkSpacing.sm)
+        .padding(.vertical, 2)
+        .frame(maxWidth: 220, alignment: .leading)
+        .background(role.fill.opacity(0.10), in: .capsule)
+        .overlay { Capsule().strokeBorder(role.fill.opacity(0.20), lineWidth: 1) }
+    }
+
+    private static func icon(forType type: String?) -> SparkIcon {
+        let type = (type ?? "").lowercased()
+        if type.contains("person") || type.contains("user") || type.contains("contact") { return .person }
+        if type.contains("album") { return .album }
+        if type.contains("artist") { return .artist }
+        if type.contains("track") || type.contains("song") || type.contains("episode") { return .track }
+        if type.contains("book") && !type.contains("bookmark") { return .book }
+        if type.contains("article") || type.contains("bookmark") || type.contains("document") { return .article }
+        if type.contains("account") || type.contains("merchant") || type.contains("money") { return .payment }
+        if type.contains("place") || type.contains("location") { return .place }
+        return .link
+    }
 }
 
 /// Money moving out takes a minus and money coming in a plus, so direction is
@@ -445,10 +461,6 @@ private struct TimelineFilterPill: View {
 
 // MARK: - Helpers
 
-private func titledWithSurplus(_ title: String, surplus: Int) -> String {
-    surplus > 0 ? "\(title) + \(surplus) others" : title
-}
-
 private func metaLine(for event: CachedEvent) -> String {
     if isBalanceSnapshot(event), event.targetTitle?.isISODateString == true {
         return event.action.sparkActionTitle
@@ -507,23 +519,6 @@ private func formattedValue(_ v: String, unit: String?) -> String {
         }
     }
     return "\(plainValue) \(u)"
-}
-
-private func shortTime(_ date: Date) -> String {
-    let f = DateFormatter()
-    f.dateFormat = "HH:mm"
-    return f.string(from: date)
-}
-
-private func domainIcon(_ domain: String) -> String {
-    switch domain {
-    case "health": return "moon.zzz.fill"
-    case "activity": return "figure.walk"
-    case "money": return "creditcard.fill"
-    case "media": return "music.note"
-    case "knowledge": return "book.fill"
-    default: return "bolt.fill"
-    }
 }
 
 private extension String {

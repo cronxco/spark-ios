@@ -56,8 +56,8 @@ struct ThreadsStrip: View {
                     }
                     .scrollTargetBehavior(.viewAligned)
                     .scrollIndicators(.hidden)
-                    // Keep the card corners, shadows and adjacent-card peek
-                    // visible beyond the horizontal scroll viewport.
+                    // Keep the adjacent-card peek visible beyond the
+                    // horizontal scroll viewport.
                     .scrollClipDisabled()
                     .scrollDisabled(active.count <= 1)
                 }
@@ -79,14 +79,12 @@ struct ThreadsStrip: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                 Spacer(minLength: SparkSpacing.sm)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.tertiary)
+                SparkGlyph(.forward, size: 10, relativeTo: .caption)
+                    .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, SparkSpacing.md)
-            .padding(.vertical, SparkSpacing.sm)
+            .padding(.horizontal, SparkSpacing.xs)
             .frame(maxWidth: .infinity, minHeight: 44)
-            .sparkGlass(.capsule)
+            .contentShape(.rect)
         }
         .buttonStyle(.plain)
     }
@@ -94,7 +92,7 @@ struct ThreadsStrip: View {
     private var dormantSummary: String {
         let count = "\(dormant.count) dormant"
         guard let next = nextDormant?.nextReviewAt, next >= .now else { return count }
-        return "\(count) · next review \(Self.reviewDate.string(from: next))"
+        return "\(count), next review \(Self.reviewDate.string(from: next))"
     }
 
     private static let reviewDate: DateFormatter = {
@@ -109,15 +107,10 @@ private struct ThreadCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.xs) {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(Self.tint(for: topic.kind))
-                    .frame(width: 6, height: 6)
-                Text(topic.kind?.rawValue ?? "thread")
-                    .font(SparkTypography.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
+            Text(Self.kindLabel(topic.kind))
+                .font(SparkTypography.captionStrong)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
 
             Text(topic.title)
                 .font(SparkTypography.bodyStrong)
@@ -135,17 +128,14 @@ private struct ThreadCard: View {
         }
         .padding(SparkSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .sparkGlass(.roundedRect(SparkRadii.md))
+        .sparkContentSurface(radius: SparkRadii.md)
         .accessibilityElement(children: .combine)
         .accessibilityHint("Opens the thread")
     }
 
-    private static func tint(for kind: FlintTopicKind?) -> Color {
-        switch kind {
-        case .strategic: .sparkTagPerson
-        case .thematic: .domainActivity
-        case .tactical: .domainKnowledge
-        case nil: .secondary
-        }
+    /// The kind in sentence case, as the card's eyebrow.
+    private static func kindLabel(_ kind: FlintTopicKind?) -> String {
+        guard let raw = kind?.rawValue, let first = raw.first else { return "Thread" }
+        return first.uppercased() + raw.dropFirst()
     }
 }

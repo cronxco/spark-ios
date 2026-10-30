@@ -12,15 +12,14 @@ struct TomorrowGlanceCard: View {
     var body: some View {
         Button(action: onOpen) {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                HStack {
+                HStack(spacing: SparkSpacing.xs + 2) {
+                    SparkGlyph(.calendarEvent, size: 12, relativeTo: .caption)
                     Text("Tomorrow at a glance")
                         .font(SparkTypography.captionStrong)
-                        .foregroundStyle(.secondary)
                     Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(SparkTypography.caption)
-                        .foregroundStyle(.tertiary)
+                    SparkGlyph(.forward, size: 11, relativeTo: .caption)
                 }
+                .foregroundStyle(.secondary)
 
                 Text(ahead.headline)
                     .font(SparkTypography.body)
@@ -29,17 +28,28 @@ struct TomorrowGlanceCard: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 if let bedBy = ahead.sleepTarget?.bedByDate {
-                    Label("In bed by \(bedBy.formatted(date: .omitted, time: .shortened))", systemImage: "bed.double.fill")
-                        .font(SparkTypography.captionStrong)
-                        .foregroundStyle(Color.sparkOcean)
+                    HStack(spacing: SparkSpacing.sm) {
+                        SparkGlyph(.bedtime, size: 14, relativeTo: .caption)
+                            .foregroundStyle(Color.domainHealth)
+                        Text("In bed by \(Self.time.string(from: bedBy))")
+                            .font(SparkTypography.captionStrong)
+                            .foregroundStyle(.primary)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(SparkSpacing.lg)
-            .sparkGlass(.roundedRect(SparkRadii.lg))
+            .sparkContentSurface(radius: SparkRadii.lg)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Tomorrow at a glance. \(ahead.headline)")
         .accessibilityHint("Opens tomorrow")
     }
+
+    private static let time: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_GB")
+        f.dateFormat = "HH:mm"
+        return f
+    }()
 }

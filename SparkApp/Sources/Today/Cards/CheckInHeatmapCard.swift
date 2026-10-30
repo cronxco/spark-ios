@@ -2,25 +2,31 @@ import SparkKit
 import SparkUI
 import SwiftUI
 
+/// The last 28 days of check-ins. Opens the history.
 struct CheckInHeatmapCard: View {
     let historyVM: CheckInHistoryViewModel?
     @Binding var showHistory: Bool
 
     var body: some View {
-        GlassCard {
+        Button {
+            showHistory = true
+        } label: {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                HStack {
-                    SectionLabel("Last 28 days")
+                HStack(spacing: SparkSpacing.sm) {
+                    Text("Last 28 days")
+                        .font(SparkTypography.captionStrong)
                     Spacer()
                     Text("\(completedDayCount) logged")
                         .font(SparkTypography.caption)
-                        .foregroundStyle(.secondary)
+                    SparkGlyph(.forward, size: 10, relativeTo: .caption)
                 }
+                .foregroundStyle(.secondary)
                 CheckInHeatmap(days: heatmapDays)
             }
+            .contentShape(.rect)
         }
-        .contentShape(Rectangle())
-        .onTapGesture { showHistory = true }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens your check-in history")
     }
 
     private var completedDayCount: Int {
