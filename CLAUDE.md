@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Key Principles
 
 - **Native Swift everywhere**: SwiftUI, SwiftData, ActivityKit, WidgetKit, App Intents, HealthKit. No WebViews except OAuth.
-- **Liquid Glass UI**: iOS 26 visual design system throughout, using native materials and depth.
+- **Liquid Glass for controls**: iOS 26 Liquid Glass floats navigation and controls; content sits on opaque surfaces (see `docs/design-language.md` sections 1 and 5.3).
 - **Offline-ready with background sync**: SwiftData is the local source of truth. Silent push + `BGAppRefreshTask` keep data fresh.
 - **Ambient computing**: Widgets, StandBy, Dynamic Island, complications mean the app is visible without opening it.
 
@@ -267,6 +267,7 @@ All targets using the same schema must depend on `SparkKit` package (enforced by
 | `Packages/SparkKit/Sources/SparkKit/Auth/AuthenticationService.swift` | OAuth flow orchestration |
 | `Packages/SparkKit/Sources/SparkKit/Persistence/SparkDataStore.swift` | SwiftData container factory |
 | `Packages/SparkKit/Sources/SparkKit/Sync/DeltaApplier.swift` | Applies `/sync/delta` responses to SwiftData |
+| `docs/design-language.md` | Shared web + iOS design language: colour roles, domain tints, glyphs, card anatomy, block/event patterns. Follow it for all UI work |
 | `Packages/SparkUI/Sources/SparkUI/Theme/` | Design tokens split across `Color+Spark.swift`, `Typography.swift`, `Spacing.swift`, `Radii.swift` |
 | `Packages/SparkUI/Sources/SparkUI/Materials/LiquidGlass.swift` | Liquid Glass effect modifiers |
 | `Project.swift` | Tuist project definition (targets, dependencies, schemes) |
