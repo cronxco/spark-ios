@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Key Principles
 
 - **Native Swift everywhere**: SwiftUI, SwiftData, ActivityKit, WidgetKit, App Intents, HealthKit. No WebViews except OAuth.
-- **Liquid Glass for controls**: iOS 26 Liquid Glass floats navigation and controls; content sits on opaque surfaces (see `docs/design-language.md` §1 and §5.3).
+- **Liquid Glass for controls**: iOS 26 Liquid Glass floats navigation and controls; content sits on opaque surfaces (see `docs/design-language.md` sections 1 and 5.3).
 - **Offline-ready with background sync**: SwiftData is the local source of truth. Silent push + `BGAppRefreshTask` keep data fresh.
 - **Ambient computing**: Widgets, StandBy, Dynamic Island, complications mean the app is visible without opening it.
 
