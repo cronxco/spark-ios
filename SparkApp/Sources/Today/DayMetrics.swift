@@ -74,7 +74,7 @@ struct MetricReading: Sendable, Hashable {
         // "0 steps" or "£0.00": the difference rounds away at the precision
         // shown, so it reads as on trend rather than "0 above".
         let digits = text.filter(\.isNumber)
-        if difference == 0 || (!digits.isEmpty && digits.allSatisfy { $0 == "0" }) {
+        if difference == 0 || (!digits.isEmpty && digits.allSatisfy { $0.wholeNumberValue == 0 }) {
             return MetricComparison(direction: .steady, text: "On \(window) trend", isGood: nil)
         }
         let isUp = difference > 0

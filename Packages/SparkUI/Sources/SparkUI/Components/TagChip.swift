@@ -288,7 +288,7 @@ public struct FlowLayout: Layout {
         var totalWidth: CGFloat = 0
 
         for subview in subviews {
-            let size = subview.sizeThatFits(Self.proposal(maxWidth))
+            let size = Self.size(of: subview, lineWidth: maxWidth)
             if origin.x + size.width > maxWidth, origin.x > 0 {
                 origin.x = 0
                 origin.y += lineHeight + spacing
@@ -308,7 +308,7 @@ public struct FlowLayout: Layout {
         var lineHeight: CGFloat = 0
 
         for subview in subviews {
-            let size = subview.sizeThatFits(Self.proposal(maxWidth))
+            let size = Self.size(of: subview, lineWidth: maxWidth)
             if origin.x + size.width > bounds.maxX, origin.x > bounds.origin.x {
                 origin.x = bounds.origin.x
                 origin.y += lineHeight + spacing
@@ -320,9 +320,12 @@ public struct FlowLayout: Layout {
         }
     }
 
-    /// Each item gets its ideal size, but no wider than a line, so a long
-    /// text wraps inside the line instead of running past it.
-    private static func proposal(_ maxWidth: CGFloat) -> ProposedViewSize {
-        maxWidth.isFinite ? ProposedViewSize(width: maxWidth, height: nil) : .unspecified
+    /// Each item gets its ideal size. Only one wider than a line is offered
+    /// the line's width, so a long text wraps inside it; offering every item
+    /// the line would stretch anything with a flexible frame to fill it.
+    private static func size(of subview: LayoutSubview, lineWidth: CGFloat) -> CGSize {
+        let ideal = subview.sizeThatFits(.unspecified)
+        guard lineWidth.isFinite, ideal.width > lineWidth else { return ideal }
+        return subview.sizeThatFits(ProposedViewSize(width: lineWidth, height: nil))
     }
 }
