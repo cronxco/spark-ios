@@ -48,7 +48,7 @@ struct FlintQuestionStack: View {
                 .scrollTargetBehavior(.viewAligned)
                 .scrollPosition(id: $visibleQuestionID)
                 .scrollIndicators(.hidden)
-                // Glass shadows and the next-card peek should not end at the
+                // The next-card peek should not end at the
                 // scroll view's rectangular content bounds.
                 .scrollClipDisabled()
                 .scrollDisabled(!isPaged)
@@ -82,23 +82,28 @@ private struct FlintQuestionCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+            HStack(spacing: SparkSpacing.xs) {
+                SparkGlyph(.flint, size: 13, relativeTo: .caption)
+                Text("Flint asks")
+                    .font(SparkTypography.captionStrong)
+                Spacer(minLength: SparkSpacing.sm)
+                if let asked = question.askedAt {
+                    SparkTimeText(asked)
+                }
+            }
+            .foregroundStyle(.secondary)
+
             // The short label the question carries as a digest block, so the
             // card can be recognised before its full text is read.
             if let title = question.title, !title.isEmpty, title != question.question {
                 Text(title)
-                    .font(SparkTypography.captionStrong)
+                    .font(SparkTypography.bodyStrong)
                     .foregroundStyle(.primary)
                     .lineLimit(2)
             }
 
-            if let asked = question.askedAt {
-                Text(Self.relative.localizedString(for: asked, relativeTo: .now))
-                    .font(SparkTypography.caption)
-                    .foregroundStyle(.tertiary)
-            }
-
             Text(question.question)
-                .font(SparkTypography.bodySmall)
+                .font(SparkTypography.body)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -109,35 +114,25 @@ private struct FlintQuestionCard: View {
                 options
             }
         }
-        .padding(SparkSpacing.md)
+        .padding(SparkSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        // The amber tint is what says Flint is asking; it replaces the glyph
-        // and the "needs you" badge this card used to carry.
-        .sparkGlass(.roundedRect(SparkRadii.lg), tint: Color.sparkAccent.opacity(0.09))
-        .overlay {
-            RoundedRectangle(cornerRadius: SparkRadii.lg)
-                .stroke(Color.sparkAccent.opacity(0.30), lineWidth: 1)
-        }
+        // Flint's own words sit on the generated surface (section 3.5); the
+        // surface is what says Flint is asking.
+        .sparkGeneratedSurface(radius: SparkRadii.lg)
     }
 
     private func answered(_ answer: String) -> some View {
-        HStack(alignment: .top, spacing: SparkSpacing.sm) {
-            Image(systemName: "checkmark")
-                .font(.system(size: 11, weight: .bold))
+        HStack(spacing: SparkSpacing.sm) {
+            SparkGlyph(.success, size: 13)
                 .foregroundStyle(Color.sparkSuccess)
-            Text(answer)
-                .font(SparkTypography.caption)
+            Text("You said \u{201C}\(answer)\u{201D}")
+                .font(SparkTypography.bodySmall)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, SparkSpacing.md)
-        .padding(.vertical, SparkSpacing.sm)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.sparkSuccess.opacity(0.14), in: .rect(cornerRadius: SparkRadii.sm))
-        .overlay {
-            RoundedRectangle(cornerRadius: SparkRadii.sm)
-                .stroke(Color.sparkSuccess.opacity(0.32), lineWidth: 1)
-        }
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .background(Color.sparkSurface, in: .rect(cornerRadius: SparkRadii.md))
     }
 
     @ViewBuilder
@@ -158,10 +153,7 @@ private struct FlintQuestionCard: View {
                             .lineLimit(2)
                             .frame(maxWidth: .infinity, minHeight: 44)
                             .padding(.horizontal, SparkSpacing.md)
-                            .background(Color.sparkElevated.opacity(0.88), in: .capsule)
-                            .overlay {
-                                Capsule().stroke(Color.primary.opacity(0.14), lineWidth: 1)
-                            }
+                            .background(Color.sparkSurface, in: .capsule)
                     }
                     .buttonStyle(.plain)
                 }
@@ -175,18 +167,9 @@ private struct FlintQuestionCard: View {
                     .foregroundStyle(.primary)
                     .frame(minHeight: 44)
                     .padding(.horizontal, SparkSpacing.lg)
-                    .background(Color.sparkElevated.opacity(0.88), in: .capsule)
-                    .overlay {
-                        Capsule().stroke(Color.primary.opacity(0.14), lineWidth: 1)
-                    }
+                    .background(Color.sparkSurface, in: .capsule)
             }
             .buttonStyle(.plain)
         }
     }
-
-    private static let relative: RelativeDateTimeFormatter = {
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .full
-        return f
-    }()
 }

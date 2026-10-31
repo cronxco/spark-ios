@@ -369,6 +369,14 @@ Blocks are drawn by one view, `BlockCard` (`Packages/SparkUI/Sources/SparkUI/Com
 3. **Draw it** in `BlockCard` for the sizes it needs: `.compact` (a value tile in a grid), `.row` (a list row with a preview), `.card` (a section with its content and value) and `.full` (the block screen's body). The shared design language (`docs/design-language.md` §7.2) defines them. Screens only decide order and grouping.
 4. **Test** the parsing in `BlockKindTests`.
 
+### Adding an Icon
+
+Icons are Font Awesome Free 6 Solid, bundled as a subset font in SparkUI. Screens name a concept (`SparkIcon.sleep`), never a Font Awesome name.
+
+1. **Map the concept** in `Packages/SparkUI/icons.json` to a Font Awesome icon name.
+2. **Regenerate**: `scripts/build-icons.py <path to an unpacked @fortawesome/fontawesome-free 6.7.2 package>`. It rewrites the subset font and `Theme/SparkIcon.swift`. Needs `fonttools` (`pip install fonttools`).
+3. **Draw it** with `SparkGlyph(.concept)` beside text, or `DomainGlyph(.concept, tint:)` for a glyph chip.
+
 ### Adding a Widget
 
 1. **Create target**: Add to `Extensions/SparkWidgets/Sources/` folder

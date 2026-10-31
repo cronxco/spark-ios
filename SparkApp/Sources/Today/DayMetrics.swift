@@ -51,6 +51,40 @@ struct MetricReading: Sendable, Hashable {
         BarGeometry(fill: value / 100, baseline: baseline.map { $0 / 100 })
     }
 
+    /// The against-the-mean bar (`docs/design-language.md` section 8): the
+    /// track runs to 1.5× the baseline, so the mean marker always sits two
+    /// thirds along and today reads against it.
+    var meanBar: BarGeometry {
+        guard let baseline, baseline > 0 else { return .empty }
+        let track = baseline * 1.5
+        return BarGeometry(fill: min(1, max(0, value / track)), baseline: baseline / track)
+    }
+
+    /// The comparison line (section 3.4): arrow, amount with its unit,
+    /// direction word, baseline window. `amount` formats the absolute
+    /// difference; a difference that formats to nothing reads as on trend.
+    func comparison(
+        higherIsBetter: Bool,
+        window: String,
+        amount: (Double) -> String
+    ) -> MetricComparison? {
+        guard let baseline else { return nil }
+        let difference = value - baseline
+        let text = amount(abs(difference))
+        // "0 steps" or "£0.00": the difference rounds away at the precision
+        // shown, so it reads as on trend rather than "0 above".
+        let digits = text.filter(\.isNumber)
+        if difference == 0 || (!digits.isEmpty && digits.allSatisfy { $0.wholeNumberValue == 0 }) {
+            return MetricComparison(direction: .steady, text: "On \(window) trend", isGood: nil)
+        }
+        let isUp = difference > 0
+        return MetricComparison(
+            direction: isUp ? .up : .down,
+            text: "\(text) \(isUp ? "above" : "below") \(window) trend",
+            isGood: isUp == higherIsBetter
+        )
+    }
+
     /// An open-ended quantity has no natural ceiling, so the scale is set by
     /// whichever of today and the baseline is larger, with headroom so a big
     /// overshoot still reads as an overshoot rather than a full bar.
@@ -69,6 +103,16 @@ struct BarGeometry: Sendable, Hashable {
     let baseline: Double?
 
     static let empty = BarGeometry(fill: nil, baseline: nil)
+}
+
+/// One comparison line. `direction` is nil for a line with no arrow, such as
+/// "So far today"; `isGood` is nil for a change inside the usual range.
+struct MetricComparison: Sendable, Hashable {
+    enum Direction: Sendable, Hashable { case up, down, steady }
+
+    let direction: Direction?
+    let text: String
+    let isGood: Bool?
 }
 
 /// What the money card can say beyond the day's spend. None of it comes from
@@ -95,12 +139,39 @@ struct DayMetrics: Sendable {
         let isFlagged: Bool
         let primary: BaselineMetricCard.Supporting
         let secondary: BaselineMetricCard.Supporting
+
+        // How the Day tab draws it: a compact card (section 7.2) with the
+        // reading as a ring when it is a score out of 100, otherwise as a
+        // value over an against-the-mean bar, and one comparison line.
+        var icon: SparkIcon = .score
+        var domain = "health"
+        var isScore = false
+        var unit: String?
+        var meanBar: BarGeometry = .empty
+        var comparison: MetricComparison?
+
+        /// The score as a share of 100, for the ring.
+        var scoreFraction: Double? {
+            guard isScore, case .value(let text, _) = reading, let score = Double(text) else { return nil }
+            return score / 100
+        }
+
+        var accessibilityLabel: String {
+            switch reading {
+            case .waiting(let reason):
+                return "\(label), \(reason)"
+            case .value(let text, _):
+                var parts = [label, isScore ? "\(text) out of 100" : [text, unit].compactMap { $0 }.joined(separator: " ")]
+                if let comparison { parts.append(comparison.text) }
+                return parts.joined(separator: ", ")
+            }
+        }
     }
 
     let cards: [Card]
 
 
-    init(summary: DaySummary?, money: MoneyContext = .empty) {
+    init(summary: DaySummary?, money: MoneyContext = .empty, isToday: Bool = false) {
         let health = summary?.sections.health?.objectValue
         let activity = summary?.sections.activity?.objectValue
         let moneySection = summary?.sections.money?.objectValue
@@ -113,7 +184,7 @@ struct DayMetrics: Sendable {
 
         cards = [
             Self.sleepCard(health),
-            Self.activityCard(health: health, activity: activity, isBehind: activityIsBehind),
+            Self.activityCard(health: health, activity: activity, isBehind: activityIsBehind, isToday: isToday),
             Self.readinessCard(health: health, activity: activity),
             Self.moneyCard(moneySection, context: money),
         ]
@@ -143,7 +214,7 @@ struct DayMetrics: Sendable {
             reading = .waiting("Waiting on Oura")
         }
 
-        return Card(
+        var card = Card(
             id: "sleep",
             label: "Sleep",
             tint: .domainHealth,
@@ -159,12 +230,18 @@ struct DayMetrics: Sendable {
                 ?? efficiencyRating.map { BaselineMetricCard.Supporting("Efficiency", "\($0)") }
                 ?? BaselineMetricCard.Supporting("REM", rem.map { "\($0)" })
         )
+        card.icon = .sleep
+        card.domain = "health"
+        card.isScore = true
+        card.comparison = score?.comparison(higherIsBetter: true, window: Self.metricWindow, amount: Self.whole)
+        return card
     }
 
     private static func activityCard(
         health: [String: AnyCodable]?,
         activity: [String: AnyCodable]?,
-        isBehind: Bool
+        isBehind: Bool,
+        isToday: Bool = false
     ) -> Card {
         // Oura files the activity score under health; the raw counts are
         // Apple Health's, under activity.
@@ -175,7 +252,7 @@ struct DayMetrics: Sendable {
         // Only Apple Health's own figures are in doubt when it is behind; an
         // Oura score for the day still stands, so wait only without one.
         if isBehind, score == nil {
-            return Card(
+            var card = Card(
                 id: "activity",
                 label: "Activity",
                 tint: .domainActivity,
@@ -186,6 +263,9 @@ struct DayMetrics: Sendable {
                 primary: .init("Steps", nil),
                 secondary: .init("Active", nil)
             )
+            card.icon = .steps
+            card.domain = "activity"
+            return card
         }
 
         let bar: BarGeometry
@@ -208,7 +288,7 @@ struct DayMetrics: Sendable {
         // Apple Health's steps only when they are not behind.
         let isFlagged = score?.isAnomaly ?? (isBehind ? false : steps?.isAnomaly ?? false)
 
-        return Card(
+        var card = Card(
             id: "activity",
             label: "Activity",
             tint: .domainActivity,
@@ -219,6 +299,24 @@ struct DayMetrics: Sendable {
             primary: .init("Steps", isBehind ? nil : steps.map { Self.count($0.value) }),
             secondary: .init("Active", isBehind ? nil : energy.map { "\(Int($0.value.rounded())) kcal" })
         )
+        card.domain = "activity"
+        if let score {
+            card.icon = .activity
+            card.isScore = true
+            card.comparison = score.comparison(higherIsBetter: true, window: Self.metricWindow, amount: Self.whole)
+        } else if let steps {
+            card.icon = .steps
+            card.unit = "steps"
+            card.meanBar = steps.meanBar
+            // Today's steps are a running total; against a whole day's mean
+            // they read as a fall until evening, so say what they are.
+            card.comparison = isToday
+                ? MetricComparison(direction: nil, text: "So far today", isGood: nil)
+                : steps.comparison(higherIsBetter: true, window: Self.metricWindow) { "\(Self.count($0)) steps" }
+        } else {
+            card.icon = .steps
+        }
+        return card
     }
 
     private static func readinessCard(
@@ -237,7 +335,7 @@ struct DayMetrics: Sendable {
             reading = .waiting("Waiting on Oura")
         }
 
-        return Card(
+        var card = Card(
             id: "readiness",
             label: "Readiness",
             tint: .domainHealth,
@@ -248,6 +346,11 @@ struct DayMetrics: Sendable {
             primary: .init("Resting HR", restingHR.map { "\(Int($0.value.rounded())) bpm" }),
             secondary: .init("Stress", stress)
         )
+        card.icon = .score
+        card.domain = "health"
+        card.isScore = true
+        card.comparison = score?.comparison(higherIsBetter: true, window: Self.metricWindow, amount: Self.whole)
+        return card
     }
 
     private static func moneyCard(
@@ -290,9 +393,9 @@ struct DayMetrics: Sendable {
 
         // Not flagged. Ember is for a day the server calls anomalous, and the
         // money section does not publish that judgement for spend.
-        return Card(
+        var card = Card(
             id: "money",
-            label: "Money",
+            label: "Spent",
             tint: .domainMoney,
             reading: reading,
             fill: barFill,
@@ -301,9 +404,24 @@ struct DayMetrics: Sendable {
             primary: .init(context.pinnedAccountLabel ?? "Balance", context.pinnedAccountBalance),
             secondary: .init("Net worth 1mo", context.netWorthChange)
         )
+        card.icon = .money
+        card.domain = "money"
+        if let spend, spend.value != 0 {
+            card.meanBar = spend.meanBar
+            // Less spent is the good direction. The server's spend baseline
+            // is its own 60-day window, not the metrics' 90.
+            card.comparison = spend.comparison(higherIsBetter: false, window: "60d") {
+                Self.currency($0, code: currency)
+            }
+        }
+        return card
     }
 
     // MARK: - Formatting
+
+    /// The window the server's metric baselines cover
+    /// (`MetricStatistic::DEFAULT_WINDOW_DAYS`).
+    private static let metricWindow = "90d"
 
     private static func whole(_ value: Double) -> String {
         "\(Int(value.rounded()))"

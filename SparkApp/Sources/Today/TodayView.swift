@@ -80,9 +80,11 @@ struct TodayView: View {
                         )
                     }
 
-                    CheckInCard(
+                    CheckInsSection(
                         date: date,
                         status: snapshot.checkInStatus,
+                        historyVM: checkInHistoryVM,
+                        showHistory: $showHistory,
                         onTapMorning: {
                             checkInSelection = CheckInSheetSelection(date: date, period: .morning)
                         },
@@ -94,8 +96,6 @@ struct TodayView: View {
                     if isToday, let vm = viewModel, !vm.topics.isEmpty {
                         ThreadsStrip(topics: vm.topics) { selectedThread = $0 }
                     }
-
-                    CheckInHeatmapCard(historyVM: checkInHistoryVM, showHistory: $showHistory)
 
                     FeedSection(date: date)
 
@@ -317,25 +317,27 @@ struct TodayView: View {
         }
     }
 
+    /// A status line (`docs/design-language.md` section 7.4): a glyph and a
+    /// sentence on a content surface, with no chip unless action is needed.
     private func anomalySummaryRow(message: String, count: String?, tint: Color) -> some View {
         HStack(spacing: SparkSpacing.sm) {
-            Circle()
-                .fill(tint)
-                .frame(width: 7, height: 7)
-                .accessibilityHidden(true)
+            SparkGlyph(count == nil ? .success : .warning, size: 15)
+                .foregroundStyle(tint)
             Text(message)
-                .font(.subheadline.weight(.medium))
+                .font(SparkTypography.body.weight(.medium))
                 .foregroundStyle(.primary)
                 .lineLimit(2)
+            Spacer(minLength: SparkSpacing.sm)
             if let count {
-                Spacer(minLength: SparkSpacing.sm)
                 Text(count)
-                    .font(.footnote)
+                    .font(SparkTypography.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
         }
-        .padding(.vertical, SparkSpacing.xs)
+        .padding(.horizontal, SparkSpacing.md)
+        .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+        .sparkContentSurface(radius: SparkRadii.md)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(count.map { "\(message), \($0)" } ?? message)
     }

@@ -292,8 +292,6 @@ struct SparkUserFeedbackSheet: View {
 struct SparkMainAppToolbarModifier: ViewModifier {
     let isVisible: Bool
 
-    @Environment(AppModel.self) private var appModel
-    @State private var showLog = false
     @State private var showSettings = false
     @State private var showNotifications = false
 
@@ -314,16 +312,9 @@ struct SparkMainAppToolbarModifier: ViewModifier {
         content
             .toolbar {
                 if isVisible {
+                    // Logging lives in Command now, so the bar keeps only
+                    // settings and notifications.
                     ToolbarItemGroup(placement: .topBarTrailing) {
-                        Button {
-                            showLog = true
-                        } label: {
-                            Image(systemName: "plus")
-                                .symbolRenderingMode(.monochrome)
-                                .foregroundStyle(Color.primary)
-                        }
-                        .accessibilityLabel("Log")
-
                         Button {
                             showSettings = true
                         } label: {
@@ -345,9 +336,6 @@ struct SparkMainAppToolbarModifier: ViewModifier {
                         )
                     }
                 }
-            }
-            .sheet(isPresented: $showLog) {
-                LogSheetView(apiClient: appModel.apiClient)
             }
             .sheet(isPresented: $showSettings) {
                 SettingsRootView()

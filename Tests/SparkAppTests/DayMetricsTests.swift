@@ -55,6 +55,42 @@ struct MetricReadingTests {
         #expect(MetricReading(value: 10, vsBaselinePct: -100).baseline == nil)
         #expect(MetricReading(value: 0, vsBaselinePct: -48).quantityBar.fill == nil)
     }
+
+    @Test("the against-the-mean bar puts the mean two thirds along")
+    func meanBar() throws {
+        let bar = MetricReading(value: 120, vsBaselinePct: 20).meanBar
+        #expect(abs(try #require(bar.baseline) - 2.0 / 3.0) < 0.001)
+        #expect(abs(try #require(bar.fill) - 0.8) < 0.001)
+    }
+
+    @Test("the comparison line says how far from the trend, and whether that is good")
+    func comparisonLine() throws {
+        let whole: (Double) -> String = { String(Int($0.rounded())) }
+
+        let above = try #require(MetricReading(value: 120, vsBaselinePct: 20)
+            .comparison(higherIsBetter: true, window: "90d", amount: whole))
+        #expect(above.text == "20 above 90d trend")
+        #expect(above.direction == .up)
+        #expect(above.isGood == true)
+
+        let spent = try #require(MetricReading(value: 120, vsBaselinePct: 20)
+            .comparison(higherIsBetter: false, window: "60d", amount: whole))
+        #expect(spent.isGood == false)
+
+        let level = try #require(MetricReading(value: 100, vsBaselinePct: 0.1)
+            .comparison(higherIsBetter: true, window: "90d", amount: whole))
+        #expect(level.text == "On 90d trend")
+        #expect(level.direction == .steady)
+        #expect(level.isGood == nil)
+    }
+
+    @Test("a difference that rounds to zero with its unit still reads as on trend")
+    func zeroWithUnit() throws {
+        let steps = try #require(MetricReading(value: 8000.2, vsBaselinePct: 0.001)
+            .comparison(higherIsBetter: true, window: "90d") { "\(Int($0.rounded())) steps" })
+        #expect(steps.text == "On 90d trend")
+        #expect(steps.direction == .steady)
+    }
 }
 
 @Suite("Day metric grid")

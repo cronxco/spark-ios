@@ -43,7 +43,7 @@ final class TodayViewModel {
     private static let questionWindow = "48h"
 
     var metrics: DayMetrics {
-        DayMetrics(summary: cached, money: moneyContext)
+        DayMetrics(summary: cached, money: moneyContext, isToday: Calendar.current.isDateInToday(date))
     }
 
     private let apiClient: APIClient
