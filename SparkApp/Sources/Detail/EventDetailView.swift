@@ -69,10 +69,11 @@ struct EventDetailView: View {
             feedbackContext: eventFeedbackContext,
             refresh: { await viewModel?.retry() },
             flintNoteContext: .event(id: eventId, label: onscreenTitle),
+            edit: SparkSubViewMenuAction(title: "Edit event", isEnabled: isLoaded) { showEditor = true },
             location: SparkSubViewMenuAction(title: hasLocation ? "Edit location" : "Add location", isEnabled: isLoaded) { showLocationEditor = true },
-            delete: SparkSubViewMenuAction(title: "Delete event", isEnabled: isLoaded) { confirmDelete = true }
+            delete: SparkSubViewMenuAction(title: "Delete event", isEnabled: isLoaded) { confirmDelete = true },
+            details: eventInfo
         )
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Edit") { showEditor = true }.disabled(!isLoaded) } }
         .sparkRelationshipsHost(relationships, kind: .events, entityID: eventId, apiClient: appModel.apiClient) { request in
             guard let viewModel else { throw TagMutationError.missingETag }
             return try await viewModel.createRelationship(request)
@@ -161,11 +162,13 @@ struct EventDetailView: View {
     private func content(for detail: EventDetail) -> some View {
         heroSection(for: detail)
 
+        // Generated text adds to the event, so it takes the card, not the
+        // band (§3.5).
         if let summary = detail.aiSummary, !summary.isEmpty {
-            aiCalloutCard(summary)
+            SparkDetailSummaryCard(text: summary)
         }
 
-        metricBaselineStatusRow()
+        flowSection(for: detail)
 
         if detail.hasRoute {
             EventRouteSection(eventID: detail.id, apiClient: appModel.apiClient)
@@ -174,10 +177,8 @@ struct EventDetailView: View {
         }
 
         if !detail.blocks.isEmpty {
-            blocksSection(detail.blocks)
+            blocksSection(detail.blocks, domain: detail.event.domain, service: detail.event.service)
         }
-
-        aboutSection(for: detail)
 
         referencesSection(for: detail)
 
@@ -227,7 +228,7 @@ struct EventDetailView: View {
 
     private func tagSection(for detail: EventDetail) -> some View {
         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-            SparkDetailSectionHeader("Tags")
+            SparkDetailSectionHeader("Tags", icon: .tag)
             FlowLayout(spacing: SparkSpacing.xs + 2) {
                 ForEach(detail.tags) { tag in
                     DetailTagChip(tag: tag)
@@ -252,27 +253,61 @@ struct EventDetailView: View {
         tagPendingRemoval = nil
     }
 
-    // MARK: - Cinematic hero
+    // MARK: - Hero
 
+    /// The verb, then the thing the event is about, then its value (§12.2).
+    /// A 0–100 score is a ring; anything else is the 56pt value.
     private func heroSection(for detail: EventDetail) -> some View {
-        SparkDetailHero(
-            eyebrow: eyebrow(for: detail.event),
-            status: heroTargetTitle(for: detail.event) == nil ? nil : detail.event.action.sparkSentenceCase,
-            title: heroTitle(for: detail.event),
+        let event = detail.event
+        let target = heroTargetTitle(for: event)
+        return SparkDetailCentredHero(
+            icon: EntityPresentation.icon(domain: event.domain, service: event.service, action: event.action, type: "event"),
+            domain: event.domain,
+            verb: target == nil ? nil : event.action.sparkActionTitle,
+            title: heroTitle(for: event),
             subtitle: heroSubtitle(for: detail),
-            value: displayValue(for: detail.event),
-            valueTint: Color.domainTint(for: detail.event.domain),
-            valueAlignment: .trailing
-        )
+            value: heroValue(for: event),
+            source: event.service.sparkSentenceCase,
+            time: event.time
+        ) {
+            heroComparison(for: event)
+        }
     }
 
-    private func eyebrow(for event: Event) -> String {
-        var parts: [String] = [event.service.sparkSentenceCase]
-        if let time = event.time {
-            parts.append(SparkDetailFormatters.shortDate.string(from: time))
-            parts.append(SparkDetailFormatters.shortTime.string(from: time))
+    private func heroValue(for event: Event) -> SparkDetailHeroValue {
+        let number = SparkDetailNumber.parse(event.value)
+        if SparkDetailNumber.isScore(value: number, unit: event.unit), let number {
+            return .score(
+                number,
+                text: SparkDetailNumber.format(number, unit: nil),
+                threshold: event.service.lowercased() == "oura" ? 0.85 : nil
+            )
         }
-        return parts.joined(separator: " — ")
+        if let text = displayValue(for: event), !text.isEmpty {
+            return .text(text)
+        }
+        return .hidden
+    }
+
+    /// "↑ 3 above 30d trend", against the metric this event is a reading
+    /// of. A tap opens the metric.
+    private func heroComparison(for event: Event) -> AnyView {
+        guard let metric = viewModel?.metric,
+              let average = metric.average30d,
+              let value = SparkDetailNumber.parse(event.value)
+        else { return AnyView(EmptyView()) }
+        let comparison = SparkDetailComparison.make(value: value, average: average, unit: event.unit ?? metric.unit, domain: event.domain)
+        let line = SparkDetailComparisonLine(comparison: comparison)
+        guard let identifier = viewModel?.metricIdentifier else { return AnyView(line) }
+        return AnyView(
+            NavigationLink {
+                MetricDetailView(identifier: identifier)
+            } label: {
+                line
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens \(metric.title)")
+        )
     }
 
     /// The thing the event is about leads ("The Diplomat S04E02"), with the
@@ -297,113 +332,29 @@ struct EventDetailView: View {
         return nil
     }
 
-    // MARK: - About
+    // MARK: - Flow
 
-    /// What the event is about, and who it was with when that isn't you.
-    /// The account owner's own user object is the actor on nearly every
-    /// event, so it's left out rather than shown as "Actor" every time.
-    @ViewBuilder
-    private func aboutSection(for detail: EventDetail) -> some View {
-        let links = linkedObjects(for: detail)
-        if !links.isEmpty {
-            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                SparkDetailSectionHeader("About")
-                ForEach(links) { link in
-                    NavigationLink {
-                        ObjectDetailView(objectId: link.id)
-                    } label: {
-                        SparkDetailLinkedRow(
-                            title: link.title,
-                            subtitle: link.subtitle,
-                            trailing: nil,
-                            tint: Color.domainTint(for: detail.event.domain),
-                            icon: link.icon
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
+    /// Actor, then the event, then its target, always, even when the actor
+    /// is you (§12.2).
+    private func flowSection(for detail: EventDetail) -> some View {
+        let event = detail.event
+        return SparkDetailFlowSection(
+            actor: detail.actor.map(party(for:)),
+            action: event.action.sparkActionTitle,
+            value: displayValue(for: event),
+            domain: event.domain,
+            icon: EntityPresentation.icon(domain: event.domain, service: event.service, action: event.action, type: "event"),
+            target: detail.target.map(party(for:))
+        )
     }
 
-    private func linkedObjects(for detail: EventDetail) -> [LinkedEventObject] {
-        let title = heroTitle(for: detail.event)
-        var links = [LinkedEventObject]()
-        if let target = detail.target, let id = target.id, !id.isEmpty {
-            // When the hero already names the target, the row says what kind
-            // of thing it is instead of repeating the title.
-            let repeatsHero = target.title.trimmingCharacters(in: .whitespacesAndNewlines)
-                .caseInsensitiveCompare(title) == .orderedSame
-            links.append(LinkedEventObject(
-                id: id,
-                title: repeatsHero ? target.typeName : target.title,
-                subtitle: repeatsHero ? nil : target.typeName,
-                icon: ObjectTypeGlyph.symbol(type: target.type, concept: target.concept)
-            ))
-        }
-        if let actor = detail.actor, let id = actor.id, !id.isEmpty, !actor.isAccountOwner, id != detail.target?.id {
-            links.append(LinkedEventObject(
-                id: id,
-                title: actor.title,
-                subtitle: actor.typeName,
-                icon: ObjectTypeGlyph.symbol(type: actor.type, concept: actor.concept)
-            ))
-        }
-        return links
-    }
-
-    // MARK: - AI summary callout
-
-    private func aiCalloutCard(_ summary: String) -> some View {
-        SparkDetailInsightCard(label: "Insight", text: summary, tint: Color.domainTint(for: "anomaly"))
-    }
-
-    // MARK: - Metric baseline
-
-    @ViewBuilder
-    private func metricBaselineStatusRow() -> some View {
-        if let status = viewModel?.metricBaselineStatus {
-            NavigationLink {
-                MetricDetailView(identifier: status.metricIdentifier)
-            } label: {
-                metricBaselineStatusCard(status)
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    private func metricBaselineStatusCard(_ status: MetricBaselineStatus) -> some View {
-        let tint = metricBaselineTint(for: status.state)
-        return GlassCard(radius: SparkRadii.md, padding: SparkSpacing.md, tint: tint?.opacity(0.08)) {
-            HStack(alignment: .center, spacing: SparkSpacing.md) {
-                Text(status.title)
-                    .font(SparkTypography.bodyStrong)
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-
-                Spacer(minLength: SparkSpacing.sm)
-
-                Text(status.trailing)
-                    .font(SparkTypography.bodyStrong)
-                    .foregroundStyle(tint ?? .secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
-
-                Image(systemName: "chevron.right")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(status.title), \(status.trailing)")
-    }
-
-    private func metricBaselineTint(for state: MetricBaselineStatus.State) -> Color? {
-        switch state {
-        case .normal: nil
-        case .high: .sparkError
-        case .low: .sparkInfo
-        }
+    private func party(for object: EventDetail.ActorTarget) -> SparkDetailFlowSection.Party {
+        SparkDetailFlowSection.Party(
+            id: object.id,
+            title: object.title,
+            typeName: object.isAccountOwner ? "You" : object.typeName,
+            type: object.type ?? object.concept
+        )
     }
 
     // MARK: - Map
@@ -415,7 +366,7 @@ struct EventDetailView: View {
             span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
         )
         return VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-            SparkDetailSectionHeader("Location")
+            SparkDetailSectionHeader("Location", icon: .place)
 
             Map(initialPosition: .region(region)) {
                 Marker("", coordinate: coordinate)
@@ -437,8 +388,20 @@ struct EventDetailView: View {
     /// alternative summaries fold away (the hero already shows the tl;dr), and
     /// only blocks with a numeric value keep the tile grid.
     @ViewBuilder
-    private func blocksSection(_ blocks: [Block]) -> some View {
+    private func blocksSection(_ blocks: [Block], domain: String, service: String) -> some View {
         let groups = BlockGroups(blocks)
+
+        if !groups.contributors.isEmpty {
+            VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+                SparkDetailSectionHeader("Contributors", count: groups.contributors.count, icon: .chart)
+                SparkDetailContributorList(
+                    blocks: groups.contributors,
+                    domain: domain,
+                    threshold: service.lowercased() == "oura" ? 0.85 : nil,
+                    parent: loadedEvent
+                )
+            }
+        }
 
         ForEach(groups.takeaways) { block in
             NavigationLink {
@@ -451,7 +414,7 @@ struct EventDetailView: View {
 
         if !groups.rows.isEmpty || !groups.summaries.isEmpty {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                SparkDetailSectionHeader("Content", trailing: "\(groups.rows.count + groups.summaries.count) blocks")
+                SparkDetailSectionHeader("Blocks", count: groups.rows.count + groups.summaries.count, icon: .grid)
                 ForEach(groups.rows) { block in blockRow(block) }
 
                 if !groups.summaries.isEmpty {
@@ -509,11 +472,22 @@ struct EventDetailView: View {
 
     private func relatedSection(_ related: [EventDetail.RelatedEvent]) -> some View {
         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-            SparkDetailSectionHeader("Related")
+            SparkDetailSectionHeader("Related", count: related.count, icon: .duration)
             ForEach(related) { rel in
-                SparkDetailLinkedRow(title: rel.title, subtitle: rel.meta, trailing: nil)
+                NavigationLink {
+                    EventDetailView(eventId: rel.id)
+                } label: {
+                    SparkDetailLinkedRow(title: rel.title, subtitle: relatedSubtitle(for: rel), trailing: nil)
+                }
+                .buttonStyle(.plain)
             }
         }
+    }
+
+    private func relatedSubtitle(for rel: EventDetail.RelatedEvent) -> String? {
+        let time = rel.time.map { SparkDetailFormatters.compactDateTime.string(from: $0) }
+        let parts = [rel.meta, time].compactMap { $0 }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
     }
 
     // MARK: - Notes
@@ -521,7 +495,7 @@ struct EventDetailView: View {
     private func noteSection(_ note: String) -> some View {
         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
             HStack(alignment: .firstTextBaseline) {
-                SectionLabel("Notes", style: .dayHeading)
+                SparkDetailSectionHeader("Note", icon: .edit)
                 Spacer(minLength: 0)
                 Button {
                     noteDraft = note
@@ -595,6 +569,26 @@ struct EventDetailView: View {
         }
     }
 
+    // MARK: - Details sheet
+
+    private var eventInfo: SparkDetailInfo? {
+        guard case .loaded(let detail) = viewModel?.state else { return nil }
+        let event = detail.event
+        var rows = [
+            SparkDetailInfo.Row(key: "Integration", value: event.service.sparkSentenceCase),
+            SparkDetailInfo.Row(key: "Type", value: event.action.sparkActionTitle),
+        ]
+        if let time = event.time {
+            rows.append(SparkDetailInfo.Row(key: "Recorded", value: SparkDetailDateText.full(time)))
+        }
+        rows.append(SparkDetailInfo.Row(key: "Event ID", value: event.id, isMono: true, isCopyable: true))
+        return SparkDetailInfo(
+            rows: rows,
+            openTitle: "Open in \(event.service.sparkSentenceCase)",
+            openURL: event.url.flatMap(URL.init(string:))
+        )
+    }
+
     // MARK: - Raw metadata
 
     private var eventRawPayload: String? {
@@ -665,17 +659,11 @@ struct EventDetailView: View {
     }
 }
 
-private struct LinkedEventObject: Identifiable {
-    let id: String
-    let title: String
-    let subtitle: String?
-    let icon: String
-}
-
 /// Sorts an event's blocks by how the detail screen shows them. Which
 /// group a block lands in comes from its `BlockKind`; how it looks there is
 /// `BlockCard`'s job.
 struct BlockGroups {
+    var contributors = [Block]()
     var takeaways = [Block]()
     var rows = [Block]()
     var summaries = [Block]()
@@ -683,6 +671,10 @@ struct BlockGroups {
 
     init(_ blocks: [Block]) {
         for block in blocks {
+            if SparkDetailContributorList.isContributor(block) {
+                contributors.append(block)
+                continue
+            }
             if let value = block.value, !value.isEmpty {
                 values.append(block)
                 continue

@@ -89,7 +89,7 @@ struct RelationshipsSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-            SparkDetailSectionHeader(title, trailing: store.relationships.isEmpty ? nil : "\(store.relationships.count)")
+            SparkDetailSectionHeader(title, count: store.relationships.isEmpty ? nil : store.relationships.count)
             if let errorMessage = store.errorMessage {
                 Button { Task { await store.load(kind: kind, entityID: entityID, apiClient: apiClient) } } label: {
                     Label(errorMessage, systemImage: "arrow.clockwise")
