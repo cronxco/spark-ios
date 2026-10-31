@@ -449,8 +449,7 @@ struct SparkSubViewToolbarModifier: ViewModifier {
                             .disabled(!delete.isEnabled)
                         }
                     } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .symbolRenderingMode(.monochrome)
+                        SparkIcon.more.image(pointSize: SparkMainAppToolbarModifier.toolbarGlyphSize)
                             .foregroundStyle(Color.primary)
                     }
                     .accessibilityLabel("More")
