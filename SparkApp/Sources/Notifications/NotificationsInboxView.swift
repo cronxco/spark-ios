@@ -283,6 +283,7 @@ struct NotificationsInboxView: View {
         case .integrationReauth(let id): IntegrationDetailView(integrationId: id, reauthOnOpen: true)
         case .account(let id): AccountDetailView(accountId: id)
         case .tag(let id, let name, let type): TagDetailView(tagID: id, tagName: name, tagType: type)
+        case .tagFamily(let family): TagFamilyView(family: family)
         }
     }
 }
