@@ -374,29 +374,43 @@ struct SparkSubViewToolbarModifier: ViewModifier {
     let reprocess: (() async -> Void)?
     let flintNoteContext: FlintNoteContext?
     /// Secondary entity actions. They sit in the ⋯ menu, so every detail
-    /// screen has the same Edit · Share · ⋯ toolbar.
+    /// screen has the same Details · ⋯ · Share toolbar (§12.2).
+    let edit: SparkSubViewMenuAction?
     let location: SparkSubViewMenuAction?
     let delete: SparkSubViewMenuAction?
+    /// The record's technical facts, behind the sliders button.
+    let details: SparkDetailInfo?
 
     @Environment(AppModel.self) private var appModel
     @State private var showShareSheet = false
     @State private var showRawSheet = false
     @State private var showFeedbackSheet = false
     @State private var showFlintNoteComposer = false
+    @State private var showDetails = false
 
     func body(content: Content) -> some View {
         content
             .toolbar {
+                // Details and More share one glass group; Share is the one
+                // prominent action, on its own (§12.2).
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button {
-                        showShareSheet = true
-                    } label: {
-                        SparkIcon.share.image(pointSize: SparkMainAppToolbarModifier.toolbarGlyphSize)
-                            .foregroundStyle(Color.primary)
+                    if details != nil {
+                        Button {
+                            showDetails = true
+                        } label: {
+                            SparkIcon.technicalDetail.image(pointSize: SparkMainAppToolbarModifier.toolbarGlyphSize)
+                                .foregroundStyle(Color.primary)
+                        }
+                        .accessibilityLabel("Show details")
                     }
-                    .accessibilityLabel("Share")
 
                     Menu {
+                        if let edit {
+                            Button(action: edit.perform) {
+                                Label(edit.title, systemImage: "pencil")
+                            }
+                            .disabled(!edit.isEnabled)
+                        }
                         if let location {
                             Button(action: location.perform) {
                                 Label(location.title, systemImage: "mappin.and.ellipse")
@@ -410,8 +424,6 @@ struct SparkSubViewToolbarModifier: ViewModifier {
                                 Label("Note to Flint", systemImage: "square.and.pencil")
                             }
                         }
-                        Button("Tag") {}
-                            .disabled(true)
                         if feedbackContext != nil {
                             Button {
                                 showFeedbackSheet = true
@@ -454,6 +466,25 @@ struct SparkSubViewToolbarModifier: ViewModifier {
                     }
                     .accessibilityLabel("More")
                 }
+
+                ToolbarSpacer(.fixed, placement: .topBarTrailing)
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showShareSheet = true
+                    } label: {
+                        SparkIcon.share.image(pointSize: SparkMainAppToolbarModifier.toolbarGlyphSize)
+                            .foregroundStyle(Color.sparkOnAccent)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .tint(Color.sparkAccent)
+                    .accessibilityLabel("Share")
+                }
+            }
+            .sheet(isPresented: $showDetails) {
+                if let details {
+                    SparkDetailInfoSheet(info: details)
+                }
             }
             .sheet(isPresented: $showShareSheet) {
                 SparkShareSheet(items: shareItems)
@@ -494,8 +525,10 @@ extension View {
         refresh: @escaping () async -> Void,
         reprocess: (() async -> Void)? = nil,
         flintNoteContext: FlintNoteContext? = nil,
+        edit: SparkSubViewMenuAction? = nil,
         location: SparkSubViewMenuAction? = nil,
-        delete: SparkSubViewMenuAction? = nil
+        delete: SparkSubViewMenuAction? = nil,
+        details: SparkDetailInfo? = nil
     ) -> some View {
         modifier(SparkSubViewToolbarModifier(
             shareItems: shareItems,
@@ -505,8 +538,10 @@ extension View {
             refresh: refresh,
             reprocess: reprocess,
             flintNoteContext: flintNoteContext,
+            edit: edit,
             location: location,
-            delete: delete
+            delete: delete,
+            details: details
         ))
     }
 }

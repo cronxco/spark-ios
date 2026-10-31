@@ -10,6 +10,9 @@ final class ObjectDetailViewModel: ETagDetailMutationHandling {
     var rawPayload: String?
     var etag: String?
     private(set) var isDeleted = false
+    /// For a metric object, the metric its events are readings of.
+    private(set) var metric: MetricDetail?
+    private(set) var metricIdentifier: String?
 
     let apiClient: APIClient
 
@@ -25,12 +28,32 @@ final class ObjectDetailViewModel: ETagDetailMutationHandling {
             rawPayload = response.utf8Body
             etag = response.etag
             state = .loaded(response.decoded)
+            await loadMetric(for: response.decoded)
         } catch APIError.notModified {
             return
         } catch {
             SparkObservability.captureHandled(error)
             let msg = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
             state = .error(msg)
+        }
+    }
+
+    /// A metric object owns its trend: every event that targets it is one
+    /// reading. Other objects have none, and a failure leaves it out.
+    private func loadMetric(for detail: ObjectDetail) async {
+        guard detail.object.concept.lowercased() == "metric",
+              let latest = detail.recentEvents.first
+        else { return }
+        let identifier = MetricIdentifier.from(event: latest)
+        guard MetricIdentifier.split(identifier) != nil else { return }
+        do {
+            metric = try await apiClient.request(MetricsEndpoint.detail(identifier: identifier))
+            metricIdentifier = identifier
+        } catch APIError.notModified {
+            return
+        } catch {
+            SparkObservability.captureHandled(error)
+            metric = nil
         }
     }
 
@@ -142,10 +165,11 @@ struct ObjectDetailView: View {
             rawPayload: objectRawPayload,
             feedbackContext: objectFeedbackContext,
             refresh: { await viewModel?.load() },
+            edit: SparkSubViewMenuAction(title: "Edit object", isEnabled: isLoaded) { showEditor = true },
             location: SparkSubViewMenuAction(title: hasLocation ? "Edit location" : "Add location", isEnabled: isLoaded) { showLocationEditor = true },
-            delete: SparkSubViewMenuAction(title: "Delete object", isEnabled: isLoaded) { confirmDelete = true }
+            delete: SparkSubViewMenuAction(title: "Delete object", isEnabled: isLoaded) { confirmDelete = true },
+            details: objectInfo
         )
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Edit") { showEditor = true }.disabled(!isLoaded) } }
         .sparkRelationshipsHost(relationships, kind: .objects, entityID: objectId, apiClient: appModel.apiClient) { request in
             guard let viewModel else { throw TagMutationError.missingETag }
             return try await viewModel.createRelationship(request)
@@ -244,7 +268,11 @@ struct ObjectDetailView: View {
         }
 
         if let summary = detail.aiSummary, !summary.isEmpty {
-            SparkDetailInsightCard(label: "Insight", text: summary)
+            SparkDetailSummaryCard(text: summary)
+        }
+
+        if let metric = viewModel?.metric, !metric.series.isEmpty {
+            trendSection(metric)
         }
 
         if detail.object.isPerson {
@@ -257,7 +285,8 @@ struct ObjectDetailView: View {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                 SparkDetailSectionHeader(
                     recentEventsTitle(for: detail.object),
-                    trailing: "\(detail.recentEvents.count) events"
+                    count: detail.recentEvents.count,
+                    icon: .duration
                 )
                 ForEach(detail.recentEvents) { event in
                     NavigationLink {
@@ -272,9 +301,14 @@ struct ObjectDetailView: View {
 
         if !detail.relatedObjects.isEmpty {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                SparkDetailSectionHeader("Related", trailing: "\(detail.relatedObjects.count) objects")
+                SparkDetailSectionHeader("Linked objects", count: detail.relatedObjects.count, icon: .link)
                 ForEach(detail.relatedObjects) { rel in
-                    relatedObjectRow(rel)
+                    NavigationLink {
+                        ObjectDetailView(objectId: rel.id)
+                    } label: {
+                        relatedObjectRow(rel)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -305,12 +339,12 @@ struct ObjectDetailView: View {
 
     private func recentEventsTitle(for object: EventObject) -> String {
         if object.isPerson { return "With \(object.title)" }
-        return object.isAccountOwner ? "Your recent events" : "Recent events"
+        return object.isAccountOwner ? "Your events" : "Events"
     }
 
     private func tagSection(for detail: ObjectDetail) -> some View {
         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-            SparkDetailSectionHeader("Tags")
+            SparkDetailSectionHeader("Tags", icon: .tag)
             FlowLayout(spacing: SparkSpacing.xs + 2) {
                 ForEach(detail.tags) { tag in
                     DetailTagChip(tag: tag)
@@ -333,27 +367,91 @@ struct ObjectDetailView: View {
         tagPendingRemoval = nil
     }
 
+    /// The concept, then the title and what it is (§12.2). A metric leads
+    /// with its latest reading and how that compares with its 30-day average.
     private func heroSection(for detail: ObjectDetail) -> some View {
-        SparkDetailHero(
-            eyebrow: objectEyebrow(for: detail.object),
-            status: nil,
-            title: detail.object.title,
-            subtitle: objectSubtitle(for: detail.object),
-            value: nil
-        )
+        let object = detail.object
+        let latest = detail.recentEvents.first
+        let domain = latest?.domain ?? ""
+        let isMetric = object.concept.lowercased() == "metric"
+        return SparkDetailCentredHero(
+            icon: ObjectTypeGlyph.symbol(type: object.type, concept: object.concept),
+            domain: domain,
+            verb: object.isAccountOwner ? "You, \(object.typeName.lowercased())" : object.typeName,
+            title: object.title,
+            subtitle: objectSubtitle(for: object),
+            value: isMetric ? metricValue(latest) : .hidden,
+            valueCaption: isMetric && latest != nil ? "Latest reading" : nil,
+            source: latest?.service.sparkSentenceCase,
+            timePrefix: object.time == nil ? nil : "First seen",
+            time: object.time
+        ) {
+            metricComparison(latest)
+        }
     }
 
-    /// "TV episode — first seen 24 Aug 2026". The owner's own account object
-    /// reads "You — Manual log account".
-    private func objectEyebrow(for object: EventObject) -> String {
-        var parts = [object.typeName]
-        if object.isAccountOwner {
-            parts.insert("You", at: 0)
+    private func metricValue(_ event: Event?) -> SparkDetailHeroValue {
+        guard let event else { return .hidden }
+        let number = SparkDetailNumber.parse(event.value)
+        if SparkDetailNumber.isScore(value: number, unit: event.unit), let number {
+            return .text(SparkDetailNumber.format(number, unit: nil))
         }
+        let text = event.displayValue?.sparkPlainTextFromHTMLFragment ?? event.value?.sparkPlainTextFromHTMLFragment
+        guard let text, !text.isEmpty else { return .hidden }
+        return .text(text)
+    }
+
+    private func metricComparison(_ event: Event?) -> AnyView {
+        guard let event,
+              let metric = viewModel?.metric,
+              let average = metric.average30d,
+              let value = SparkDetailNumber.parse(event.value)
+        else { return AnyView(EmptyView()) }
+        let comparison = SparkDetailComparison.make(value: value, average: average, unit: event.unit ?? metric.unit, domain: event.domain)
+        return AnyView(SparkDetailComparisonLine(comparison: comparison))
+    }
+
+    /// The metric's last 30 days, with its usual range as a band and
+    /// anomalies marked (§8). A tap opens the metric.
+    private func trendSection(_ metric: MetricDetail) -> some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+            SparkDetailSectionHeader("Last 30 days", icon: .chart, trailing: usualRange(metric))
+            NavigationLink {
+                MetricDetailView(identifier: viewModel?.metricIdentifier ?? metric.id)
+            } label: {
+                MetricTrendChart(
+                    series: metric.series,
+                    baseline: metric.baseline,
+                    anomalies: metric.anomalies,
+                    valueForAnomaly: { $0.value },
+                    tint: Color.domainTint(for: metric.domain),
+                    height: 160
+                )
+                .padding(SparkSpacing.lg)
+                .sparkContentSurface(radius: SparkRadii.lg)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func usualRange(_ metric: MetricDetail) -> String? {
+        guard let baseline = metric.baseline else { return nil }
+        let unit = metric.unit
+        return "Usual \(SparkDetailNumber.format(max(0, baseline.low), unit: unit)) to \(SparkDetailNumber.format(baseline.high, unit: unit))"
+    }
+
+    private var objectInfo: SparkDetailInfo? {
+        guard case .loaded(let detail) = viewModel?.state else { return nil }
+        let object = detail.object
+        var rows = [
+            SparkDetailInfo.Row(key: "Concept", value: object.concept),
+            SparkDetailInfo.Row(key: "Type", value: object.type),
+        ]
         if let time = object.time {
-            parts.append("first seen \(SparkDetailFormatters.shortDate.string(from: time))")
+            rows.append(SparkDetailInfo.Row(key: "First seen", value: SparkDetailDateText.full(time)))
         }
-        return parts.joined(separator: " — ")
+        rows.append(SparkDetailInfo.Row(key: "Object ID", value: object.id, isMono: true, isCopyable: true))
+        return SparkDetailInfo(rows: rows, openTitle: "Open link", openURL: object.url.flatMap(URL.init(string:)))
     }
 
     private func objectSubtitle(for object: EventObject) -> String? {
