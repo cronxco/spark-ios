@@ -102,7 +102,7 @@ struct MoneyExploreView: View {
     private func planSections(proxy: ScrollViewProxy) -> some View {
         if let vm = planViewModel {
             switch vm.loadState {
-            case .idle, .loading where vm.plan == nil:
+            case .idle where vm.plan == nil, .loading where vm.plan == nil:
                 shimmer(heights: [220, 160, 120])
             case .error(let message):
                 EmptyState(
@@ -147,7 +147,7 @@ struct MoneyExploreView: View {
             MoneySectionHeader(title: "Net worth", icon: .netWorth)
             if let vm = viewModel {
                 switch vm.loadState {
-                case .idle, .loading where vm.accounts.isEmpty:
+                case .idle where vm.accounts.isEmpty, .loading where vm.accounts.isEmpty:
                     shimmer(heights: [260, 56, 56])
                 case .error(let message):
                     EmptyState(
