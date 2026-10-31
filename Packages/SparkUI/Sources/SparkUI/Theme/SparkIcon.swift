@@ -45,6 +45,11 @@ public enum SparkIcon: String, CaseIterable, Sendable {
     case bedtime
     case morning
     case afternoon
+    case bloodOxygen
+    case stress
+    case resilience
+    case breathing
+    case stand
     case add
     case edit
     case delete
@@ -120,6 +125,11 @@ public enum SparkIcon: String, CaseIterable, Sendable {
         case .bedtime: "\u{f236}" // fas.bed
         case .morning: "\u{f185}" // fas.sun
         case .afternoon: "\u{f6c4}" // fas.cloud-sun
+        case .bloodOxygen: "\u{f043}" // fas.droplet
+        case .stress: "\u{f5dc}" // fas.brain
+        case .resilience: "\u{e574}" // fas.shield-heart
+        case .breathing: "\u{f604}" // fas.lungs
+        case .stand: "\u{e59d}" // fas.child-reaching
         case .add: "\u{2b}" // fas.plus
         case .edit: "\u{f304}" // fas.pen
         case .delete: "\u{f1f8}" // fas.trash

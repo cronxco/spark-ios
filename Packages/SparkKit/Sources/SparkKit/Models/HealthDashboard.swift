@@ -147,12 +147,17 @@ public struct HealthDashboard: Codable, Sendable, Hashable {
         public let vsBaselinePct: Double?
         public let isAnomaly: Bool
         public let status: String
+        /// An ordinal reading (Oura stress, resilience) is a level, not a
+        /// quantity: it has no percentage, and `band` names it ("Strong").
+        public let isOrdinal: Bool?
+        public let band: String?
 
         enum CodingKeys: String, CodingKey {
-            case id, label, value, unit, status
+            case id, label, value, unit, status, band
             case eventId = "event_id"
             case vsBaselinePct = "vs_baseline_pct"
             case isAnomaly = "is_anomaly"
+            case isOrdinal = "is_ordinal"
         }
     }
 

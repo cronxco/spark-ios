@@ -43,6 +43,11 @@
     "bedtime": "bed",
     "morning": "sun",
     "afternoon": "cloud-sun",
+    "bloodOxygen": "droplet",
+    "stress": "brain",
+    "resilience": "shield-heart",
+    "breathing": "lungs",
+    "stand": "child-reaching",
 
     "add": "plus",
     "edit": "pen",

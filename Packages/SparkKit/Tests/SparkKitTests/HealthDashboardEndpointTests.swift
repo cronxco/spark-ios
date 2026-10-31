@@ -91,6 +91,18 @@ struct HealthDashboardEndpointTests {
               "vs_baseline_pct": -16,
               "is_anomaly": false,
               "status": "normal"
+            },
+            {
+              "id": "oura.had_resilience_score.resilience_level",
+              "event_id": "evt_resilience",
+              "label": "Resilience",
+              "value": 4,
+              "unit": "resilience_level",
+              "vs_baseline_pct": null,
+              "is_ordinal": true,
+              "band": "Strong",
+              "is_anomaly": false,
+              "status": "normal"
             }
           ],
           "trends": [
@@ -130,6 +142,9 @@ struct HealthDashboardEndpointTests {
         #expect(dashboard.fitness.workouts[0].routeAvailable == true)
         #expect(dashboard.fitness.workouts[1].exercises?.first?.sets == 4)
         #expect(dashboard.bodyMetrics.first?.label == "HRV")
+        #expect(dashboard.bodyMetrics.first?.isOrdinal == nil)
+        #expect(dashboard.bodyMetrics.last?.isOrdinal == true)
+        #expect(dashboard.bodyMetrics.last?.band == "Strong")
         #expect(dashboard.trends.first?.dailyValues.first?.value == 7411)
         #expect(dashboard.insights.first?.content == "Prioritise recovery today.")
     }
