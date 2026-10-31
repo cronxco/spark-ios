@@ -69,6 +69,12 @@
     "increase": "arrow-up",
     "decrease": "arrow-down",
     "steady": "arrow-right",
-    "home": "house"
+    "home": "house",
+
+    "day": "sun",
+    "explore": "compass",
+    "command": "terminal",
+    "notifications": "bell",
+    "share": "arrow-up-from-bracket"
   }
 }

@@ -41,3 +41,29 @@ public extension SparkIcon {
         }
     }
 }
+
+#if os(iOS)
+import UIKit
+
+public extension SparkIcon {
+    /// The glyph drawn into a template image, for the places that take only
+    /// an image, such as a tab bar item. Elsewhere, use `SparkGlyph`, which
+    /// scales with Dynamic Type.
+    @MainActor func image(pointSize: CGFloat = 22) -> Image {
+        Image(uiImage: uiImage(pointSize: pointSize))
+    }
+
+    @MainActor func uiImage(pointSize: CGFloat) -> UIImage {
+        SparkFonts.registerBundledFonts()
+        let font = UIFont(name: SparkFonts.iconPostScriptName, size: pointSize)
+            ?? .systemFont(ofSize: pointSize)
+        let text = NSAttributedString(string: glyph, attributes: [.font: font])
+        let size = text.size()
+        let canvas = CGSize(width: ceil(size.width), height: ceil(size.height))
+        let image = UIGraphicsImageRenderer(size: canvas).image { _ in
+            text.draw(at: .zero)
+        }
+        return image.withRenderingMode(.alwaysTemplate)
+    }
+}
+#endif
