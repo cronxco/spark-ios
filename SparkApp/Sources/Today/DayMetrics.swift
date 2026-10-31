@@ -156,6 +156,18 @@ struct DayMetrics: Sendable {
             return score / 100
         }
 
+        /// The figures the compact card leaves out, for its peek card. A
+        /// figure the app is still waiting on reads as a dash, not zero.
+        var peekFacts: [PeekCard.Fact] {
+            [primary, secondary].map { PeekCard.Fact($0.label, $0.value ?? "\u{2014}") }
+        }
+
+        /// Where the peek card's button goes: the Explore section that holds
+        /// this metric's history.
+        var exploreDestination: CmdDestination {
+            domain == "money" ? .exploreMoney : .exploreHealth
+        }
+
         var accessibilityLabel: String {
             switch reading {
             case .waiting(let reason):

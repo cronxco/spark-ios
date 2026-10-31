@@ -1,5 +1,6 @@
 import Foundation
 import SparkKit
+import SparkUI
 import Testing
 
 @testable import Spark
@@ -167,6 +168,9 @@ struct DayMetricsTests {
         #expect(reason.contains("Apple Health"))
         #expect(activity.fill == nil)
         #expect(activity.primary.value == nil)
+        // The peek card shows a dash for each figure it is waiting on.
+        #expect(activity.peekFacts.map(\.value) == ["\u{2014}", "\u{2014}"])
+        #expect(activity.exploreDestination == .exploreHealth)
     }
 
     @Test("a service that has reported is read normally")
@@ -440,6 +444,11 @@ struct DayMetricsTests {
         #expect(money.baseline == nil)
         #expect(money.primary.label == "Current Account")
         #expect(money.secondary.value == "+£1,204")
+        #expect(money.peekFacts == [
+            PeekCard.Fact("Current Account", "£3,180"),
+            PeekCard.Fact("Net worth 1mo", "+£1,204"),
+        ])
+        #expect(money.exploreDestination == .exploreMoney)
     }
 }
 

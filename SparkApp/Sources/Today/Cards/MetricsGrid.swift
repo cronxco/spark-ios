@@ -26,7 +26,7 @@ struct MetricsGrid: View {
 
             LazyVGrid(columns: columns, spacing: SparkSpacing.md) {
                 ForEach(metrics.cards) { card in
-                    DayMetricCard(card: card)
+                    PeekableMetricCard(card: card)
                 }
             }
         }
@@ -34,6 +34,39 @@ struct MetricsGrid: View {
             geometry.size.width < Self.minimumTwoColumnWidth
         } action: { narrow in
             isNarrow = narrow
+        }
+    }
+}
+
+/// A compact metric that opens a peek card on a tap, with the figures the
+/// card leaves out (sleep duration and efficiency, steps and active energy,
+/// resting heart rate, balance) and a button to its Explore section.
+private struct PeekableMetricCard: View {
+    let card: DayMetrics.Card
+
+    @Environment(AppModel.self) private var appModel
+    @State private var isPeeking = false
+
+    var body: some View {
+        Button {
+            isPeeking.toggle()
+        } label: {
+            DayMetricCard(card: card)
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Shows more figures")
+        .sparkPeek(isPresented: $isPeeking) {
+            PeekCard(
+                icon: card.icon,
+                tint: EntityPresentation.tint(domain: card.domain),
+                eyebrow: card.domain.capitalized,
+                title: card.label,
+                facts: card.peekFacts,
+                action: PeekCard.Action(card.exploreDestination == .exploreMoney ? "Open Money" : "Open Health") {
+                    isPeeking = false
+                    appModel.pendingDestination = card.exploreDestination
+                }
+            )
         }
     }
 }
