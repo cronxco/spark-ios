@@ -54,6 +54,7 @@ public enum SparkIcon: String, CaseIterable, Sendable {
     case more
     case back
     case forward
+    case previous
     case expand
     case collapse
     case openExternal
@@ -129,6 +130,7 @@ public enum SparkIcon: String, CaseIterable, Sendable {
         case .more: "\u{f142}" // fas.ellipsis-vertical
         case .back: "\u{f060}" // fas.arrow-left
         case .forward: "\u{f054}" // fas.chevron-right
+        case .previous: "\u{f053}" // fas.chevron-left
         case .expand: "\u{f078}" // fas.chevron-down
         case .collapse: "\u{f077}" // fas.chevron-up
         case .openExternal: "\u{f08e}" // fas.arrow-up-right-from-square

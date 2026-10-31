@@ -53,6 +53,7 @@
     "more": "ellipsis-vertical",
     "back": "arrow-left",
     "forward": "chevron-right",
+    "previous": "chevron-left",
     "expand": "chevron-down",
     "collapse": "chevron-up",
     "openExternal": "arrow-up-right-from-square",
