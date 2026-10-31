@@ -350,10 +350,15 @@ enum HealthDisplay {
         guard !values.isEmpty else { return nil }
 
         let kind = Self.kind(action: trend.action)
+        let isMinutes = trend.unit == "min"
         let isScore = kind.isScore || trend.unit == "percent"
-        let mean = values.reduce(0, +) / Double(values.count)
-        let format: (Double) -> String = trend.unit == "min" ? { duration(minutes: $0) } : number
-        let baseline = trend.baseline?.mean
+        let total: Double = values.reduce(0.0) { $0 + $1 }
+        let mean: Double = total / Double(values.count)
+        let format: (Double) -> String = { value in
+            isMinutes ? Self.duration(minutes: value) : Self.number(value)
+        }
+        let suffix: String? = isMinutes ? nil : Self.unit(trend.unit)
+        let baseline: Double? = trend.baseline?.mean
 
         var usualRange: ClosedRange<Double>?
         if let baseline, let deviation = trend.baseline?.stddev, deviation > 0 {
@@ -363,14 +368,13 @@ enum HealthDisplay {
         var comparison: MetricComparison?
         if let baseline, baseline != 0 {
             let pct = (mean - baseline) / baseline * 100
-            comparison = Self.comparison(value: mean, vsBaselinePct: pct, higherIsBetter: kind.higherIsBetter) {
-                amount($0, unit: trend.unit)
+            let trendUnit = trend.unit
+            comparison = Self.comparison(value: mean, vsBaselinePct: pct, higherIsBetter: kind.higherIsBetter) { amountValue in
+                Self.amount(amountValue, unit: trendUnit)
             }
         }
 
-        let latest = values.last.map { value in
-            format(value) + (trend.unit == "min" ? "" : (unit(trend.unit) ?? ""))
-        }
+        let latest: String? = values.last.map { value in format(value) + (suffix ?? "") }
 
         return TrendCard(
             id: trend.metric,
@@ -381,7 +385,7 @@ enum HealthDisplay {
             points: points,
             usualRange: usualRange,
             average: format(mean),
-            unit: trend.unit == "min" ? nil : unit(trend.unit),
+            unit: suffix,
             latest: latest,
             comparison: comparison,
             rangeLabel: "\(days)-day average"
