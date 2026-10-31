@@ -299,7 +299,7 @@ private struct TimelineRow: View {
             // By position: the cache keeps no tag IDs, so two tags with the
             // same name and type would otherwise share an identity.
             ForEach(Array(event.decodedTags.enumerated()), id: \.offset) { _, tag in
-                TagChip(tag)
+                DetailTagChip(tag: tag)
             }
         }
     }

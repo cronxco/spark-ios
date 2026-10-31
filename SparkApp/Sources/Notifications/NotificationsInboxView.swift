@@ -38,6 +38,7 @@ struct NotificationsInboxView: View {
                     }
                 }
         }
+        .sparkOpensDetailRoutes(on: $path)
         .searchable(text: $search, prompt: "Search notifications")
         .task(id: filterKey) {
             if viewModel == nil {

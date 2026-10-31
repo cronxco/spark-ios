@@ -295,6 +295,10 @@ struct SparkMainAppToolbarModifier: ViewModifier {
     @State private var showSettings = false
     @State private var showNotifications = false
 
+    /// Toolbar buttons take an image, so the Font Awesome glyph is drawn
+    /// into one at about the size of the system's toolbar symbols.
+    static let toolbarGlyphSize: CGFloat = 18
+
     @Query(filter: #Predicate<CachedNotification> { !$0.isRead })
     private var unreadNotifications: [CachedNotification]
     @Query private var allIntegrations: [CachedIntegration]
@@ -318,8 +322,7 @@ struct SparkMainAppToolbarModifier: ViewModifier {
                         Button {
                             showSettings = true
                         } label: {
-                            Image(systemName: "gearshape")
-                                .symbolRenderingMode(.monochrome)
+                            SparkIcon.settings.image(pointSize: Self.toolbarGlyphSize)
                                 .foregroundStyle(hasUnhealthyIntegration ? Color.sparkError : Color.primary)
                         }
                         .accessibilityLabel("Settings")
@@ -347,8 +350,7 @@ struct SparkMainAppToolbarModifier: ViewModifier {
 
     @ViewBuilder
     private var notificationIcon: some View {
-        let icon = Image(systemName: "bell")
-            .symbolRenderingMode(.monochrome)
+        let icon = SparkIcon.notifications.image(pointSize: Self.toolbarGlyphSize)
             .foregroundStyle(
                 unreadNotifications.isEmpty
                     ? Color.primary
@@ -389,8 +391,7 @@ struct SparkSubViewToolbarModifier: ViewModifier {
                     Button {
                         showShareSheet = true
                     } label: {
-                        Image(systemName: "square.and.arrow.up")
-                            .symbolRenderingMode(.monochrome)
+                        SparkIcon.share.image(pointSize: SparkMainAppToolbarModifier.toolbarGlyphSize)
                             .foregroundStyle(Color.primary)
                     }
                     .accessibilityLabel("Share")
@@ -448,8 +449,7 @@ struct SparkSubViewToolbarModifier: ViewModifier {
                             .disabled(!delete.isEnabled)
                         }
                     } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .symbolRenderingMode(.monochrome)
+                        SparkIcon.more.image(pointSize: SparkMainAppToolbarModifier.toolbarGlyphSize)
                             .foregroundStyle(Color.primary)
                     }
                     .accessibilityLabel("More")

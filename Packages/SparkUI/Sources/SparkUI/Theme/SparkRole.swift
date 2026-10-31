@@ -57,6 +57,18 @@ public enum SparkRole: String, CaseIterable, Sendable {
         return .info
     }
 
+    /// A block or event reference's role from its integration's domain, as
+    /// the web's `x-event-ref` maps it (section 7.5).
+    public static func forDomain(_ domain: String?) -> SparkRole {
+        switch (domain ?? "").lowercased() {
+        case "health": .success
+        case "money": .warning
+        case "media": .info
+        case "online": .accent
+        default: .primary
+        }
+    }
+
     /// An object reference's role from its concept (section 7.5).
     public static func forObjectType(_ type: String?) -> SparkRole {
         let type = (type ?? "").lowercased()

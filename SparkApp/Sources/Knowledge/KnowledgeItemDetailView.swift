@@ -37,21 +37,17 @@ struct KnowledgeItemDetailView: View {
                         if !payload.eventDetail.tags.isEmpty {
                             FlowLayout(spacing: SparkSpacing.xs + 2) {
                                 ForEach(payload.eventDetail.tags) { tag in
-                                    let route = DetailRoute.tag(name: tag.name, type: tag.type)
-                                    NavigationLink(value: route) {
-                                        TagChip(tag)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .contextMenu {
-                                        Button {
-                                            appModel.pendingRoute = .tag(name: tag.name, type: tag.type)
-                                        } label: {
-                                            Label("Open Tag", systemImage: "tag")
+                                    DetailTagChip(tag: tag)
+                                        .contextMenu {
+                                            Button {
+                                                appModel.pendingRoute = .tag(name: tag.name, type: tag.type)
+                                            } label: {
+                                                Label("Open Tag", systemImage: "tag")
+                                            }
+                                        } preview: {
+                                            TagPreviewCard(tag: tag)
+                                                .environment(appModel)
                                         }
-                                    } preview: {
-                                        TagPreviewCard(tag: tag)
-                                            .environment(appModel)
-                                    }
                                 }
                             }
                         }

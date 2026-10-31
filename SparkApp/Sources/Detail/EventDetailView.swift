@@ -230,9 +230,7 @@ struct EventDetailView: View {
             SparkDetailSectionHeader("Tags")
             FlowLayout(spacing: SparkSpacing.xs + 2) {
                 ForEach(detail.tags) { tag in
-                    let route = DetailRoute.tag(id: tag.tagID, name: tag.name, type: tag.type)
-                    NavigationLink(value: route) { TagChip(tag) }
-                        .buttonStyle(.plain)
+                    DetailTagChip(tag: tag)
                         .contextMenu {
                             Button(role: .destructive) { tagPendingRemoval = tag } label: {
                                 Label("Remove tag", systemImage: "trash")
