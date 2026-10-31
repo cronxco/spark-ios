@@ -313,15 +313,12 @@ struct ObjectDetailView: View {
             SparkDetailSectionHeader("Tags")
             FlowLayout(spacing: SparkSpacing.xs + 2) {
                 ForEach(detail.tags) { tag in
-                    NavigationLink(value: DetailRoute.tag(id: tag.tagID, name: tag.name, type: tag.type)) {
-                        TagChip(tag)
-                    }
-                    .buttonStyle(.plain)
-                    .contextMenu {
-                        Button(role: .destructive) { tagPendingRemoval = tag } label: {
-                            Label("Remove tag", systemImage: "trash")
+                    DetailTagChip(tag: tag)
+                        .contextMenu {
+                            Button(role: .destructive) { tagPendingRemoval = tag } label: {
+                                Label("Remove tag", systemImage: "trash")
+                            }
                         }
-                    }
                 }
             }
         }

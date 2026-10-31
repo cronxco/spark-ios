@@ -21,6 +21,7 @@ struct ExploreView: View {
             .sparkDetailDestinations()
             .sparkMainAppToolbar()
         }
+        .sparkOpensDetailRoutes(on: $path)
         .onChange(of: appModel.pendingDestination, initial: true) { _, destination in
             guard let destination, let target = ExploreSection(destination: destination) else { return }
             section = target

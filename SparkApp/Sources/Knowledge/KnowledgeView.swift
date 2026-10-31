@@ -24,6 +24,7 @@ struct KnowledgeView: View {
             .sparkDetailDestinations()
             .sparkMainAppToolbar()
         }
+        .sparkOpensDetailRoutes(on: $path)
         .onChange(of: filter) { _, filter in
             viewModel?.filter = filter
         }

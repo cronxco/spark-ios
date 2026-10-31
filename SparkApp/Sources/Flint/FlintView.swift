@@ -24,6 +24,7 @@ struct FlintView: View {
                     return .systemAction
                 })
         }
+        .sparkOpensDetailRoutes(on: $path)
         .task {
             if viewModel == nil {
                 viewModel = FlintViewModel(apiClient: appModel.apiClient)
