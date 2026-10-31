@@ -34,6 +34,10 @@ public enum SparkIcon: String, CaseIterable, Sendable {
     case budget
     case income
     case invoice
+    case bank
+    case investment
+    case netWorth
+    case interest
     case task
     case place
     case person
@@ -109,6 +113,10 @@ public enum SparkIcon: String, CaseIterable, Sendable {
         case .budget: "\u{f555}" // fas.wallet
         case .income: "\u{f4c0}" // fas.hand-holding-dollar
         case .invoice: "\u{f571}" // fas.file-invoice-dollar
+        case .bank: "\u{f19c}" // fas.building-columns
+        case .investment: "\u{f201}" // fas.chart-line
+        case .netWorth: "\u{f24e}" // fas.scale-balanced
+        case .interest: "\u{25}" // fas.percent
         case .task: "\u{f058}" // fas.circle-check
         case .place: "\u{f3c5}" // fas.location-dot
         case .person: "\u{f007}" // fas.user

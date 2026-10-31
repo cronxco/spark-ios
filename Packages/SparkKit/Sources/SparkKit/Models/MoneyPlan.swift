@@ -21,15 +21,49 @@ public struct MoneyPlan: Decodable, Sendable {
     }
 }
 
+/// What is left once the cards and the bills before payday are paid:
+/// `amount = available - owedOnCards - upcomingBills`.
 public struct SafeToSpend: Decodable, Sendable {
+    /// A bill expected before payday (a direct debit or standing order).
+    public struct Bill: Decodable, Sendable, Identifiable, Hashable {
+        public let payee: String
+        public let amount: Int
+        /// yyyy-MM-dd
+        public let due: String
+
+        public var id: String { "\(due)-\(payee)-\(amount)" }
+    }
+
     public let available: Int
     public let owedOnCards: Int
+    /// `0` from a server that predates bills.
+    public let upcomingBills: Int
+    /// Soonest first, as the server sends them.
+    public let bills: [Bill]
+    /// yyyy-MM-dd, the next payday, or `nil` when the server has none.
+    public let payday: String?
+    /// `false` when the payday is a guess (the end of the month).
+    public let paydayKnown: Bool
     public let amount: Int
 
     enum CodingKeys: String, CodingKey {
         case available
         case owedOnCards = "owed_on_cards"
+        case upcomingBills = "upcoming_bills"
+        case bills, payday
+        case paydayKnown = "payday_known"
         case amount
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        available = try c.decode(Int.self, forKey: .available)
+        owedOnCards = try c.decode(Int.self, forKey: .owedOnCards)
+        upcomingBills = try c.decodeIfPresent(Int.self, forKey: .upcomingBills) ?? 0
+        bills = try c.decodeIfPresent([Bill].self, forKey: .bills) ?? []
+        payday = try c.decodeIfPresent(String.self, forKey: .payday)
+        paydayKnown = try c.decodeIfPresent(Bool.self, forKey: .paydayKnown) ?? false
+        amount = try c.decode(Int.self, forKey: .amount)
     }
 }
 
