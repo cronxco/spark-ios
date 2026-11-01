@@ -76,11 +76,14 @@ struct FeedSection: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, SparkSpacing.sm)
                 } else {
+                    // `rows` filters, sorts and groups the day, so build it once.
+                    let entries = rows
+                    let firstEntryID = entries.first?.id
                     VStack(alignment: .leading, spacing: 0) {
-                        ForEach(rows) { row in
+                        ForEach(entries) { row in
                             switch row {
                             case .hour(let hour):
-                                TimelineHourMarker(hour: hour, opensTimeline: row.id == rows.first?.id)
+                                TimelineHourMarker(hour: hour, opensTimeline: row.id == firstEntryID)
                             case .group(let events):
                                 TimelineGroupRow(events: events)
                             }
