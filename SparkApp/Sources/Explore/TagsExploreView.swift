@@ -9,13 +9,13 @@ import SwiftUI
 @MainActor
 @Observable
 final class TagsExploreViewModel {
-    /// The most used tags, enough to fill every family's sections. The
+    /// The most used tags, enough to fill every type's section. The
     /// first page also carries each type's true size (`TagPage.types`).
     private static let catalogueSize = 100
 
     private let apiClient: APIClient
     private(set) var mostUsed: [TagResource] = []
-    private(set) var sections: [TagFamilySection] = []
+    private(set) var sections: [TagTypeGroup] = []
     private(set) var hasLoadedCatalogue = false
 
     private(set) var results: [TagResource] = []
@@ -35,7 +35,7 @@ final class TagsExploreViewModel {
             let page = try await apiClient.request(TagsEndpoint.list(limit: Self.catalogueSize))
             guard !Task.isCancelled else { return }
             mostUsed = TagCatalogue.mostUsed(page.data)
-            sections = TagCatalogue.sections(tags: page.data, totals: page.types)
+            sections = TagCatalogue.typeSections(tags: page.data, totals: page.types)
             hasLoadedCatalogue = true
             error = nil
         } catch APIError.notModified {
@@ -81,15 +81,15 @@ final class TagsExploreViewModel {
 
 // MARK: - Screen
 
-/// Explore's Tags section: the most used tags, then every tag sorted into
-/// families (your tags, music, spending, payment details). Tapping a tag in
-/// a family opens its peek card (`docs/design-language.md` section 7.5);
+/// Explore's Tags section: the most used tags, then one section per tag
+/// type, related types together and payment details collapsed. Tapping a
+/// pill opens its peek card (`docs/design-language.md` section 7.5);
 /// tapping a row opens the tag.
 struct TagsExploreView: View {
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: TagsExploreViewModel?
     @State private var query = ""
-    @State private var expanded: Set<TagFamily> = []
+    @State private var expanded: Set<String> = []
 
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
 
@@ -154,19 +154,19 @@ struct TagsExploreView: View {
             if !viewModel.mostUsed.isEmpty {
                 MostUsedTagsSection(tags: viewModel.mostUsed)
             }
-            ForEach(viewModel.sections) { section in
-                TagFamilySectionView(
-                    section: section,
-                    isExpanded: !section.family.startsCollapsed || expanded.contains(section.family),
-                    onToggle: { toggle(section.family) }
+            ForEach(viewModel.sections) { group in
+                TagTypeSectionView(
+                    group: group,
+                    isExpanded: !group.family.startsCollapsed || expanded.contains(group.type),
+                    onToggle: { toggle(group.type) }
                 )
             }
         }
     }
 
-    private func toggle(_ family: TagFamily) {
+    private func toggle(_ type: String) {
         withAnimation(.snappy) {
-            if expanded.contains(family) { expanded.remove(family) } else { expanded.insert(family) }
+            if expanded.contains(type) { expanded.remove(type) } else { expanded.insert(type) }
         }
     }
 
@@ -290,18 +290,17 @@ private struct MostUsedTagsSection: View {
     }
 }
 
-// MARK: - A family
+// MARK: - A type
 
-/// One family: a heading with its size and See all, then each type's most
-/// used tags as pills that open their peek cards. Payment details start
+/// One tag type: a heading with its size and See all, then its most used
+/// tags as pills that open their peek cards. Payment-detail types start
 /// collapsed behind their heading.
-private struct TagFamilySectionView: View {
-    let section: TagFamilySection
+private struct TagTypeSectionView: View {
+    let group: TagTypeGroup
     let isExpanded: Bool
     let onToggle: () -> Void
 
-    private var family: TagFamily { section.family }
-    private var hasHidden: Bool { section.groups.contains { $0.hiddenCount > 0 } }
+    private var family: TagFamily { group.family }
 
     var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.md) {
@@ -311,7 +310,7 @@ private struct TagFamilySectionView: View {
                 header
             }
             if isExpanded {
-                groups
+                pills
             }
         }
     }
@@ -321,8 +320,8 @@ private struct TagFamilySectionView: View {
             DomainGlyph(family.icon, tint: family.tint)
             title
             Spacer(minLength: SparkSpacing.sm)
-            if hasHidden {
-                NavigationLink(value: DetailRoute.tagFamily(family)) {
+            if group.hiddenCount > 0 {
+                NavigationLink(value: DetailRoute.tagType(group.type)) {
                     HStack(spacing: SparkSpacing.xs) {
                         Text("See all")
                         SparkGlyph(.forward, size: 11, relativeTo: .body)
@@ -333,7 +332,7 @@ private struct TagFamilySectionView: View {
                     .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("See all \(family.title.lowercased())")
+                .accessibilityLabel("See all \(group.title.lowercased())")
             }
         }
     }
@@ -344,11 +343,9 @@ private struct TagFamilySectionView: View {
                 DomainGlyph(family.icon, tint: family.tint)
                 VStack(alignment: .leading, spacing: SparkSpacing.xxs) {
                     title
-                    if let summary = family.summary {
-                        Text(summary)
-                            .font(SparkTypography.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                    Text(family.title)
+                        .font(SparkTypography.caption)
+                        .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: SparkSpacing.sm)
                 SparkGlyph(isExpanded ? .collapse : .expand, size: 12, relativeTo: .body)
@@ -367,8 +364,8 @@ private struct TagFamilySectionView: View {
 
     private var title: some View {
         HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.xs) {
-            SectionLabel(family.title, style: .dayHeading)
-            Text("(\(section.tagsCount))")
+            SectionLabel(group.title, style: .dayHeading)
+            Text("(\(group.tagsCount))")
                 .font(SparkTypography.bodySmall)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
@@ -376,32 +373,22 @@ private struct TagFamilySectionView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var groups: some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-            ForEach(section.groups) { group in
-                VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                    Text(group.title)
+    private var pills: some View {
+        FlowLayout(spacing: SparkSpacing.xs + 2) {
+            ForEach(group.tags) { tag in
+                ExploreTagChip(tag: tag)
+            }
+            if group.hiddenCount > 0 {
+                NavigationLink(value: DetailRoute.tagType(group.type)) {
+                    Text("+\(group.hiddenCount) more")
                         .font(SparkTypography.captionStrong)
                         .foregroundStyle(.secondary)
-                        .accessibilityAddTraits(.isHeader)
-                    FlowLayout(spacing: SparkSpacing.xs + 2) {
-                        ForEach(group.tags) { tag in
-                            ExploreTagChip(tag: tag)
-                        }
-                        if group.hiddenCount > 0 {
-                            NavigationLink(value: DetailRoute.tagFamily(family)) {
-                                Text("+\(group.hiddenCount) more")
-                                    .font(SparkTypography.captionStrong)
-                                    .foregroundStyle(.secondary)
-                                    .padding(.horizontal, SparkSpacing.sm)
-                                    .frame(minHeight: 28)
-                                    .contentShape(.rect)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Show \(group.hiddenCount) more \(group.title.lowercased())")
-                        }
-                    }
+                        .padding(.horizontal, SparkSpacing.sm)
+                        .frame(minHeight: 28)
+                        .contentShape(.rect)
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Show \(group.hiddenCount) more \(group.title.lowercased())")
             }
         }
         .padding(SparkSpacing.lg)

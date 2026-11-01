@@ -66,8 +66,8 @@ struct DayPagerView: View {
                     AccountDetailView(accountId: id)
                 case .tag(let id, let name, let type):
                     TagDetailView(tagID: id, tagName: name, tagType: type)
-                case .tagFamily(let family):
-                    TagFamilyView(family: family)
+                case .tagType(let type):
+                    TagTypeView(type: type)
                 }
             }
         }
@@ -139,8 +139,8 @@ enum DetailRoute: Hashable {
     case integration(service: String)
     case account(id: String)
     case tag(id: String?, name: String, type: String?)
-    /// One tag family's tags, a type at a time (Explore, Tags, See all).
-    case tagFamily(TagFamily)
+    /// Every tag of one type, most used first (Explore, Tags, See all).
+    case tagType(String)
 
     static func tag(name: String, type: String?) -> Self {
         .tag(id: nil, name: name, type: type)

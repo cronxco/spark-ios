@@ -57,6 +57,20 @@ struct TagFamilyTests {
         #expect(music.tagsCount == 43)
     }
 
+    @Test("type sections keep related types together, most used first")
+    func typeSections() {
+        let tags = [
+            tag("1", "RAYE", "music_artist", 18),
+            tag("2", "RENT", "music_album", 27),
+            tag("3", "debit", "transaction_type", 55),
+            tag("4", "Lunch", "spark", 2),
+            tag("5", "bills", "transaction_category", 10),
+        ]
+        let groups = TagCatalogue.typeSections(tags: tags, totals: nil)
+        #expect(groups.map(\.type) == ["spark", "music_album", "music_artist", "transaction_category", "transaction_type"])
+        #expect(groups.last?.family == .paymentDetails)
+    }
+
     @Test("without totals, sizes come from what has loaded")
     func sectionsWithoutTotals() throws {
         let tags = [tag("1", "RAYE", "music_artist", 18), tag("2", "Judah Earl", "music_artist", 13)]
