@@ -120,7 +120,7 @@ public enum SparkIcon: String, CaseIterable, Sendable {
         case .calendarEvent: "\u{f133}" // fas.calendar
         case .tag: "\u{f02b}" // fas.tag
         case .link: "\u{f0c1}" // fas.link
-        case .flint: "\u{e2ca}" // fas.wand-magic-sparkles
+        case .flint: "\u{e699}" // fas.hexagon-nodes
         case .photo: "\u{f03e}" // fas.image
         case .bedtime: "\u{f236}" // fas.bed
         case .morning: "\u{f185}" // fas.sun
