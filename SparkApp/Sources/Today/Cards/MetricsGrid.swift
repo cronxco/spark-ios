@@ -156,7 +156,7 @@ struct DayMetricCard: View {
 
 /// The against-the-mean bar (section 8): today's fill on a track that runs to
 /// 1.5× the mean, with a marker at the mean.
-private struct MeanBar: View {
+struct MeanBar: View {
     let geometry: BarGeometry
     let tint: Color
 

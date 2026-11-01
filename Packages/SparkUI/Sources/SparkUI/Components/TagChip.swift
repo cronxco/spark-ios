@@ -106,12 +106,14 @@ public extension EventTag {
 /// tag's items. Without `onOpen`, the card says there is nothing to open.
 public struct PeekableTagChip: View {
     public let tag: EventTag
+    public let facts: [PeekCard.Fact]
     public let onOpen: (() -> Void)?
 
     @State private var isPeeking = false
 
-    public init(_ tag: EventTag, onOpen: (() -> Void)?) {
+    public init(_ tag: EventTag, facts: [PeekCard.Fact] = [], onOpen: (() -> Void)?) {
         self.tag = tag
+        self.facts = facts
         self.onOpen = onOpen
     }
 
@@ -126,7 +128,7 @@ public struct PeekableTagChip: View {
     public var body: some View {
         TagChip(tag) { isPeeking.toggle() }
             .sparkPeek(isPresented: $isPeeking) {
-                TagPeekCard(tag: tag, onOpen: openFromPeek)
+                TagPeekCard(tag: tag, facts: facts, onOpen: openFromPeek)
             }
     }
 }
@@ -134,10 +136,14 @@ public struct PeekableTagChip: View {
 /// A tag's peek card, built from the name and type it carries.
 public struct TagPeekCard: View {
     public let tag: EventTag
+    public let facts: [PeekCard.Fact]
     public let onOpen: (() -> Void)?
 
-    public init(tag: EventTag, onOpen: (() -> Void)?) {
+    /// - Parameter facts: a few lines under the title, such as how many
+    ///   events and objects carry the tag.
+    public init(tag: EventTag, facts: [PeekCard.Fact] = [], onOpen: (() -> Void)?) {
         self.tag = tag
+        self.facts = facts
         self.onOpen = onOpen
     }
 
@@ -154,6 +160,7 @@ public struct TagPeekCard: View {
             tint: SparkRole.forTagType(tag.type).fill,
             eyebrow: eyebrow,
             title: tag.name,
+            facts: facts,
             action: onOpen.map { PeekCard.Action("View tagged items", perform: $0) },
             noDestination: "This tag has no page to open."
         )

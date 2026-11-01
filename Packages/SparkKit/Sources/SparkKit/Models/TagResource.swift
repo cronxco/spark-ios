@@ -16,6 +16,15 @@ public struct TagResource: Codable, Sendable, Hashable, Identifiable {
         case totalCount = "total_count"
     }
 
+    public init(id: String, name: String, type: String?, eventsCount: Int, objectsCount: Int, totalCount: Int? = nil) {
+        self.id = id
+        self.name = name
+        self.type = type
+        self.eventsCount = eventsCount
+        self.objectsCount = objectsCount
+        self.totalCount = totalCount ?? eventsCount + objectsCount
+    }
+
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         if let stringID = try? container.decode(String.self, forKey: .id) { id = stringID }
@@ -34,8 +43,33 @@ public struct TagPage: Codable, Sendable {
     public let data: [TagResource]
     public let nextCursor: String?
     public let hasMore: Bool
+    /// How many tags of each type there are, and how often they are used.
+    /// Only the first page of `GET /tags` carries it, and older servers
+    /// leave it out.
+    public let types: [TagTypeTotal]?
 
-    enum CodingKeys: String, CodingKey { case data; case nextCursor = "next_cursor"; case hasMore = "has_more" }
+    enum CodingKeys: String, CodingKey { case data, types; case nextCursor = "next_cursor"; case hasMore = "has_more" }
+}
+
+/// One tag type's size: `GET /tags` sends these on its first page so a
+/// screen can head a group with its true size before paging through it.
+public struct TagTypeTotal: Codable, Sendable, Hashable {
+    /// The tag type, `untyped` for tags without one.
+    public let type: String
+    public let tagsCount: Int
+    public let totalCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case tagsCount = "tags_count"
+        case totalCount = "total_count"
+    }
+
+    public init(type: String, tagsCount: Int, totalCount: Int) {
+        self.type = type
+        self.tagsCount = tagsCount
+        self.totalCount = totalCount
+    }
 }
 
 /// The API accepts an existing tag ID or resolves a new/existing tag by name.

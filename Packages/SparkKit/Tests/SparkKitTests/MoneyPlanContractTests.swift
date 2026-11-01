@@ -37,6 +37,39 @@ struct MoneyPlanContractTests {
         #expect(response.data.bufferEnabled == false)
     }
 
+    @Test("safe to spend decodes the bills before payday")
+    func bills() throws {
+        let response = try decode(MoneyPlanResponse.self, """
+        {"data":{"safe_to_spend":{"available":606729,"owed_on_cards":484570,"upcoming_bills":160650,
+            "bills":[{"payee":"Accord Mortgages","amount":150000,"due":"2026-11-01"},
+                     {"payee":"Octopus Energy","amount":8650,"due":"2026-11-01"},
+                     {"payee":"TV Licensing","amount":2000,"due":"2026-11-08"}],
+            "payday":"2026-11-29","payday_known":true,"stale_accounts":[],"amount":-38491},
+          "cover":{"pot":null,"cards":[],"owed":0,"buffered":0,"unbuffered":0,"status":"no_buffer","shortfall":0},
+          "budgets":[],"strip":{"in_pots":0,"latest_month":null,"latest_interest":0,"run_rate":0,"twelve_months":0,
+          "months_recorded":0,"tax_estimate":0,"as_of":"2026-10-31"},"pots":[],"interest":[],"buffer_enabled":false}}
+        """)
+        let safe = response.data.safeToSpend
+        #expect(safe.upcomingBills == 160_650)
+        #expect(safe.bills.map(\.payee) == ["Accord Mortgages", "Octopus Energy", "TV Licensing"])
+        #expect(safe.payday == "2026-11-29")
+        #expect(safe.paydayKnown)
+        #expect(safe.available - safe.owedOnCards - safe.upcomingBills == safe.amount)
+    }
+
+    @Test("safe to spend from a server without bills reads as none")
+    func noBills() throws {
+        let response = try decode(MoneyPlanResponse.self, """
+        {"data":{"safe_to_spend":{"available":100,"owed_on_cards":0,"amount":100},
+          "cover":{"pot":null,"cards":[],"owed":0,"buffered":0,"unbuffered":0,"status":"no_buffer","shortfall":0},
+          "budgets":[],"strip":{"in_pots":0,"latest_month":null,"latest_interest":0,"run_rate":0,"twelve_months":0,
+          "months_recorded":0,"tax_estimate":0,"as_of":"2026-10-31"},"pots":[],"interest":[],"buffer_enabled":false}}
+        """)
+        #expect(response.data.safeToSpend.upcomingBills == 0)
+        #expect(response.data.safeToSpend.bills.isEmpty)
+        #expect(response.data.safeToSpend.payday == nil)
+    }
+
     @Test("a plan without a buffer pot decodes")
     func noBuffer() throws {
         let response = try decode(MoneyPlanResponse.self, """

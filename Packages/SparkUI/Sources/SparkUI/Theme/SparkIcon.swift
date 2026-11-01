@@ -34,6 +34,10 @@ public enum SparkIcon: String, CaseIterable, Sendable {
     case budget
     case income
     case invoice
+    case bank
+    case investment
+    case netWorth
+    case interest
     case task
     case place
     case person
@@ -45,6 +49,11 @@ public enum SparkIcon: String, CaseIterable, Sendable {
     case bedtime
     case morning
     case afternoon
+    case bloodOxygen
+    case stress
+    case resilience
+    case breathing
+    case stand
     case add
     case edit
     case delete
@@ -54,6 +63,7 @@ public enum SparkIcon: String, CaseIterable, Sendable {
     case more
     case back
     case forward
+    case previous
     case expand
     case collapse
     case openExternal
@@ -109,6 +119,10 @@ public enum SparkIcon: String, CaseIterable, Sendable {
         case .budget: "\u{f555}" // fas.wallet
         case .income: "\u{f4c0}" // fas.hand-holding-dollar
         case .invoice: "\u{f571}" // fas.file-invoice-dollar
+        case .bank: "\u{f19c}" // fas.building-columns
+        case .investment: "\u{f201}" // fas.chart-line
+        case .netWorth: "\u{f24e}" // fas.scale-balanced
+        case .interest: "\u{25}" // fas.percent
         case .task: "\u{f058}" // fas.circle-check
         case .place: "\u{f3c5}" // fas.location-dot
         case .person: "\u{f007}" // fas.user
@@ -120,6 +134,11 @@ public enum SparkIcon: String, CaseIterable, Sendable {
         case .bedtime: "\u{f236}" // fas.bed
         case .morning: "\u{f185}" // fas.sun
         case .afternoon: "\u{f6c4}" // fas.cloud-sun
+        case .bloodOxygen: "\u{f043}" // fas.droplet
+        case .stress: "\u{f5dc}" // fas.brain
+        case .resilience: "\u{e574}" // fas.shield-heart
+        case .breathing: "\u{f604}" // fas.lungs
+        case .stand: "\u{e59d}" // fas.child-reaching
         case .add: "\u{2b}" // fas.plus
         case .edit: "\u{f304}" // fas.pen
         case .delete: "\u{f1f8}" // fas.trash
@@ -129,6 +148,7 @@ public enum SparkIcon: String, CaseIterable, Sendable {
         case .more: "\u{f142}" // fas.ellipsis-vertical
         case .back: "\u{f060}" // fas.arrow-left
         case .forward: "\u{f054}" // fas.chevron-right
+        case .previous: "\u{f053}" // fas.chevron-left
         case .expand: "\u{f078}" // fas.chevron-down
         case .collapse: "\u{f077}" // fas.chevron-up
         case .openExternal: "\u{f08e}" // fas.arrow-up-right-from-square
