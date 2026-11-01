@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// Flint's mark — a warm gradient disc with a four-point star. Used wherever
-/// Flint "speaks" in the UI (Up to Speed screens, the Flint tab, digest cards).
+/// Flint's mark: a warm gradient disc with Flint's glyph (`fas.hexagon-nodes`,
+/// the same as the web). Used wherever Flint "speaks" in the UI (Up to Speed
+/// screens, the Flint tab, digest cards).
 public struct FlintAvatar: View {
     public enum Size {
         case sm, md
@@ -38,8 +39,7 @@ public struct FlintAvatar: View {
             )
             .frame(width: size.diameter, height: size.diameter)
             .overlay {
-                Image(systemName: "sparkle")
-                    .font(.system(size: size.glyph, weight: .bold))
+                SparkGlyph(.flint, size: size.glyph)
                     .foregroundStyle(.white)
             }
             .accessibilityHidden(true)
