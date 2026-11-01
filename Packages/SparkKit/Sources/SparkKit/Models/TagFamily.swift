@@ -1,8 +1,8 @@
 import Foundation
 
-/// The groups Explore's Tags section sorts tag types into. A family is a few
-/// related types, so the screen shows a handful of sections instead of one
-/// per raw type (about 18 of them).
+/// The kinds of tag type Explore's Tags section orders its sections by, so
+/// related types sit together (artists beside albums), and which types start
+/// collapsed. Each type still gets its own section (Will, 2026-11-01).
 public enum TagFamily: String, CaseIterable, Sendable, Hashable, Codable {
     /// Tags you added yourself, and tags with no type.
     case yours
@@ -162,6 +162,7 @@ public struct TagTypeGroup: Sendable, Hashable, Identifiable {
 
     public var id: String { type }
     public var title: String { TagTypeName.plural(type) }
+    public var family: TagFamily { TagFamily(tagType: type) }
     /// Tags of this type that are not shown.
     public var hiddenCount: Int { max(0, tagsCount - tags.count) }
 }
@@ -208,6 +209,16 @@ public enum TagCatalogue {
             guard let groups = byFamily[family], !groups.isEmpty else { return nil }
             return TagFamilySection(family: family, groups: groups.sorted(by: groupOrder))
         }
+    }
+
+    /// One section per tag type, related types together: the families in
+    /// display order, and within each family the most used type first.
+    public static func typeSections(
+        tags: [TagResource],
+        totals: [TagTypeTotal]?,
+        perGroup: Int = 8
+    ) -> [TagTypeGroup] {
+        sections(tags: tags, totals: totals, perGroup: perGroup).flatMap(\.groups)
     }
 
     /// The most used tags, leaving out families that would crowd the list.
