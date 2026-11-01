@@ -308,10 +308,6 @@ struct SparkMainAppToolbarModifier: ViewModifier {
         return allIntegrations.contains { !healthy.contains($0.status) }
     }
 
-    private var hasUnreadAttention: Bool {
-        unreadNotifications.contains { $0.domain == NotificationFeedItem.Stream.attention.rawValue }
-    }
-
     func body(content: Content) -> some View {
         content
             .toolbar {
@@ -323,9 +319,9 @@ struct SparkMainAppToolbarModifier: ViewModifier {
                             showSettings = true
                         } label: {
                             SparkIcon.settings.image(pointSize: Self.toolbarGlyphSize)
-                                .foregroundStyle(hasUnhealthyIntegration ? Color.sparkError : Color.primary)
+                                .foregroundStyle(Color.primary)
                         }
-                        .accessibilityLabel("Settings")
+                        .accessibilityLabel(hasUnhealthyIntegration ? "Settings, an integration needs attention" : "Settings")
 
                         Button {
                             showNotifications = true
@@ -350,12 +346,10 @@ struct SparkMainAppToolbarModifier: ViewModifier {
 
     @ViewBuilder
     private var notificationIcon: some View {
+        // Bar glyphs are always ink, never a status colour (Will, 2026-11-01):
+        // the badge carries the unread count.
         let icon = SparkIcon.notifications.image(pointSize: Self.toolbarGlyphSize)
-            .foregroundStyle(
-                unreadNotifications.isEmpty
-                    ? Color.primary
-                    : (hasUnreadAttention ? Color.sparkError : Color.sparkAccent)
-            )
+            .foregroundStyle(Color.primary)
 
         if unreadNotifications.isEmpty {
             icon

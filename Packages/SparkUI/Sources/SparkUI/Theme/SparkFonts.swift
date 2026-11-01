@@ -1,5 +1,6 @@
 import CoreText
 import Foundation
+import OSLog
 import SwiftUI
 
 /// Bundled type. Comfortaa is used for hero/display moments, PT Mono for
@@ -13,13 +14,25 @@ public enum SparkFonts {
     /// "Spark Icons", because the OFL reserves the "Font Awesome" name.
     public static let iconPostScriptName = "SparkIcons-Solid"
 
+    /// The font files bundled in `Resources/Fonts`, without their extension.
+    static let bundledFontFiles = [
+        "Comfortaa-VariableFont_wght",
+        "PTMono-Regular",
+        "SparkIcons-Solid",
+    ]
+
     /// Register the bundled fonts with Core Text. Call once at app launch
     /// before any view that depends on them renders. Idempotent.
+    ///
+    /// A font that is missing or fails to register is logged and skipped, never
+    /// fatal: `Font.custom` falls back to the system face, so the app still
+    /// launches with plain text in place of the missing type. The
+    /// `SparkFontsTests` suite is what catches a missing file.
     public static func registerBundledFonts() {
         guard !hasRegistered else { return }
-        register("Comfortaa-VariableFont_wght", ext: "ttf")
-        register("PTMono-Regular", ext: "ttf")
-        register("SparkIcons-Solid", ext: "ttf")
+        for name in bundledFontFiles {
+            register(name, ext: "ttf")
+        }
         hasRegistered = true
     }
 
@@ -56,15 +69,22 @@ public enum SparkFonts {
 
     private nonisolated(unsafe) static var hasRegistered = false
 
+    private static let logger = Logger(subsystem: "co.cronx.sparkapp", category: "SparkFonts")
+
+    /// The bundled file for `name`, or nil when the resource bundle lacks it.
+    static func bundledFontURL(_ name: String, ext: String = "ttf") -> URL? {
+        Bundle.module.url(forResource: name, withExtension: ext)
+    }
+
     private static func register(_ name: String, ext: String) {
-        guard let url = Bundle.module.url(forResource: name, withExtension: ext) else {
-            assertionFailure("Missing bundled font: \(name).\(ext)")
+        guard let url = bundledFontURL(name, ext: ext) else {
+            logger.error("Missing bundled font \(name, privacy: .public).\(ext, privacy: .public); falling back to the system font")
             return
         }
         var error: Unmanaged<CFError>?
         if !CTFontManagerRegisterFontsForURL(url as CFURL, .process, &error) {
-            // Silent in release; the next Font.custom call will fall back to system.
-            assertionFailure("Failed to register \(name): \(String(describing: error?.takeRetainedValue()))")
+            let reason = error.map { String(describing: $0.takeRetainedValue()) } ?? "unknown error"
+            logger.error("Failed to register \(name, privacy: .public): \(reason, privacy: .public)")
         }
     }
 
