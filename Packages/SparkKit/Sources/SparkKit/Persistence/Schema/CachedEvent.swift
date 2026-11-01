@@ -30,6 +30,14 @@ public final class CachedEvent {
     public var groupKey: String?
     /// `MoneyDirection` raw value, money events only.
     public var direction: String?
+    /// The integration instance's name ("Current Account"). `nil` until the
+    /// feed has sent it.
+    public var integrationName: String?
+    /// The feed's block pills, JSON-encoded `[Event.BlockRef]`. Kept as data
+    /// so the store needs no new model; read it through `decodedBlockRefs`.
+    public var blockRefsData: Data?
+    /// How many blocks the pills were taken from.
+    public var blockRefsTotal: Int?
     public var lastSyncedAt: Date
 
     public init(
@@ -55,6 +63,9 @@ public final class CachedEvent {
         targetMediaUrl: String? = nil,
         groupKey: String? = nil,
         direction: String? = nil,
+        integrationName: String? = nil,
+        blockRefsData: Data? = nil,
+        blockRefsTotal: Int? = nil,
         lastSyncedAt: Date = .init()
     ) {
         self.id = id
@@ -79,6 +90,9 @@ public final class CachedEvent {
         self.targetMediaUrl = targetMediaUrl
         self.groupKey = groupKey
         self.direction = direction
+        self.integrationName = integrationName
+        self.blockRefsData = blockRefsData
+        self.blockRefsTotal = blockRefsTotal
         self.lastSyncedAt = lastSyncedAt
     }
 }
@@ -101,6 +115,26 @@ public extension CachedEvent {
 
     var decodedTagNames: [String] {
         decodedTags.map(\.name)
+    }
+
+    var decodedBlockRefs: [Event.BlockRef] {
+        guard let blockRefsData else { return [] }
+        return (try? JSONDecoder().decode([Event.BlockRef].self, from: blockRefsData)) ?? []
+    }
+
+    static func encodeBlockRefs(_ refs: [Event.BlockRef]?) -> Data? {
+        guard let refs else { return nil }
+        return try? JSONEncoder().encode(refs)
+    }
+
+    /// Copies the fields only the feed sends. A payload without them (a delta
+    /// or a search hit) leaves what an earlier feed fetch cached in place.
+    func applyFeedExtras(from event: Event) {
+        if let name = event.integration?.name { integrationName = name }
+        if let refs = event.blockRefs {
+            blockRefsData = Self.encodeBlockRefs(refs)
+            blockRefsTotal = event.blockRefsTotal ?? refs.count
+        }
     }
 
     static func encodeTagNames(_ tags: [EventTag]) -> String? {

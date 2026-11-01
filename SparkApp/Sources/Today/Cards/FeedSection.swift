@@ -6,9 +6,9 @@ import SwiftUI
 /// The day's events, on one continuous spine.
 ///
 /// Drawn the way the web draws them (`resources/views/livewire/day.blade.php`):
-/// a single rule down the left, an hour pip on it, a service node per group,
-/// the action written as a sentence with its object as a link, and the value
-/// right-aligned. The iOS version this replaces ruled every hour off and
+/// a single rule down the left, each hour as a node on it, a service node per
+/// group, the action with its object on the line below, the time, the pills
+/// in tiers, and the value right-aligned. The iOS version this replaces ruled every hour off and
 /// changed a row's weight with what kind of event it was, which made the page
 /// a stack of unrelated cards rather than a day.
 ///
@@ -163,19 +163,23 @@ private struct SpineColumn<Node: View>: View {
 /// The timeline's vertical rhythm, on the 4 pt grid (`SparkSpacing`).
 /// Proximity does the grouping, so the gaps step up from inside an event, to
 /// between events, to between hours:
-/// - inside an event (sentence, meta, wrapped tags): 4
-/// - an hour label to its first event: 12, so the label reads as that
-///   hour's heading rather than the previous hour's footer
-/// - between events in the same hour: 16
-/// - between hours: 32, twice the event gap
+/// - inside an event: 4 between the title, the time and each pill row
+/// - an hour node to its first event: 16, so the node reads as that hour's
+///   heading rather than the previous hour's footer
+/// - between events in the same hour: 24
+/// - between hours: 36
 private enum TimelineRhythm {
     static let insideEvent = SparkSpacing.xs
-    static let eventPadding = SparkSpacing.sm
+    static let betweenTiers = SparkSpacing.sm
+    static let eventPadding = SparkSpacing.md
     static let hourLeading = SparkSpacing.xl
     static let hourTrailing = SparkSpacing.xs
     static let firstHourLeading = SparkSpacing.xs
+    /// Tags shown before a "+N" pill, as the web caps block pills at three.
+    static let tagLimit = 5
 }
 
+/// The hour as a node on the spine ("09" in a ring), as on the web.
 private struct TimelineHourMarker: View {
     let hour: Int
     /// The first marker sits under the section header, which already
@@ -183,24 +187,23 @@ private struct TimelineHourMarker: View {
     var opensTimeline = false
 
     var body: some View {
-        HStack(alignment: .center, spacing: SparkSpacing.md) {
+        HStack(spacing: 0) {
             SpineColumn {
-                Circle()
-                    .fill(Color.secondary.opacity(0.5))
-                    .frame(width: 7, height: 7)
-                    .padding(3)
+                Text(String(format: "%02d", hour))
+                    .font(SparkTypography.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
                     .background(Color.sparkSurface, in: .circle)
+                    .overlay { Circle().strokeBorder(Color.primary.opacity(0.13), lineWidth: 1) }
             }
-            Text(String(format: "%02d:00", hour))
-                .font(SparkTypography.captionStrong)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
             Spacer(minLength: 0)
         }
         .padding(.top, opensTimeline ? TimelineRhythm.firstHourLeading : TimelineRhythm.hourLeading)
         .padding(.bottom, TimelineRhythm.hourTrailing)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(String(format: "%02d:00", hour))
+        .accessibilityAddTraits(.isHeader)
     }
 }
 
@@ -244,10 +247,15 @@ private struct TimelineGroupRow: View {
     }
 }
 
+/// One event, laid out like the web day view: the action, then its object
+/// on a line of its own, then the exact and relative time, then the pills in
+/// tiers (where it came from, its tags, its blocks), each capped with "+N".
 private struct TimelineRow: View {
     let event: CachedEvent
     let surplus: Int
     let isChild: Bool
+
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(alignment: .top, spacing: SparkSpacing.md) {
@@ -263,20 +271,24 @@ private struct TimelineRow: View {
             }
 
             VStack(alignment: .leading, spacing: TimelineRhythm.insideEvent) {
-                sentence
-                meta
+                title
+                if let time = event.time {
+                    TimelineTimeText(date: time)
+                }
+                tiers
+                    .padding(.top, TimelineRhythm.insideEvent)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 4)
+            .padding(.top, 2)
 
             if let value = signedValue(for: event) {
                 Text(value)
-                    .font(SparkFonts.display(.body, weight: .bold))
-                    .foregroundStyle(.primary)
+                    .font(SparkFonts.display(.title3, weight: .bold))
+                    .foregroundStyle(valueColor)
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
-                    .padding(.top, 5)
+                    .padding(.top, 2)
             }
         }
         .padding(.vertical, TimelineRhythm.eventPadding)
@@ -285,17 +297,24 @@ private struct TimelineRow: View {
         .accessibilityLabel(accessibilityLabel)
     }
 
-    /// "Paid [Brother Marcus] + 2 others": the action, its object as a
-    /// reference pill showing the title only (`docs/design-language.md`
-    /// section 7.5), and the surplus count quiet.
-    private var sentence: some View {
-        FlowLayout(spacing: SparkSpacing.xs, lineSpacing: TimelineRhythm.insideEvent) {
+    /// Values take their domain's tint in dark mode, like the card heroes;
+    /// light mode keeps them in ink, since the tints are fills there and do
+    /// not clear 4.5:1 as text.
+    private var valueColor: Color {
+        colorScheme == .dark ? EntityPresentation.tint(domain: event.domain) : .primary
+    }
+
+    /// The action, then its object in full on its own line, so a long title
+    /// wraps instead of being cut off inside a pill.
+    private var title: some View {
+        VStack(alignment: .leading, spacing: 0) {
             Text(actionTitle(for: event))
-                .font(SparkTypography.body)
+                .font(SparkTypography.title.weight(.semibold))
                 .foregroundStyle(.primary)
-            if event.displayWithObject,
-               let target = event.targetTitle?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty {
-                ObjectRefPill(title: target, type: event.targetType)
+            if let object = objectTitle(for: event) {
+                Text(object)
+                    .font(SparkTypography.title)
+                    .foregroundStyle(.primary)
             }
             if surplus > 0 {
                 Text("+ \(surplus) other" + (surplus == 1 ? "" : "s"))
@@ -303,26 +322,24 @@ private struct TimelineRow: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
-    /// The time (relative, exact on a tap), the actor, and every tag as an
-    /// outline pill. No dividers between them: the spacing separates.
-    private var meta: some View {
-        FlowLayout(spacing: SparkSpacing.sm, lineSpacing: TimelineRhythm.insideEvent) {
-            if let time = event.time {
-                SparkTimeText(time)
+    private var tiers: some View {
+        VStack(alignment: .leading, spacing: TimelineRhythm.betweenTiers) {
+            if let source = sourceTitle(for: event) {
+                TimelineSourcePill(title: source, service: event.service, domain: event.domain)
             }
-            if let source = metaLine(for: event).nilIfEmpty {
-                Text(source)
-                    .font(SparkTypography.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .frame(maxWidth: 180, alignment: .leading)
+            let tags = uniqueTags(event.decodedTags)
+            if !tags.isEmpty {
+                TimelineTagTier(tags: tags)
             }
-            // By position: the cache keeps no tag IDs, so two tags with the
-            // same name and type would otherwise share an identity.
-            ForEach(Array(event.decodedTags.enumerated()), id: \.offset) { _, tag in
-                DetailTagChip(tag: tag)
+            let blocks = event.decodedBlockRefs
+            if !blocks.isEmpty {
+                TimelineBlockTier(
+                    blocks: blocks,
+                    hidden: max((event.blockRefsTotal ?? blocks.count) - blocks.count, 0)
+                )
             }
         }
     }
@@ -332,7 +349,8 @@ private struct TimelineRow: View {
         if surplus > 0 { parts.append("and \(surplus) more") }
         if let time = event.time { parts.append(Self.absolute.string(from: time)) }
         if let value = signedValue(for: event) { parts.append(value) }
-        let tags = event.decodedTagNames
+        if let source = sourceTitle(for: event) { parts.append("from \(source)") }
+        let tags = uniqueTags(event.decodedTags).map(\.name)
         if !tags.isEmpty { parts.append("tagged " + tags.joined(separator: ", ")) }
         return parts.joined(separator: ", ")
     }
@@ -345,41 +363,185 @@ private struct TimelineRow: View {
     }()
 }
 
-/// An object reference: the title only, in its concept's role colour, on a
-/// 10% fill with a 20% border. Text takes the role's ink.
-private struct ObjectRefPill: View {
-    let title: String
-    let type: String?
+/// "20:00  in 57 minutes": the exact time first, then the relative one,
+/// separated by a gap rather than a divider.
+private struct TimelineTimeText: View {
+    let date: Date
 
     var body: some View {
-        let role = SparkRole.forObjectType(type)
-        HStack(spacing: SparkSpacing.xs) {
-            SparkGlyph(Self.icon(forType: type), size: 11, relativeTo: .subheadline)
-                .opacity(0.8)
+        TimelineView(.everyMinute) { context in
+            HStack(spacing: SparkSpacing.sm) {
+                Text(Self.exact.string(from: date))
+                Text(Self.relative.localizedString(for: date, relativeTo: context.date))
+            }
+            .font(SparkTypography.bodySmall)
+            .monospacedDigit()
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+        }
+    }
+
+    private static let exact: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_GB")
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+
+    private static let relative: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .full
+        return f
+    }()
+}
+
+// MARK: - Pill tiers
+
+/// Where the event came from: the integration instance ("Current Account"),
+/// or the actor when the feed has not sent one yet. Opens the integration.
+private struct TimelineSourcePill: View {
+    let title: String
+    let service: String
+    let domain: String
+
+    @Environment(\.openDetailRoute) private var openDetailRoute
+
+    var body: some View {
+        let pill = HStack(spacing: SparkSpacing.xs) {
+            SparkGlyph(SparkIcon.domain(domain), size: 11, relativeTo: .subheadline)
+                .opacity(0.7)
             Text(title)
                 .font(SparkTypography.bodySmall.weight(.medium))
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
-        .foregroundStyle(role.ink)
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: 240, alignment: .leading)
         .padding(.horizontal, SparkSpacing.sm)
         .padding(.vertical, 2)
-        .frame(maxWidth: 220, alignment: .leading)
-        .background(role.fill.opacity(0.10), in: .capsule)
-        .overlay { Capsule().strokeBorder(role.fill.opacity(0.20), lineWidth: 1) }
-    }
+        .overlay {
+            RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.2), lineWidth: 1)
+        }
+        .contentShape(.rect(cornerRadius: 6))
 
-    private static func icon(forType type: String?) -> SparkIcon {
-        let type = (type ?? "").lowercased()
-        if type.contains("person") || type.contains("user") || type.contains("contact") { return .person }
-        if type.contains("album") { return .album }
-        if type.contains("artist") { return .artist }
-        if type.contains("track") || type.contains("song") || type.contains("episode") { return .track }
-        if type.contains("book") && !type.contains("bookmark") { return .book }
-        if type.contains("article") || type.contains("bookmark") || type.contains("document") { return .article }
-        if type.contains("account") || type.contains("merchant") || type.contains("money") { return .payment }
-        if type.contains("place") || type.contains("location") { return .place }
-        return .link
+        if let openDetailRoute {
+            Button { openDetailRoute(.integration(service: service)) } label: { pill }
+                .buttonStyle(.plain)
+                .accessibilityLabel("From \(title)")
+        } else {
+            pill
+        }
+    }
+}
+
+/// The event's tags, the first few and then "+N", which shows the rest.
+private struct TimelineTagTier: View {
+    let tags: [EventTag]
+    @State private var showsAll = false
+
+    var body: some View {
+        let shown = showsAll ? tags : Array(tags.prefix(TimelineRhythm.tagLimit))
+        let hidden = tags.count - shown.count
+        FlowLayout(spacing: SparkSpacing.xs + SparkSpacing.xxs, lineSpacing: TimelineRhythm.insideEvent + SparkSpacing.xxs) {
+            ForEach(Array(shown.enumerated()), id: \.offset) { _, tag in
+                DetailTagChip(tag: tag)
+            }
+            if hidden > 0 {
+                Button {
+                    withAnimation(.snappy(duration: 0.2)) { showsAll = true }
+                } label: {
+                    TimelineMorePill(count: hidden)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Show \(hidden) more tags")
+            }
+        }
+    }
+}
+
+/// The event's first blocks as pills, each with its value ("Tax Summary
+/// £1.20"), then "+N" for the rest, which live on the event screen.
+private struct TimelineBlockTier: View {
+    let blocks: [Event.BlockRef]
+    let hidden: Int
+
+    @Environment(\.openDetailRoute) private var openDetailRoute
+
+    var body: some View {
+        FlowLayout(spacing: SparkSpacing.xs + SparkSpacing.xxs, lineSpacing: TimelineRhythm.insideEvent + SparkSpacing.xxs) {
+            ForEach(blocks) { block in
+                if let openDetailRoute {
+                    Button { openDetailRoute(.block(id: block.id)) } label: { TimelineBlockPill(block: block) }
+                        .buttonStyle(.plain)
+                } else {
+                    TimelineBlockPill(block: block)
+                }
+            }
+            if hidden > 0 {
+                TimelineMorePill(count: hidden)
+                    .accessibilityLabel("\(hidden) more blocks")
+            }
+        }
+    }
+}
+
+private struct TimelineBlockPill: View {
+    let block: Event.BlockRef
+
+    var body: some View {
+        let kind = BlockKind(blockType: block.blockType, hasValue: block.displayValue != nil)
+        let role = SparkRole.forDomain(kind.domain)
+        HStack(spacing: SparkSpacing.xs) {
+            Image(systemName: kind.systemImage)
+                .font(.caption2.weight(.semibold))
+                .opacity(0.8)
+            Text(block.title)
+                .font(SparkTypography.bodySmall.weight(.medium))
+                .lineLimit(1)
+                .truncationMode(.tail)
+            if let value = block.displayValue {
+                Text(value)
+                    .font(SparkTypography.bodySmall.weight(.semibold))
+                    .monospacedDigit()
+                    .lineLimit(1)
+            }
+        }
+        .foregroundStyle(role.ink)
+        .frame(maxWidth: 260, alignment: .leading)
+        .padding(.horizontal, SparkSpacing.sm)
+        .padding(.vertical, 2)
+        .background(role.fill.opacity(0.10), in: .rect(cornerRadius: 6))
+        .overlay {
+            RoundedRectangle(cornerRadius: 6).strokeBorder(role.fill.opacity(0.20), lineWidth: 1)
+        }
+        .contentShape(.rect(cornerRadius: 6))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel([block.title, block.displayValue].compactMap { $0 }.joined(separator: ", "))
+    }
+}
+
+/// "+N": the items a tier holds back.
+private struct TimelineMorePill: View {
+    let count: Int
+
+    var body: some View {
+        Text("+\(count)")
+            .font(SparkTypography.bodySmall.weight(.medium))
+            .monospacedDigit()
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, SparkSpacing.sm)
+            .padding(.vertical, 2)
+            .background(Color.primary.opacity(0.06), in: .rect(cornerRadius: 6))
+    }
+}
+
+/// Tags with the same name and type once only: integrations sometimes
+/// attach a tag twice ("eating_out" from both the category and the merchant).
+private func uniqueTags(_ tags: [EventTag]) -> [EventTag] {
+    var seen = Set<String>()
+    return tags.filter { tag in
+        let key = "\(tag.name.lowercased())\u{1E}\((tag.type ?? "").lowercased())"
+        return seen.insert(key).inserted
     }
 }
 
@@ -486,11 +648,27 @@ private struct TimelineFilterPill: View {
 
 // MARK: - Helpers
 
-private func metaLine(for event: CachedEvent) -> String {
+/// The object written on the line under the action: the target, or the
+/// actor when there is no target, as on the web. A balance snapshot's target
+/// is a date, so it names the account instead.
+private func objectTitle(for event: CachedEvent) -> String? {
+    let actor = event.actorTitle?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
     if isBalanceSnapshot(event), event.targetTitle?.isISODateString == true {
-        return event.action.sparkActionTitle
+        return actor
     }
-    return event.actorTitle?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? ""
+    guard event.displayWithObject else { return nil }
+    return event.targetTitle?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? actor
+}
+
+/// Where the event came from, for the first pill: the integration instance,
+/// or the actor until the feed has sent the integration. Left out when it
+/// would repeat the object line.
+private func sourceTitle(for event: CachedEvent) -> String? {
+    if let name = event.integrationName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty {
+        return name
+    }
+    let actor = event.actorTitle?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+    return actor == objectTitle(for: event) ? nil : actor
 }
 
 private func primaryTitle(for event: CachedEvent) -> String {
