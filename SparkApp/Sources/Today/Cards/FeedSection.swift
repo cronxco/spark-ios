@@ -76,11 +76,11 @@ struct FeedSection: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, SparkSpacing.sm)
                 } else {
-                    VStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: 0) {
                         ForEach(rows) { row in
                             switch row {
                             case .hour(let hour):
-                                TimelineHourMarker(hour: hour)
+                                TimelineHourMarker(hour: hour, opensTimeline: row.id == rows.first?.id)
                             case .group(let events):
                                 TimelineGroupRow(events: events)
                             }
@@ -157,8 +157,27 @@ private struct SpineColumn<Node: View>: View {
     }
 }
 
+/// The timeline's vertical rhythm, on the 4 pt grid (`SparkSpacing`).
+/// Proximity does the grouping, so the gaps step up from inside an event, to
+/// between events, to between hours:
+/// - inside an event (sentence, meta, wrapped tags): 4
+/// - an hour label to its first event: 12, so the label reads as that
+///   hour's heading rather than the previous hour's footer
+/// - between events in the same hour: 16
+/// - between hours: 32, twice the event gap
+private enum TimelineRhythm {
+    static let insideEvent = SparkSpacing.xs
+    static let eventPadding = SparkSpacing.sm
+    static let hourLeading = SparkSpacing.xl
+    static let hourTrailing = SparkSpacing.xs
+    static let firstHourLeading = SparkSpacing.xs
+}
+
 private struct TimelineHourMarker: View {
     let hour: Int
+    /// The first marker sits under the section header, which already
+    /// separates it, so it skips the gap between hours.
+    var opensTimeline = false
 
     var body: some View {
         HStack(alignment: .center, spacing: SparkSpacing.md) {
@@ -175,7 +194,8 @@ private struct TimelineHourMarker: View {
                 .monospacedDigit()
             Spacer(minLength: 0)
         }
-        .frame(height: 30)
+        .padding(.top, opensTimeline ? TimelineRhythm.firstHourLeading : TimelineRhythm.hourLeading)
+        .padding(.bottom, TimelineRhythm.hourTrailing)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(String(format: "%02d:00", hour))
     }
@@ -239,7 +259,7 @@ private struct TimelineRow: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: SparkSpacing.xs) {
+            VStack(alignment: .leading, spacing: TimelineRhythm.insideEvent) {
                 sentence
                 meta
             }
@@ -256,7 +276,7 @@ private struct TimelineRow: View {
                     .padding(.top, 5)
             }
         }
-        .padding(.vertical, SparkSpacing.sm)
+        .padding(.vertical, TimelineRhythm.eventPadding)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
@@ -266,7 +286,7 @@ private struct TimelineRow: View {
     /// reference pill showing the title only (`docs/design-language.md`
     /// section 7.5), and the surplus count quiet.
     private var sentence: some View {
-        FlowLayout(spacing: SparkSpacing.xs) {
+        FlowLayout(spacing: SparkSpacing.xs, lineSpacing: TimelineRhythm.insideEvent) {
             Text(actionTitle(for: event))
                 .font(SparkTypography.body)
                 .foregroundStyle(.primary)
@@ -285,7 +305,7 @@ private struct TimelineRow: View {
     /// The time (relative, exact on a tap), the actor, and every tag as an
     /// outline pill. No dividers between them: the spacing separates.
     private var meta: some View {
-        FlowLayout(spacing: SparkSpacing.sm) {
+        FlowLayout(spacing: SparkSpacing.sm, lineSpacing: TimelineRhythm.insideEvent) {
             if let time = event.time {
                 SparkTimeText(time)
             }
