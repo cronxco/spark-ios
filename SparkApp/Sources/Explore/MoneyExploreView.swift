@@ -44,14 +44,23 @@ enum HistoryRange: String, CaseIterable, Identifiable {
     }
 }
 
-/// Explore › Money as one page, ordered by what the reader acts on first:
-/// what is safe to spend, whether the cards are covered, the bills before
-/// payday, this month's spending, then net worth, accounts and pots.
+enum MoneySection: String, CaseIterable, Identifiable {
+    case now = "Now"
+    case pots = "Pots"
+    case worth = "Worth"
+
+    var id: String { rawValue }
+}
+
+/// Explore › Money in three tabs. Now: what is safe to spend, whether the
+/// cards are covered, the bills before payday and this month's spending.
+/// Pots: pot interest and the pots. Worth: net worth and the accounts.
 struct MoneyExploreView: View {
     @Environment(AppModel.self) private var appModel
     @State private var viewModel: MoneyExploreViewModel?
     @State private var planViewModel: MoneyPlanViewModel?
     @Binding var path: [DetailRoute]
+    @State private var section: MoneySection = .now
     @State private var showCreateAccount = false
     @State private var selectedRange: HistoryRange = .oneMonth
     @State private var expandedGroups: Set<String> = ["current_account", "credit_card"]
@@ -60,9 +69,17 @@ struct MoneyExploreView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: SparkSpacing.xxl) {
-                    planSections(proxy: proxy)
-                    worthSection(proxy: proxy)
-                    potsSection
+                    Picker("Section", selection: $section) {
+                        ForEach(MoneySection.allCases) { section in
+                            Text(section.rawValue).tag(section)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    switch section {
+                    case .now: planSections(proxy: proxy)
+                    case .pots: potsSection
+                    case .worth: worthSection
+                    }
                 }
                 .padding(.horizontal, SparkSpacing.lg)
                 .padding(.top, SparkSpacing.md)
@@ -135,14 +152,22 @@ struct MoneyExploreView: View {
     private var potsSection: some View {
         if let vm = planViewModel, let plan = vm.plan {
             MoneyPotsSection(viewModel: vm, plan: plan)
-                .id("pots")
+        } else if let vm = planViewModel, case .error(let message) = vm.loadState {
+            EmptyState(
+                systemImage: "exclamationmark.triangle.fill",
+                title: "Couldn't load your pots",
+                message: message,
+                actionTitle: "Retry"
+            ) { Task { await vm.refresh() } }
+        } else {
+            shimmer(heights: [300, 56, 56, 56])
         }
     }
 
     // MARK: Net worth
 
     @ViewBuilder
-    private func worthSection(proxy: ScrollViewProxy) -> some View {
+    private var worthSection: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.md) {
             MoneySectionHeader(title: "Net worth", icon: .netWorth)
             if let vm = viewModel {
@@ -165,7 +190,7 @@ struct MoneyExploreView: View {
                         }
                     } else {
                         worthCard(vm: vm)
-                        accountGroups(vm: vm, proxy: proxy)
+                        accountGroups(vm: vm)
                     }
                     addAccountButton
                 }
@@ -272,15 +297,15 @@ struct MoneyExploreView: View {
 
     // MARK: Accounts
 
-    private func accountGroups(vm: MoneyExploreViewModel, proxy: ScrollViewProxy) -> some View {
+    private func accountGroups(vm: MoneyExploreViewModel) -> some View {
         VStack(spacing: SparkSpacing.sm) {
             ForEach(groupedAccounts(vm.accounts), id: \.type) { group in
-                accountGroup(group, proxy: proxy)
+                accountGroup(group)
             }
         }
     }
 
-    private func accountGroup(_ group: AccountGroup, proxy: ScrollViewProxy) -> some View {
+    private func accountGroup(_ group: AccountGroup) -> some View {
         let isExpanded = expandedGroups.contains(group.type)
         return VStack(spacing: SparkSpacing.xs) {
             Button {
@@ -292,7 +317,7 @@ struct MoneyExploreView: View {
                     title: accountTypeLabel(group.type),
                     metadata: groupMetadata(group),
                     value: group.total.map(gbp),
-                    valueCaption: group.isDebt ? "owed" : nil,
+                    valueTint: group.isDebt ? Color.sparkError : nil,
                     ground: .surface,
                     disclosure: isExpanded ? .collapse : .expand
                 ) {
@@ -312,7 +337,7 @@ struct MoneyExploreView: View {
                                 title: account.title,
                                 metadata: accountMetadata(account),
                                 value: account.latestBalance.map { gbp(abs($0.balance)) } ?? "—",
-                                valueCaption: account.isNegativeBalance ? "owed" : nil,
+                                valueTint: account.isNegativeBalance ? Color.sparkError : nil,
                                 ground: .surface,
                                 disclosure: .forward
                             )
@@ -322,11 +347,11 @@ struct MoneyExploreView: View {
                     let pots = group.accounts.filter { $0.kind == "monzo_pot" }
                     if !pots.isEmpty {
                         Button {
-                            withAnimation(.snappy(duration: 0.3)) { proxy.scrollTo("pots", anchor: .top) }
+                            section = .pots
                         } label: {
                             MoneyRow(
                                 title: "Monzo pots (\(pots.count))",
-                                metadata: ["Shown under Pots"],
+                                metadata: ["Shown in Pots"],
                                 value: gbp(pots.compactMap { $0.latestBalance?.balance }.reduce(0, +)),
                                 ground: .surface,
                                 disclosure: .forward

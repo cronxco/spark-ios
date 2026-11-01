@@ -104,7 +104,7 @@ struct MoneyStatusChip: View {
 
 /// A `row` (section 7.2): optional glyph chip, title, metadata spaced by a
 /// gap (no dividers), and a trailing value with an optional word under it
-/// ("owed"). Nested rows sit on the page colour inside a card; rows on the
+/// ("owed"), in the error colour for a debt. Nested rows sit on the page colour inside a card; rows on the
 /// page sit on the content surface.
 struct MoneyRow<Leading: View>: View {
     enum Ground { case nested, surface }
@@ -113,6 +113,7 @@ struct MoneyRow<Leading: View>: View {
     var metadata: [String] = []
     var value: String?
     var valueCaption: String?
+    var valueTint: Color?
     var ground: Ground = .nested
     var disclosure: SparkIcon?
     @ViewBuilder var leading: () -> Leading
@@ -135,7 +136,7 @@ struct MoneyRow<Leading: View>: View {
                     Text(value)
                         .font(SparkTypography.bodyStrong)
                         .monospacedDigit()
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(valueTint.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.primary))
                         .lineLimit(1)
                     if let valueCaption {
                         Text(valueCaption)
@@ -164,11 +165,11 @@ struct MoneyRow<Leading: View>: View {
 extension MoneyRow where Leading == EmptyView {
     init(
         title: String, metadata: [String] = [], value: String? = nil, valueCaption: String? = nil,
-        ground: Ground = .nested, disclosure: SparkIcon? = nil
+        valueTint: Color? = nil, ground: Ground = .nested, disclosure: SparkIcon? = nil
     ) {
         self.init(
             title: title, metadata: metadata, value: value, valueCaption: valueCaption,
-            ground: ground, disclosure: disclosure, leading: { EmptyView() }
+            valueTint: valueTint, ground: ground, disclosure: disclosure, leading: { EmptyView() }
         )
     }
 }
