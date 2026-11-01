@@ -341,50 +341,64 @@ public struct TagChipRow: View {
 
 // MARK: - FlowLayout
 
-/// Minimal flow layout for chip rows. Wraps to next line when the current
-/// line fills.
+/// Minimal flow layout for chip rows. Wraps to the next line when the current
+/// line fills, and centres each item on its line, so a run of text sits level
+/// with the pills beside it instead of riding at their top edge.
 public struct FlowLayout: Layout {
     public let spacing: CGFloat
+    public let lineSpacing: CGFloat
 
-    public init(spacing: CGFloat = 6) { self.spacing = spacing }
+    /// - Parameters:
+    ///   - spacing: the gap between items on a line.
+    ///   - lineSpacing: the gap between wrapped lines; the same as `spacing`
+    ///     unless given.
+    public init(spacing: CGFloat = 6, lineSpacing: CGFloat? = nil) {
+        self.spacing = spacing
+        self.lineSpacing = lineSpacing ?? spacing
+    }
+
+    private struct Line {
+        var items: [(index: Int, size: CGSize)] = []
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+    }
+
+    private func arrangeLines(for subviews: Subviews, maxWidth: CGFloat) -> [Line] {
+        var lines: [Line] = [Line()]
+        for (index, subview) in zip(subviews.indices, subviews) {
+            let size = Self.size(of: subview, lineWidth: maxWidth)
+            let gap = lines[lines.count - 1].items.isEmpty ? 0 : spacing
+            if lines[lines.count - 1].width + gap + size.width > maxWidth, !lines[lines.count - 1].items.isEmpty {
+                lines.append(Line())
+            }
+            var line = lines[lines.count - 1]
+            line.width += (line.items.isEmpty ? 0 : spacing) + size.width
+            line.height = max(line.height, size.height)
+            line.items.append((index, size))
+            lines[lines.count - 1] = line
+        }
+        return lines.filter { !$0.items.isEmpty }
+    }
 
     public func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let maxWidth = proposal.width ?? .infinity
-        var origin = CGPoint.zero
-        var lineHeight: CGFloat = 0
-        var totalHeight: CGFloat = 0
-        var totalWidth: CGFloat = 0
-
-        for subview in subviews {
-            let size = Self.size(of: subview, lineWidth: maxWidth)
-            if origin.x + size.width > maxWidth, origin.x > 0 {
-                origin.x = 0
-                origin.y += lineHeight + spacing
-                lineHeight = 0
-            }
-            origin.x += size.width + spacing
-            lineHeight = max(lineHeight, size.height)
-            totalWidth = max(totalWidth, origin.x)
-            totalHeight = origin.y + lineHeight
-        }
-        return CGSize(width: totalWidth, height: totalHeight)
+        let lines = arrangeLines(for: subviews, maxWidth: proposal.width ?? .infinity)
+        // Never wider than offered: a stack takes its widest child's width,
+        // so an overrun here pushed every other timeline row off the spine.
+        let width = min(lines.map(\.width).max() ?? 0, proposal.width ?? .infinity)
+        let height = lines.map(\.height).reduce(0, +) + lineSpacing * CGFloat(max(lines.count - 1, 0))
+        return CGSize(width: width, height: height)
     }
 
     public func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let maxWidth = bounds.width
-        var origin = bounds.origin
-        var lineHeight: CGFloat = 0
-
-        for subview in subviews {
-            let size = Self.size(of: subview, lineWidth: maxWidth)
-            if origin.x + size.width > bounds.maxX, origin.x > bounds.origin.x {
-                origin.x = bounds.origin.x
-                origin.y += lineHeight + spacing
-                lineHeight = 0
+        var y = bounds.minY
+        for line in arrangeLines(for: subviews, maxWidth: bounds.width) {
+            var x = bounds.minX
+            for item in line.items {
+                let origin = CGPoint(x: x, y: y + (line.height - item.size.height) / 2)
+                subviews[item.index].place(at: origin, proposal: ProposedViewSize(item.size))
+                x += item.size.width + spacing
             }
-            subview.place(at: origin, proposal: ProposedViewSize(size))
-            origin.x += size.width + spacing
-            lineHeight = max(lineHeight, size.height)
+            y += line.height + lineSpacing
         }
     }
 

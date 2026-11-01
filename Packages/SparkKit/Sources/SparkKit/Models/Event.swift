@@ -46,14 +46,56 @@ public struct Event: Codable, Sendable, Hashable, Identifiable {
     public let groupKey: String?
     /// Money events only.
     public let direction: MoneyDirection?
+    /// The integration instance the event came from ("Current Account").
+    public let integration: IntegrationRef?
+    /// The feed's first few blocks as pills; `nil` outside the feed.
+    public let blockRefs: [BlockRef]?
+    /// How many blocks `blockRefs` was taken from, for a "+N" pill.
+    public let blockRefsTotal: Int?
 
     enum CodingKeys: String, CodingKey {
-        case id, time, service, domain, action, value, unit, url, hidden, tags, tldr, actor, target, direction
+        case id, time, service, domain, action, value, unit, url, hidden, tags, tldr, actor, target, direction, integration
         case displayName = "display_name"
         case displayWithObject = "display_with_object"
         case displayValue = "display_value"
         case blocksCount = "blocks_count"
         case groupKey = "group_key"
+        case blockRefs = "block_refs"
+        case blockRefsTotal = "block_refs_total"
+    }
+
+    public struct IntegrationRef: Codable, Sendable, Hashable {
+        public let id: String
+        public let name: String?
+        public let service: String?
+
+        public init(id: String, name: String?, service: String? = nil) {
+            self.id = id
+            self.name = name
+            self.service = service
+        }
+    }
+
+    /// A block as the feed sends it for a timeline pill: its title and, when
+    /// it has one, its formatted value ("Tax Summary £1.20").
+    public struct BlockRef: Codable, Sendable, Hashable, Identifiable {
+        public let id: String
+        public let blockType: String
+        public let title: String
+        public let displayValue: String?
+
+        enum CodingKeys: String, CodingKey {
+            case id, title
+            case blockType = "block_type"
+            case displayValue = "display_value"
+        }
+
+        public init(id: String, blockType: String, title: String, displayValue: String? = nil) {
+            self.id = id
+            self.blockType = blockType
+            self.title = title
+            self.displayValue = displayValue
+        }
     }
 
     public struct ActorTarget: Codable, Sendable, Hashable {
@@ -96,7 +138,10 @@ public struct Event: Codable, Sendable, Hashable, Identifiable {
         actor: ActorTarget? = nil,
         target: ActorTarget? = nil,
         groupKey: String? = nil,
-        direction: MoneyDirection? = nil
+        direction: MoneyDirection? = nil,
+        integration: IntegrationRef? = nil,
+        blockRefs: [BlockRef]? = nil,
+        blockRefsTotal: Int? = nil
     ) {
         self.id = id
         self.time = time
@@ -117,6 +162,9 @@ public struct Event: Codable, Sendable, Hashable, Identifiable {
         self.target = target
         self.groupKey = groupKey
         self.direction = direction
+        self.integration = integration
+        self.blockRefs = blockRefs
+        self.blockRefsTotal = blockRefsTotal
     }
 
     public init(from decoder: Decoder) throws {
@@ -139,6 +187,9 @@ public struct Event: Codable, Sendable, Hashable, Identifiable {
         target = try container.decodeIfPresent(ActorTarget.self, forKey: .target)
         groupKey = try container.decodeIfPresent(String.self, forKey: .groupKey)
         direction = try container.decodeIfPresent(MoneyDirection.self, forKey: .direction)
+        integration = try? container.decodeIfPresent(IntegrationRef.self, forKey: .integration)
+        blockRefs = try? container.decodeIfPresent([BlockRef].self, forKey: .blockRefs)
+        blockRefsTotal = try container.decodeIfPresent(Int.self, forKey: .blockRefsTotal)
 
         if let stringValue = try? container.decodeIfPresent(String.self, forKey: .value) {
             value = stringValue
