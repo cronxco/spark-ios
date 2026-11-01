@@ -16,6 +16,8 @@ final class TagTypeViewModel {
     private(set) var hasMore = false
     private(set) var isLoading = false
     private(set) var hasLoaded = false
+    /// The query the loaded tags answer (nil for the whole type).
+    private(set) var loadedQuery: String?
     private(set) var error: String?
     private var requestGeneration = 0
 
@@ -41,6 +43,7 @@ final class TagTypeViewModel {
             tags = reset ? page.data : tags + page.data
             nextCursor = page.nextCursor
             hasMore = page.hasMore
+            if reset { loadedQuery = query }
             if query == nil, let total = page.types?.first(where: { $0.type == type }) {
                 tagsCount = total.tagsCount
             }
@@ -95,6 +98,9 @@ struct TagTypeView: View {
                 try? await Task.sleep(for: .milliseconds(300))
                 guard !Task.isCancelled else { return }
             }
+            // Coming back from a tag keeps the pages already loaded.
+            let wanted = trimmedQuery.isEmpty ? nil : trimmedQuery
+            if viewModel?.hasLoaded == true, viewModel?.error == nil, viewModel?.loadedQuery == wanted { return }
             await reload()
         }
     }
