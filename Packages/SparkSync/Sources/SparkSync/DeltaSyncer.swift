@@ -82,6 +82,7 @@ public enum DeltaSyncer {
             existing.targetMediaUrl = event.target?.mediaUrl
             existing.groupKey = event.groupKey
             existing.direction = event.direction?.rawValue
+            existing.applyFeedExtras(from: event)
             existing.lastSyncedAt = syncedAt
         } else {
             context.insert(CachedEvent(
@@ -107,6 +108,9 @@ public enum DeltaSyncer {
                 targetMediaUrl: event.target?.mediaUrl,
                 groupKey: event.groupKey,
                 direction: event.direction?.rawValue,
+                integrationName: event.integration?.name,
+                blockRefsData: CachedEvent.encodeBlockRefs(event.blockRefs),
+                blockRefsTotal: event.blockRefsTotal,
                 lastSyncedAt: syncedAt
             ))
         }

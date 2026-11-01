@@ -525,6 +525,7 @@ final class TodayViewModel {
             existing.targetMediaUrl = event.target?.mediaUrl
             existing.groupKey = event.groupKey
             existing.direction = event.direction?.rawValue
+            existing.applyFeedExtras(from: event)
             existing.lastSyncedAt = .now
         } else {
             context.insert(CachedEvent(
@@ -549,7 +550,10 @@ final class TodayViewModel {
                 targetType: event.target?.type,
                 targetMediaUrl: event.target?.mediaUrl,
                 groupKey: event.groupKey,
-                direction: event.direction?.rawValue
+                direction: event.direction?.rawValue,
+                integrationName: event.integration?.name,
+                blockRefsData: CachedEvent.encodeBlockRefs(event.blockRefs),
+                blockRefsTotal: event.blockRefsTotal
             ))
         }
     }
