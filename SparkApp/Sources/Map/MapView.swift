@@ -237,17 +237,11 @@ private struct MapViewContent: View {
     }
 
     private func pinLabel(_ pin: MapPinGroup) -> String {
-        let times = pin.stops.compactMap(\.stopTime).map { Self.timeFormatter.string(from: $0) }
+        let times = pin.stops.compactMap(\.stopTimeLabel)
         let kind = pin.stops.count == 1 ? pin.stops[0].mapLabel : "\(pin.stops.count) stops"
         return ([pin.title, kind] + times).joined(separator: ", ")
     }
 
-    private static let timeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_GB")
-        f.dateFormat = "HH:mm"
-        return f
-    }()
 }
 
 extension MapDataPoint {
@@ -337,8 +331,11 @@ private struct MapStopCard: View {
                     .font(SparkTypography.captionStrong)
                     .foregroundStyle(.secondary)
                 Spacer(minLength: SparkSpacing.sm)
-                if let time = stop.stopTime {
-                    SparkTimeText(time)
+                if let time = stop.stopTimeLabel {
+                    Text(time)
+                        .font(SparkTypography.caption)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
                 }
             }
             HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.md) {

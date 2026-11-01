@@ -53,6 +53,26 @@ extension MapDataPoint {
         return address ?? service.map(Self.serviceName)
     }
 
+    /// The stop's exact 24-hour time, such as "09:40". Will chose exact
+    /// times over relative-first on the map (decision P2, 1 Nov 2026):
+    /// every stop on a past day would otherwise read "1 day ago".
+    var stopTimeLabel: String? {
+        stopTimeLabel(in: .current)
+    }
+
+    func stopTimeLabel(in timeZone: TimeZone) -> String? {
+        guard let stopTime else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let style = Date.VerbatimFormatStyle(
+            format: "\(hour: .twoDigits(clock: .twentyFourHour, hourCycle: .zeroBased)):\(minute: .twoDigits)",
+            locale: Locale(identifier: "en_GB"),
+            timeZone: timeZone,
+            calendar: calendar
+        )
+        return stopTime.formatted(style)
+    }
+
     var detailRoute: DetailRoute {
         kind == .place ? .place(id: id) : .event(id: id)
     }

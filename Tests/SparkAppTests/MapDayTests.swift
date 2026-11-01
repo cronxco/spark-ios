@@ -62,4 +62,17 @@ struct MapDayTests {
         let paid = MapDataPoint(id: "x", kind: .transaction, lat: 0, lng: 0, title: "Kaffateria", address: "5 Dundas Street, Glasgow")
         #expect(paid.mapContext == "5 Dundas Street, Glasgow")
     }
+
+    @Test("stop times are exact and 24-hour, in local time")
+    func stopTimes() {
+        let london = TimeZone(identifier: "Europe/London")!
+        let coffee = thursday.first { $0.id == "coffee-2" }
+        let gilmour = thursday.first { $0.id == "gilmour" }
+        let station = thursday.first { $0.id == "station" }
+        #expect(coffee?.stopTimeLabel(in: london) == "09:40")
+        #expect(gilmour?.stopTimeLabel(in: london) == "14:45")
+        #expect(station?.stopTimeLabel(in: london) == nil)
+        let late = MapDataPoint(id: "late", kind: .transaction, lat: 0, lng: 0, title: "Late", time: at("2026-07-01T23:05:00Z"))
+        #expect(late.stopTimeLabel(in: london) == "00:05")
+    }
 }

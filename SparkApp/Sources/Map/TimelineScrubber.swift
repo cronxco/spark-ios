@@ -183,7 +183,7 @@ struct TimelineScrubber: View {
         guard let stop = viewModel.selectedStop, let index = viewModel.selectedIndex else {
             return "\(viewModel.stops.count) stops"
         }
-        let time = stop.stopTime.map { Self.timeFormatter.string(from: $0) } ?? ""
+        let time = stop.stopTimeLabel ?? ""
         return "\(stop.title), \(time), stop \(index + 1) of \(viewModel.stops.count)"
     }
 
@@ -208,13 +208,6 @@ struct TimelineScrubber: View {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_GB")
         f.dateFormat = "EEE d MMM"
-        return f
-    }()
-
-    private static let timeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_GB")
-        f.dateFormat = "HH:mm"
         return f
     }()
 }
