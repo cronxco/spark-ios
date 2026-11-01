@@ -102,11 +102,15 @@ private struct FlintQuestionCard: View {
                     .lineLimit(2)
             }
 
-            Text(question.question)
-                .font(SparkTypography.body)
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            // Flint writes links to events, days and objects into its
+            // questions as Markdown. Rendered, a tap goes to the app's
+            // `openURL` action, which opens the event in the app.
+            SparkRichContentText(
+                text: question.question,
+                font: SparkTypography.body,
+                lineSpacing: 2
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             if isAnswered, let answer = question.effectiveAnswer?.answer {
                 answered(answer)
