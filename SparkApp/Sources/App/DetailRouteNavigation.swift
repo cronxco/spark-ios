@@ -2,13 +2,15 @@ import SparkKit
 import SparkUI
 import SwiftUI
 
-/// Reference chip cluster for detail screens. Uses value-based
-/// `NavigationLink`, so it pushes onto whatever stack presented the detail
-/// view (matching every other in-detail navigation) instead of routing
-/// globally and jumping tabs. Long-press shows the same peek as the Flint row.
+/// Reference chip cluster for detail screens. A tap opens the reference's
+/// peek card (`docs/design-language.md` section 7.5), whose button pushes the
+/// detail onto whatever stack presented this screen, instead of routing
+/// globally and jumping tabs. A long press keeps the preview.
 struct EntityReferenceLinkRow: View {
     let label: String?
     let references: [EntityReference]
+
+    @Environment(\.openDetailRoute) private var openDetailRoute
 
     var body: some View {
         if !references.isEmpty {
@@ -18,25 +20,85 @@ struct EntityReferenceLinkRow: View {
                 }
                 FlowLayout(spacing: SparkSpacing.xs + 2) {
                     ForEach(references) { reference in
-                        if let route = reference.detailRoute {
+                        if let route = reference.detailRoute, openDetailRoute == nil {
+                            // A sheet's own stack has no opener: link straight
+                            // through, as before the peek card.
                             NavigationLink(value: route) {
                                 EntityRefChip(reference)
                             }
                             .buttonStyle(.plain)
-                            .contextMenu {
-                                NavigationLink(value: route) {
-                                    Label("Open", systemImage: "arrow.up.forward.app")
-                                }
-                            } preview: {
-                                EntityPreviewCard(reference: reference)
-                            }
                         } else {
-                            EntityRefChip(reference)
+                            PeekableEntityRefChip(reference, onOpen: opener(for: reference))
                         }
                     }
                 }
             }
         }
+    }
+
+    private func opener(for reference: EntityReference) -> ((EntityReference) -> Void)? {
+        guard let route = reference.detailRoute, let openDetailRoute else { return nil }
+        return { _ in openDetailRoute(route) }
+    }
+}
+
+/// A tag that opens its peek card on a tap; the card's button pushes the
+/// tag's screen onto the current stack.
+struct DetailTagChip: View {
+    let tag: EventTag
+
+    @Environment(\.openDetailRoute) private var openDetailRoute
+
+    var body: some View {
+        let route = DetailRoute.tag(id: tag.tagID, name: tag.name, type: tag.type)
+        if let openDetailRoute {
+            PeekableTagChip(tag) { openDetailRoute(route) }
+        } else {
+            // A sheet's own stack has no opener: link straight through.
+            NavigationLink(value: route) { TagChip(tag) }
+                .buttonStyle(.plain)
+        }
+    }
+}
+
+// MARK: - Opening a detail from a peek card
+
+/// Pushes a `DetailRoute` onto the stack that owns the screen. A peek card
+/// is a popover, outside the stack, so it can't use a `NavigationLink`; each
+/// tab's stack installs one of these instead. Screens with no opener (a
+/// sheet's own stack) link straight through instead.
+struct OpenDetailRouteAction {
+    let open: @MainActor (DetailRoute) -> Void
+
+    @MainActor func callAsFunction(_ route: DetailRoute) {
+        open(route)
+    }
+}
+
+private struct OpenDetailRouteKey: EnvironmentKey {
+    static var defaultValue: OpenDetailRouteAction? { nil }
+}
+
+extension EnvironmentValues {
+    var openDetailRoute: OpenDetailRouteAction? {
+        get { self[OpenDetailRouteKey.self] }
+        set { self[OpenDetailRouteKey.self] = newValue }
+    }
+}
+
+extension View {
+    /// Lets peek cards inside this stack push onto `path`.
+    func sparkOpensDetailRoutes(on path: Binding<[DetailRoute]>) -> some View {
+        environment(\.openDetailRoute, OpenDetailRouteAction { route in
+            if path.wrappedValue.last != route { path.wrappedValue.append(route) }
+        })
+    }
+
+    /// Lets peek cards inside this stack push onto `path`.
+    func sparkOpensDetailRoutes(on path: Binding<NavigationPath>) -> some View {
+        environment(\.openDetailRoute, OpenDetailRouteAction { route in
+            path.wrappedValue.append(route)
+        })
     }
 }
 

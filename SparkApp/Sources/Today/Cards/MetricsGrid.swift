@@ -15,18 +15,29 @@ struct MetricsGrid: View {
     // gap between them. Below that, keep the values in one column.
     private nonisolated static let minimumTwoColumnWidth: CGFloat = 320
 
-    private var columns: [GridItem] {
-        let count = isNarrow || dynamicTypeSize >= .xxxLarge ? 1 : 2
-        return Array(repeating: GridItem(.flexible(), spacing: SparkSpacing.md), count: count)
+    private var columnCount: Int {
+        isNarrow || dynamicTypeSize >= .xxxLarge ? 1 : 2
+    }
+
+    private var rows: [[DayMetrics.Card]] {
+        stride(from: 0, to: metrics.cards.count, by: columnCount).map {
+            Array(metrics.cards[$0..<min($0 + columnCount, metrics.cards.count)])
+        }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.md) {
             SectionLabel("Metrics", style: .dayHeading)
 
-            LazyVGrid(columns: columns, spacing: SparkSpacing.md) {
-                ForEach(metrics.cards) { card in
-                    DayMetricCard(card: card)
+            // A Grid rather than a LazyVGrid: it gives each row the height
+            // of its tallest card and lets the other card fill it.
+            Grid(horizontalSpacing: SparkSpacing.md, verticalSpacing: SparkSpacing.md) {
+                ForEach(rows, id: \.first?.id) { row in
+                    GridRow {
+                        ForEach(row) { card in
+                            PeekableMetricCard(card: card)
+                        }
+                    }
                 }
             }
         }
@@ -34,6 +45,39 @@ struct MetricsGrid: View {
             geometry.size.width < Self.minimumTwoColumnWidth
         } action: { narrow in
             isNarrow = narrow
+        }
+    }
+}
+
+/// A compact metric that opens a peek card on a tap, with the figures the
+/// card leaves out (sleep duration and efficiency, steps and active energy,
+/// resting heart rate, balance) and a button to its Explore section.
+private struct PeekableMetricCard: View {
+    let card: DayMetrics.Card
+
+    @Environment(AppModel.self) private var appModel
+    @State private var isPeeking = false
+
+    var body: some View {
+        Button {
+            isPeeking.toggle()
+        } label: {
+            DayMetricCard(card: card)
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Shows more figures")
+        .sparkPeek(isPresented: $isPeeking) {
+            PeekCard(
+                icon: card.icon,
+                tint: EntityPresentation.tint(domain: card.domain),
+                eyebrow: card.domain.capitalized,
+                title: card.label,
+                facts: card.peekFacts,
+                action: PeekCard.Action(card.exploreDestination == .exploreMoney ? "Open Money" : "Open Health") {
+                    isPeeking = false
+                    appModel.pendingDestination = card.exploreDestination
+                }
+            )
         }
     }
 }
@@ -65,7 +109,10 @@ struct DayMetricCard: View {
                 ComparisonLine(comparison: comparison)
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
+        // As tall as its content, or as the tallest card in its row, so the
+        // comparison lines of a row align without leaving a gap under the
+        // reading. No fixed minimum height.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(SparkSpacing.md)
         .sparkContentSurface(radius: SparkRadii.md)
         .accessibilityElement(children: .ignore)

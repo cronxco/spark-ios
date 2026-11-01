@@ -21,8 +21,11 @@ struct ExploreView: View {
             .sparkDetailDestinations()
             .sparkMainAppToolbar()
         }
+        .sparkOpensDetailRoutes(on: $path)
         .onChange(of: appModel.pendingDestination, initial: true) { _, destination in
             guard let destination, let target = ExploreSection(destination: destination) else { return }
+            // A detail left open in this tab would hide the section asked for.
+            path.removeAll()
             section = target
             appModel.pendingDestination = nil
         }

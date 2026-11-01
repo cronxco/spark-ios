@@ -14,6 +14,10 @@ final class EventDetailViewModel: ETagDetailMutationHandling {
     let eventId: String
     var state: DetailLoadState<EventDetail> = .loading
     private(set) var metricBaselineStatus: MetricBaselineStatus?
+    /// The metric this event is a reading of, for the hero's comparison line.
+    private(set) var metric: MetricDetail?
+    /// The identifier `metric` was loaded with, for the link to its screen.
+    private(set) var metricIdentifier: String?
     var rawPayload: String?
     var etag: String?
     private(set) var isDeleted = false
@@ -140,6 +144,8 @@ final class EventDetailViewModel: ETagDetailMutationHandling {
         guard MetricIdentifier.split(identifier) != nil else { return }
         do {
             let metric = try await apiClient.request(MetricsEndpoint.detail(identifier: identifier))
+            self.metric = metric
+            metricIdentifier = identifier
             metricBaselineStatus = MetricBaselineStatus.make(
                 event: detail.event,
                 metric: metric,

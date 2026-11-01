@@ -2,118 +2,47 @@ import SparkKit
 import SparkUI
 import SwiftUI
 
-struct SparkDetailHero: View {
-    let eyebrow: String
-    let status: String?
-    let title: String
-    let subtitle: String?
-    let value: String?
-    var valueTint: Color = .sparkAccent
-    var valueAlignment: HorizontalAlignment = .leading
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-            Text(eyebrow)
-                .font(SparkTypography.mono)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-
-            if let status, !status.isEmpty {
-                Text(status)
-                    .font(SparkTypography.bodyStrong)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-
-            Text(title)
-                .font(SparkFonts.display(.largeTitle, weight: .bold))
-                .foregroundStyle(.primary)
-                .lineLimit(3)
-                .minimumScaleFactor(0.72)
-                .accessibilityAddTraits(.isHeader)
-
-            if let subtitle, !subtitle.isEmpty {
-                Text(subtitle)
-                    .font(SparkTypography.title)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(3)
-            }
-
-            if let value, !value.isEmpty {
-                Text(value)
-                    .font(SparkFonts.display(.largeTitle, weight: .bold))
-                    .foregroundStyle(valueTint)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.52)
-                    .frame(maxWidth: .infinity, alignment: valueAlignment == .trailing ? .trailing : .leading)
-                    .multilineTextAlignment(valueAlignment == .trailing ? .trailing : .leading)
-                    .padding(.top, SparkSpacing.xs)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-    }
-}
-
+/// A detail section heading (§12.2): the UI face, not Comfortaa, with an
+/// optional glyph and a count written as "(N)".
 struct SparkDetailSectionHeader: View {
     let title: String
     let trailing: String?
+    var count: Int?
+    var icon: SparkIcon?
 
-    init(_ title: String, trailing: String? = nil) {
+    init(_ title: String, count: Int? = nil, icon: SparkIcon? = nil, trailing: String? = nil) {
         self.title = title
+        self.count = count
+        self.icon = icon
         self.trailing = trailing
     }
 
+    private var text: String {
+        guard let count else { return title }
+        return "\(title) (\(count))"
+    }
+
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            // The Day screen's heading, so detail sections sit a step below
-            // the largeTitle hero instead of competing with it.
-            SectionLabel(title, style: .dayHeading)
+        HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.sm) {
+            if let icon {
+                SparkGlyph(icon, size: 14, relativeTo: .headline)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+
+            Text(text)
+                .font(Font.system(.headline))
+                .foregroundStyle(.primary)
+                .accessibilityAddTraits(.isHeader)
 
             Spacer(minLength: SparkSpacing.sm)
 
             if let trailing, !trailing.isEmpty {
                 Text(trailing)
-                    .font(SparkTypography.monoSmall)
+                    .font(SparkTypography.caption)
                     .foregroundStyle(.secondary)
             }
         }
-    }
-}
-
-struct SparkDetailInsightCard: View {
-    var label = "Insight"
-    let text: String
-    var tint: Color = .sparkWarning
-
-    var body: some View {
-        GlassCard(radius: SparkRadii.lg, padding: SparkSpacing.md, tint: tint.opacity(0.06)) {
-            HStack(alignment: .top, spacing: SparkSpacing.sm) {
-                Circle()
-                    .fill(tint)
-                    .frame(width: 12, height: 12)
-                    .padding(.top, 5)
-                    .background {
-                        Circle()
-                            .fill(tint.opacity(0.2))
-                            .frame(width: 26, height: 26)
-                    }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(label)
-                        .font(SparkTypography.mono)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(tint)
-
-                    Text(text)
-                        .font(SparkTypography.body)
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label): \(text)")
     }
 }
 

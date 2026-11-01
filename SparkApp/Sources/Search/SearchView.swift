@@ -47,6 +47,7 @@ struct SearchView: View {
                 .sparkMainNavigationTitle("Search")
                 .sparkMainAppToolbar()
         }
+        .sparkOpensDetailRoutes(on: $path)
         .searchable(
             text: queryBinding,
             placement: .automatic,

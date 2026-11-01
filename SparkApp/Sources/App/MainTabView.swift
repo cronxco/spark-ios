@@ -1,4 +1,5 @@
 import SparkKit
+import SparkUI
 import SwiftUI
 
 struct MainTabView: View {
@@ -38,22 +39,43 @@ struct MainTabView: View {
 
     private var tabs: some View {
         TabView(selection: $selection) {
-            Tab("Day", systemImage: "sun.max.fill", value: AppTab.day) {
+            Tab(value: AppTab.day) {
                 DayPagerView()
+            } label: {
+                tabLabel("Day", .day)
             }
-            Tab("Explore", systemImage: "safari", value: AppTab.explore) {
+            Tab(value: AppTab.explore) {
                 ExploreView()
+            } label: {
+                tabLabel("Explore", .explore)
             }
-            Tab("Knowledge", systemImage: "books.vertical.fill", value: AppTab.knowledge) {
+            Tab(value: AppTab.knowledge) {
                 KnowledgeView()
+            } label: {
+                tabLabel("Knowledge", .knowledge)
             }
-            Tab("Flint", systemImage: "sparkles", value: AppTab.flint) {
+            Tab(value: AppTab.flint) {
                 FlintView()
+            } label: {
+                tabLabel("Flint", .flint)
             }
-            Tab("CMD", systemImage: "terminal", value: AppTab.cmd) {
+            Tab(value: AppTab.cmd) {
                 CmdView(apiClient: model.apiClient)
+            } label: {
+                tabLabel("CMD", .command)
             }
         }
+    }
+}
+
+// Tab bar items take only an image, so each glyph is drawn into one
+// (`docs/design-language.md` section 6).
+@MainActor
+private func tabLabel(_ title: String, _ icon: SparkIcon) -> some View {
+    Label {
+        Text(title)
+    } icon: {
+        icon.image()
     }
 }
 

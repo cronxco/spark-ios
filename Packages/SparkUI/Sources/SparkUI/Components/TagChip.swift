@@ -99,6 +99,67 @@ public extension EventTag {
     }
 }
 
+// MARK: - PeekableTagChip
+
+/// A tag that opens its peek card on a tap (`docs/design-language.md`
+/// section 7.5): the type as the eyebrow, the name, and a button to the
+/// tag's items. Without `onOpen`, the card says there is nothing to open.
+public struct PeekableTagChip: View {
+    public let tag: EventTag
+    public let onOpen: (() -> Void)?
+
+    @State private var isPeeking = false
+
+    public init(_ tag: EventTag, onOpen: (() -> Void)?) {
+        self.tag = tag
+        self.onOpen = onOpen
+    }
+
+    private var openFromPeek: (() -> Void)? {
+        guard let onOpen else { return nil }
+        return {
+            isPeeking = false
+            onOpen()
+        }
+    }
+
+    public var body: some View {
+        TagChip(tag) { isPeeking.toggle() }
+            .sparkPeek(isPresented: $isPeeking) {
+                TagPeekCard(tag: tag, onOpen: openFromPeek)
+            }
+    }
+}
+
+/// A tag's peek card, built from the name and type it carries.
+public struct TagPeekCard: View {
+    public let tag: EventTag
+    public let onOpen: (() -> Void)?
+
+    public init(tag: EventTag, onOpen: (() -> Void)?) {
+        self.tag = tag
+        self.onOpen = onOpen
+    }
+
+    /// The type in sentence case ("Music album tag"), as section 4 asks.
+    private var eyebrow: String {
+        guard let label = tag.tagTypeLabel else { return "Tag" }
+        let text = "\(label) tag".lowercased()
+        return text.prefix(1).uppercased() + text.dropFirst()
+    }
+
+    public var body: some View {
+        PeekCard(
+            icon: TagChip.icon(forType: tag.type),
+            tint: SparkRole.forTagType(tag.type).fill,
+            eyebrow: eyebrow,
+            title: tag.name,
+            action: onOpen.map { PeekCard.Action("View tagged items", perform: $0) },
+            noDestination: "This tag has no page to open."
+        )
+    }
+}
+
 // MARK: - TagChip
 
 /// Tag chip supporting both typed `EventTag` (colour-coded, no `#`) and a
@@ -165,7 +226,7 @@ public struct TagChip: View {
         }
     }
 
-    private static func icon(forType type: String?) -> SparkIcon {
+    static func icon(forType type: String?) -> SparkIcon {
         let type = (type ?? "").lowercased()
         if type.contains("artist") { return .artist }
         if type.contains("album") { return .album }

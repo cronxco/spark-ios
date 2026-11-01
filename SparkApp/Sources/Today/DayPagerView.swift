@@ -69,6 +69,7 @@ struct DayPagerView: View {
                 }
             }
         }
+        .sparkOpensDetailRoutes(on: $path)
         .onChange(of: appModel.pendingRoute) { _, route in
             apply(route: route)
         }
