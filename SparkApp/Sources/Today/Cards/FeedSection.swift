@@ -175,6 +175,8 @@ private enum TimelineRhythm {
     static let hourLeading = SparkSpacing.xl
     static let hourTrailing = SparkSpacing.xs
     static let firstHourLeading = SparkSpacing.xs
+    /// Block pills shown before a "+N" pill, matching the server's cap.
+    static let blockLimit = 3
     /// Tags shown before a "+N" pill, as the web caps block pills at three.
     static let tagLimit = 5
 }
@@ -336,9 +338,10 @@ private struct TimelineRow: View {
             }
             let blocks = event.decodedBlockRefs
             if !blocks.isEmpty {
+                let shown = Array(blocks.prefix(TimelineRhythm.blockLimit))
                 TimelineBlockTier(
-                    blocks: blocks,
-                    hidden: max((event.blockRefsTotal ?? blocks.count) - blocks.count, 0)
+                    blocks: shown,
+                    hidden: max(event.blockRefsTotal ?? blocks.count, blocks.count) - shown.count
                 )
             }
         }
