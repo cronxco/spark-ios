@@ -15,18 +15,29 @@ struct MetricsGrid: View {
     // gap between them. Below that, keep the values in one column.
     private nonisolated static let minimumTwoColumnWidth: CGFloat = 320
 
-    private var columns: [GridItem] {
-        let count = isNarrow || dynamicTypeSize >= .xxxLarge ? 1 : 2
-        return Array(repeating: GridItem(.flexible(), spacing: SparkSpacing.md), count: count)
+    private var columnCount: Int {
+        isNarrow || dynamicTypeSize >= .xxxLarge ? 1 : 2
+    }
+
+    private var rows: [[DayMetrics.Card]] {
+        stride(from: 0, to: metrics.cards.count, by: columnCount).map {
+            Array(metrics.cards[$0..<min($0 + columnCount, metrics.cards.count)])
+        }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.md) {
             SectionLabel("Metrics", style: .dayHeading)
 
-            LazyVGrid(columns: columns, spacing: SparkSpacing.md) {
-                ForEach(metrics.cards) { card in
-                    PeekableMetricCard(card: card)
+            // A Grid rather than a LazyVGrid: it gives each row the height
+            // of its tallest card and lets the other card fill it.
+            Grid(horizontalSpacing: SparkSpacing.md, verticalSpacing: SparkSpacing.md) {
+                ForEach(rows, id: \.first?.id) { row in
+                    GridRow {
+                        ForEach(row) { card in
+                            PeekableMetricCard(card: card)
+                        }
+                    }
                 }
             }
         }
@@ -98,7 +109,10 @@ struct DayMetricCard: View {
                 ComparisonLine(comparison: comparison)
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
+        // As tall as its content, or as the tallest card in its row, so the
+        // comparison lines of a row align without leaving a gap under the
+        // reading. No fixed minimum height.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(SparkSpacing.md)
         .sparkContentSurface(radius: SparkRadii.md)
         .accessibilityElement(children: .ignore)

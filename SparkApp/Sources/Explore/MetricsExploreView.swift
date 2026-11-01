@@ -1,95 +1,66 @@
-import Charts
 import SparkKit
 import SparkUI
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
+/// Explore › Metrics: every metric Spark tracks, across services. A list to
+/// find a metric and see where it sits against its trend; the trend itself
+/// lives on the metric screen (`docs/design-language.md` 7.2, 8).
 struct MetricsExploreView: View {
     @Environment(AppModel.self) private var appModel
-    @Environment(\.colorScheme) private var colorScheme
     @State private var viewModel: MetricsExploreViewModel?
-    @State private var filterDomain: String? = nil
-    @State private var domainSelection: String = Self.allDomainsFilterID
-    @State private var sortMode: MetricSortMode = .anomalies
+    @State private var domainFilter: String?
+    @State private var arrangement: MetricArrangement = .byService
     @State private var searchText = ""
-    @State private var heroRange: HeroMetricRange = .week
     @Binding var path: [DetailRoute]
 
-    private var visibleMetrics: [MetricPresentation] {
-        let metrics = (viewModel?.metrics ?? []).map { metric in
-            MetricPresentation(
-                metric: metric,
-                detail: viewModel?.snapshots[metric.identifier]
-            )
-        }
-        let domainFiltered = metrics.filter { metric in
-            guard let filterDomain else { return true }
-            return metric.domain == filterDomain
-        }
+    private var items: [MetricItem] {
+        (viewModel?.metrics ?? []).map { MetricItem(metric: $0, detail: viewModel?.snapshots[$0.identifier]) }
+    }
+
+    private var visibleItems: [MetricItem] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let searched = query.isEmpty ? domainFiltered : domainFiltered.filter { $0.matches(query: query) }
-        return searched.sorted { sortMode.areInIncreasingOrder($0, $1) }
-    }
-
-    private var heroMetric: MetricPresentation? {
-        visibleMetrics.first
-    }
-
-    private var rowMetrics: [MetricPresentation] {
-        Array(visibleMetrics.dropFirst())
-    }
-
-    private var availableDomains: [String] {
-        Array(Set((viewModel?.metrics ?? []).map { MetricPresentation.domain(for: $0) })).sorted {
-            displayLabel(forDomain: $0) < displayLabel(forDomain: $1)
+        return items.filter { item in
+            (domainFilter == nil || item.domain == domainFilter)
+                && (query.isEmpty || item.matches(query))
         }
     }
 
-    private var heatmapRows: [DomainHeatmapRow] {
-        let raw = HeatmapPlaceholder.generate()
-        return [
-            .init(id: "sleep", label: "Sleep", values: raw["sleep"] ?? [], tint: .domainHealth),
-            .init(id: "motion", label: "Motion", values: raw["activity"] ?? [], tint: .domainActivity),
-            .init(id: "spend", label: "Spend", values: raw["spend"] ?? [], tint: .domainMoney),
-            .init(id: "mood", label: "Mood", values: raw["mood"] ?? [], tint: .sparkSuccess),
-        ]
+    private var flaggedItems: [MetricItem] {
+        visibleItems.filter(\.isFlagged).sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+    }
+
+    private var groups: [MetricGroup] {
+        arrangement.groups(visibleItems)
+    }
+
+    private var availableDomains: [DomainChip.Domain] {
+        let present = Set(items.map(\.domain))
+        return DomainChip.Domain.allCases.filter { present.contains($0.rawValue) }
     }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-                pageHeader
+            VStack(alignment: .leading, spacing: 0) {
+                SparkSectionCaption(text: caption)
                     .padding(.horizontal, SparkSpacing.lg)
 
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
-                        .font(.system(size: 14))
-                    TextField("Search service or action", text: $searchText)
-                        .font(SparkTypography.bodySmall)
-                        .foregroundStyle(.primary)
-                        .tint(.primary)
+                controls
+                    .padding(.top, SparkSpacing.md)
+                    .padding(.horizontal, SparkSpacing.lg)
+
+                if !availableDomains.isEmpty {
+                    domainChips
+                        .padding(.top, SparkSpacing.md)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .sparkGlass(.capsule)
-                .padding(.horizontal, SparkSpacing.lg)
-
-                sortControls
-                    .padding(.horizontal, SparkSpacing.lg)
-
-                domainFilter
-                    .padding(.horizontal, SparkSpacing.lg)
 
                 content
-
-                if heroMetric != nil {
-                    historySection
-                        .padding(.horizontal, SparkSpacing.lg)
-                }
-
+                    .padding(.top, SparkSpacing.xl)
             }
             .padding(.top, SparkSpacing.md)
-            .padding(.bottom, SparkSpacing.xl)
+            .padding(.bottom, SparkSpacing.xxl)
         }
         .refreshable { await viewModel?.refresh() }
         .task {
@@ -100,67 +71,91 @@ struct MetricsExploreView: View {
         }
     }
 
-    // MARK: - Page header
+    // MARK: - Header and controls
 
-    private var pageHeader: some View {
-        SparkSectionCaption(text: headerSubtitle)
-    }
-
-    // MARK: - Domain filter
-
-    @ViewBuilder
-    private var domainFilter: some View {
-        if !availableDomains.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                Picker("Domain", selection: $domainSelection) {
-                    Text("All").tag(Self.allDomainsFilterID)
-                    ForEach(availableDomains, id: \.self) { domain in
-                        Text(displayLabel(forDomain: domain)).tag(domain)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(minWidth: 360)
-                .onChange(of: domainSelection) { _, newValue in
-                    filterDomain = newValue == Self.allDomainsFilterID ? nil : newValue
-                }
-                .onChange(of: availableDomains) { _, domains in
-                    guard domainSelection != Self.allDomainsFilterID,
-                          !domains.contains(domainSelection)
-                    else { return }
-                    domainSelection = Self.allDomainsFilterID
-                    filterDomain = nil
-                }
-            }
+    private var caption: String {
+        switch viewModel?.metadataState {
+        case .loaded(let summary):
+            let metrics = summary.activeSourceCount == 1 ? "1 metric" : "\(summary.activeSourceCount) metrics"
+            let services = summary.serviceCount == 1 ? "1 service" : "\(summary.serviceCount) services"
+            guard let lastSyncAt = summary.lastSyncAt else { return "\(metrics) from \(services)" }
+            return "\(metrics) from \(services), synced \(SparkRelativeTime.string(for: lastSyncAt))"
+        case .unavailable:
+            return "Metrics unavailable"
+        case .idle, .none:
+            return "Loading metrics"
         }
     }
 
-    private var sortControls: some View {
+    private var controls: some View {
         HStack(spacing: SparkSpacing.sm) {
+            HStack(spacing: SparkSpacing.sm) {
+                SparkGlyph(.search, size: 14, relativeTo: .subheadline)
+                    .foregroundStyle(.secondary)
+                TextField("Search metrics or services", text: $searchText)
+                    .font(SparkTypography.bodySmall)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .submitLabel(.search)
+            }
+            .padding(.horizontal, 14)
+            .frame(minHeight: 44)
+            .sparkGlass(.capsule)
+
             Menu {
-                ForEach(MetricSortMode.allCases, id: \.self) { mode in
-                    Button {
-                        sortMode = mode
-                    } label: {
-                        Label(mode.title, systemImage: mode.systemImage)
+                Picker("Arrange", selection: $arrangement) {
+                    ForEach(MetricArrangement.allCases, id: \.self) { mode in
+                        Text(mode.title).tag(mode)
                     }
                 }
             } label: {
                 HStack(spacing: SparkSpacing.xs) {
-                    Image(systemName: sortMode.systemImage)
-                    Text(sortMode.title)
-                    Image(systemName: "chevron.down")
-                        .font(.caption2)
+                    SparkGlyph(.filter, size: 13, relativeTo: .caption)
+                    Text(arrangement.title)
+                        .font(SparkTypography.captionStrong)
+                        .lineLimit(1)
                 }
-                .font(SparkTypography.captionStrong)
                 .foregroundStyle(Color.sparkTextPrimary)
-                .padding(.horizontal, SparkSpacing.md)
-                .padding(.vertical, SparkSpacing.xs + 2)
+                .padding(.horizontal, 14)
+                .frame(minHeight: 44)
                 .sparkGlass(.capsule)
             }
             .buttonStyle(.plain)
-
-            Spacer(minLength: 0)
+            .accessibilityLabel("Arrange metrics, \(arrangement.title)")
         }
+    }
+
+    private var domainChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: SparkSpacing.sm) {
+                Button {
+                    domainFilter = nil
+                } label: {
+                    Text("All")
+                        .font(SparkTypography.captionStrong)
+                        .foregroundStyle(domainFilter == nil ? Color.sparkOnAccent : Color.sparkTextPrimary)
+                        .padding(.horizontal, SparkSpacing.md)
+                        .padding(.vertical, SparkSpacing.sm)
+                        .background(
+                            Capsule().fill(domainFilter == nil ? Color.sparkAccent : Color.primary.opacity(0.08))
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(domainFilter == nil ? .isSelected : [])
+
+                ForEach(availableDomains, id: \.self) { domain in
+                    Button {
+                        domainFilter = domainFilter == domain.rawValue ? nil : domain.rawValue
+                    } label: {
+                        DomainChip(domain: domain, isSelected: domainFilter == domain.rawValue)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(domainFilter == domain.rawValue ? .isSelected : [])
+                }
+            }
+            .padding(.horizontal, SparkSpacing.lg)
+        }
+        .scrollClipDisabled()
     }
 
     // MARK: - Content
@@ -179,555 +174,445 @@ struct MetricsExploreView: View {
             ) { Task { await viewModel?.refresh() } }
             .padding(.horizontal, SparkSpacing.lg)
         case .loaded:
-            if viewModel?.metrics.isEmpty == true {
+            if items.isEmpty {
                 EmptyState(
                     systemImage: "chart.line.uptrend.xyaxis",
-                    title: "No active metrics",
-                    message: "Connected metrics will appear here once Spark receives events for them."
+                    title: "No metrics yet",
+                    message: "Metrics appear here once a connected integration sends Spark a reading."
                 )
                 .padding(.horizontal, SparkSpacing.lg)
-            } else if visibleMetrics.isEmpty {
+            } else if visibleItems.isEmpty {
                 EmptyState(
                     systemImage: "magnifyingglass",
                     title: "No matching metrics",
-                    message: searchText.isEmpty ? "Try another domain." : "Try a different service, action, or metric name."
+                    message: "Try adjusting your filters."
                 )
                 .padding(.horizontal, SparkSpacing.lg)
             } else {
-                heroChartCard
-                    .padding(.horizontal, SparkSpacing.lg)
-
-                metricsStack
-                    .padding(.horizontal, SparkSpacing.lg)
+                VStack(alignment: .leading, spacing: SparkSpacing.xxl) {
+                    if !flaggedItems.isEmpty {
+                        flaggedSection
+                    }
+                    ForEach(groups) { group in
+                        groupSection(group)
+                    }
+                }
+                .padding(.horizontal, SparkSpacing.lg)
             }
         }
     }
 
     private var loadingContent: some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-            LoadingShimmerCard()
-                .frame(height: 210)
-            LoadingShimmerCard()
-                .frame(height: 104)
-            LoadingShimmerCard()
-                .frame(height: 104)
+        VStack(alignment: .leading, spacing: SparkSpacing.md) {
+            LoadingShimmerCard().frame(height: 120)
+            LoadingShimmerCard().frame(height: 260)
         }
         .padding(.horizontal, SparkSpacing.lg)
     }
 
-    // MARK: - Hero chart card
-
-    @ViewBuilder
-    private var heroChartCard: some View {
-        if let metric = heroMetric {
-            GlassCard(radius: SparkRadii.hero, padding: SparkSpacing.xl, tint: metric.tint.opacity(0.08)) {
-                VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-                    HStack(alignment: .top, spacing: SparkSpacing.sm) {
-                        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                            HStack(spacing: SparkSpacing.sm) {
-                                DomainGlyph(icon: metric.icon, tint: metric.tint, size: 26)
-                                Text(metric.title)
-                                    .font(SparkTypography.bodyStrong)
-                                    .foregroundStyle(headerTextColor)
-                                AnomalyDot(active: metric.latestAnomalyAt != nil)
-                            }
-
-                            if let detail = metric.detail {
-                                VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                                    if let today = detail.today {
-                                        valueLine(today, unit: detail.unit, tint: metric.tint, size: 60)
-                                    }
-                                    if let delta = delta(for: detail) {
-                                        deltaChip(delta, suffix: "vs 30-day avg")
-                                    }
-                                }
-                            } else {
-                                LoadingShimmerCard()
-                                    .frame(width: 140, height: 74)
-                            }
-                        }
-
-                        Spacer(minLength: SparkSpacing.md)
-
-                        rangePicker(tint: metric.tint)
-                    }
-
-                    if let detail = metric.detail {
-                        SparklineMiniChart(series: series(for: detail), tint: metric.tint)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 118)
-                    } else {
-                        LoadingShimmerCard()
-                            .frame(height: 118)
-                    }
-                }
-                .frame(minHeight: 236, alignment: .topLeading)
-            }
-            .contentShape(RoundedRectangle(cornerRadius: SparkRadii.hero))
-            .onTapGesture {
-                path.append(.metric(identifier: metric.identifier))
-            }
-        }
-    }
-
-    // MARK: - Metric rows (full-bleed sparkline)
-
-    private var metricsStack: some View {
-        VStack(spacing: SparkSpacing.sm) {
-            ForEach(rowMetrics, id: \.identifier) { metric in
-                Button {
-                    path.append(.metric(identifier: metric.identifier))
-                } label: {
-                    FullBleedMetricRow(
-                        metric: metric,
-                        isLoading: viewModel?.loadState == .loading || viewModel == nil
-                    )
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    // MARK: - History / heatmap
-
-    private var historySection: some View {
+    private var flaggedSection: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.md) {
-            SparkSectionHeader(title: "Last 45 days", icon: "waveform", tint: .domainKnowledge)
-
-            GlassCard(radius: SparkRadii.lg, padding: SparkSpacing.lg) {
-                Heatmap45(rows: heatmapRows)
+            SectionTitle(title: "Outside usual range", count: flaggedItems.count, icon: .anomaly, tint: .domainAnomaly)
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 160), spacing: SparkSpacing.md)],
+                alignment: .leading,
+                spacing: SparkSpacing.md
+            ) {
+                ForEach(flaggedItems) { item in
+                    Button { open(item) } label: { FlaggedMetricCard(item: item) }
+                        .buttonStyle(.plain)
+                        .contextMenu { menu(for: item) }
+                }
             }
         }
     }
 
-    // MARK: - Helpers
-
-    private func delta(for detail: MetricDetail) -> (value: Double, isPositive: Bool)? {
-        guard let today = detail.today, let avg = detail.average30d else { return nil }
-        return (today - avg, today >= avg)
-    }
-
-    private func valueLine(_ value: Double, unit: String?, tint: Color, size: CGFloat) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.xs) {
-            Text(formatValue(value, unit: unit))
-                .font(SparkFonts.display(size: size))
-                .foregroundStyle(tint)
-                .lineLimit(1)
-                .minimumScaleFactor(0.65)
-            if let unit = unitLabel(unit) {
-                Text(unit)
-                    .font(SparkTypography.bodySmall)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func deltaChip(_ d: (value: Double, isPositive: Bool), suffix: String? = nil) -> some View {
-        HStack(spacing: 3) {
-            Image(systemName: d.isPositive ? "arrow.up.right" : "arrow.down.right")
-                .font(.caption2)
-            Text(deltaLabel(d.value))
-                .font(SparkTypography.monoSmall)
-            if let suffix {
-                Text(suffix)
-                    .font(SparkTypography.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .foregroundStyle(d.isPositive ? Color.sparkSuccess : Color.sparkWarning)
-    }
-
-    private func formatValue(_ v: Double, unit: String?) -> String {
-        switch unit {
-        case "score", "bpm", "percent": return String(Int(v))
-        case "ms": return "\(Int(v))"
-        case "GBP", "USD", "EUR": return String(format: "£%.2f", v)
-        default:
-            if v >= 1000 { return String(format: "%.1fk", v / 1000) }
-            return v.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(v)) : String(format: "%.1f", v)
-        }
-    }
-
-    private func deltaLabel(_ diff: Double) -> String {
-        let sign = diff >= 0 ? "+" : ""
-        if abs(diff) >= 1000 { return "\(sign)\(String(format: "%.1fk", diff / 1000))" }
-        return "\(sign)\(diff.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(diff)) : String(format: "%.1f", diff))"
-    }
-
-    private var headerTextColor: Color {
-        colorScheme == .dark ? Color.spark2 : Color.sparkTextPrimary
-    }
-
-    private var headerSubtitle: String {
-        switch viewModel?.metadataState {
-        case .loaded(let summary):
-            guard let lastSyncAt = summary.lastSyncAt else { return "No metrics synced yet" }
-            return lastSyncedSubtitle(for: lastSyncAt)
-        case .unavailable:
-            return "Metrics unavailable"
-        case .idle, .none:
-            return "Loading metrics"
-        }
-    }
-
-    private func rangePicker(tint: Color) -> some View {
-        RangeChipBar(HeroMetricRange.allCases, selected: heroRange, tint: tint, label: \.label) { range in
-            heroRange = range
-        }
-    }
-
-    private func series(for detail: MetricDetail) -> [MetricDetail.Point] {
-        switch heroRange {
-        case .day:
-            return Array(detail.series.suffix(2))
-        case .week:
-            return Array(detail.series.suffix(7))
-        case .month:
-            return Array(detail.series.suffix(30))
-        }
-    }
-
-    private func unitLabel(_ unit: String?) -> String? {
-        switch unit {
-        case nil, "score", "steps":
-            nil
-        case "percent":
-            "percent"
-        case "GBP":
-            "GBP"
-        default:
-            unit
-        }
-    }
-
-    private func lastSyncedSubtitle(for date: Date) -> String {
-        let calendar = Calendar.current
-        if calendar.isDateInToday(date) {
-            return "Last synced today at \(Self.syncTimeFormatter.string(from: date))"
-        }
-        if calendar.isDateInYesterday(date) {
-            return "Last synced yesterday at \(Self.syncTimeFormatter.string(from: date))"
-        }
-        return "Last synced \(Self.syncDateFormatter.string(from: date))"
-    }
-
-    private func displayLabel(forDomain domain: String) -> String {
-        domain.replacingOccurrences(of: "_", with: " ").sparkActionTitle
-    }
-
-    private static let syncTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        return formatter
-    }()
-
-    private static let syncDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter
-    }()
-
-    private static let allDomainsFilterID = "__all__"
-}
-
-// MARK: - Full-bleed metric row
-
-private struct FullBleedMetricRow: View {
-    let metric: MetricPresentation
-    let isLoading: Bool
-
-    private var recentSeries: [MetricDetail.Point] {
-        Array((metric.detail?.series ?? []).suffix(14))
-    }
-
-    var body: some View {
-        ZStack(alignment: .leading) {
-            if !recentSeries.isEmpty {
-                SparklineMiniChart(series: recentSeries, tint: metric.tint)
-                    .opacity(0.24)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 118)
-                    .offset(x: 52, y: 8)
-                    .clipShape(RoundedRectangle(cornerRadius: SparkRadii.lg))
-
-                LinearGradient(
-                    stops: [
-                        .init(color: Color.sparkElevated.opacity(0.95), location: 0),
-                        .init(color: Color.sparkElevated.opacity(0.78), location: 0.34),
-                        .init(color: Color.sparkElevated.opacity(0), location: 0.74),
-                    ],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .frame(height: 118)
-                .clipShape(RoundedRectangle(cornerRadius: SparkRadii.lg))
-
-                LinearGradient(
-                    stops: [
-                        .init(color: Color.sparkElevated.opacity(0), location: 0.0),
-                        .init(color: Color.sparkElevated.opacity(0.66), location: 0.56),
-                        .init(color: Color.sparkElevated.opacity(0.92), location: 1.0),
-                    ],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .frame(height: 118)
-                .clipShape(RoundedRectangle(cornerRadius: SparkRadii.lg))
-            }
-
-            HStack(alignment: .center, spacing: SparkSpacing.md) {
-                leadingContent
-                Spacer(minLength: SparkSpacing.sm)
-                trailingDelta
+    private func groupSection(_ group: MetricGroup) -> some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.md) {
+            SectionTitle(title: group.title, count: group.items.count)
+            LazyVStack(spacing: 0) {
+                ForEach(Array(group.items.enumerated()), id: \.element.id) { index, item in
+                    if index > 0 {
+                        Divider().padding(.leading, 30 + SparkSpacing.md)
+                    }
+                    Button { open(item) } label: { MetricListRow(item: item) }
+                        .buttonStyle(.plain)
+                        .contextMenu { menu(for: item) }
+                }
             }
             .padding(.horizontal, SparkSpacing.lg)
+            .sparkContentSurface(radius: SparkRadii.lg)
         }
-        .frame(height: 118)
-        .sparkGlass(.roundedRect(SparkRadii.lg))
-        .overlay(alignment: .topTrailing) {
-            AnomalyDot(active: metric.latestAnomalyAt != nil)
-                .padding(8)
-        }
-    }
-
-    private var leadingContent: some View {
-        HStack(spacing: SparkSpacing.md) {
-            DomainGlyph(icon: metric.icon, tint: metric.tint, size: 44)
-
-            VStack(alignment: .leading, spacing: SparkSpacing.xs) {
-                Text(metric.title)
-                    .font(SparkTypography.bodySmall)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                if let today = metric.detail?.today {
-                    HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.xs) {
-                        Text(formatValue(today, unit: metric.detail?.unit))
-                            .font(SparkFonts.display(size: 34))
-                            .foregroundStyle(metric.tint)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.65)
-                        if let unit = unitLabel(metric.detail?.unit) {
-                            Text(unit)
-                                .font(SparkTypography.bodySmall)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-                } else if isLoading {
-                    Text("--")
-                        .font(SparkTypography.monoBody)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .padding(.trailing, SparkSpacing.sm)
     }
 
     @ViewBuilder
-    private var trailingDelta: some View {
-        if let delta = delta(for: metric.detail) {
-            HStack(spacing: 3) {
-                Image(systemName: delta.isPositive ? "arrow.up.right" : "arrow.down.right")
-                    .font(.caption2)
-                Text(deltaLabel(delta.value))
-                    .font(SparkTypography.monoSmall)
-            }
-            .fontWeight(.semibold)
-            .foregroundStyle(delta.isPositive ? Color.sparkSuccess : Color.sparkWarning)
-            .padding(.horizontal, SparkSpacing.sm)
-            .padding(.vertical, SparkSpacing.xs)
-            .sparkGlass(.capsule)
+    private func menu(for item: MetricItem) -> some View {
+        Button { open(item) } label: { Label("Open metric", systemImage: "chart.xyaxis.line") }
+        Button {
+            #if canImport(UIKit)
+            UIPasteboard.general.string = item.identifier
+            #endif
+        } label: {
+            Label("Copy identifier", systemImage: "doc.on.doc")
         }
     }
 
-    private func delta(for detail: MetricDetail?) -> (value: Double, isPositive: Bool)? {
-        guard let detail, let today = detail.today, let avg = detail.average30d else { return nil }
-        return (today - avg, today >= avg)
-    }
-
-    private func formatValue(_ v: Double, unit: String?) -> String {
-        switch unit {
-        case "score", "bpm", "percent": return String(Int(v))
-        case "steps": return String(Int(v))
-        case "kcal": return String(Int(v))
-        case "GBP", "USD", "EUR": return String(format: "£%.2f", v)
-        default:
-            if v >= 1000 { return String(format: "%.1fk", v / 1000) }
-            return v.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(v)) : String(format: "%.1f", v)
-        }
-    }
-
-    private func unitLabel(_ unit: String?) -> String? {
-        switch unit {
-        case "score", "steps", "percent", nil:
-            return nil
-        case "GBP":
-            return nil
-        default:
-            return unit
-        }
-    }
-
-    private func deltaLabel(_ diff: Double) -> String {
-        let sign = diff >= 0 ? "+" : ""
-        if abs(diff) >= 1000 { return "\(sign)\(String(format: "%.1fk", diff / 1000))" }
-        return "\(sign)\(diff.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(diff)) : String(format: "%.1f", diff))"
+    private func open(_ item: MetricItem) {
+        path.append(.metric(identifier: item.identifier))
     }
 }
 
-// MARK: - Supporting types
+// MARK: - Arrangement
 
-private enum MetricSortMode: String, CaseIterable {
-    case anomalies
-    case recent
-    case name
-    case service
+/// The sort-and-group menu. By service is the default: a metric is named by
+/// the integration that records it, and the domain chips already slice by
+/// part of life.
+private enum MetricArrangement: CaseIterable, Hashable {
+    case byService, needsAttention, recent, name
 
     var title: String {
         switch self {
-        case .anomalies: "Anomalies"
-        case .recent: "Most recent"
-        case .name: "Name"
-        case .service: "Service"
+        case .byService: "By service"
+        case .needsAttention: "Furthest from trend"
+        case .recent: "Recently updated"
+        case .name: "A to Z"
         }
     }
 
-    var systemImage: String {
+    func groups(_ items: [MetricItem]) -> [MetricGroup] {
+        let byName: (MetricItem, MetricItem) -> Bool = {
+            $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+        }
         switch self {
-        case .anomalies: "exclamationmark.triangle.fill"
-        case .recent: "clock.fill"
-        case .name: "textformat"
-        case .service: "server.rack"
-        }
-    }
-
-    func areInIncreasingOrder(_ lhs: MetricPresentation, _ rhs: MetricPresentation) -> Bool {
-        switch self {
-        case .anomalies:
-            return compare(lhs, rhs, dates: [\.latestAnomalyAt, \.lastEventAt])
-        case .recent:
-            return compare(lhs, rhs, dates: [\.lastEventAt])
-        case .name:
-            return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
-        case .service:
-            let service = lhs.service.localizedCaseInsensitiveCompare(rhs.service)
-            if service != .orderedSame { return service == .orderedAscending }
-            let action = lhs.action.localizedCaseInsensitiveCompare(rhs.action)
-            if action != .orderedSame { return action == .orderedAscending }
-            return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
-        }
-    }
-
-    private func compare(
-        _ lhs: MetricPresentation,
-        _ rhs: MetricPresentation,
-        dates: [KeyPath<MetricPresentation, Date?>]
-    ) -> Bool {
-        for keyPath in dates {
-            let left = lhs[keyPath: keyPath]
-            let right = rhs[keyPath: keyPath]
-            switch (left, right) {
-            case let (left?, right?) where left != right:
-                return left > right
-            case (_?, nil):
-                return true
-            case (nil, _?):
-                return false
-            default:
-                break
+        case .byService:
+            let grouped = Dictionary(grouping: items, by: \.serviceName)
+            return grouped
+                .map { MetricGroup(title: $0.key, items: $0.value.sorted(by: byName)) }
+                .sorted { lhs, rhs in
+                    // Most recently active service first, so the ones still
+                    // sending readings lead.
+                    let left = lhs.items.compactMap(\.lastEventAt).max() ?? .distantPast
+                    let right = rhs.items.compactMap(\.lastEventAt).max() ?? .distantPast
+                    if left != right { return left > right }
+                    return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+                }
+        case .needsAttention:
+            let sorted = items.sorted { lhs, rhs in
+                if lhs.isFlagged != rhs.isFlagged { return lhs.isFlagged }
+                let left = lhs.deviation ?? -1
+                let right = rhs.deviation ?? -1
+                if left != right { return left > right }
+                return byName(lhs, rhs)
             }
-        }
-        return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
-    }
-}
-
-private enum HeroMetricRange: CaseIterable {
-    case day, week, month
-
-    var label: String {
-        switch self {
-        case .day: "D"
-        case .week: "W"
-        case .month: "M"
+            return [MetricGroup(title: "All metrics", items: sorted)]
+        case .recent:
+            let sorted = items.sorted { lhs, rhs in
+                let left = lhs.lastEventAt ?? .distantPast
+                let right = rhs.lastEventAt ?? .distantPast
+                if left != right { return left > right }
+                return byName(lhs, rhs)
+            }
+            return [MetricGroup(title: "All metrics", items: sorted)]
+        case .name:
+            return [MetricGroup(title: "All metrics", items: items.sorted(by: byName))]
         }
     }
 }
 
-private struct MetricPresentation {
+private struct MetricGroup: Identifiable {
+    let title: String
+    let items: [MetricItem]
+    var id: String { title }
+}
+
+// MARK: - Item
+
+/// One metric as the list draws it: names, glyph and the latest reading
+/// against its 30-day mean, worked out once.
+struct MetricItem: Identifiable {
     let metric: Metric
     let detail: MetricDetail?
+    let now: Date
 
+    init(metric: Metric, detail: MetricDetail?, now: Date = .now) {
+        self.metric = metric
+        self.detail = detail
+        self.now = now
+    }
+
+    var id: String { metric.identifier }
     var identifier: String { metric.identifier }
-    var title: String { metric.displayName }
-    var service: String { metric.service }
-    var action: String { metric.action }
-    var domain: String { Self.domain(for: metric) }
     var lastEventAt: Date? { metric.lastEventAt }
-    var latestAnomalyAt: Date? {
-        guard let detail,
-              let latestPointDate = detail.series.last?.date,
-              detail.anomalies.contains(where: { $0.date == latestPointDate })
-        else { return nil }
-        return latestPointDate
-    }
 
-    var icon: String {
-        EntityPresentation.icon(domain: domain, service: service, action: action)
-    }
-
-    var tint: Color {
-        EntityPresentation.tint(domain: domain)
-    }
-
-    func matches(query: String) -> Bool {
-        let fields = [title, identifier, service, action, domain]
-        return fields.contains { field in
-            field.localizedCaseInsensitiveContains(query)
-        }
-    }
-
-    static func domain(for metric: Metric) -> String {
-        guard let domain = metric.domain?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !domain.isEmpty
-        else {
+    var domain: String {
+        guard let domain = metric.domain?.trimmingCharacters(in: .whitespacesAndNewlines), !domain.isEmpty else {
             return metric.service
         }
-        return domain
+        return domain.lowercased()
+    }
+
+    var title: String { MetricDisplay.title(metric.displayName, service: metric.service) }
+    var serviceName: String { MetricDisplay.serviceName(metric.service) }
+    var icon: SparkIcon { MetricDisplay.icon(action: metric.action, unit: unit, domain: domain) }
+    var tint: Color { EntityPresentation.tint(domain: domain) }
+    var unit: String? { detail?.unit ?? metric.unit }
+
+    var latest: MetricDetail.Point? { detail?.series.last }
+
+    var value: MetricDisplay.Value? {
+        latest.map { MetricDisplay.format($0.value, unit: unit, action: metric.action) }
+    }
+
+    var isScore: Bool { MetricDisplay.isScore(action: metric.action, unit: unit) }
+
+    var daysAgo: Int? { latest.map { MetricDisplay.daysAgo($0.date, now: now) } }
+
+    var comparison: MetricComparison? {
+        guard let latest else { return nil }
+        return MetricDisplay.comparison(
+            value: latest.value,
+            mean: detail?.average30d,
+            unit: unit,
+            action: metric.action
+        )
+    }
+
+    /// The comparison with "from yesterday" run on when the latest reading
+    /// isn't today's.
+    var context: String? {
+        let stale = daysAgo.flatMap(MetricDisplay.staleness(daysAgo:))
+        switch (comparison?.text, stale) {
+        case let (text?, stale?): return "\(text), \(stale)"
+        case let (text?, nil): return text
+        case let (nil, stale?): return stale.prefix(1).uppercased() + stale.dropFirst()
+        case (nil, nil): return nil
+        }
+    }
+
+    /// The latest reading sits outside the usual range.
+    var isFlagged: Bool {
+        guard let detail, let latest else { return false }
+        return detail.anomalies.contains { $0.date == latest.date }
+    }
+
+    /// How far the latest reading sits from its mean, as a share of the mean,
+    /// for "Furthest from trend".
+    var deviation: Double? {
+        guard let latest, let mean = detail?.average30d, mean != 0 else { return nil }
+        return abs(latest.value - mean) / abs(mean)
+    }
+
+    /// "Usual 34.6–36.0°C", for a reading outside it.
+    var usualRange: String? {
+        guard let baseline = detail?.baseline, baseline.low <= baseline.high else { return nil }
+        let low = MetricDisplay.format(max(0, baseline.low), unit: unit, action: metric.action)
+        let high = MetricDisplay.format(baseline.high, unit: unit, action: metric.action)
+        return "usual \(low.text)–\(high.text)\(high.unit ?? "")"
+    }
+
+    func matches(_ query: String) -> Bool {
+        [title, serviceName, metric.displayName, metric.identifier, domain]
+            .contains { $0.localizedCaseInsensitiveContains(query) }
+    }
+
+    var accessibilityLabel: String {
+        var parts = [title, serviceName]
+        if let value { parts.append([value.text, value.unit].compactMap { $0 }.joined(separator: " ")) }
+        if let context { parts.append(context) }
+        if isFlagged { parts.append("Outside usual range") }
+        return parts.joined(separator: ", ")
     }
 }
 
-// MARK: - Sparkline mini chart
+// MARK: - Views
 
-private struct SparklineMiniChart: View {
-    let series: [MetricDetail.Point]
-    let tint: Color
+private struct SectionTitle: View {
+    let title: String
+    let count: Int
+    var icon: SparkIcon?
+    var tint: Color = .secondary
 
     var body: some View {
-        Chart(series) { point in
-            AreaMark(
-                x: .value("Date", point.date),
-                y: .value("Value", point.value)
-            )
-            .foregroundStyle(
-                LinearGradient(
-                    colors: [tint.opacity(0.4), tint.opacity(0)],
-                    startPoint: .top, endPoint: .bottom
-                )
-            )
-            LineMark(
-                x: .value("Date", point.date),
-                y: .value("Value", point.value)
-            )
-            .foregroundStyle(tint)
-            .lineStyle(StrokeStyle(lineWidth: 1.5))
+        HStack(spacing: SparkSpacing.sm) {
+            if let icon {
+                SparkGlyph(icon, size: 15, relativeTo: .headline)
+                    .foregroundStyle(tint)
+            }
+            HStack(spacing: SparkSpacing.xs) {
+                Text(title)
+                    .font(SparkTypography.bodyStrong)
+                    .foregroundStyle(Color.sparkTextPrimary)
+                Text("(\(count))")
+                    .font(SparkTypography.body)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .chartXAxis(.hidden)
-        .chartYAxis(.hidden)
-        .chartLegend(.hidden)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// A `row` (7.2): glyph chip, name over its comparison line, value trailing.
+private struct MetricListRow: View {
+    let item: MetricItem
+
+    var body: some View {
+        HStack(spacing: SparkSpacing.md) {
+            DomainGlyph(item.icon, tint: item.tint, size: 30)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: SparkSpacing.xs) {
+                    Text(item.title)
+                        .font(SparkTypography.bodyStrong)
+                        .foregroundStyle(Color.sparkTextPrimary)
+                        .lineLimit(1)
+                    if item.isFlagged {
+                        SparkGlyph(.anomaly, size: 11, relativeTo: .caption)
+                            .foregroundStyle(Color.domainAnomaly)
+                    }
+                }
+                if let context = item.context {
+                    ComparisonText(comparison: item.comparison, text: context)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let value = item.value {
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Text(value.text)
+                        .font(SparkTypography.bodyStrong)
+                        .foregroundStyle(Color.sparkTextPrimary)
+                    if let unit = value.unit {
+                        Text(unit)
+                            .font(SparkTypography.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .monospacedDigit()
+                .lineLimit(1)
+                .layoutPriority(1)
+            } else if item.detail == nil {
+                Text("\u{2014}")
+                    .font(SparkTypography.bodyStrong)
+                    .foregroundStyle(.secondary)
+            }
+
+            SparkGlyph(.forward, size: 12, relativeTo: .caption)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(minHeight: 64)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(item.accessibilityLabel)
+        .accessibilityAddTraits(.isButton)
+    }
+}
+
+/// A `compact` card (7.2) for a reading outside its usual range: eyebrow,
+/// hero value or ring, one context line.
+private struct FlaggedMetricCard: View {
+    let item: MetricItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+            HStack(spacing: SparkSpacing.xs) {
+                SparkGlyph(item.icon, size: 13, relativeTo: .caption)
+                    .foregroundStyle(item.tint)
+                Text(item.title)
+                    .font(SparkTypography.captionStrong)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: SparkSpacing.xs)
+                if let daysAgo = item.daysAgo {
+                    Text(MetricDisplay.dayLabel(daysAgo: daysAgo))
+                        .font(SparkTypography.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            hero
+
+            if let line = contextLine {
+                ComparisonText(comparison: item.comparison, text: line)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .padding(SparkSpacing.lg)
+        .sparkContentSurface(radius: SparkRadii.lg)
+        .contentShape(RoundedRectangle(cornerRadius: SparkRadii.lg))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(item.accessibilityLabel)
+        .accessibilityAddTraits(.isButton)
+    }
+
+    @ViewBuilder
+    private var hero: some View {
+        if item.isScore, let latest = item.latest {
+            ScoreRing(
+                fraction: latest.value / 100,
+                text: MetricDisplay.format(latest.value, unit: item.unit, action: item.metric.action).text,
+                tint: item.tint,
+                diameter: 64,
+                valueColor: .sparkHero(domain: item.domain)
+            )
+            .frame(maxWidth: .infinity)
+        } else if let value = item.value {
+            HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.xs) {
+                Text(value.text)
+                    .font(SparkTypography.compactValue)
+                    .foregroundStyle(Color.sparkHero(domain: item.domain))
+                if let unit = value.unit {
+                    Text(unit)
+                        .font(SparkTypography.compactUnit)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+        }
+    }
+
+    /// The comparison, then the usual range it left.
+    private var contextLine: String? {
+        let parts = [item.comparison?.text, item.usualRange].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
+    }
+}
+
+/// The comparison line (3.4): the arrow carries the polarity colour, the
+/// words stay secondary.
+private struct ComparisonText: View {
+    let comparison: MetricComparison?
+    let text: String
+
+    private var arrowColor: Color {
+        switch comparison?.isGood {
+        case true?: .sparkSuccess
+        case false?: .sparkError
+        case nil: .secondary
+        }
+    }
+
+    private var arrow: SparkIcon? {
+        switch comparison?.direction {
+        case .up?: .increase
+        case .down?: .decrease
+        case .steady?: .steady
+        case nil: nil
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.xs) {
+            if let arrow {
+                SparkGlyph(arrow, size: 10, relativeTo: .caption)
+                    .foregroundStyle(arrowColor)
+            }
+            Text(text)
+                .font(SparkTypography.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        }
     }
 }
 
