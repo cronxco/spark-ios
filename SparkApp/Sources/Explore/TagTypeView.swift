@@ -140,10 +140,10 @@ struct TagTypeView: View {
                     .padding(.horizontal, SparkSpacing.xs)
                 TagRowList(tags: tags, showsType: false) {
                     Task {
-                        await viewModel?.load(
-                            query: trimmedQuery.isEmpty ? nil : trimmedQuery,
-                            reset: false
-                        )
+                        // The cursor belongs to the loaded query, which can
+                        // trail the field while typing is debounced.
+                        guard let viewModel else { return }
+                        await viewModel.load(query: viewModel.loadedQuery, reset: false)
                     }
                 }
             }
