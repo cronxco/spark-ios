@@ -116,7 +116,7 @@ Facts that Flint or a summary picks out inside running text (in Up to Speed, dig
 
 ### 3.4 Change and comparison
 
-A delta is good or bad according to the metric, not its direction. Lower spend, lower resting heart rate and fewer awake minutes are good. Each metric declares its polarity (`higherIsBetter`), and the arrow glyph takes `success` or `error` from that. The number itself stays `base-content`. A neutral change (inside the usual range) is `secondary` with a flat arrow.
+A delta is good or bad according to the metric, not its direction. Lower spend, lower resting heart rate and fewer awake minutes are good. Each metric declares its polarity (`higherIsBetter`), and the arrow glyph takes `success` or `error` from that. The number itself stays `base-content`. A neutral change (inside the usual range, the mean ± one standard deviation in 8) is `secondary` with a flat arrow. Use the backend's status when it sends one; without one, treat a change under 10% as neutral.
 
 Every comparison line has one shape: arrow, amount, direction word, baseline. `↓ 4bpm below 30d trend`, `↑ £9 above 7d trend`, `↓ 12 below 30d trend` for a score. The arrow shows direction and carries the polarity colour; the amount always carries the metric's unit, unspaced (`4bpm`, `35m`), and only unitless scores go bare; the baseline is the window (`30d`, `7d`, `12w`) followed by "trend". No "your", no metric name repeated.
 
@@ -220,7 +220,7 @@ Elevation is shown by surface change, not shadows. No card, filter panel or nest
 
 ## 6. Glyphs
 
-- **One concept, one Font Awesome glyph, one semantic manifest.** Both platforms resolve named Spark concepts through a single version-pinned manifest (for example `sleep: moon`, `task: circle-check`, `flint: wand-magic-sparkles`). Generate or validate the Swift enum and PHP mapping from it; neither platform guesses glyphs from labels. iOS uses `SparkIcon` through `EntityPresentation`; web uses `App\Support\BlockPresentation`. Bundle only required, licensed Font Awesome assets (prefer vector asset-catalog images on iOS) and test for missing glyphs.
+- **One concept, one Font Awesome glyph, one semantic manifest.** Both platforms resolve named Spark concepts through a single version-pinned manifest (for example `sleep: moon`, `task: circle-check`, `flint: hexagon-nodes`). Generate or validate the Swift enum and PHP mapping from it; neither platform guesses glyphs from labels. iOS uses `SparkIcon` through `EntityPresentation`; web uses `App\Support\BlockPresentation`. Bundle only required, licensed Font Awesome assets (prefer vector asset-catalog images on iOS) and test for missing glyphs.
 - **Font Awesome Solid is the default on web and iOS.** Brand glyphs (`fab.`) are for genuine service/network marks only. Native platform-owned controls, such as back navigation, switches or standard disclosure controls, may retain their system iconography when substitution harms usability or accessibility. Do not introduce new Heroicons or SF Symbols for Spark-specific semantic content.
 - **Licensing and accessibility:** Verify the version and redistribution permissions of bundled assets (Free SVGs, fonts and Pro assets have different terms). Decorative glyphs are hidden from assistive technology when adjacent text conveys their meaning. Interactive glyphs require accessible labels.
 - **Colour**: a domain glyph takes its domain fill (3.2). A neutral glyph (action, navigation, section heading) inherits `base-content`, or `base-content/70` when secondary. A status glyph takes its status colour (`fas.circle-check` in `success`). Never colour a glyph for decoration, and never use a status colour for a domain.
@@ -389,7 +389,7 @@ Pick one pattern per card. Each has one implementation per platform, shared acro
 | **List** | Takeaways, receipt lines, checklists | `VStack` of rows | `ul` with `space-y-1` | Up to 5 in `card`, then "+N more". Real checkboxes only for tasks. |
 | **Image-led** | Album art (1:1), book cover (2:3), photo, bookmark hero (16:9) | `AsyncImage` in the body slot | `img` with `aspect-*` and `object-cover` | Aspect ratio comes from the kind. Placeholder is the kind's glyph on a 12% tint. Never tint artwork. |
 | **Text** | Summaries, notes, quotes | `body` or `longFormBodySmall`, 3–5 lines | `text-sm line-clamp-5` | Generated text sits on the generated surface in [3.5](#35-generated-text). |
-| **Trend** | A value over time, on `full` cards only | Swift Charts | Chart.js | Show the usual range as a band. Label the latest point. No gridlines beyond a baseline. A line for scores and continuous readings; **bars** for daily totals (sleep duration, steps, spend): one bar per day from zero, the usual range as a band drawn over them, earlier bars at 50% fill, the latest at full fill and labelled. |
+| **Trend** | A value over time, on `full` cards, and on `card` size on an Explore dashboard (Will, 2026-11-01) | Swift Charts | Chart.js | Show the usual range as a band: the mean ± one standard deviation of the baseline window, floored at zero. Label the latest point. No gridlines beyond a baseline. A line for scores and continuous readings; **bars** for daily totals (sleep duration, steps, spend): one bar per day from zero, the usual range as a band drawn over them, earlier bars at 50% fill, the latest at full fill and labelled. |
 
 ## 9. Writing data
 

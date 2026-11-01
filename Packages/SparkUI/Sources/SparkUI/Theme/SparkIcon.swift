@@ -34,6 +34,10 @@ public enum SparkIcon: String, CaseIterable, Sendable {
     case budget
     case income
     case invoice
+    case bank
+    case investment
+    case netWorth
+    case interest
     case task
     case place
     case person
@@ -45,6 +49,11 @@ public enum SparkIcon: String, CaseIterable, Sendable {
     case bedtime
     case morning
     case afternoon
+    case bloodOxygen
+    case stress
+    case resilience
+    case breathing
+    case stand
     case add
     case edit
     case delete
@@ -110,17 +119,26 @@ public enum SparkIcon: String, CaseIterable, Sendable {
         case .budget: "\u{f555}" // fas.wallet
         case .income: "\u{f4c0}" // fas.hand-holding-dollar
         case .invoice: "\u{f571}" // fas.file-invoice-dollar
+        case .bank: "\u{f19c}" // fas.building-columns
+        case .investment: "\u{f201}" // fas.chart-line
+        case .netWorth: "\u{f24e}" // fas.scale-balanced
+        case .interest: "\u{25}" // fas.percent
         case .task: "\u{f058}" // fas.circle-check
         case .place: "\u{f3c5}" // fas.location-dot
         case .person: "\u{f007}" // fas.user
         case .calendarEvent: "\u{f133}" // fas.calendar
         case .tag: "\u{f02b}" // fas.tag
         case .link: "\u{f0c1}" // fas.link
-        case .flint: "\u{e2ca}" // fas.wand-magic-sparkles
+        case .flint: "\u{e699}" // fas.hexagon-nodes
         case .photo: "\u{f03e}" // fas.image
         case .bedtime: "\u{f236}" // fas.bed
         case .morning: "\u{f185}" // fas.sun
         case .afternoon: "\u{f6c4}" // fas.cloud-sun
+        case .bloodOxygen: "\u{f043}" // fas.droplet
+        case .stress: "\u{f5dc}" // fas.brain
+        case .resilience: "\u{e574}" // fas.shield-heart
+        case .breathing: "\u{f604}" // fas.lungs
+        case .stand: "\u{e59d}" // fas.child-reaching
         case .add: "\u{2b}" // fas.plus
         case .edit: "\u{f304}" // fas.pen
         case .delete: "\u{f1f8}" // fas.trash

@@ -40,8 +40,8 @@ final class MetricsExploreViewModel {
     private func fetchAll() async {
         loadState = .loading
         do {
-                            let fetched = try await apiClient.request(MetricsEndpoint.list())
-                self.metrics = fetched.filter { $0.eventCount > 0 }
+            let fetched = try await apiClient.request(MetricsEndpoint.list())
+            self.metrics = fetched.filter { $0.eventCount > 0 }
 
             metadataState = .loaded(MetricsMetadataSummary(metrics: self.metrics))
         } catch where error.isAPICancellation {
@@ -83,10 +83,15 @@ final class MetricsExploreViewModel {
 
 struct MetricsMetadataSummary: Equatable, Sendable {
     let activeSourceCount: Int
+    /// Integrations, counted by name: `google_calendar` and
+    /// `google-calendar` are one service to the reader.
+    let serviceCount: Int
     let lastSyncAt: Date?
 
     init(metrics: [Metric]) {
-        activeSourceCount = metrics.filter { $0.eventCount > 0 }.count
-        lastSyncAt = metrics.compactMap(\.lastEventAt).max()
+        let active = metrics.filter { $0.eventCount > 0 }
+        activeSourceCount = active.count
+        serviceCount = Set(active.map { MetricDisplay.serviceName($0.service) }).count
+        lastSyncAt = active.compactMap(\.lastEventAt).max()
     }
 }

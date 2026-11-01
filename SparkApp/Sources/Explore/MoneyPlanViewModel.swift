@@ -15,6 +15,104 @@ enum MoneyPlanFormat {
         return "\(sign)£\(body)"
     }
 
+    /// Always two decimals, as the design language writes money (`£24.80`).
+    static func amount(_ pence: Int, signed: Bool = false) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        let body = formatter.string(from: NSNumber(value: Double(abs(pence)) / 100)) ?? "0.00"
+        let sign = pence < 0 ? "-" : (signed && pence > 0 ? "+" : "")
+        return "\(sign)£\(body)"
+    }
+
+    /// A hero value split for display: the pounds at hero size, the pence
+    /// smaller beside them. `-£10,470` and `.15`.
+    static func heroParts(_ pence: Int) -> (whole: String, fraction: String) {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 0
+        let pounds = abs(pence) / 100
+        let whole = formatter.string(from: NSNumber(value: pounds)) ?? "0"
+        let sign = pence < 0 ? "-" : ""
+        return ("\(sign)£\(whole)", String(format: ".%02d", abs(pence) % 100))
+    }
+
+    /// The day a bill leaves, relative where that reads better:
+    /// "Tomorrow, Sunday 1 November", "Thursday 5 November".
+    static func dueLabel(_ day: String, now: Date = .now, calendar: Calendar = .current) -> String {
+        guard let date = parseDay(day, calendar: calendar) else { return day }
+        let output = DateFormatter()
+        output.locale = Locale(identifier: "en_GB")
+        output.calendar = calendar
+        output.timeZone = calendar.timeZone
+        output.dateFormat = "EEEE d MMMM"
+        let label = output.string(from: date)
+        if calendar.isDate(date, inSameDayAs: now) { return "Today, \(label)" }
+        if let tomorrow = calendar.date(byAdding: .day, value: 1, to: now), calendar.isDate(date, inSameDayAs: tomorrow) {
+            return "Tomorrow, \(label)"
+        }
+        return label
+    }
+
+    /// "Payday is Sunday 29 November, in 29 days." `nil` when the server
+    /// sent no payday.
+    static func paydayLine(_ day: String?, known: Bool, now: Date = .now, calendar: Calendar = .current) -> String? {
+        guard let day, let date = parseDay(day, calendar: calendar) else { return nil }
+        let output = DateFormatter()
+        output.locale = Locale(identifier: "en_GB")
+        output.calendar = calendar
+        output.timeZone = calendar.timeZone
+        output.dateFormat = "EEEE d MMMM"
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: now), to: date).day ?? 0
+        let lead = known ? "Payday is" : "Counting to"
+        switch days {
+        case ..<1: return "\(lead) today"
+        case 1: return "\(lead) tomorrow"
+        default: return "\(lead) \(output.string(from: date)), in \(days) days"
+        }
+    }
+
+    /// "8 Oct" for 2026-10-08.
+    static func shortDay(_ day: String, calendar: Calendar = .current) -> String {
+        guard let date = parseDay(day, calendar: calendar) else { return day }
+        let output = DateFormatter()
+        output.locale = Locale(identifier: "en_GB")
+        output.calendar = calendar
+        output.timeZone = calendar.timeZone
+        output.dateFormat = "d MMM"
+        return output.string(from: date)
+    }
+
+    static func parseDay(_ day: String, calendar: Calendar = .current) -> Date? {
+        let parts = day.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return nil }
+        return calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
+    }
+
+    /// The month's first letter, for a chart axis ("S" for 2026-09).
+    static func monthInitial(_ month: String) -> String {
+        let parser = DateFormatter()
+        parser.dateFormat = "yyyy-MM"
+        parser.locale = Locale(identifier: "en_GB")
+        guard let date = parser.date(from: month) else { return "" }
+        let output = DateFormatter()
+        output.dateFormat = "MMMMM"
+        output.locale = Locale(identifier: "en_GB")
+        return output.string(from: date)
+    }
+
+    static func monthName(_ month: String) -> String {
+        let parser = DateFormatter()
+        parser.dateFormat = "yyyy-MM"
+        parser.locale = Locale(identifier: "en_GB")
+        guard let date = parser.date(from: month) else { return month }
+        let output = DateFormatter()
+        output.dateFormat = "MMMM"
+        output.locale = Locale(identifier: "en_GB")
+        return output.string(from: date)
+    }
+
     static func monthLabel(_ month: String) -> String {
         let parser = DateFormatter()
         parser.dateFormat = "yyyy-MM"

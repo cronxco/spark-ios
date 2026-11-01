@@ -1,10 +1,17 @@
 import Foundation
 
 public enum TagsEndpoint {
-    /// GET /tags — browse by usage or query text, cursor-paginated.
-    public static func list(query: String? = nil, cursor: String? = nil, limit: Int = 30) -> Endpoint<TagPage> {
+    /// GET /tags — browse by usage or query text, cursor-paginated. `type`
+    /// keeps one tag type (`untyped` for tags without one).
+    public static func list(
+        query: String? = nil,
+        type: String? = nil,
+        cursor: String? = nil,
+        limit: Int = 30
+    ) -> Endpoint<TagPage> {
         Endpoint(method: .get, path: "/tags", query: [
             URLQueryItem(name: "q", value: query),
+            URLQueryItem(name: "type", value: type),
             URLQueryItem(name: "cursor", value: cursor),
             URLQueryItem(name: "limit", value: String(limit)),
         ].compactMap { $0.value == nil ? nil : $0 })
