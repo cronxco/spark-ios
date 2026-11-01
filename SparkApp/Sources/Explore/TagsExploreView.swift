@@ -24,6 +24,9 @@ final class TagsExploreViewModel {
     private(set) var hasMore = false
     private(set) var isLoading = false
     private(set) var error: String?
+    /// A failed search, kept apart from `error` so it doesn't linger over
+    /// the catalogue once the query is cleared.
+    private(set) var searchError: String?
     private var requestGeneration = 0
 
     init(apiClient: APIClient) { self.apiClient = apiClient }
@@ -50,6 +53,7 @@ final class TagsExploreViewModel {
     /// Searches every tag, most used first. `reset: false` loads the next page.
     func search(_ query: String, reset: Bool = true) async {
         if !reset, isLoading || !hasMore { return }
+        searchError = nil
         requestGeneration += 1
         let generation = requestGeneration
         isLoading = true
@@ -65,12 +69,11 @@ final class TagsExploreViewModel {
             resultsQuery = query
             nextCursor = page.nextCursor
             hasMore = page.hasMore
-            error = nil
         } catch APIError.notModified {
         } catch {
             guard generation == requestGeneration, !Task.isCancelled else { return }
             SparkObservability.captureHandled(error)
-            self.error = Self.message(for: error)
+            searchError = Self.message(for: error)
         }
     }
 
@@ -98,7 +101,7 @@ struct TagsExploreView: View {
             VStack(alignment: .leading, spacing: SparkSpacing.xxl) {
                 TagSearchField(prompt: "Find tags", text: $query)
 
-                if let error = viewModel?.error {
+                if let error = trimmedQuery.isEmpty ? viewModel?.error : viewModel?.searchError {
                     Text(error)
                         .font(SparkTypography.bodySmall)
                         .foregroundStyle(Color.sparkError)
@@ -126,6 +129,8 @@ struct TagsExploreView: View {
             // Wait for typing to pause before asking the server.
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
+            // Coming back from a tag keeps the pages already loaded.
+            if viewModel?.resultsQuery == trimmedQuery, viewModel?.searchError == nil { return }
             await viewModel?.search(trimmedQuery)
         }
         .task {
@@ -176,11 +181,12 @@ struct TagsExploreView: View {
     private var searchResults: some View {
         let results = viewModel?.resultsQuery == trimmedQuery ? viewModel?.results ?? [] : []
         if results.isEmpty {
-            if viewModel?.isLoading == true || viewModel?.resultsQuery != trimmedQuery {
+            if viewModel?.isLoading == true
+                || (viewModel?.resultsQuery != trimmedQuery && viewModel?.searchError == nil) {
                 ProgressView()
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, SparkSpacing.xxxl)
-            } else {
+            } else if viewModel?.searchError == nil {
                 EmptyState(
                     systemImage: "magnifyingglass",
                     title: "No tags match",
