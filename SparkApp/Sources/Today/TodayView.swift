@@ -230,7 +230,12 @@ struct TodayView: View {
     /// updates: a slow scroll arrives in steps smaller than the threshold.
     private func reportScroll(from old: CGFloat, to new: CGFloat) {
         guard showsToolbar, let onTopBarVisibilityChange else { return }
-        if let visible = scrollTracker.update(from: old, to: new, isShown: !isTopBarHidden) {
+        if let visible = scrollTracker.update(
+            from: old,
+            to: new,
+            isShown: !isTopBarHidden,
+            now: ProcessInfo.processInfo.systemUptime
+        ) {
             onTopBarVisibilityChange(visible)
         }
     }
@@ -465,24 +470,42 @@ private extension TodaySnapshot {
 /// appeared; while it is hidden, up from the lowest point. A slow scroll, or
 /// one that wobbles back a little as it goes, still adds up to the
 /// threshold.
+///
+/// Showing or hiding the bar's buttons can resize the bar, which moves the
+/// page by about the bar's height. Read as a scroll, that move flipped the
+/// bar straight back, every frame, and the page froze. So after each flip
+/// the tracker ignores offsets for a moment and then measures from wherever
+/// the page settled.
 @MainActor
 final class ScrollDirectionTracker {
     /// Scroll distance, in points, that counts as a change of direction.
     static let threshold: CGFloat = 8
     /// Near the top of the page the bar always shows.
     static let revealOffset: CGFloat = 40
+    /// How long after a flip offsets are ignored, in seconds: longer than
+    /// the bar's own animation.
+    static let settleTime: TimeInterval = 0.5
 
     /// The smallest offset since the bar last showed.
     private var low = CGFloat.infinity
     /// The largest offset since the bar last hid.
     private var high = -CGFloat.infinity
+    /// Offsets before this time are the page settling after a flip.
+    private var settlesAt: TimeInterval = -.infinity
 
     /// `true` to show the bar, `false` to hide it, `nil` to leave it.
     /// `isShown` is the bar's state now, which the pager can also change.
-    func update(from old: CGFloat, to new: CGFloat, isShown: Bool) -> Bool? {
+    func update(from old: CGFloat, to new: CGFloat, isShown: Bool, now: TimeInterval) -> Bool? {
+        if now < settlesAt {
+            low = new
+            high = new
+            return nil
+        }
         if new <= Self.revealOffset {
             low = new
             high = -.infinity
+            if isShown { return nil }
+            settlesAt = now + Self.settleTime
             return true
         }
         if isShown {
@@ -490,6 +513,7 @@ final class ScrollDirectionTracker {
             if new - low > Self.threshold {
                 high = new
                 low = .infinity
+                settlesAt = now + Self.settleTime
                 return false
             }
         } else {
@@ -497,6 +521,7 @@ final class ScrollDirectionTracker {
             if high - new > Self.threshold {
                 low = new
                 high = -.infinity
+                settlesAt = now + Self.settleTime
                 return true
             }
         }
