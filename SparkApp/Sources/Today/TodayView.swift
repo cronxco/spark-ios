@@ -24,8 +24,12 @@ struct TodayView: View {
     @State private var showUpToSpeed = false
     @State private var upToSpeedViewModel: UpToSpeedViewModel?
     @State private var selectedThread: FlintTopic?
-    /// The offset where the reader last changed scroll direction.
-    @State private var scrollAnchor: CGFloat = 0
+    /// Where the reader last changed scroll direction. A reference, so
+    /// moving it on every scroll frame doesn't redraw the page.
+    @State private var scrollTracker = ScrollDirectionTracker()
+    /// The height of the bar the page scrolls under, where the timeline's
+    /// hour labels pin.
+    @State private var topInset: CGFloat = 0
 
     private var isToday: Bool { Calendar.current.isDateInToday(date) }
 
@@ -107,7 +111,7 @@ struct TodayView: View {
                         ThreadsStrip(topics: vm.topics) { selectedThread = $0 }
                     }
 
-                    FeedSection(date: date)
+                    FeedSection(date: date, pinnedTop: topInset)
 
                     if !snapshot.hasAnyDomainData {
                         loadingOrEmptyState
@@ -131,6 +135,11 @@ struct TodayView: View {
                 geometry.contentOffset.y + geometry.contentInsets.top
             } action: { old, new in
                 reportScroll(from: old, to: new)
+            }
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                geometry.contentInsets.top
+            } action: { _, new in
+                topInset = new
             }
             .refreshable {
                 await viewModel?.refresh()
@@ -217,31 +226,12 @@ struct TodayView: View {
 
     // MARK: - Top bar
 
-    /// Scroll distance, in points, that counts as a change of direction.
-    /// Smaller moves are the bar's own show or hide shifting the content.
-    private static let scrollDirectionThreshold: CGFloat = 8
-    /// Near the top of the page the bar always shows.
-    private static let topBarRevealOffset: CGFloat = 40
-
     /// Measures movement from where the scroll last turned, not between
     /// updates: a slow scroll arrives in steps smaller than the threshold.
     private func reportScroll(from old: CGFloat, to new: CGFloat) {
         guard showsToolbar, let onTopBarVisibilityChange else { return }
-        if new <= Self.topBarRevealOffset {
-            scrollAnchor = new
-            onTopBarVisibilityChange(true)
-            return
-        }
-        // A change of direction moves the anchor to the turning point.
-        let wasDown = old >= scrollAnchor
-        if (new > old) != wasDown { scrollAnchor = old }
-
-        if new - scrollAnchor > Self.scrollDirectionThreshold {
-            scrollAnchor = new
-            onTopBarVisibilityChange(false)
-        } else if scrollAnchor - new > Self.scrollDirectionThreshold {
-            scrollAnchor = new
-            onTopBarVisibilityChange(true)
+        if let visible = scrollTracker.update(from: old, to: new, isShown: !isTopBarHidden) {
+            onTopBarVisibilityChange(visible)
         }
     }
 
@@ -467,5 +457,49 @@ private extension TodaySnapshot {
             || (money?.hasAny ?? false)
             || (media?.hasAny ?? false)
             || (knowledge?.hasAny ?? false)
+    }
+}
+
+/// Turns scroll offsets into "show the bar" or "hide the bar". While the
+/// bar shows, it measures down from the highest point reached since it
+/// appeared; while it is hidden, up from the lowest point. A slow scroll, or
+/// one that wobbles back a little as it goes, still adds up to the
+/// threshold.
+@MainActor
+final class ScrollDirectionTracker {
+    /// Scroll distance, in points, that counts as a change of direction.
+    static let threshold: CGFloat = 8
+    /// Near the top of the page the bar always shows.
+    static let revealOffset: CGFloat = 40
+
+    /// The smallest offset since the bar last showed.
+    private var low = CGFloat.infinity
+    /// The largest offset since the bar last hid.
+    private var high = -CGFloat.infinity
+
+    /// `true` to show the bar, `false` to hide it, `nil` to leave it.
+    /// `isShown` is the bar's state now, which the pager can also change.
+    func update(from old: CGFloat, to new: CGFloat, isShown: Bool) -> Bool? {
+        if new <= Self.revealOffset {
+            low = new
+            high = -.infinity
+            return true
+        }
+        if isShown {
+            low = min(low, old, new)
+            if new - low > Self.threshold {
+                high = new
+                low = .infinity
+                return false
+            }
+        } else {
+            high = max(high, old, new)
+            if high - new > Self.threshold {
+                low = new
+                high = -.infinity
+                return true
+            }
+        }
+        return nil
     }
 }

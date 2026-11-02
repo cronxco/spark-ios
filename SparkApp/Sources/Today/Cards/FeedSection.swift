@@ -15,6 +15,9 @@ import SwiftUI
 /// any spacing between them opens a gap in the spine.
 struct FeedSection: View {
     let date: Date
+    /// Where an hour's label pins, in the scroll view's own space: the
+    /// height of the bar the page scrolls under.
+    var pinnedTop: CGFloat = 0
     @State private var filter: TimelineFilter = .home
     @State private var expandedGroups: Set<String> = []
     @Query private var allEvents: [CachedEvent]
@@ -79,9 +82,19 @@ struct FeedSection: View {
                     let firstHour = hours.first?.id
                     // Each hour's label pins to the top while you scroll
                     // through that hour, so the rows need no ring of their own.
-                    LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                    // An eager stack, not a LazyVStack with pinned headers: a
+                    // lazy stack nested in the page's VStack kept re-estimating
+                    // its height as rows appeared, and the page would not
+                    // scroll down to it.
+                    VStack(alignment: .leading, spacing: 0) {
                         ForEach(hours) { section in
-                            Section {
+                            VStack(alignment: .leading, spacing: 0) {
+                                // Holds the label's place; the pinned copy
+                                // drawn over the section is the one you see
+                                // and the one VoiceOver reads.
+                                TimelineHourLabel(hour: section.hour, opensTimeline: section.id == firstHour)
+                                    .opacity(0)
+                                    .accessibilityHidden(true)
                                 ForEach(section.groups) { group in
                                     TimelineGroupRow(
                                         events: group.events,
@@ -90,8 +103,13 @@ struct FeedSection: View {
                                         toggle(group.id)
                                     }
                                 }
-                            } header: {
-                                TimelineHourLabel(hour: section.hour, opensTimeline: section.id == firstHour)
+                            }
+                            .overlay(alignment: .top) {
+                                TimelinePinnedHourLabel(
+                                    hour: section.hour,
+                                    opensTimeline: section.id == firstHour,
+                                    pinnedTop: pinnedTop
+                                )
                             }
                         }
                     }
@@ -234,6 +252,37 @@ private enum TimelineRhythm {
     static let blockLimit = 3
     /// The diameter of an expanded row's dot on the spine.
     static let childDot: CGFloat = 8
+}
+
+/// An hour's label drawn over its section, moved down with the scroll so it
+/// stays at the top of the page until the section's end pushes it off.
+/// The move is a visual effect, so it never changes the layout under the
+/// scroll. It takes no touches, so the rows beneath it stay tappable, but
+/// VoiceOver reads it as the hour's header.
+private struct TimelinePinnedHourLabel: View {
+    let hour: Int
+    let opensTimeline: Bool
+    let pinnedTop: CGFloat
+
+    /// About the label's height with its padding, so it leaves its section
+    /// before overlapping the next hour's label.
+    private static let labelHeight: CGFloat = 36
+
+    var body: some View {
+        let pinnedTop = pinnedTop
+        let labelHeight = Self.labelHeight
+        Color.clear
+            .overlay(alignment: .top) {
+                TimelineHourLabel(hour: hour, opensTimeline: opensTimeline)
+            }
+            .visualEffect { content, proxy in
+                let frame = proxy.frame(in: .scrollView(axis: .vertical))
+                let pinned = max(0, pinnedTop - frame.minY)
+                let limit = max(0, frame.height - labelHeight)
+                return content.offset(y: min(pinned, limit))
+            }
+            .allowsHitTesting(false)
+    }
 }
 
 /// The hour as a small label ("14:00") that pins to the top of the page
