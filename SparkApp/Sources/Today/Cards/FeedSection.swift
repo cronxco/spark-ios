@@ -15,9 +15,6 @@ import SwiftUI
 /// any spacing between them opens a gap in the spine.
 struct FeedSection: View {
     let date: Date
-    /// Where an hour's label pins, in the scroll view's own space: the
-    /// height of the bar the page scrolls under.
-    var pinnedTop: CGFloat = 0
     @State private var filter: TimelineFilter = .home
     @State private var expandedGroups: Set<String> = []
     @Query private var allEvents: [CachedEvent]
@@ -107,8 +104,7 @@ struct FeedSection: View {
                             .overlay(alignment: .top) {
                                 TimelinePinnedHourLabel(
                                     hour: section.hour,
-                                    opensTimeline: section.id == firstHour,
-                                    pinnedTop: pinnedTop
+                                    opensTimeline: section.id == firstHour
                                 )
                             }
                         }
@@ -262,22 +258,23 @@ private enum TimelineRhythm {
 private struct TimelinePinnedHourLabel: View {
     let hour: Int
     let opensTimeline: Bool
-    let pinnedTop: CGFloat
 
     /// About the label's height with its padding, so it leaves its section
     /// before overlapping the next hour's label.
     private static let labelHeight: CGFloat = 36
 
     var body: some View {
-        let pinnedTop = pinnedTop
         let labelHeight = Self.labelHeight
         Color.clear
             .overlay(alignment: .top) {
                 TimelineHourLabel(hour: hour, opensTimeline: opensTimeline)
             }
             .visualEffect { content, proxy in
+                // The scroll view's space starts below the bar (its top
+                // safe area), so zero is where the label pins. Adding the
+                // bar's height as well pinned it a bar's height too low.
                 let frame = proxy.frame(in: .scrollView(axis: .vertical))
-                let pinned = max(0, pinnedTop - frame.minY)
+                let pinned = max(0, -frame.minY)
                 let limit = max(0, frame.height - labelHeight)
                 return content.offset(y: min(pinned, limit))
             }

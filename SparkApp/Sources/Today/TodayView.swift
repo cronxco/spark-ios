@@ -6,14 +6,6 @@ import SwiftUI
 struct TodayView: View {
     let date: Date
     var showsToolbar = true
-    /// True while the reader is scrolling down the page. The bar's items
-    /// fade out, but the bar itself stays, so the page's safe area never
-    /// changes under the scroll.
-    var isTopBarHidden = false
-    /// Called with `false` when the reader scrolls down the page and `true`
-    /// when they scroll back up or reach the top, so the pager can hide the
-    /// top bar while reading.
-    var onTopBarVisibilityChange: (@MainActor (Bool) -> Void)?
     @Environment(AppModel.self) private var appModel
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
@@ -24,12 +16,6 @@ struct TodayView: View {
     @State private var showUpToSpeed = false
     @State private var upToSpeedViewModel: UpToSpeedViewModel?
     @State private var selectedThread: FlintTopic?
-    /// Where the reader last changed scroll direction. A reference, so
-    /// moving it on every scroll frame doesn't redraw the page.
-    @State private var scrollTracker = ScrollDirectionTracker()
-    /// The height of the bar the page scrolls under, where the timeline's
-    /// hour labels pin.
-    @State private var topInset: CGFloat = 0
 
     private var isToday: Bool { Calendar.current.isDateInToday(date) }
 
@@ -111,7 +97,7 @@ struct TodayView: View {
                         ThreadsStrip(topics: vm.topics) { selectedThread = $0 }
                     }
 
-                    FeedSection(date: date, pinnedTop: topInset)
+                    FeedSection(date: date)
 
                     if !snapshot.hasAnyDomainData {
                         loadingOrEmptyState
@@ -131,22 +117,12 @@ struct TodayView: View {
             .scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
             // Clear the minimised tab bar at the end of the page.
             .contentMargins(.bottom, SparkSpacing.xxxl, for: .scrollContent)
-            .onScrollGeometryChange(for: CGFloat.self) { geometry in
-                geometry.contentOffset.y + geometry.contentInsets.top
-            } action: { old, new in
-                reportScroll(from: old, to: new)
-            }
-            .onScrollGeometryChange(for: CGFloat.self) { geometry in
-                geometry.contentInsets.top
-            } action: { _, new in
-                topInset = new
-            }
             .refreshable {
                 await viewModel?.refresh()
                 await checkInHistoryVM?.load()
             }
         }
-        .sparkMainAppToolbar(isVisible: showsToolbar && !isTopBarHidden)
+        .sparkMainAppToolbar(isVisible: showsToolbar)
         .sheet(item: $checkInSelection, onDismiss: {
             Task { await checkInHistoryVM?.load() }
         }) { selection in
@@ -221,22 +197,6 @@ struct TodayView: View {
             if newPhase == .active {
                 Task { await viewModel?.backgroundRevalidate() }
             }
-        }
-    }
-
-    // MARK: - Top bar
-
-    /// Measures movement from where the scroll last turned, not between
-    /// updates: a slow scroll arrives in steps smaller than the threshold.
-    private func reportScroll(from old: CGFloat, to new: CGFloat) {
-        guard showsToolbar, let onTopBarVisibilityChange else { return }
-        if let visible = scrollTracker.update(
-            from: old,
-            to: new,
-            isShown: !isTopBarHidden,
-            now: ProcessInfo.processInfo.systemUptime
-        ) {
-            onTopBarVisibilityChange(visible)
         }
     }
 
@@ -465,6 +425,11 @@ private extension TodaySnapshot {
     }
 }
 
+/// Turns scroll offsets into "show the bar" or "hide the bar". Not wired
+/// up at the moment: hiding the bar's buttons on scroll froze the day page
+/// three times over, so the buttons stay put until there is a way to hide
+/// them that doesn't resize the bar.
+///
 /// Turns scroll offsets into "show the bar" or "hide the bar". While the
 /// bar shows, it measures down from the highest point reached since it
 /// appeared; while it is hidden, up from the lowest point. A slow scroll, or
