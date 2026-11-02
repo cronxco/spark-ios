@@ -10,7 +10,10 @@ struct DayPagerView: View {
     @State private var dates: [DayKey] = DayKey.defaultWindow()
     @State private var path: [DetailRoute] = []
     /// Settings and notifications slide away while you scroll down a day,
-    /// and come back when you scroll up.
+    /// and come back when you scroll up. Only the bar's items go: hiding
+    /// the navigation bar itself changed the page's top inset, which read
+    /// as a scroll the other way and brought the bar straight back, so the
+    /// page could not scroll down.
     @State private var isTopBarHidden = false
 
     var body: some View {
@@ -26,6 +29,7 @@ struct DayPagerView: View {
                         TodayView(
                             date: key.date,
                             showsToolbar: key.offset == selectedOffset,
+                            isTopBarHidden: isTopBarHidden,
                             onTopBarVisibilityChange: { visible in
                                 guard isTopBarHidden == visible else { return }
                                 withAnimation(.snappy(duration: 0.25)) { isTopBarHidden = !visible }
@@ -52,7 +56,6 @@ struct DayPagerView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
-            .toolbarVisibility(isTopBarHidden ? .hidden : .visible, for: .navigationBar)
             .navigationDestination(for: DetailRoute.self) { route in
                 switch route {
                 case .event(let id):
