@@ -6,6 +6,10 @@ import SwiftUI
 struct TodayView: View {
     let date: Date
     var showsToolbar = true
+    /// True while the reader is scrolling down the page. The bar's items
+    /// fade out, but the bar itself stays, so the page's safe area never
+    /// changes under the scroll.
+    var isTopBarHidden = false
     /// Called with `false` when the reader scrolls down the page and `true`
     /// when they scroll back up or reach the top, so the pager can hide the
     /// top bar while reading.
@@ -133,7 +137,7 @@ struct TodayView: View {
                 await checkInHistoryVM?.load()
             }
         }
-        .sparkMainAppToolbar(isVisible: showsToolbar)
+        .sparkMainAppToolbar(isVisible: showsToolbar && !isTopBarHidden)
         .sheet(item: $checkInSelection, onDismiss: {
             Task { await checkInHistoryVM?.load() }
         }) { selection in
