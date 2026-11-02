@@ -265,6 +265,7 @@ private struct TimelinePinnedHourLabel: View {
 
     var body: some View {
         let labelHeight = Self.labelHeight
+        let topPadding = TimelineHourLabel.topPadding(opensTimeline: opensTimeline)
         Color.clear
             .overlay(alignment: .top) {
                 TimelineHourLabel(hour: hour, opensTimeline: opensTimeline)
@@ -274,7 +275,8 @@ private struct TimelinePinnedHourLabel: View {
                 // safe area), so zero is where the label pins. Adding the
                 // bar's height as well pinned it a bar's height too low.
                 let frame = proxy.frame(in: .scrollView(axis: .vertical))
-                let pinned = max(0, -frame.minY)
+                // Pin the capsule itself, not the space above it.
+                let pinned = max(0, -frame.minY - topPadding)
                 let limit = max(0, frame.height - labelHeight)
                 return content.offset(y: min(pinned, limit))
             }
@@ -290,6 +292,12 @@ private struct TimelineHourLabel: View {
     /// separates it, so it skips the gap between hours.
     var opensTimeline = false
 
+    /// The space above the capsule: the gap between hours, or less for the
+    /// first label.
+    nonisolated static func topPadding(opensTimeline: Bool) -> CGFloat {
+        opensTimeline ? TimelineRhythm.firstHourLeading : TimelineRhythm.hourLeading
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             Text(hour >= 0 ? String(format: "%02d:00", hour) : "Undated")
@@ -302,7 +310,7 @@ private struct TimelineHourLabel: View {
                 .overlay { Capsule().strokeBorder(Color.primary.opacity(0.13), lineWidth: 1) }
             Spacer(minLength: 0)
         }
-        .padding(.top, opensTimeline ? TimelineRhythm.firstHourLeading : TimelineRhythm.hourLeading)
+        .padding(.top, Self.topPadding(opensTimeline: opensTimeline))
         .padding(.bottom, TimelineRhythm.hourTrailing)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(hour >= 0 ? String(format: "%02d:00", hour) : "Undated")
@@ -463,18 +471,21 @@ private struct TimelineRow: View {
         return colorScheme == .dark ? tint : .primary
     }
 
-    /// The action, then its object in full on its own line, so a long title
-    /// wraps instead of being cut off inside a pill.
+    /// The action, then its object in full, as one run of text: the object
+    /// follows on the same line when it fits and wraps when it doesn't,
+    /// rather than being cut off inside a pill.
     private var title: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(actionTitle(for: event))
+            let action = Text(actionTitle(for: event))
                 .font(SparkTypography.title.weight(.semibold))
-                .foregroundStyle(.primary)
-            if let object = objectTitle(for: event) {
-                Text(object)
-                    .font(SparkTypography.title)
-                    .foregroundStyle(.primary)
+            Group {
+                if let object = objectTitle(for: event) {
+                    Text("\(action) \(Text(object).font(SparkTypography.title))")
+                } else {
+                    action
+                }
             }
+            .foregroundStyle(.primary)
             if hiddenCount > 0, let toggle = toggle {
                 Button(action: toggle) {
                     Text("+ \(hiddenCount) other" + (hiddenCount == 1 ? "" : "s"))
