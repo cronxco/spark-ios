@@ -361,6 +361,13 @@ private struct TimelineRow: View {
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
+        // The combined row opens the event, so VoiceOver reaches the
+        // group's toggle as an action.
+        .accessibilityActions {
+            if case .lead(let surplus, let isExpanded, let onToggle?) = style {
+                Button(isExpanded ? "Hide \(surplus) more" : "Show \(surplus) more", action: onToggle)
+            }
+        }
     }
 
     /// The glyph for a lead row, a dot for an expanded one. The column is

@@ -321,7 +321,8 @@ struct SparkDetailFlowSection: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .fixedSize()
+                // FlowLayout offers the line's width to anything wider, so
+                // a long verb and value wrap inside the card.
                 .accessibilityElement(children: .combine)
 
                 if let target {

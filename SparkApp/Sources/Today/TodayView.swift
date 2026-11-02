@@ -20,6 +20,8 @@ struct TodayView: View {
     @State private var showUpToSpeed = false
     @State private var upToSpeedViewModel: UpToSpeedViewModel?
     @State private var selectedThread: FlintTopic?
+    /// The offset where the reader last changed scroll direction.
+    @State private var scrollAnchor: CGFloat = 0
 
     private var isToday: Bool { Calendar.current.isDateInToday(date) }
 
@@ -217,13 +219,24 @@ struct TodayView: View {
     /// Near the top of the page the bar always shows.
     private static let topBarRevealOffset: CGFloat = 40
 
+    /// Measures movement from where the scroll last turned, not between
+    /// updates: a slow scroll arrives in steps smaller than the threshold.
     private func reportScroll(from old: CGFloat, to new: CGFloat) {
         guard showsToolbar, let onTopBarVisibilityChange else { return }
         if new <= Self.topBarRevealOffset {
+            scrollAnchor = new
             onTopBarVisibilityChange(true)
-        } else if new - old > Self.scrollDirectionThreshold {
+            return
+        }
+        // A change of direction moves the anchor to the turning point.
+        let wasDown = old >= scrollAnchor
+        if (new > old) != wasDown { scrollAnchor = old }
+
+        if new - scrollAnchor > Self.scrollDirectionThreshold {
+            scrollAnchor = new
             onTopBarVisibilityChange(false)
-        } else if old - new > Self.scrollDirectionThreshold {
+        } else if scrollAnchor - new > Self.scrollDirectionThreshold {
+            scrollAnchor = new
             onTopBarVisibilityChange(true)
         }
     }
