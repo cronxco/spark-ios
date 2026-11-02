@@ -27,11 +27,15 @@ public struct UpToSpeedFlintDigestSummary: Codable, Sendable {
     public let summary: String?
     public let blockCount: Int
     public let unansweredQuestionCount: Int
+    /// Cards for the metric events the summary links to, in the order it
+    /// first mentions them. Empty for payloads that predate the field.
+    public let linkedEvents: [LinkedEventCard]
 
     enum CodingKeys: String, CodingKey {
         case date, period, title, kind, summary
         case blockCount = "block_count"
         case unansweredQuestionCount = "unanswered_question_count"
+        case linkedEvents = "linked_events"
     }
 
     public init(
@@ -41,7 +45,8 @@ public struct UpToSpeedFlintDigestSummary: Codable, Sendable {
         kind: FlintDigestKind? = nil,
         summary: String? = nil,
         blockCount: Int,
-        unansweredQuestionCount: Int
+        unansweredQuestionCount: Int,
+        linkedEvents: [LinkedEventCard] = []
     ) {
         self.date = date
         self.period = period
@@ -50,6 +55,7 @@ public struct UpToSpeedFlintDigestSummary: Codable, Sendable {
         self.summary = summary
         self.blockCount = blockCount
         self.unansweredQuestionCount = unansweredQuestionCount
+        self.linkedEvents = linkedEvents
     }
 
     public init(from decoder: Decoder) throws {
@@ -61,6 +67,9 @@ public struct UpToSpeedFlintDigestSummary: Codable, Sendable {
         summary = try c.decodeIfPresent(String.self, forKey: .summary)
         blockCount = try c.decodeIfPresent(Int.self, forKey: .blockCount) ?? 0
         unansweredQuestionCount = try c.decodeIfPresent(Int.self, forKey: .unansweredQuestionCount) ?? 0
+        // One malformed card must not cost the reader the whole digest.
+        linkedEvents = (try? c.decodeIfPresent([FailableDecodable<LinkedEventCard>].self, forKey: .linkedEvents))?
+            .compactMap(\.value) ?? []
     }
 }
 
@@ -273,4 +282,14 @@ public struct AnomalyAcknowledgeRequest: Encodable, Sendable {
 
 public struct AnomalyAcknowledgeResponse: Decodable, Sendable {
     public let acknowledged: Bool
+}
+
+/// Decodes one element of an array, or nothing, so a single bad element
+/// doesn't fail the array around it.
+private struct FailableDecodable<Value: Decodable>: Decodable {
+    let value: Value?
+
+    init(from decoder: Decoder) throws {
+        value = try? Value(from: decoder)
+    }
 }

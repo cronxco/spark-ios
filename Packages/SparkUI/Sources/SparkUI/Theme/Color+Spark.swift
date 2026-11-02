@@ -174,6 +174,26 @@ public extension Color {
     }
 }
 
+// MARK: - Highlight and domain ink
+//
+// Tinted text (design language §3.2, §3.3). The domain fills above are for
+// glyphs, rings and 10–15% backgrounds; as text on the light wash most of
+// them fail contrast (spark-5 amber is about 1.6:1), so text uses an ink.
+
+public extension Color {
+    /// Facts picked out in Flint and summary prose, whatever their domain:
+    /// ocean-5 in light (8.1:1 on ash-1), spark-5 in dark (11.1:1 on slate-5).
+    static let sparkHighlight = Color.ocean5.fallback(light: .ocean5, dark: .spark5)
+    static let domainHealthInk = Color.sparkSuccess.fallback(
+        light: Color(red: 0.043, green: 0.169, blue: 0.137), // #0B2B23, success-content
+        dark: Color(red: 0.702, green: 0.847, blue: 0.788) // #B3D8C9
+    )
+    static let domainActivityInk = Color.ember7.fallback(light: .ember7, dark: .ember5)
+    static let domainMoneyInk = Color.spark8.fallback(light: .spark8, dark: .spark5)
+    static let domainMediaInk = Color.flame7.fallback(light: .flame7, dark: .flame5)
+    static let domainKnowledgeInk = Color.sky6.fallback(light: .sky6, dark: .sky3)
+}
+
 // MARK: - Tag type tints
 //
 // Colour-codes EventTag.type in chip display. Values are the design system's

@@ -45,7 +45,7 @@ struct FlintHeaderPage: View {
 
                 if let section = firstSection {
                     Divider().opacity(0.2)
-                    SparkLongFormContentView(text: section, tint: .sparkAccent, paragraphFont: SparkTypography.longFormBody)
+                    LinkedParagraph(text: section, linkedEvents: summary?.linkedEvents ?? [])
                 }
             }
         }
@@ -85,11 +85,41 @@ struct FlintParagraphPage: View {
             onReachedBottom: onReachedBottom,
             supplement: supplement
         ) {
+            LinkedParagraph(text: text, linkedEvents: summary?.linkedEvents ?? [])
+        }
+    }
+}
+
+// MARK: - LinkedParagraph
+
+/// A briefing paragraph with cards for the metric events it links to,
+/// underneath, in the order it mentions them (design language §7.3).
+///
+/// Highlighted phrases take the one highlight token (design language §3.3).
+/// They used to be spark-5 amber text, which is about 1.6:1 on the light wash.
+struct LinkedParagraph: View {
+    let text: String
+    let linkedEvents: [LinkedEventCard]
+
+    @Environment(\.openURL) private var openURL
+
+    private var cards: [LinkedEventCard] {
+        LinkedEventCard.cards(linkedFrom: text, in: linkedEvents)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.lg) {
             SparkLongFormContentView(
                 text: text,
-                tint: .sparkAccent,
+                tint: .sparkHighlight,
                 paragraphFont: SparkTypography.longFormBody
             )
+
+            EventCardRow(cards) { card in
+                if let url = URL(string: "https://spark.cronx.co/events/\(card.event.id)") {
+                    openURL(url)
+                }
+            }
         }
     }
 }
