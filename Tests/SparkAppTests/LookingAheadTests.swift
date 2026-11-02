@@ -38,4 +38,14 @@ struct LookingAheadTests {
         #expect(SleepTargetCard.duration(minutes: 480) == "8h")
         #expect(SleepTargetCard.duration(minutes: 460) == "7h 40m")
     }
+
+    @Test("clock times read in 24-hour form with a leading zero")
+    @MainActor
+    func twentyFourHourTimes() throws {
+        let calendar = Calendar.current
+        let early = try #require(calendar.date(from: DateComponents(year: 2026, month: 11, day: 2, hour: 4, minute: 19)))
+        let afternoon = try #require(calendar.date(from: DateComponents(year: 2026, month: 11, day: 2, hour: 13, minute: 0)))
+        #expect(LookingAheadTime.string(early) == "04:19")
+        #expect(LookingAheadTime.string(afternoon) == "13:00")
+    }
 }

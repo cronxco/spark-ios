@@ -176,7 +176,7 @@ struct AheadGlanceStrip: View {
             )
         }
         if let start = ahead.firstCommitment?.startDate {
-            chip(symbol: "clock", text: "First up \(start.formatted(date: .omitted, time: .shortened))", tint: .sparkAccent)
+            chip(symbol: "clock", text: "First up \(LookingAheadTime.string(start))", tint: .sparkAccent)
         }
         let count = ahead.calendar.count + ahead.openPlanCount
         if count > 0 {
@@ -271,7 +271,7 @@ struct ScheduleTimeline: View {
             if entry.allDay {
                 allDayChip
             } else {
-                Text(entry.startDate?.formatted(date: .omitted, time: .shortened) ?? "—")
+                Text(entry.startDate.map { LookingAheadTime.string($0) } ?? "—")
                     .font(SparkTypography.caption)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
@@ -451,7 +451,7 @@ struct SleepTargetCard: View {
                     Image(systemName: "bed.double.fill")
                         .foregroundStyle(Color.sparkOcean)
                     if let bedBy = target.bedByDate {
-                        Text("In bed by \(bedBy.formatted(date: .omitted, time: .shortened))")
+                        Text("In bed by \(LookingAheadTime.string(bedBy))")
                             .font(SparkFonts.display(.title2, weight: .bold))
                     }
                 }
@@ -469,17 +469,24 @@ struct SleepTargetCard: View {
     private var reason: String {
         var sentences: [String] = []
         let sleep = Self.duration(minutes: target.sleepNeedMinutes)
+        let lowReadiness = target.readinessLowNights >= 3
 
         if target.earlyStart, let first = firstCommitment, let start = first.startDate, let wake = target.wakeByDate {
-            sentences.append(
-                "\(first.title) is at \(start.formatted(date: .omitted, time: .shortened)), so you'll want to be up by \(wake.formatted(date: .omitted, time: .shortened)), earlier than your usual \(target.typicalWake ?? "start")."
-            )
-        } else if let wake = target.wakeByDate {
-            sentences.append("To be up by \(wake.formatted(date: .omitted, time: .shortened)).")
-        }
-        sentences.append("That gives you your usual \(sleep) of sleep.")
-        if target.readinessLowNights >= 3 {
-            sentences.append("Readiness has been below your average for \(target.readinessLowNights) nights running.")
+            let usual = target.typicalWake.map { ", earlier than your usual \($0)" } ?? ""
+            sentences.append("\(first.title) is at \(LookingAheadTime.string(start)), so be up by \(LookingAheadTime.string(wake))\(usual).")
+            sentences.append("That gives you your usual \(sleep) of sleep.")
+            if lowReadiness {
+                sentences.append("Readiness has been below your average for \(target.readinessLowNights) nights running.")
+            }
+        } else {
+            if lowReadiness {
+                sentences.append("Readiness has been below your average for \(target.readinessLowNights) nights running.")
+            }
+            if let wake = target.wakeByDate {
+                sentences.append("This gets you your usual \(sleep) of sleep before you wake at \(LookingAheadTime.string(wake)).")
+            } else {
+                sentences.append("This gets you your usual \(sleep) of sleep.")
+            }
         }
         return sentences.joined(separator: " ")
     }
@@ -488,6 +495,21 @@ struct SleepTargetCard: View {
         let hours = minutes / 60
         let remainder = minutes % 60
         return remainder == 0 ? "\(hours)h" : "\(hours)h \(remainder)m"
+    }
+}
+
+/// Looking ahead shows clock times in 24-hour form, like the rest of the app.
+@MainActor
+enum LookingAheadTime {
+    private static let formatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+
+    static func string(_ date: Date) -> String {
+        formatter.string(from: date)
     }
 }
 
