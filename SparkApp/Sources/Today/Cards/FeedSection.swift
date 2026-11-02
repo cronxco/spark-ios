@@ -6,17 +6,17 @@ import SwiftUI
 /// The day's events, on one continuous spine.
 ///
 /// Drawn the way the web draws them (`resources/views/livewire/day.blade.php`):
-/// a single rule down the left, each hour as a node on it, a service node per
-/// group, the action with its object on the line below, the time, the pills
-/// in tiers, and the value right-aligned. The iOS version this replaces ruled every hour off and
-/// changed a row's weight with what kind of event it was, which made the page
-/// a stack of unrelated cards rather than a day.
+/// a single rule down the left, a service glyph per group, the action with
+/// its object on the line below, the time, the pills in tiers, and the value
+/// right-aligned. Each hour is a small label that pins to the top while you
+/// scroll through it.
 ///
 /// Rows carry their own vertical padding and the enclosing stack has none:
 /// any spacing between them opens a gap in the spine.
 struct FeedSection: View {
     let date: Date
     @State private var filter: TimelineFilter = .home
+    @State private var expandedGroups: Set<String> = []
     @Query private var allEvents: [CachedEvent]
 
     private var rawDayEvents: [CachedEvent] {
@@ -35,30 +35,28 @@ struct FeedSection: View {
         rawDayEvents.filter(filter.includes)
     }
 
-    /// Consecutive events sharing the server's `group_key` collapse into one
-    /// row — twenty Spotify plays are one line that says twenty. The key is
-    /// decided server-side so the web and the app group identically.
-    private var rows: [TimelineEntry] {
-        var out: [TimelineEntry] = []
-        var previousHour: Int?
+    /// The day in hours, newest first, each hour holding its groups.
+    ///
+    /// Consecutive events in the same run collapse into one group — twenty
+    /// Spotify plays are one row that says twenty. A group sits in the hour
+    /// of its newest event.
+    private var sections: [TimelineHourSection] {
+        var out: [TimelineHourSection] = []
         let events = dayEvents
 
         var i = 0
         while i < events.count {
             let current = events[i]
-            let key = runKey(for: current)
             var j = i + 1
-            while j < events.count, runKey(for: events[j]) == key { j += 1 }
-            let run = Array(events[i..<j])
+            while j < events.count, sameRun(events[j - 1], events[j]) { j += 1 }
+            let group = TimelineGroup(events: Array(events[i..<j]))
 
-            if let time = current.time {
-                let hour = Calendar.current.component(.hour, from: time)
-                if hour != previousHour {
-                    out.append(.hour(hour))
-                    previousHour = hour
-                }
+            let hour = current.time.map { Calendar.current.component(.hour, from: $0) } ?? -1
+            if let last = out.indices.last, out[last].hour == hour {
+                out[last].groups.append(group)
+            } else {
+                out.append(TimelineHourSection(hour: hour, groups: [group]))
             }
-            out.append(.group(run))
             i = j
         }
         return out
@@ -76,16 +74,24 @@ struct FeedSection: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, SparkSpacing.sm)
                 } else {
-                    // `rows` filters, sorts and groups the day, so build it once.
-                    let entries = rows
-                    let firstEntryID = entries.first?.id
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(entries) { row in
-                            switch row {
-                            case .hour(let hour):
-                                TimelineHourMarker(hour: hour, opensTimeline: row.id == firstEntryID)
-                            case .group(let events):
-                                TimelineGroupRow(events: events)
+                    // `sections` filters, sorts and groups the day, so build it once.
+                    let hours = sections
+                    let firstHour = hours.first?.id
+                    // Each hour's label pins to the top while you scroll
+                    // through that hour, so the rows need no ring of their own.
+                    LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                        ForEach(hours) { section in
+                            Section {
+                                ForEach(section.groups) { group in
+                                    TimelineGroupRow(
+                                        events: group.events,
+                                        isExpanded: expandedGroups.contains(group.id)
+                                    ) {
+                                        toggle(group.id)
+                                    }
+                                }
+                            } header: {
+                                TimelineHourLabel(hour: section.hour, opensTimeline: section.id == firstHour)
                             }
                         }
                     }
@@ -101,7 +107,19 @@ struct FeedSection: View {
                     }
                 }
             }
+            .task(id: date) { expandedGroups = TimelineExpansionStore.load(for: date) }
         }
+    }
+
+    private func toggle(_ id: String) {
+        withAnimation(.snappy(duration: 0.22)) {
+            if expandedGroups.contains(id) {
+                expandedGroups.remove(id)
+            } else {
+                expandedGroups.insert(id)
+            }
+        }
+        TimelineExpansionStore.save(expandedGroups, for: date)
     }
 
     private var timelineHeader: some View {
@@ -124,22 +142,61 @@ struct FeedSection: View {
     }
 }
 
-/// The server's run key, or — for rows cached before the field existed —
-/// the service and action the client used to group on. The fallback drops
-/// the actor, so it can merge runs the server would keep apart; it lasts
-/// only until the cache refreshes.
-private func runKey(for event: CachedEvent) -> String {
-    event.groupKey ?? "\(event.service):\(event.action)"
+/// Whether two neighbouring events belong to one run.
+///
+/// The server's `group_key` is service, action and actor. Rows cached before
+/// that field existed have none, and comparing their stand-in key with a
+/// fresh row's real one split a run in two, so only one half showed "+N".
+/// When either side has no key, compare what the key is made of instead,
+/// with the actor's title for its id.
+private func sameRun(_ a: CachedEvent, _ b: CachedEvent) -> Bool {
+    if let left = a.groupKey, let right = b.groupKey {
+        return left == right
+    }
+    return a.service == b.service
+        && a.action == b.action
+        && (a.actorTitle ?? "") == (b.actorTitle ?? "")
 }
 
-private enum TimelineEntry: Identifiable {
-    case hour(Int)
-    case group([CachedEvent])
+private struct TimelineHourSection: Identifiable {
+    let hour: Int
+    var groups: [TimelineGroup]
 
+    var id: Int { hour }
+}
+
+private struct TimelineGroup: Identifiable {
+    let events: [CachedEvent]
+
+    /// Stable while new plays arrive: newer events join the top of a run,
+    /// so the oldest event and the run's key name it.
     var id: String {
-        switch self {
-        case .hour(let h): "hour_\(h)"
-        case .group(let events): events.first?.id ?? UUID().uuidString
+        guard let oldest = events.last else { return UUID().uuidString }
+        let key = oldest.groupKey ?? "\(oldest.service):\(oldest.action)"
+        return "\(key)|\(oldest.id)"
+    }
+}
+
+/// Which groups are open on a day, kept per day like the web's
+/// `day-collapsed-groups-{date}`. Groups start collapsed.
+private enum TimelineExpansionStore {
+    private static func key(for date: Date) -> String {
+        let components = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        return String(
+            format: "spark.timeline.expanded.%04d-%02d-%02d",
+            components.year ?? 0, components.month ?? 0, components.day ?? 0
+        )
+    }
+
+    static func load(for date: Date) -> Set<String> {
+        Set(UserDefaults.standard.stringArray(forKey: key(for: date)) ?? [])
+    }
+
+    static func save(_ ids: Set<String>, for date: Date) {
+        if ids.isEmpty {
+            UserDefaults.standard.removeObject(forKey: key(for: date))
+        } else {
+            UserDefaults.standard.set(Array(ids).sorted(), forKey: key(for: date))
         }
     }
 }
@@ -164,85 +221,80 @@ private struct SpineColumn<Node: View>: View {
 /// Proximity does the grouping, so the gaps step up from inside an event, to
 /// between events, to between hours:
 /// - inside an event: 4 between the title, the time and each pill row
-/// - an hour node to its first event: 16, so the node reads as that hour's
-///   heading rather than the previous hour's footer
-/// - between events in the same hour: 24
-/// - between hours: 36
+/// - between events: 24 (12 above and below each row)
+/// - an hour label: 12 above (4 for the first), 4 below
 private enum TimelineRhythm {
     static let insideEvent = SparkSpacing.xs
     static let betweenTiers = SparkSpacing.sm
     static let eventPadding = SparkSpacing.md
-    static let hourLeading = SparkSpacing.xl
+    static let hourLeading = SparkSpacing.md
     static let hourTrailing = SparkSpacing.xs
     static let firstHourLeading = SparkSpacing.xs
     /// Block pills shown before a "+N" pill, matching the server's cap.
     static let blockLimit = 3
-    /// Tags shown before a "+N" pill, as the web caps block pills at three.
-    static let tagLimit = 5
+    /// The diameter of an expanded row's dot on the spine.
+    static let childDot: CGFloat = 8
 }
 
-/// The hour as a node on the spine ("09" in a ring), as on the web.
-private struct TimelineHourMarker: View {
+/// The hour as a small label ("14:00") that pins to the top of the page
+/// while you scroll through that hour. Opaque, so rows pass behind it.
+private struct TimelineHourLabel: View {
     let hour: Int
-    /// The first marker sits under the section header, which already
+    /// The first label sits under the section header, which already
     /// separates it, so it skips the gap between hours.
     var opensTimeline = false
 
     var body: some View {
         HStack(spacing: 0) {
-            SpineColumn {
-                Text(String(format: "%02d", hour))
-                    .font(SparkTypography.caption)
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-                    .frame(width: 28, height: 28)
-                    .background(Color.sparkSurface, in: .circle)
-                    .overlay { Circle().strokeBorder(Color.primary.opacity(0.13), lineWidth: 1) }
-            }
+            Text(hour >= 0 ? String(format: "%02d:00", hour) : "Undated")
+                .font(SparkTypography.captionStrong)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, SparkSpacing.sm)
+                .padding(.vertical, SparkSpacing.xxs)
+                .background(Color.sparkSurface, in: .capsule)
+                .overlay { Capsule().strokeBorder(Color.primary.opacity(0.13), lineWidth: 1) }
             Spacer(minLength: 0)
         }
         .padding(.top, opensTimeline ? TimelineRhythm.firstHourLeading : TimelineRhythm.hourLeading)
         .padding(.bottom, TimelineRhythm.hourTrailing)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(String(format: "%02d:00", hour))
+        .accessibilityLabel(hour >= 0 ? String(format: "%02d:00", hour) : "Undated")
         .accessibilityAddTraits(.isHeader)
     }
 }
 
 // MARK: - One group
 
+/// A run of events: the newest as the row, the rest folded behind "+N".
+/// The glyph (or "+N") opens and closes the group; the rest of the row opens
+/// the event.
 private struct TimelineGroupRow: View {
     let events: [CachedEvent]
-    @State private var isExpanded = false
+    let isExpanded: Bool
+    let onToggle: () -> Void
 
     private var lead: CachedEvent { events[0] }
     private var surplus: Int { events.count - 1 }
 
     var body: some View {
         VStack(spacing: 0) {
-            if surplus > 0, !isExpanded {
-                Button {
-                    withAnimation(.snappy(duration: 0.22)) { isExpanded = true }
-                } label: {
-                    TimelineRow(event: lead, surplus: surplus, isChild: false)
-                }
-                .buttonStyle(.plain)
-                .accessibilityHint("Expands \(surplus) more")
-            } else {
-                NavigationLink(value: DetailRoute.event(id: lead.id)) {
-                    TimelineRow(event: lead, surplus: 0, isChild: false)
-                }
-                .buttonStyle(.plain)
-                .sparkAppEntityIdentifier(type: "event", identifier: lead.id)
+            NavigationLink(value: DetailRoute.event(id: lead.id)) {
+                TimelineRow(
+                    event: lead,
+                    style: .lead(surplus: surplus, isExpanded: isExpanded, onToggle: surplus > 0 ? onToggle : nil)
+                )
+            }
+            .buttonStyle(.plain)
+            .sparkAppEntityIdentifier(type: "event", identifier: lead.id)
 
-                if isExpanded {
-                    ForEach(events.dropFirst()) { event in
-                        NavigationLink(value: DetailRoute.event(id: event.id)) {
-                            TimelineRow(event: event, surplus: 0, isChild: true)
-                        }
-                        .buttonStyle(.plain)
-                        .sparkAppEntityIdentifier(type: "event", identifier: event.id)
+            if isExpanded {
+                ForEach(events.dropFirst()) { event in
+                    NavigationLink(value: DetailRoute.event(id: event.id)) {
+                        TimelineRow(event: event, style: .child)
                     }
+                    .buttonStyle(.plain)
+                    .sparkAppEntityIdentifier(type: "event", identifier: event.id)
                 }
             }
         }
@@ -253,24 +305,36 @@ private struct TimelineGroupRow: View {
 /// on a line of its own, then the exact and relative time, then the pills in
 /// tiers (where it came from, its tags, its blocks), each capped with "+N".
 private struct TimelineRow: View {
+    enum Style {
+        /// A group's newest event, with its glyph on the spine. `onToggle`
+        /// is set when the group has more than one event.
+        case lead(surplus: Int, isExpanded: Bool, onToggle: (() -> Void)?)
+        /// One of the events an open group shows under its lead: a dot on
+        /// the spine, so each still reads as a point in time.
+        case child
+    }
+
     let event: CachedEvent
-    let surplus: Int
-    let isChild: Bool
+    let style: Style
 
     @Environment(\.colorScheme) private var colorScheme
 
+    private var tint: Color { EntityPresentation.tint(domain: event.domain) }
+
+    /// "+N others" shows only while the group is closed.
+    private var hiddenCount: Int {
+        if case .lead(let surplus, let isExpanded, _) = style, !isExpanded { return surplus }
+        return 0
+    }
+
+    private var toggle: (() -> Void)? {
+        if case .lead(_, _, let onToggle) = style { return onToggle }
+        return nil
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: SparkSpacing.md) {
-            SpineColumn {
-                if !isChild {
-                    DomainGlyph(
-                        SparkIcon.domain(event.domain),
-                        tint: EntityPresentation.tint(domain: event.domain),
-                        size: 30,
-                        backing: .sparkSurface
-                    )
-                }
-            }
+            SpineColumn { node }
 
             VStack(alignment: .leading, spacing: TimelineRhythm.insideEvent) {
                 title
@@ -285,12 +349,12 @@ private struct TimelineRow: View {
 
             if let value = signedValue(for: event) {
                 Text(value)
-                    .font(SparkFonts.display(.title3, weight: .bold))
+                    .font(valueFont)
                     .foregroundStyle(valueColor)
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
-                    .padding(.top, 2)
+                    .padding(.top, 4)
             }
         }
         .padding(.vertical, TimelineRhythm.eventPadding)
@@ -299,11 +363,51 @@ private struct TimelineRow: View {
         .accessibilityLabel(accessibilityLabel)
     }
 
-    /// Values take their domain's tint in dark mode, like the card heroes;
-    /// light mode keeps them in ink, since the tints are fills there and do
-    /// not clear 4.5:1 as text.
+    /// The glyph for a lead row, a dot for an expanded one. The column is
+    /// never empty: an empty view takes no space in an HStack, which is how
+    /// expanded rows lost their column and ran into the spine.
+    @ViewBuilder
+    private var node: some View {
+        switch style {
+        case .child:
+            Circle()
+                .fill(tint)
+                .frame(width: TimelineRhythm.childDot, height: TimelineRhythm.childDot)
+                .padding(.top, 12)
+        case .lead(let surplus, let isExpanded, let onToggle):
+            let glyph = DomainGlyph(
+                SparkIcon.event(action: event.action, service: event.service, domain: event.domain),
+                tint: tint,
+                size: 30,
+                backing: .sparkSurface
+            )
+            if let onToggle {
+                Button(action: onToggle) { glyph }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(isExpanded ? "Hide \(surplus) more" : "Show \(surplus) more")
+            } else {
+                glyph
+            }
+        }
+    }
+
+    /// Money is the figure people scan the timeline for, so it keeps the
+    /// display face, a step under the title. Durations, scores and counts
+    /// are detail and read at body size.
+    private var isMoney: Bool { event.domain == "money" }
+
+    private var valueFont: Font {
+        isMoney
+            ? SparkFonts.display(.headline, weight: .bold)
+            : SparkTypography.body.weight(.semibold)
+    }
+
+    /// Money takes its domain's tint in dark mode, like the card heroes, and
+    /// ink in light mode, since the tints are fills there and do not clear
+    /// 4.5:1 as text. Other values are secondary.
     private var valueColor: Color {
-        colorScheme == .dark ? EntityPresentation.tint(domain: event.domain) : .primary
+        guard isMoney else { return .secondary }
+        return colorScheme == .dark ? tint : .primary
     }
 
     /// The action, then its object in full on its own line, so a long title
@@ -318,10 +422,14 @@ private struct TimelineRow: View {
                     .font(SparkTypography.title)
                     .foregroundStyle(.primary)
             }
-            if surplus > 0 {
-                Text("+ \(surplus) other" + (surplus == 1 ? "" : "s"))
-                    .font(SparkTypography.body)
-                    .foregroundStyle(.secondary)
+            if hiddenCount > 0, let toggle = toggle {
+                Button(action: toggle) {
+                    Text("+ \(hiddenCount) other" + (hiddenCount == 1 ? "" : "s"))
+                        .font(SparkTypography.body)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Show \(hiddenCount) more")
             }
         }
         .fixedSize(horizontal: false, vertical: true)
@@ -332,7 +440,7 @@ private struct TimelineRow: View {
             if let source = sourceTitle(for: event) {
                 TimelineSourcePill(title: source, service: event.service, domain: event.domain)
             }
-            let tags = uniqueTags(event.decodedTags)
+            let tags = timelineTags(event.decodedTags)
             if !tags.isEmpty {
                 TimelineTagTier(tags: tags)
             }
@@ -349,11 +457,11 @@ private struct TimelineRow: View {
 
     private var accessibilityLabel: String {
         var parts = [primaryTitle(for: event)]
-        if surplus > 0 { parts.append("and \(surplus) more") }
+        if hiddenCount > 0 { parts.append("and \(hiddenCount) more") }
         if let time = event.time { parts.append(Self.absolute.string(from: time)) }
         if let value = signedValue(for: event) { parts.append(value) }
         if let source = sourceTitle(for: event) { parts.append("from \(source)") }
-        let tags = uniqueTags(event.decodedTags).map(\.name)
+        let tags = timelineTags(event.decodedTags).map(\.displayName)
         if !tags.isEmpty { parts.append("tagged " + tags.joined(separator: ", ")) }
         return parts.joined(separator: ", ")
     }
@@ -419,7 +527,7 @@ private struct TimelineSourcePill: View {
                 .truncationMode(.tail)
         }
         .foregroundStyle(.secondary)
-        .frame(maxWidth: 240, alignment: .leading)
+        .sparkWidthCap(240)
         .padding(.horizontal, SparkSpacing.sm)
         .padding(.vertical, 2)
         .overlay {
@@ -437,28 +545,66 @@ private struct TimelineSourcePill: View {
     }
 }
 
-/// The event's tags, the first few and then "+N", which shows the rest.
+/// The event's tags on one line: as many as fit, then "+N" in the same
+/// outline, which opens the tier onto as many lines as it needs.
 private struct TimelineTagTier: View {
     let tags: [EventTag]
     @State private var showsAll = false
 
+    private static let spacing = SparkSpacing.xs + SparkSpacing.xxs
+
     var body: some View {
-        let shown = showsAll ? tags : Array(tags.prefix(TimelineRhythm.tagLimit))
-        let hidden = tags.count - shown.count
-        FlowLayout(spacing: SparkSpacing.xs + SparkSpacing.xxs, lineSpacing: TimelineRhythm.insideEvent + SparkSpacing.xxs) {
-            ForEach(Array(shown.enumerated()), id: \.offset) { _, tag in
+        if showsAll {
+            FlowLayout(spacing: Self.spacing, lineSpacing: TimelineRhythm.insideEvent + SparkSpacing.xxs) {
+                ForEach(Array(tags.enumerated()), id: \.offset) { _, tag in
+                    DetailTagChip(tag: tag)
+                }
+            }
+        } else {
+            // The first arrangement that fits wins: every tag, then one fewer
+            // with "+1", and so on down to "+N" alone.
+            ViewThatFits(in: .horizontal) {
+                ForEach(Array(stride(from: tags.count, through: 0, by: -1)), id: \.self) { shown in
+                    line(showing: shown)
+                }
+            }
+        }
+    }
+
+    private func line(showing shown: Int) -> some View {
+        HStack(spacing: Self.spacing) {
+            ForEach(Array(tags.prefix(shown).enumerated()), id: \.offset) { _, tag in
                 DetailTagChip(tag: tag)
             }
+            let hidden = tags.count - shown
             if hidden > 0 {
                 Button {
                     withAnimation(.snappy(duration: 0.2)) { showsAll = true }
                 } label: {
-                    TimelineMorePill(count: hidden)
+                    TimelineMoreTagPill(count: hidden)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Show \(hidden) more tags")
             }
         }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+}
+
+/// "+N" at the end of a tag line, in the tags' outline so it reads as one
+/// more of them.
+private struct TimelineMoreTagPill: View {
+    let count: Int
+
+    var body: some View {
+        Text("+\(count)")
+            .font(SparkTypography.caption.weight(.medium))
+            .monospacedDigit()
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, SparkSpacing.sm)
+            .padding(.vertical, SparkSpacing.xxs)
+            .overlay { Capsule().strokeBorder(Color.primary.opacity(0.25), lineWidth: 1) }
+            .contentShape(.capsule)
     }
 }
 
@@ -510,7 +656,7 @@ private struct TimelineBlockPill: View {
             }
         }
         .foregroundStyle(role.ink)
-        .frame(maxWidth: 260, alignment: .leading)
+        .sparkWidthCap(260)
         .padding(.horizontal, SparkSpacing.sm)
         .padding(.vertical, 2)
         .background(role.fill.opacity(0.10), in: .rect(cornerRadius: 6))
@@ -546,6 +692,33 @@ private func uniqueTags(_ tags: [EventTag]) -> [EventTag] {
         let key = "\(tag.name.lowercased())\u{1E}\((tag.type ?? "").lowercased())"
         return seen.insert(key).inserted
     }
+}
+
+/// The tags a timeline row shows: unique, and without the bank's own
+/// bookkeeping. The event screen still shows every tag.
+private func timelineTags(_ tags: [EventTag]) -> [EventTag] {
+    uniqueTags(tags).filter { !isMachineTag($0) }
+}
+
+/// Tag types that describe how a transaction was processed rather than what
+/// it was for: its currency, status, debit or credit, payment scheme
+/// ("uk_retail_pot"), card number, balance type and merchant metadata.
+private let machineTagTypes: Set<String> = [
+    "transaction_currency", "transaction_status", "transaction_type",
+    "transaction_scheme", "card_pan", "balance_type",
+    "merchant_emoji", "merchant_country", "currency",
+]
+
+private let currencyCodes = Set(Locale.Currency.isoCurrencies.map(\.identifier))
+
+private func isMachineTag(_ tag: EventTag) -> Bool {
+    let type = (tag.type ?? "").lowercased()
+    // A declined payment is worth seeing at a glance.
+    if type == "transaction_status", tag.name.lowercased() == "declined" { return false }
+    if machineTagTypes.contains(type) { return true }
+    // Rows cached before tags kept their type: a bare currency code.
+    if type.isEmpty, currencyCodes.contains(tag.name) { return true }
+    return false
 }
 
 /// Money moving out takes a minus and money coming in a plus, so direction is

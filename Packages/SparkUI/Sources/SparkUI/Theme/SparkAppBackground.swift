@@ -249,6 +249,9 @@ private struct SparkAppBackgroundModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .scrollContentBackground(.hidden)
+            // Soften what scrolls under the tab bar, so rows read as passing
+            // behind the glass rather than as a second bar.
+            .scrollEdgeEffectStyle(.soft, for: .bottom)
             .background(SparkResolvedAppBackground(date: date))
     }
 }

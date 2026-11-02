@@ -40,6 +40,62 @@ public extension SparkIcon {
         default: .link
         }
     }
+
+    /// An event's glyph, from what happened rather than only where: music
+    /// for "listened to", a book for "read", a receipt for a payment. The
+    /// timeline and the event screen both draw this, so an event looks the
+    /// same in each. Anything unmatched takes its domain's glyph.
+    static func event(action: String?, service: String? = nil, domain: String?) -> SparkIcon {
+        let action = (action ?? "").lowercased()
+        let service = (service ?? "").lowercased()
+        // Whole words of the snake_case action, so "ran" never matches
+        // "transfer". A pattern with an underscore matches as written.
+        let words = Set(action.split(separator: "_").map(String.init))
+        func has(_ patterns: String...) -> Bool {
+            patterns.contains { $0.contains("_") ? action.contains($0) : words.contains($0) }
+        }
+
+        // Health and activity readings
+        if has("sleep", "slept", "sleeping") { return .sleep }
+        if has("bedtime", "went_to_bed") { return .bedtime }
+        if has("hrv") { return .hrv }
+        if has("heart") { return .heartRate }
+        if has("oxygen", "spo2") { return .bloodOxygen }
+        if has("stress") { return .stress }
+        if has("resilience") { return .resilience }
+        if has("breath", "respiratory") { return .breathing }
+        if has("step", "steps") { return .steps }
+        if has("stand") { return .stand }
+        if has("calorie", "calories", "energy_burned") { return .energy }
+        if has("workout", "exercise", "lifted", "trained") { return .workout }
+        if has("distance", "walked", "ran", "cycled") { return .distance }
+        if has("readiness", "_score") { return .score }
+        if has("morning_checkin", "morning_check_in") { return .morning }
+        if has("afternoon_checkin", "afternoon_check_in") { return .afternoon }
+
+        // Media and knowledge
+        if has("listened", "played_track", "scrobbled") || service == "spotify" && has("played") { return .track }
+        if has("watched", "played") { return .media }
+        if has("read", "reading", "finished_book", "started_book") { return .book }
+        if has("bookmarked", "saved", "clipped") { return .article }
+        if has("photo", "photos", "took_picture") { return .photo }
+
+        // Money
+        if has("pot") { return .savingsPot }
+        if has("transfer") { return .transfer }
+        if has("balance") { return .balance }
+        if has("salary", "income", "received_payment") { return .income }
+        if has("invoice") { return .invoice }
+        if has("card_payment", "payment", "purchase", "spent", "paid") { return .payment }
+
+        // Time and place
+        if has("visited", "arrived", "checked_in", "departed") { return .place }
+        if service.contains("calendar") || has("had_event", "meeting", "attended") { return .calendarEvent }
+        if has("completed_task", "task") { return .task }
+        if service == "flint" { return .flint }
+
+        return .domain(domain)
+    }
 }
 
 #if os(iOS)

@@ -97,6 +97,33 @@ public extension EventTag {
     var tagTypeLabel: String? {
         tagPresentation.label
     }
+
+    /// The name as people read it. Integrations sometimes tag with a raw
+    /// code ("uk_retail_pot"); those read as words ("UK retail pot"). Any
+    /// name with capitals or spaces is the source's own and stays as it is.
+    /// Routes and lookups keep using `name`.
+    var displayName: String {
+        SparkTagPresentation.displayName(for: name)
+    }
+}
+
+public extension SparkTagPresentation {
+    private static let acronyms: Set<String> = ["uk", "us", "eu", "gb", "atm", "pos", "id", "tv", "dj"]
+
+    static func displayName(for name: String) -> String {
+        guard name.contains("_"),
+              name == name.lowercased(),
+              !name.contains(" ")
+        else { return name }
+
+        let words = name.split(separator: "_").map(String.init).filter { !$0.isEmpty }
+        guard !words.isEmpty else { return name }
+        return words.enumerated().map { index, word in
+            if acronyms.contains(word) { return word.uppercased() }
+            return index == 0 ? word.prefix(1).uppercased() + word.dropFirst() : word
+        }
+        .joined(separator: " ")
+    }
 }
 
 // MARK: - PeekableTagChip
@@ -159,7 +186,7 @@ public struct TagPeekCard: View {
             icon: TagChip.icon(forType: tag.type),
             tint: SparkRole.forTagType(tag.type).fill,
             eyebrow: eyebrow,
-            title: tag.name,
+            title: tag.displayName,
             facts: facts,
             action: onOpen.map { PeekCard.Action("View tagged items", perform: $0) },
             noDestination: "This tag has no page to open."
@@ -208,13 +235,13 @@ public struct TagChip: View {
         let chip = HStack(spacing: SparkSpacing.xs) {
             SparkGlyph(Self.icon(forType: tag.type), size: 10, relativeTo: .caption)
                 .opacity(0.7)
-            Text(tag.name)
+            Text(tag.displayName)
                 .font(SparkTypography.caption.weight(.medium))
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
         .foregroundStyle(role.ink)
-        .frame(maxWidth: 160, alignment: .leading)
+        .sparkWidthCap(220)
         .padding(.horizontal, SparkSpacing.sm)
         .padding(.vertical, SparkSpacing.xxs)
         .overlay {
@@ -243,9 +270,9 @@ public struct TagChip: View {
 
     private func accessibilityLabel(for tag: EventTag) -> String {
         if let label = tag.tagTypeLabel {
-            return "Tag \(tag.name), \(label)"
+            return "Tag \(tag.displayName), \(label)"
         }
-        return "Tag \(tag.name)"
+        return "Tag \(tag.displayName)"
     }
 
     private func legacyBody(text: String, isGhost: Bool) -> some View {

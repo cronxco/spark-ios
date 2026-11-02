@@ -6,6 +6,10 @@ import SwiftUI
 struct TodayView: View {
     let date: Date
     var showsToolbar = true
+    /// Called with `false` when the reader scrolls down the page and `true`
+    /// when they scroll back up or reach the top, so the pager can hide the
+    /// top bar while reading.
+    var onTopBarVisibilityChange: (@MainActor (Bool) -> Void)?
     @Environment(AppModel.self) private var appModel
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
@@ -114,7 +118,14 @@ struct TodayView: View {
                 .padding(.bottom, SparkSpacing.xl)
                 .containerRelativeFrame(.horizontal)
             }
-            .scrollEdgeEffectStyle(.soft, for: .top)
+            .scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
+            // Clear the minimised tab bar at the end of the page.
+            .contentMargins(.bottom, SparkSpacing.xxxl, for: .scrollContent)
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top
+            } action: { old, new in
+                reportScroll(from: old, to: new)
+            }
             .refreshable {
                 await viewModel?.refresh()
                 await checkInHistoryVM?.load()
@@ -195,6 +206,25 @@ struct TodayView: View {
             if newPhase == .active {
                 Task { await viewModel?.backgroundRevalidate() }
             }
+        }
+    }
+
+    // MARK: - Top bar
+
+    /// Scroll distance, in points, that counts as a change of direction.
+    /// Smaller moves are the bar's own show or hide shifting the content.
+    private static let scrollDirectionThreshold: CGFloat = 8
+    /// Near the top of the page the bar always shows.
+    private static let topBarRevealOffset: CGFloat = 40
+
+    private func reportScroll(from old: CGFloat, to new: CGFloat) {
+        guard showsToolbar, let onTopBarVisibilityChange else { return }
+        if new <= Self.topBarRevealOffset {
+            onTopBarVisibilityChange(true)
+        } else if new - old > Self.scrollDirectionThreshold {
+            onTopBarVisibilityChange(false)
+        } else if old - new > Self.scrollDirectionThreshold {
+            onTopBarVisibilityChange(true)
         }
     }
 

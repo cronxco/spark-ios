@@ -35,7 +35,7 @@ public struct EntityRefChip: View {
             }
         }
         .foregroundStyle(role.ink)
-        .frame(maxWidth: 220, alignment: .leading)
+        .sparkWidthCap(220)
         .padding(.horizontal, SparkSpacing.sm)
         .padding(.vertical, 2)
         .background(role.fill.opacity(0.10), in: .rect(cornerRadius: 6))

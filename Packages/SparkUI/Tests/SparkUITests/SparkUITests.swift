@@ -496,3 +496,43 @@ struct HeroColourTests {
     }
 }
 #endif
+
+@Suite("Event glyphs")
+struct EventGlyphTests {
+    @Test("the action picks the glyph before the domain")
+    func actionsPickGlyphs() {
+        #expect(SparkIcon.event(action: "listened_to", service: "spotify", domain: "media") == .track)
+        #expect(SparkIcon.event(action: "had_sleep_score", service: "oura", domain: "health") == .sleep)
+        #expect(SparkIcon.event(action: "card_payment_to", service: "monzo", domain: "money") == .payment)
+        #expect(SparkIcon.event(action: "pot_transfer_to", service: "monzo", domain: "money") == .savingsPot)
+        #expect(SparkIcon.event(action: "had_event", service: "portal", domain: "knowledge") == .calendarEvent)
+    }
+
+    /// Matching on substrings sent "pot_transfer" to running ("ran").
+    @Test("only whole words of the action match")
+    func wholeWords() {
+        #expect(SparkIcon.event(action: "bank_transfer_from", domain: "money") == .transfer)
+        #expect(SparkIcon.event(action: "thread_reply", domain: "online") == .online)
+    }
+
+    @Test("an unknown action takes its domain's glyph")
+    func fallsBackToDomain() {
+        #expect(SparkIcon.event(action: "did_something", domain: "media") == .media)
+    }
+}
+
+@Suite("Tag display names")
+struct TagDisplayNameTests {
+    @Test("raw codes read as words")
+    func rawCodes() {
+        #expect(SparkTagPresentation.displayName(for: "uk_retail_pot") == "UK retail pot")
+        #expect(SparkTagPresentation.displayName(for: "eating_out") == "Eating out")
+    }
+
+    @Test("the source's own names are left alone")
+    func ownNames() {
+        #expect(SparkTagPresentation.displayName(for: "Dustin O'Halloran") == "Dustin O'Halloran")
+        #expect(SparkTagPresentation.displayName(for: "playlist") == "playlist")
+        #expect(SparkTagPresentation.displayName(for: "Some_Name") == "Some_Name")
+    }
+}
