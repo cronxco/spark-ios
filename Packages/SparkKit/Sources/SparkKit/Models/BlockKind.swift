@@ -232,15 +232,16 @@ public extension Block {
     /// The first couple of lines of the block's text, without markup, so a
     /// row can say which block it is before you open it.
     var preview: String? {
-        guard let content = content?.sparkPlainTextFromHTMLFragment else { return nil }
         // A record's first line is its summary ("3:42, Between Worlds"); the
-        // rest is for its own screen.
+        // rest is for its own screen. Split before stripping markup, which
+        // folds every newline into a space.
         if kind == .track {
-            return content
+            return content?
                 .split(whereSeparator: \.isNewline)
-                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .map { String($0).sparkPlainTextFromHTMLFragment }
                 .first { !$0.isEmpty }
         }
+        guard let content = content?.sparkPlainTextFromHTMLFragment else { return nil }
         let collapsed = content
             .replacingOccurrences(of: "[#*_>`]", with: "", options: .regularExpression)
             .split(whereSeparator: \.isNewline)
