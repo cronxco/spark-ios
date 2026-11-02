@@ -87,8 +87,15 @@ public struct EventCard: View {
     @ViewBuilder
     private var hero: some View {
         if let maximum = kind.ringMaximum, let live = card.liveValue {
-            ScoreRing(value: live, maximum: maximum, label: card.heroValue, fill: fill)
-                .frame(maxWidth: .infinity)
+            ScoreRing(
+                fraction: live / maximum,
+                text: card.heroValue,
+                tint: fill,
+                diameter: 64,
+                threshold: 85 / maximum
+            )
+            .accessibilityHidden(true)
+            .frame(maxWidth: .infinity)
         } else {
             VStack(alignment: .leading, spacing: SparkSpacing.xs) {
                 HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.xxs) {
@@ -165,49 +172,6 @@ public struct EventCard: View {
             parts.append("30-day average \(kind.heroValue(mean, unit: card.event.unit, displayValue: nil))")
         }
         return parts.joined(separator: ", ")
-    }
-}
-
-/// A score drawn as a 64pt ring with the number inside and a short tick at
-/// 85, Oura's "excellent" (design language §7.3). Proportions follow the
-/// spec's 84-unit SVG: radius 36, stroke 8.
-struct ScoreRing: View {
-    let value: Double
-    let maximum: Double
-    let label: String
-    let fill: Color
-
-    static let diameter: CGFloat = 64
-    static let excellent: Double = 85
-
-    private var scale: CGFloat { Self.diameter / 84 }
-    private var lineWidth: CGFloat { 8 * scale }
-    private var progress: Double { min(max(value / maximum, 0), 1) }
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(fill.opacity(0.18), lineWidth: lineWidth)
-            Circle()
-                .trim(from: 0, to: progress)
-                .stroke(fill, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-            Capsule()
-                .fill(Color.primary)
-                .frame(width: 2 * scale, height: 10 * scale)
-                .offset(y: -(Self.diameter / 2 - lineWidth / 2))
-                .rotationEffect(.degrees(Self.excellent / maximum * 360))
-            Text(label)
-                .font(SparkFonts.display(.title3, weight: .bold))
-                .monospacedDigit()
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .padding(.horizontal, lineWidth + 2)
-        }
-        .padding(lineWidth / 2)
-        .frame(width: Self.diameter, height: Self.diameter)
-        .accessibilityHidden(true)
     }
 }
 
