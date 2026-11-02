@@ -168,7 +168,9 @@ struct EventDetailView: View {
             SparkDetailSummaryCard(text: summary)
         }
 
-        flowSection(for: detail)
+        if showsFlow(for: detail) {
+            flowSection(for: detail)
+        }
 
         if detail.hasRoute {
             EventRouteSection(eventID: detail.id, apiClient: appModel.apiClient)
@@ -262,6 +264,7 @@ struct EventDetailView: View {
         let target = heroTargetTitle(for: event)
         return SparkDetailCentredHero(
             icon: EntityPresentation.icon(domain: event.domain, service: event.service, action: event.action, type: "event"),
+            glyph: SparkIcon.event(action: event.action, service: event.service, domain: event.domain),
             domain: event.domain,
             verb: target == nil ? nil : event.action.sparkActionTitle,
             title: heroTitle(for: event),
@@ -334,8 +337,18 @@ struct EventDetailView: View {
 
     // MARK: - Flow
 
-    /// Actor, then the event, then its target, always, even when the actor
-    /// is you (§12.2).
+    /// Flow says nothing the hero doesn't when you are the actor and the
+    /// object is already the hero's title ("Listened to The Drifter"), so
+    /// it shows only when it adds someone or something (Will, 2 Nov).
+    private func showsFlow(for detail: EventDetail) -> Bool {
+        let actorIsYou = detail.actor?.isAccountOwner ?? true
+        guard actorIsYou else { return true }
+        guard let target = detail.target else { return false }
+        let heroTarget = heroTargetTitle(for: detail.event)
+        return heroTarget?.caseInsensitiveCompare(target.title.trimmingCharacters(in: .whitespacesAndNewlines)) != .orderedSame
+    }
+
+    /// Actor, then the event, then its target.
     private func flowSection(for detail: EventDetail) -> some View {
         let event = detail.event
         return SparkDetailFlowSection(
@@ -343,7 +356,7 @@ struct EventDetailView: View {
             action: event.action.sparkActionTitle,
             value: displayValue(for: event),
             domain: event.domain,
-            icon: EntityPresentation.icon(domain: event.domain, service: event.service, action: event.action, type: "event"),
+            glyph: SparkIcon.event(action: event.action, service: event.service, domain: event.domain),
             target: detail.target.map(party(for:))
         )
     }
@@ -403,7 +416,7 @@ struct EventDetailView: View {
             }
         }
 
-        ForEach(groups.takeaways) { block in
+        ForEach(groups.takeaways + groups.media) { block in
             NavigationLink {
                 BlockDetailView(blockId: block.id, parent: loadedEvent)
             } label: {
@@ -412,9 +425,9 @@ struct EventDetailView: View {
             .buttonStyle(.plain)
         }
 
-        if !groups.rows.isEmpty || !groups.summaries.isEmpty {
+        if !groups.rows.isEmpty || !groups.summaries.isEmpty || !groups.values.isEmpty {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
-                SparkDetailSectionHeader("Blocks", count: groups.rows.count + groups.summaries.count, icon: .grid)
+                SparkDetailSectionHeader("Blocks", count: groups.sectionCount, icon: .grid)
                 ForEach(groups.rows) { block in blockRow(block) }
 
                 if !groups.summaries.isEmpty {
@@ -665,9 +678,15 @@ struct EventDetailView: View {
 struct BlockGroups {
     var contributors = [Block]()
     var takeaways = [Block]()
+    /// Artwork and photos, drawn as images whatever value the source sent.
+    var media = [Block]()
     var rows = [Block]()
     var summaries = [Block]()
     var values = [Block]()
+
+    /// Everything under the "Blocks" heading: rows, summaries and value
+    /// tiles. It counted only the first two, so "Blocks (1)" sat over three.
+    var sectionCount: Int { rows.count + summaries.count + values.count }
 
     init(_ blocks: [Block]) {
         for block in blocks {
@@ -675,7 +694,19 @@ struct BlockGroups {
                 contributors.append(block)
                 continue
             }
-            if let value = block.value, !value.isEmpty {
+            // The kind decides first: a source can put a number on a block
+            // that is not a reading (an image's width, a track's popularity).
+            switch block.kind {
+            case .albumArt, .bookCover, .image, .immichPhoto:
+                media.append(block)
+                continue
+            case .track:
+                rows.append(block)
+                continue
+            default:
+                break
+            }
+            if block.displayValue != nil {
                 values.append(block)
                 continue
             }

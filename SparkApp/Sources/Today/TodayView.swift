@@ -6,6 +6,10 @@ import SwiftUI
 struct TodayView: View {
     let date: Date
     var showsToolbar = true
+    /// Called with `false` when the reader scrolls down the page and `true`
+    /// when they scroll back up or reach the top, so the pager can hide the
+    /// top bar while reading.
+    var onTopBarVisibilityChange: (@MainActor (Bool) -> Void)?
     @Environment(AppModel.self) private var appModel
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
@@ -16,6 +20,8 @@ struct TodayView: View {
     @State private var showUpToSpeed = false
     @State private var upToSpeedViewModel: UpToSpeedViewModel?
     @State private var selectedThread: FlintTopic?
+    /// The offset where the reader last changed scroll direction.
+    @State private var scrollAnchor: CGFloat = 0
 
     private var isToday: Bool { Calendar.current.isDateInToday(date) }
 
@@ -114,7 +120,14 @@ struct TodayView: View {
                 .padding(.bottom, SparkSpacing.xl)
                 .containerRelativeFrame(.horizontal)
             }
-            .scrollEdgeEffectStyle(.soft, for: .top)
+            .scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
+            // Clear the minimised tab bar at the end of the page.
+            .contentMargins(.bottom, SparkSpacing.xxxl, for: .scrollContent)
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top
+            } action: { old, new in
+                reportScroll(from: old, to: new)
+            }
             .refreshable {
                 await viewModel?.refresh()
                 await checkInHistoryVM?.load()
@@ -195,6 +208,36 @@ struct TodayView: View {
             if newPhase == .active {
                 Task { await viewModel?.backgroundRevalidate() }
             }
+        }
+    }
+
+    // MARK: - Top bar
+
+    /// Scroll distance, in points, that counts as a change of direction.
+    /// Smaller moves are the bar's own show or hide shifting the content.
+    private static let scrollDirectionThreshold: CGFloat = 8
+    /// Near the top of the page the bar always shows.
+    private static let topBarRevealOffset: CGFloat = 40
+
+    /// Measures movement from where the scroll last turned, not between
+    /// updates: a slow scroll arrives in steps smaller than the threshold.
+    private func reportScroll(from old: CGFloat, to new: CGFloat) {
+        guard showsToolbar, let onTopBarVisibilityChange else { return }
+        if new <= Self.topBarRevealOffset {
+            scrollAnchor = new
+            onTopBarVisibilityChange(true)
+            return
+        }
+        // A change of direction moves the anchor to the turning point.
+        let wasDown = old >= scrollAnchor
+        if (new > old) != wasDown { scrollAnchor = old }
+
+        if new - scrollAnchor > Self.scrollDirectionThreshold {
+            scrollAnchor = new
+            onTopBarVisibilityChange(false)
+        } else if scrollAnchor - new > Self.scrollDirectionThreshold {
+            scrollAnchor = new
+            onTopBarVisibilityChange(true)
         }
     }
 

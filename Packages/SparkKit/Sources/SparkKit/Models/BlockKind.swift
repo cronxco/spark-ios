@@ -121,6 +121,16 @@ public enum BlockKind: Hashable, Sendable {
         }
     }
 
+    /// Whether a value on this kind is a reading worth showing. Images carry
+    /// their pixel width and tracks their popularity as `value`, which are
+    /// not something anyone reads a card for.
+    public var showsValue: Bool {
+        switch self {
+        case .albumArt, .bookCover, .image, .immichPhoto, .track: false
+        default: true
+        }
+    }
+
     /// Text written by a model rather than by the source. These are marked
     /// as such wherever they're shown.
     public var isAIWritten: Bool {
@@ -164,6 +174,7 @@ public enum BlockKind: Hashable, Sendable {
         "contributor": .contributor,
 
         "album_art": .albumArt,
+        "episode_art": .albumArt,
         "book_cover": .bookCover,
         "image": .image,
         "bookmark_metadata": .bookmarkMetadata,
@@ -221,6 +232,15 @@ public extension Block {
     /// The first couple of lines of the block's text, without markup, so a
     /// row can say which block it is before you open it.
     var preview: String? {
+        // A record's first line is its summary ("3:42, Between Worlds"); the
+        // rest is for its own screen. Split before stripping markup, which
+        // folds every newline into a space.
+        if kind == .track {
+            return content?
+                .split(whereSeparator: \.isNewline)
+                .map { String($0).sparkPlainTextFromHTMLFragment }
+                .first { !$0.isEmpty }
+        }
         guard let content = content?.sparkPlainTextFromHTMLFragment else { return nil }
         let collapsed = content
             .replacingOccurrences(of: "[#*_>`]", with: "", options: .regularExpression)

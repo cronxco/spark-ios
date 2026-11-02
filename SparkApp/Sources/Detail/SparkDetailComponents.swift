@@ -104,6 +104,8 @@ struct SparkDetailCentredHero<Comparison: View>: View {
     typealias Value = SparkDetailHeroValue
 
     let icon: String
+    /// A Spark glyph, drawn in place of the SF Symbol `icon` when set.
+    var glyph: SparkIcon?
     let domain: String
     let verb: String?
     let title: String
@@ -117,8 +119,14 @@ struct SparkDetailCentredHero<Comparison: View>: View {
 
     var body: some View {
         VStack(spacing: SparkSpacing.sm) {
-            DomainGlyph(icon: icon, tint: Color.domainTint(for: domain), size: 42)
-                .accessibilityHidden(true)
+            Group {
+                if let glyph {
+                    DomainGlyph(glyph, tint: Color.domainTint(for: domain), size: 42)
+                } else {
+                    DomainGlyph(icon: icon, tint: Color.domainTint(for: domain), size: 42)
+                }
+            }
+            .accessibilityHidden(true)
 
             if let verb, !verb.isEmpty {
                 Text(verb)
@@ -273,9 +281,9 @@ struct SparkDetailSummaryCard: View {
 
 // MARK: - Flow
 
-/// An event's actor object, the action with its value, and its target
-/// object, top to bottom (§12.2). It is the page's one featured section: an
-/// even 2pt info stroke at 10% (§5.3). The actor shows even when it is you.
+/// Who did what to what, as one line that wraps: the actor's chip, the
+/// event's glyph and verb, the object's chip (§12.2). Leading-aligned like
+/// every other card; only the hero centres.
 struct SparkDetailFlowSection: View {
     struct Party {
         let id: String?
@@ -288,23 +296,22 @@ struct SparkDetailFlowSection: View {
     let action: String
     let value: String?
     let domain: String
-    let icon: String
+    let glyph: SparkIcon
     let target: Party?
 
     var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
             SparkDetailSectionHeader("Flow", icon: .steady)
 
-            VStack(spacing: SparkSpacing.xs + 2) {
+            FlowLayout(spacing: SparkSpacing.sm, lineSpacing: SparkSpacing.sm) {
                 if let actor {
-                    partyView(actor, role: "Actor", labelFirst: true)
+                    chip(actor, role: "From")
                     arrow
                 }
 
-                HStack(spacing: SparkSpacing.sm) {
-                    Image(systemName: icon)
+                HStack(spacing: SparkSpacing.xs) {
+                    SparkGlyph(glyph, size: 14)
                         .foregroundStyle(Color.domainTint(for: domain))
-                        .accessibilityHidden(true)
                     Text(action)
                         .font(SparkTypography.bodyStrong)
                     if let value, !value.isEmpty {
@@ -314,16 +321,19 @@ struct SparkDetailFlowSection: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                // FlowLayout offers the line's width to anything wider, so
+                // a long verb and value wrap inside the card.
+                .accessibilityElement(children: .combine)
 
                 if let target {
                     arrow
-                    partyView(target, role: "Object", labelFirst: false)
+                    chip(target, role: "To")
                 }
             }
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: .infinity)
-            .padding(SparkSpacing.lg)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(SparkSpacing.md)
             .sparkContentSurface(radius: SparkRadii.lg)
+            // The page's one featured section (§5.3).
             .overlay {
                 RoundedRectangle(cornerRadius: SparkRadii.lg, style: .continuous)
                     .strokeBorder(Color.sparkInfo.opacity(0.10), lineWidth: 2)
@@ -332,42 +342,30 @@ struct SparkDetailFlowSection: View {
     }
 
     private var arrow: some View {
-        SparkGlyph(.decrease, size: 12, relativeTo: .caption)
+        SparkGlyph(.forward, size: 10, relativeTo: .caption)
             .foregroundStyle(.secondary)
-            .padding(.vertical, 2)
+            .frame(minHeight: 22)
             .accessibilityHidden(true)
     }
 
     @ViewBuilder
-    private func partyView(_ party: Party, role: String, labelFirst: Bool) -> some View {
-        let label = Text(role)
-            .font(SparkTypography.captionStrong)
-            .foregroundStyle(.secondary)
-        VStack(spacing: SparkSpacing.xs) {
-            if labelFirst { label }
-            chip(party)
-            Text(party.typeName)
-                .font(SparkTypography.caption)
-                .foregroundStyle(.secondary)
-            if !labelFirst { label }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(role): \(party.title), \(party.typeName)")
-    }
-
-    @ViewBuilder
-    private func chip(_ party: Party) -> some View {
-        let reference = EntityReference(type: .object, id: party.id ?? "", title: party.title, domain: party.type)
-        if let id = party.id, !id.isEmpty {
-            NavigationLink {
-                ObjectDetailView(objectId: id)
-            } label: {
+    private func chip(_ party: Party, role: String) -> some View {
+        // The event's domain, so the chip carries its glyph and colour
+        // rather than the link fallback an object type gets.
+        let reference = EntityReference(type: .object, id: party.id ?? "", title: party.title, domain: domain)
+        Group {
+            if let id = party.id, !id.isEmpty {
+                NavigationLink {
+                    ObjectDetailView(objectId: id)
+                } label: {
+                    EntityRefChip(reference)
+                }
+                .buttonStyle(.plain)
+            } else {
                 EntityRefChip(reference)
             }
-            .buttonStyle(.plain)
-        } else {
-            EntityRefChip(reference)
         }
+        .accessibilityLabel("\(role) \(party.title), \(party.typeName)")
     }
 }
 

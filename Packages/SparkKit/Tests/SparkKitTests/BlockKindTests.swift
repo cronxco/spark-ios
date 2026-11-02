@@ -65,4 +65,28 @@ struct BlockKindTests {
         let block = Block(id: "1", blockType: "note", title: "Note", content: "## Heading\n\n**Bold** line\n- item")
         #expect(block.preview == "Heading Bold line - item")
     }
+
+    @Test("a track's preview is its first line")
+    func trackPreviewIsFirstLine() {
+        let block = Block(id: "1", blockType: "track_details", title: "Track Details",
+                          content: "3:42, Between Worlds\n\nPopularity 39 out of 100")
+        #expect(block.preview == "3:42, Between Worlds")
+    }
+
+    @Test("episode artwork is album art")
+    func episodeArt() {
+        #expect(BlockKind(blockType: "episode_art", hasValue: true) == .albumArt)
+    }
+
+    /// Spotify sent an image's width and a track's popularity as values,
+    /// which drew "640 pixels" and "39 popularity" tiles.
+    @Test("images and tracks show no value")
+    func mediaValuesAreHidden() {
+        let art = Block(id: "1", blockType: "album_art", title: "Album Art", value: "640", unit: "pixels")
+        let track = Block(id: "2", blockType: "track_details", title: "Track Details", value: "39", unit: "popularity")
+        let heartRate = Block(id: "3", blockType: "heart_rate", title: "Heart rate", value: "62", unit: "bpm")
+        #expect(art.displayValue == nil)
+        #expect(track.displayValue == nil)
+        #expect(heartRate.displayValue != nil)
+    }
 }

@@ -51,6 +51,7 @@ public struct BlockValue: Hashable, Sendable {
     private static let percentUnits: Set<String> = ["%", "percent", "pct"]
 
     static func make(value: String?, unit: String?, kind: BlockKind) -> BlockValue? {
+        guard kind.showsValue else { return nil }
         guard let raw = value?.sparkPlainTextFromHTMLFragment
             .trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty
         else { return nil }
