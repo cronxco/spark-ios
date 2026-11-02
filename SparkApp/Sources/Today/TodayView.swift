@@ -230,7 +230,7 @@ struct TodayView: View {
     /// updates: a slow scroll arrives in steps smaller than the threshold.
     private func reportScroll(from old: CGFloat, to new: CGFloat) {
         guard showsToolbar, let onTopBarVisibilityChange else { return }
-        if let visible = scrollTracker.update(from: old, to: new) {
+        if let visible = scrollTracker.update(from: old, to: new, isShown: !isTopBarHidden) {
             onTopBarVisibilityChange(visible)
         }
     }
@@ -460,9 +460,11 @@ private extension TodaySnapshot {
     }
 }
 
-/// Turns scroll offsets into "show the bar" or "hide the bar", measuring
-/// movement from where the scroll last turned rather than between updates:
-/// a slow scroll arrives in steps smaller than the threshold.
+/// Turns scroll offsets into "show the bar" or "hide the bar". While the
+/// bar shows, it measures down from the highest point reached since it
+/// appeared; while it is hidden, up from the lowest point. A slow scroll, or
+/// one that wobbles back a little as it goes, still adds up to the
+/// threshold.
 @MainActor
 final class ScrollDirectionTracker {
     /// Scroll distance, in points, that counts as a change of direction.
@@ -470,25 +472,33 @@ final class ScrollDirectionTracker {
     /// Near the top of the page the bar always shows.
     static let revealOffset: CGFloat = 40
 
-    private var anchor: CGFloat = 0
+    /// The smallest offset since the bar last showed.
+    private var low = CGFloat.infinity
+    /// The largest offset since the bar last hid.
+    private var high = -CGFloat.infinity
 
     /// `true` to show the bar, `false` to hide it, `nil` to leave it.
-    func update(from old: CGFloat, to new: CGFloat) -> Bool? {
+    /// `isShown` is the bar's state now, which the pager can also change.
+    func update(from old: CGFloat, to new: CGFloat, isShown: Bool) -> Bool? {
         if new <= Self.revealOffset {
-            anchor = new
+            low = new
+            high = -.infinity
             return true
         }
-        // A change of direction moves the anchor to the turning point.
-        let wasDown = old >= anchor
-        if (new > old) != wasDown { anchor = old }
-
-        if new - anchor > Self.threshold {
-            anchor = new
-            return false
-        }
-        if anchor - new > Self.threshold {
-            anchor = new
-            return true
+        if isShown {
+            low = min(low, old, new)
+            if new - low > Self.threshold {
+                high = new
+                low = .infinity
+                return false
+            }
+        } else {
+            high = max(high, old, new)
+            if high - new > Self.threshold {
+                low = new
+                high = -.infinity
+                return true
+            }
         }
         return nil
     }

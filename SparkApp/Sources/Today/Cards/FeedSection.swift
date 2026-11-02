@@ -89,11 +89,12 @@ struct FeedSection: View {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(hours) { section in
                             VStack(alignment: .leading, spacing: 0) {
-                                // Holds the label's place and its VoiceOver
-                                // header; the pinned copy is drawn over the
-                                // section.
+                                // Holds the label's place; the pinned copy
+                                // drawn over the section is the one you see
+                                // and the one VoiceOver reads.
                                 TimelineHourLabel(hour: section.hour, opensTimeline: section.id == firstHour)
                                     .opacity(0)
+                                    .accessibilityHidden(true)
                                 ForEach(section.groups) { group in
                                     TimelineGroupRow(
                                         events: group.events,
@@ -256,7 +257,8 @@ private enum TimelineRhythm {
 /// An hour's label drawn over its section, moved down with the scroll so it
 /// stays at the top of the page until the section's end pushes it off.
 /// The move is a visual effect, so it never changes the layout under the
-/// scroll. It takes no touches: the rows beneath it stay tappable.
+/// scroll. It takes no touches, so the rows beneath it stay tappable, but
+/// VoiceOver reads it as the hour's header.
 private struct TimelinePinnedHourLabel: View {
     let hour: Int
     let opensTimeline: Bool
@@ -280,7 +282,6 @@ private struct TimelinePinnedHourLabel: View {
                 return content.offset(y: min(pinned, limit))
             }
             .allowsHitTesting(false)
-            .accessibilityHidden(true)
     }
 }
 
