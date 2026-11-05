@@ -104,7 +104,7 @@ struct WrapScreen: View {
             }
         } label: {
             Label(
-                didMarkAll ? "All marked as read" : (markAllFailed ? "Couldn’t mark all · Try again" : "Mark all as read"),
+                didMarkAll ? "All marked as read" : (markAllFailed ? "Couldn’t mark all. Try again" : "Mark all as read"),
                 systemImage: didMarkAll ? "checkmark.circle.fill" : "checkmark.circle"
             )
             .font(SparkTypography.bodyStrong)
@@ -125,7 +125,7 @@ struct WrapScreen: View {
     private func recapLink(count: Int, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: SparkSpacing.xs) {
-                Text("Recap · \(count) items")
+                Text("Recap (\(count) items)")
                     .font(SparkTypography.bodySmall)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .semibold))
@@ -191,7 +191,7 @@ struct WrapScreen: View {
 
     private func readingLabel(_ reading: UpToSpeedParsing.ReadingItem) -> String {
         if let time = reading.readingTime {
-            return "Saved to read · \(time)"
+            return "Saved to read at \(time)"
         }
         return "Saved to read"
     }
@@ -208,7 +208,7 @@ struct WrapScreen: View {
                     jump(to: question)
                 } label: {
                     HStack(spacing: SparkSpacing.md) {
-                        Text(question.block.question ?? question.block.title)
+                        Text(SparkRichContentText.plainText(question.block.question ?? question.block.title))
                             .font(SparkTypography.bodySmall)
                             .foregroundStyle(.primary)
                             .multilineTextAlignment(.leading)

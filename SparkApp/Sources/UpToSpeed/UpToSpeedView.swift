@@ -193,10 +193,12 @@ struct UpToSpeedView: View {
                             .font(SparkTypography.bodyStrong)
                             .foregroundStyle(.primary)
                     }
-                    Text(vm.chapterCounter)
-                        .font(SparkTypography.caption)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
+                    if !vm.chapterCounter.isEmpty {
+                        Text(vm.chapterCounter)
+                            .font(SparkTypography.caption)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
                 }
                 Spacer(minLength: 0)
                 toolbarCapsule(vm: vm)

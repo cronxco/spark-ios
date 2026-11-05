@@ -16,9 +16,20 @@ struct DayContextSection: View {
     var now: Date = .now
     @State private var showsFullDay = false
 
+    /// All-day entries first, then timed ones in order. Collapsed, the card
+    /// keeps every all-day entry (they were a loose grey line under the card
+    /// before, while the expanded card drew them as rows) and the next
+    /// three timed entries still ahead.
     private var calendarEntries: [FlintDayContextEvent] {
-        let entries = dayContext.calendar.sorted { ($0.start ?? .distantPast) < ($1.start ?? .distantPast) }
-        return showsFullDay ? entries : Array(entries.filter { !$0.allDay && ($0.start ?? .distantPast) > now }.prefix(3))
+        let sorted = dayContext.calendar.sorted { ($0.start ?? .distantPast) < ($1.start ?? .distantPast) }
+        let allDay = sorted.filter(\.allDay)
+        let timed = sorted.filter { !$0.allDay }
+        guard !showsFullDay else { return allDay + timed }
+        return allDay + Array(timed.filter { ($0.start ?? .distantPast) > now }.prefix(3))
+    }
+
+    private var hasHiddenEntries: Bool {
+        calendarEntries.count < dayContext.calendar.count
     }
 
     var body: some View {
@@ -37,18 +48,13 @@ struct DayContextSection: View {
                 calendarCard
             }
 
-            if !showsFullDay {
-                let allDay = dayContext.calendar.filter(\.allDay)
-                if !allDay.isEmpty {
-                    Text("All day · " + allDay.map(\.title).joined(separator: " · "))
-                        .font(SparkTypography.bodySmall)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            if !dayContext.calendar.isEmpty {
+            // A link in the accent role (§3.1), and only when it would
+            // change something.
+            if showsFullDay || hasHiddenEntries {
                 Button(showsFullDay ? "Show fewer" : "Show all events") { showsFullDay.toggle() }
                     .font(SparkTypography.bodySmall)
-                    .tint(.primary)
+                    .foregroundStyle(Color.sparkLink)
+                    .frame(minHeight: 44)
             }
 
             if let yesterday {
@@ -84,9 +90,12 @@ struct DayContextSection: View {
     private var birthdayRows: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.sm) {
             ForEach(dayContext.birthdays) { birthday in
-                Label(birthday.title, systemImage: "birthday.cake.fill")
-                    .font(SparkTypography.bodyStrong)
-                    .foregroundStyle(.primary)
+                HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.sm) {
+                    SparkGlyph(.birthday, relativeTo: .headline)
+                    Text(birthday.title)
+                }
+                .font(SparkTypography.bodyStrong)
+                .foregroundStyle(.primary)
             }
         }
     }
@@ -117,54 +126,76 @@ struct DayContextSection: View {
         }
     }
 
+    /// Time, title, and who it belongs to. The time column is exactly as
+    /// wide as "00:00", so a short time no longer leaves a hole before the
+    /// title. Your own entries need no marker; Dan's say "Dan" in words
+    /// rather than by the colour of a dot.
     private func calendarRow(_ entry: FlintDayContextEvent) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.md) {
             timeLabel(for: entry)
-
-            Circle().fill(personColor(entry.person))
-                .frame(width: 6, height: 6)
-                .accessibilityHidden(true)
 
             Text(entry.title)
                 .font(entry.id == nextEntryID ? SparkTypography.bodyStrong : SparkTypography.body)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Metadata spaced by a gap, never a divider (§9).
+            HStack(spacing: SparkSpacing.md) {
+                if entry.allDay {
+                    Text("All day")
+                }
+                if entry.person != .will {
+                    Text(personName(entry.person))
+                }
+            }
+            .font(SparkTypography.caption)
+            .foregroundStyle(.secondary)
         }
-        .padding(.leading, SparkSpacing.lg)
-        .padding(.trailing, SparkSpacing.lg)
+        .padding(.horizontal, SparkSpacing.lg)
         .padding(.vertical, SparkSpacing.md)
+        .frame(minHeight: 44)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(personName(entry.person)): \(entry.title), \(accessibleTime(for: entry))")
+        .accessibilityLabel(accessibleLabel(for: entry))
     }
 
-    /// All-day entries get a chip, not a fake time — the time column should
-    /// only ever hold times, so a glance down it reads as a schedule.
-    @ViewBuilder
+    /// A time column that only ever holds times, sized to "00:00". An
+    /// all-day entry leaves it empty and says "All day" at the end of the
+    /// row instead, so the column still reads as a schedule.
     private func timeLabel(for entry: FlintDayContextEvent) -> some View {
-        if entry.allDay {
-            Text("All day")
-                .font(SparkTypography.caption)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, SparkSpacing.sm)
-                .padding(.vertical, 2)
-                .background(Capsule().fill(Color.primary.opacity(0.07)))
-                .frame(width: 62, alignment: .leading)
-        } else {
-            Text(entry.start?.formatted(date: .omitted, time: .shortened) ?? "—")
-                .font(SparkTypography.caption)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-                .frame(width: 62, alignment: .leading)
-        }
+        Text("00:00")
+            .font(SparkTypography.caption)
+            .monospacedDigit()
+            .hidden()
+            .overlay(alignment: .leading) {
+                Text(entry.allDay ? "" : Self.clockTime(entry.start))
+                    .font(SparkTypography.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .fixedSize()
+            }
+    }
+
+    /// Exact times are always 24-hour, "08:10" (§12.2), whatever the
+    /// device's locale.
+    static func clockTime(_ date: Date?) -> String {
+        guard let date else { return "—" }
+        return date.formatted(
+            Date.VerbatimFormatStyle(
+                format: "\(hour: .twoDigits(clock: .twentyFourHour, hourCycle: .zeroBased)):\(minute: .twoDigits)",
+                timeZone: .current,
+                calendar: .current
+            )
+        )
     }
 
     private func personName(_ person: FlintDayContextEvent.Person) -> String {
         person == .will ? "Will" : "Dan"
     }
 
-    private func personColor(_ person: FlintDayContextEvent.Person) -> Color {
-        person == .will ? .sparkAccent : .sparkOcean
+    private func accessibleLabel(for entry: FlintDayContextEvent) -> String {
+        let owner = entry.person == .will ? nil : personName(entry.person)
+        return [entry.title, accessibleTime(for: entry), owner].compactMap { $0 }.joined(separator: ", ")
     }
 
     private func accessibleTime(for entry: FlintDayContextEvent) -> String {
@@ -180,9 +211,10 @@ struct DayContextSection: View {
     /// statistic about the weather rather than the weather.
     private func weatherRow(_ weather: FlintDayContextWeather) -> some View {
         HStack(spacing: SparkSpacing.md) {
-            Image(systemName: Self.symbol(for: weather.condition, rainProbability: weather.rainProbabilityPct))
-                .font(.system(size: 26))
-                .foregroundStyle(Color.sparkOcean)
+            // A Font Awesome glyph from the manifest (§6), neutral: weather
+            // has no domain, so its colour would only be decoration.
+            SparkGlyph(Self.glyph(for: weather.condition, rainProbability: weather.rainProbabilityPct), size: 26, relativeTo: .title2)
+                .foregroundStyle(.primary)
                 .frame(width: 34)
 
             // Temperature over the condition, so a long condition gets the
@@ -200,7 +232,7 @@ struct DayContextSection: View {
                     if let location = weather.location, !location.isEmpty {
                         Text(location)
                             .font(SparkTypography.caption)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 if let detail = weatherDetail(weather) {
@@ -213,7 +245,8 @@ struct DayContextSection: View {
         }
         .padding(SparkSpacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .sparkGlass(.roundedRect(SparkRadii.lg))
+        // Content, so the opaque surface; glass is for controls (§5.3).
+        .sparkContentSurface(radius: SparkRadii.lg)
         .accessibilityElement(children: .combine)
     }
 
@@ -223,9 +256,32 @@ struct DayContextSection: View {
             // "0% rain" beside "drizzle possible" contradicts itself.
             weather.rainProbabilityPct.flatMap { $0 > 0 ? "\($0)% rain" : nil },
         ].compactMap { $0 }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
     }
 
+    static func glyph(for condition: String?, rainProbability: Int? = nil) -> SparkIcon {
+        guard let condition = condition?.lowercased() else { return .weatherCloudy }
+        // A forecast of no rain shouldn't draw rain, whatever the wording.
+        let rainless = rainProbability == 0
+
+        if condition.contains("thunder") { return .weatherStorm }
+        if condition.contains("snow") || condition.contains("sleet") { return .weatherSnow }
+        if condition.contains("drizzle") || condition.contains("rain") || condition.contains("shower") {
+            return rainless ? .weatherCloudy : .weatherRain
+        }
+        if condition.contains("fog") || condition.contains("mist") { return .weatherFog }
+        if condition.contains("wind") || condition.contains("breez") { return .weatherWind }
+        // Checked before the bare "cloud" test, which would otherwise swallow it.
+        if condition.contains("part"), condition.contains("cloud") { return .weatherPartlyCloudy }
+        if condition.contains("overcast") || condition.contains("cloud") { return .weatherCloudy }
+        if condition.contains("clear") || condition.contains("sun") || condition.contains("fair") {
+            return .weatherClear
+        }
+        return .weatherCloudy
+    }
+
+    /// SF Symbol twin of `glyph(for:)`, for the Looking Ahead chips, which
+    /// have not moved onto the manifest yet.
     static func symbol(for condition: String?, rainProbability: Int? = nil) -> String {
         guard let condition = condition?.lowercased() else { return "cloud.fill" }
         // A forecast of no rain shouldn't draw rain, whatever the wording.
@@ -260,6 +316,6 @@ struct DayContextSection: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(SparkSpacing.lg)
-        .sparkGlass(.roundedRect(SparkRadii.lg))
+        .sparkContentSurface(radius: SparkRadii.lg)
     }
 }

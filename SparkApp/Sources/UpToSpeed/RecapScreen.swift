@@ -146,7 +146,7 @@ private struct RecapItemDetail: View {
                             if let text = block.content {
                                 SparkLongFormContentView(text: text, tint: .sparkHighlight, paragraphFont: SparkTypography.longFormBody)
                             }
-                            if let question = block.question { Text(question).font(SparkTypography.body) }
+                            if let question = block.question { Text(SparkRichContentText.plainText(question)).font(SparkTypography.body) }
                             if let answer = block.answer { Text(answer).font(SparkTypography.bodyStrong) }
                             if let note = block.answerNote { Text(note).font(SparkTypography.body) }
                             if let url = block.url.flatMap({ URL(string: $0) }) { Link("Open source", destination: url) }

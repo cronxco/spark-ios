@@ -184,6 +184,9 @@ public extension Color {
     /// Facts picked out in Flint and summary prose, whatever their domain:
     /// ocean-5 in light (8.1:1 on ash-1), spark-5 in dark (11.1:1 on slate-5).
     static let sparkHighlight = Color.ocean5.fallback(light: .ocean5, dark: .spark5)
+    /// The `accent` role (§3.1): links and disclosure controls such as "See
+    /// the week". Ocean-5 in light, sky-3 in dark; reads as text in both.
+    static let sparkLink = Color.adaptive(light: .ocean5, dark: .sky3)
     static let domainHealthInk = Color.sparkSuccess.fallback(
         light: Color(red: 0.043, green: 0.169, blue: 0.137), // #0B2B23, success-content
         dark: Color(red: 0.702, green: 0.847, blue: 0.788) // #B3D8C9

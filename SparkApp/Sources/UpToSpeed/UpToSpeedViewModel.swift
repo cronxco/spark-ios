@@ -180,8 +180,8 @@ final class UpToSpeedViewModel {
 
     // MARK: - Wrap tally
 
-    /// What the reader got through this session, for the Wrap: "3 stories ·
-    /// 11 articles · 2 questions answered". Empty parts are left out.
+    /// What the reader got through this session, for the Wrap: "3 stories,
+    /// 11 articles, 2 questions answered". Empty parts are left out.
     var sessionTally: String? {
         let seen = Set(sessionSeenDates.keys).subtracting(manuallyUnreadIDs)
         let seenTypes = allItems.filter { seen.contains($0.id) }.map(\.type)
@@ -195,7 +195,7 @@ final class UpToSpeedViewModel {
             Self.tallyPart(seenTypes.filter { $0 == .newsSummary }.count, "article"),
             Self.tallyPart(sessionAnsweredQuestionIDs.count, "question answered", plural: "questions answered"),
         ].compactMap { $0 }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
     }
 
     private static func tallyPart(_ n: Int, _ singular: String, plural: String? = nil) -> String? {
@@ -290,8 +290,10 @@ final class UpToSpeedViewModel {
     }
 
     /// Screen counter for the current chapter, e.g. "2 / 3".
+    /// "2 / 5" within the current chapter. Empty for a one-card chapter,
+    /// where "1 / 1" says nothing.
     var chapterCounter: String {
-        guard let chapter = currentChapter else { return "" }
+        guard let chapter = currentChapter, chapter.cardCount > 1 else { return "" }
         let position = currentIndex - chapter.range.lowerBound + 1
         return "\(position) / \(chapter.cardCount)"
     }

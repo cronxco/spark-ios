@@ -1090,7 +1090,7 @@ private struct FlintBlockSurface: View {
             HStack(alignment: .top, spacing: SparkSpacing.md) {
                 DomainGlyph(icon: icon, tint: tint, size: 26)
                 VStack(alignment: .leading, spacing: SparkSpacing.xs) {
-                    Text(block.isQuestion ? (block.question ?? block.title) : block.title)
+                    Text(SparkRichContentText.plainText(block.isQuestion ? (block.question ?? block.title) : block.title))
                         .font(SparkTypography.bodyStrong)
                         .foregroundStyle(.primary)
                         .fixedSize(horizontal: false, vertical: true)

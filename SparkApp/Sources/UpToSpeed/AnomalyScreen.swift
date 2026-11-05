@@ -2,8 +2,8 @@ import SparkKit
 import SparkUI
 import SwiftUI
 
-/// Renders an anomaly Up to Speed item in Flint's voice — an "unusual" flag, a
-/// glass metric readout, the trend behind it, and chips to act.
+/// Renders an anomaly Up to Speed item in Flint's voice: what moved, one hero
+/// reading with its comparison and trend, and chips to act.
 struct AnomalyScreen: View {
     let item: UpToSpeedItem
     let viewModel: UpToSpeedViewModel
@@ -12,7 +12,6 @@ struct AnomalyScreen: View {
     @Environment(AppModel.self) private var appModel
     @State private var metricDetail: MetricDetail?
     @State private var isLoadingMetric = false
-    @State private var showChart = false
     @State private var showSuppressSheet = false
     @State private var isAcknowledging = false
     @State private var acknowledged = false
@@ -25,10 +24,12 @@ struct AnomalyScreen: View {
     var body: some View {
         StoryScreenScaffold(flintByline: .init(meta: "Something unusual")) {
             VStack(alignment: .leading, spacing: SparkSpacing.xl) {
-                header
-                metricGrid
+                Text(headline)
+                    .font(SparkTypography.heroSmall)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                heroCard
                 narrative
-                chartDisclosure
                 if acknowledged {
                     acknowledgedBadge
                 } else {
@@ -53,115 +54,110 @@ struct AnomalyScreen: View {
         }
     }
 
-    // MARK: - Header
+    // MARK: - Headline
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.md) {
-            Text("Unusual")
-                .font(SparkTypography.caption)
-                .tracking(1.4)
+    /// Plain statement of what moved, in sentence case. The "Unusual" chip
+    /// that sat above it is gone: the byline already says "Something
+    /// unusual", and a chip is for a state that needs acting on (§12.9).
+    private var headline: String {
+        let name = anomaly?.sentenceCaseName ?? "A metric"
+        switch anomaly?.movement ?? .level {
+        case .below: return "\(name) is below its usual range."
+        case .above: return "\(name) is above its usual range."
+        case .level: return "\(name) is off its usual range."
+        }
+    }
+
+    // MARK: - Hero
+
+    /// One hero (§1.1): the reading, one comparison line in the §3.4 shape,
+    /// and the trend with its usual band underneath, all on one content
+    /// surface. It replaces three glass tiles (Now, Baseline, Run) that
+    /// repeated each other and the paragraph below.
+    private var heroCard: some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: SparkSpacing.md) {
+                eyebrow
+                heroValue
+                if let comparison = anomaly?.comparisonText {
+                    comparisonLine(comparison)
+                } else if let usual = anomaly?.baselineText {
+                    // A banded reading with no numbers ("Adequate") still
+                    // needs its usual value to read as unusual.
+                    Text("Usually \(usual)")
+                        .font(SparkTypography.caption)
+                        .foregroundStyle(.secondary)
+                }
+                chart
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var eyebrow: some View {
+        HStack(spacing: SparkSpacing.sm) {
+            SparkGlyph(glyph, relativeTo: .caption)
+                .foregroundStyle(EntityPresentation.tint(domain: anomaly?.domain))
+            Text(anomaly?.sentenceCaseName ?? "Reading")
+                .font(SparkTypography.captionStrong)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// "oura.had_heart_rate.bpm" draws the heart, by its action.
+    private var glyph: SparkIcon {
+        let parts = (anomaly?.metric ?? "").split(separator: ".").map(String.init)
+        let action = parts.count > 1 ? parts[1] : parts.first
+        return SparkIcon.event(action: action, service: anomaly?.service, domain: anomaly?.domain)
+    }
+
+    private var heroValue: some View {
+        let parts: (value: String, unit: String?) = anomaly?.heroParts ?? (value: "—", unit: nil)
+        return HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.xs) {
+            Text(parts.value)
+                .font(SparkFonts.display(size: 44, relativeTo: .largeTitle))
+                .monospacedDigit()
+                .foregroundStyle(Color.sparkHero(domain: anomaly?.domain))
+            if let unit = parts.unit {
+                // About 55% of the value (§4).
+                Text(unit)
+                    .font(SparkFonts.display(size: 24, relativeTo: .title2, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.6)
+    }
+
+    /// The arrow points the way the reading moved and takes its colour from
+    /// whether that is welcome (§3.4); the words stay secondary.
+    private func comparisonLine(_ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.xs) {
+            SparkGlyph(arrowIcon, size: 12, relativeTo: .caption)
                 .foregroundStyle(valenceTint)
-                .padding(.horizontal, SparkSpacing.sm)
-                .padding(.vertical, 3)
-                .overlay(
-                    Capsule().stroke(valenceTint.opacity(0.4), lineWidth: 1)
-                )
-
-            Text(headline)
-                .font(SparkTypography.heroSmall)
-                .foregroundStyle(.primary)
+            Text(text)
+                .font(SparkTypography.caption)
+                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    /// Whether the move is welcome, which direction alone cannot say — a
-    /// balance rising is good news, a cardiovascular age rising is not. Before
-    /// this, every rising number was tinted as a warning.
+    private var arrowIcon: SparkIcon {
+        switch anomaly?.movement ?? .level {
+        case .above: .increase
+        case .below: .decrease
+        case .level: .steady
+        }
+    }
+
+    /// Whether the move is welcome, which direction alone cannot say: a
+    /// balance rising is good news, a cardiovascular age rising is not.
     private var valenceTint: Color {
         switch anomaly?.valence ?? .neutral {
         case .good: .sparkSuccess
-        case .bad: .sparkWarning
+        case .bad: .sparkError
         case .neutral: .secondary
         }
-    }
-
-    private var valenceEmphasis: MetricDeltaCard.Emphasis {
-        switch anomaly?.valence ?? .neutral {
-        case .good: .reassuring
-        case .bad: .flagged
-        case .neutral: .neutral
-        }
-    }
-
-    /// Plain statement of what moved. The old copy claimed a drop "isn't the
-    /// obvious story", which asserts more than a single reading supports.
-    private var headline: String {
-        let name = anomaly?.displayName ?? anomaly?.metric ?? "A metric"
-        guard let direction = anomaly?.direction?.lowercased() else {
-            return "\(name) is off its usual range."
-        }
-        if direction.contains("down") || direction == "low" {
-            return "\(name) is below its usual range."
-        }
-        if direction.contains("up") || direction == "high" {
-            return "\(name) is above its usual range."
-        }
-        return "\(name) is off its usual range."
-    }
-
-    // MARK: - Metric grid
-
-    private var metricGrid: some View {
-        LazyVGrid(
-            columns: [GridItem(.flexible(), spacing: SparkSpacing.md), GridItem(.flexible(), spacing: SparkSpacing.md)],
-            spacing: SparkSpacing.md
-        ) {
-            if let anomaly {
-                MetricDeltaCard(
-                    label: "Now",
-                    value: anomaly.currentText ?? formatted(anomaly.currentValue),
-                    delta: deviationText,
-                    emphasis: valenceEmphasis
-                )
-                MetricDeltaCard(
-                    label: "Baseline",
-                    value: anomaly.baselineText ?? formatted(anomaly.baselineValue),
-                    delta: "typical",
-                    emphasis: .neutral
-                )
-                if let streak = anomaly.streakDays, streak > 1 {
-                    MetricDeltaCard(
-                        label: "Run",
-                        value: "\(streak)",
-                        unit: "days",
-                        delta: "in a row",
-                        emphasis: .neutral
-                    )
-                }
-            }
-        }
-    }
-
-    /// A percentage change against a fractional baseline is meaningless for a
-    /// banded score — "Adequate" is not 37% below "Solid" — so an ordinal
-    /// metric says how far it moved in bands instead.
-    private var deviationText: String? {
-        guard let anomaly else { return nil }
-
-        if anomaly.isOrdinal {
-            guard let current = anomaly.currentValue, let baseline = anomaly.baselineValue else { return nil }
-            let steps = abs(current - baseline)
-            guard steps.isFinite else { return nil }
-            guard steps >= 0.5 else { return "off baseline" }
-            // String(format:) rather than Int(), which traps out of range.
-            return steps < 1.5 ? "a band off" : String(format: "%.0f bands off", steps)
-        }
-
-        if let pct = anomaly.percentChange {
-            return String(format: "%+.0f%%", pct)
-        }
-
-        return anomaly.deviation.map { String(format: "%+.1f", $0) }
     }
 
     // MARK: - Narrative
@@ -183,26 +179,24 @@ struct AnomalyScreen: View {
 
     // MARK: - Chart
 
+    /// Shown inline rather than behind "See the week": the usual band is
+    /// what makes the reading unusual, so it belongs beside the number.
     @ViewBuilder
-    private var chartDisclosure: some View {
+    private var chart: some View {
         if let detail = metricDetail {
-            DisclosureGroup(isExpanded: $showChart) {
-                MetricTrendChart(
-                    series: detail.series,
-                    baseline: detail.baseline,
-                    anomalies: detail.anomalies,
-                    valueForAnomaly: { _ in anomaly?.currentValue }
-                )
-                .frame(height: 140)
-                .padding(.top, SparkSpacing.sm)
-            } label: {
-                Text("See the week")
-                    .font(SparkTypography.bodySmall)
-                    .foregroundStyle(Color.ember7)
-            }
+            MetricTrendChart(
+                series: detail.series,
+                baseline: detail.baseline,
+                anomalies: detail.anomalies,
+                valueForAnomaly: { detail.valueForAnomaly($0) },
+                tint: EntityPresentation.tint(domain: anomaly?.domain),
+                height: 140
+            )
+            .padding(.top, SparkSpacing.xs)
+            .accessibilityLabel("Trend with the usual range")
         } else if isLoadingMetric {
             LoadingShimmer()
-                .frame(height: 44)
+                .frame(height: 140)
                 .cornerRadius(SparkRadii.md)
         }
     }
@@ -238,25 +232,21 @@ struct AnomalyScreen: View {
     }
 
     private var acknowledgedBadge: some View {
-        Label("Noted — I'll ease off on this one", systemImage: "checkmark.circle.fill")
-            .font(SparkTypography.bodySmall)
-            .foregroundStyle(Color.sparkSuccess)
-            .padding(SparkSpacing.md)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: SparkRadii.md)
-                    .fill(Color.sparkSuccess.opacity(0.1))
-            )
+        // The glyph carries the success colour; as text it fails on the
+        // light wash (§3.1).
+        HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.sm) {
+            SparkGlyph(.success, size: 14, relativeTo: .subheadline)
+                .foregroundStyle(Color.sparkSuccess)
+            Text("Noted. I'll ease off on this one.")
+                .font(SparkTypography.bodySmall)
+                .foregroundStyle(.primary)
+        }
+        .padding(SparkSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .sparkContentSurface(radius: SparkRadii.md, tint: Color.sparkSuccess.opacity(0.1))
     }
 
     // MARK: - Data
-
-    private func formatted(_ value: Double?) -> String {
-        // Int(value) traps for out-of-range or non-finite doubles (a
-        // mis-scaled/corrupted backend value shouldn't crash this screen).
-        guard let value, value.isFinite else { return "—" }
-        return value.rounded() == value ? String(format: "%.0f", value) : String(format: "%.1f", value)
-    }
 
     private func loadMetric() async {
         guard let metric = anomaly?.metric, metricDetail == nil else { return }

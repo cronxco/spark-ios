@@ -33,7 +33,7 @@ struct NewsSummaryScreen: View {
 
     var body: some View {
         StoryScreenScaffold(
-            flintByline: .init(meta: news.map { [Self.publication(for: $0), metaLine($0)].compactMap { $0 }.joined(separator: " · ") }),
+            flintByline: .init(meta: news.map { [Self.publication(for: $0), metaLine($0)].compactMap { $0 }.joined(separator: ", ") }),
             reserveTopSpace: reserveTopSpace,
             isActive: isActive,
             onReachedBottom: onReachedBottom
