@@ -49,6 +49,11 @@ struct AnomalyPresentationTests {
         #expect(resilience.comparisonText == "2 bands below 30d trend")
     }
 
+    @Test func aHugeBandDifferenceDoesNotTrap() {
+        let wild = Anomaly(id: "w", currentValue: 1e300, baselineValue: -1e300, isOrdinal: true)
+        #expect(wild.comparisonText?.hasSuffix("bands above 90d trend") == true)
+    }
+
     @Test func missingValuesGiveNoComparison() {
         #expect(Anomaly(id: "x", currentValue: 3).comparisonText == nil)
     }

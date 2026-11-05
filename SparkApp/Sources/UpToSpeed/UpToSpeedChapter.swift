@@ -113,6 +113,7 @@ struct UpToSpeedChapter: Identifiable {
     static func chapters(for keys: [Kind]) -> [UpToSpeedChapter] {
         var result: [UpToSpeedChapter] = []
         var start = 0
+        let keepDates = digestTitlesNeedingDates(in: keys)
 
         while start < keys.count {
             let kind = keys[start]
@@ -122,7 +123,7 @@ struct UpToSpeedChapter: Identifiable {
                 UpToSpeedChapter(
                     id: "\(result.count)-\(kind.shortLabel)",
                     kind: kind,
-                    title: title(for: kind),
+                    title: title(for: kind, keepingDatesFor: keepDates),
                     range: start..<end
                 )
             )
@@ -141,7 +142,19 @@ struct UpToSpeedChapter: Identifiable {
         return trimmed.isEmpty ? title : trimmed
     }
 
-    private static func title(for kind: Kind) -> String {
+    /// Digest titles whose date has to stay: two unread digests from
+    /// different days ("Morning Digest — Wed 4 Nov", "… — Thu 5 Nov") would
+    /// otherwise read as the same row.
+    static func digestTitlesNeedingDates(in keys: [Kind]) -> Set<String> {
+        var titles = Set<String>()
+        for key in keys {
+            if case .digest(let title) = key { titles.insert(title) }
+        }
+        let byBase = Dictionary(grouping: titles, by: withoutDateSuffix)
+        return Set(byBase.values.filter { $0.count > 1 }.joined())
+    }
+
+    private static func title(for kind: Kind, keepingDatesFor keepDates: Set<String>) -> String {
         switch kind {
         // The opener leads with today's calendar and weather now, so it is
         // literally the day rather than an abstract orientation.
@@ -150,7 +163,7 @@ struct UpToSpeedChapter: Identifiable {
         // which is often neither readiness nor a dip — and, before the domain
         // was known, was as likely to be a bank balance as a health metric.
         case .anomaly: kind.shortLabel
-        case .digest(let title): withoutDateSuffix(title)
+        case .digest(let title): keepDates.contains(title) ? title : withoutDateSuffix(title)
         case .news: "You need to know"
         case .headlines: "And in other news"
         case .checkIn: "Check-in"

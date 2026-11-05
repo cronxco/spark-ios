@@ -81,6 +81,12 @@ struct AnomalyScreen: View {
                 heroValue
                 if let comparison = anomaly?.comparisonText {
                     comparisonLine(comparison)
+                } else if let usual = anomaly?.baselineText {
+                    // A banded reading with no numbers ("Adequate") still
+                    // needs its usual value to read as unusual.
+                    Text("Usually \(usual)")
+                        .font(SparkTypography.caption)
+                        .foregroundStyle(.secondary)
                 }
                 chart
             }
@@ -182,7 +188,7 @@ struct AnomalyScreen: View {
                 series: detail.series,
                 baseline: detail.baseline,
                 anomalies: detail.anomalies,
-                valueForAnomaly: { _ in anomaly?.currentValue },
+                valueForAnomaly: { detail.valueForAnomaly($0) },
                 tint: EntityPresentation.tint(domain: anomaly?.domain),
                 height: 140
             )

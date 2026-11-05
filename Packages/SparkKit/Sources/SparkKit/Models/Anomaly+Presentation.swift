@@ -75,9 +75,13 @@ public extension Anomaly {
 
         let amount: String
         if isOrdinal {
-            let bands = Int(difference.rounded())
+            // Kept as a Double: two finite values can differ by more than
+            // an Int holds, and converting would trap.
+            let bands = difference.rounded()
             guard bands >= 1 else { return "Just \(word) \(window)" }
-            amount = bands == 1 ? "1 band" : "\(bands) bands"
+            amount = bands == 1
+                ? "1 band"
+                : "\(bands.formatted(.number.precision(.fractionLength(0)))) bands"
         } else {
             amount = Self.withUnit(Self.amount(difference), unit: unit)
         }

@@ -277,7 +277,12 @@ struct FlintQuestionHeadline: View {
             linkTint: .sparkHighlight
         )
         .environment(\.openURL, OpenURLAction { url in
-            guard let reference = reference(for: url) else { return .systemAction }
+            // Anything but an event goes to the flow's handler, which routes
+            // Spark links in the app; `.systemAction` would open Safari.
+            guard let reference = reference(for: url) else {
+                openURL(url)
+                return .handled
+            }
             peek = reference
             return .handled
         })
@@ -303,9 +308,13 @@ struct FlintQuestionHeadline: View {
         if let known = references.first(where: { $0.type == .event && $0.id == id }) {
             return known
         }
+        // A formatted phrase ("£159 **Criterion Theatre** payment") spans
+        // several runs, so join every run of the link.
         let phrase = attributed.runs
-            .first { $0.link == url }
+            .drop { $0.link != url }
+            .prefix { $0.link == url }
             .map { String(attributed[$0.range].characters) }
-        return EntityReference(type: .event, id: id, title: phrase ?? "Event")
+            .joined()
+        return EntityReference(type: .event, id: id, title: phrase.isEmpty ? "Event" : phrase)
     }
 }

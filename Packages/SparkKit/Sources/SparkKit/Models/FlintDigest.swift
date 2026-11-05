@@ -370,7 +370,7 @@ public struct FlintDayContextEvent: Codable, Sendable, Hashable, Identifiable {
     public let start: Date?
     public let person: Person
 
-    public var id: String { "\(title)-\(start?.timeIntervalSince1970 ?? 0)" }
+    public var id: String { "\(person.rawValue)-\(title)-\(start?.timeIntervalSince1970 ?? 0)" }
 
     enum CodingKeys: String, CodingKey {
         case title, start, person

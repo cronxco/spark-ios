@@ -146,6 +146,19 @@ struct UpToSpeedChapterTests {
         #expect(UpToSpeedChapter.withoutDateSuffix("Week ahead — the plan") == "Week ahead — the plan")
     }
 
+    @Test func digestTitlesKeepTheirDateWhenTwoDaysShareATitle() {
+        let chapters = UpToSpeedChapter.chapters(for: [
+            .digest(title: "Morning Digest — Wed 4 Nov"),
+            .digest(title: "Morning Digest — Thu 5 Nov"),
+            .digest(title: "Evening briefing — Wed 4 Nov"),
+        ])
+        #expect(chapters.map(\.title) == [
+            "Morning Digest — Wed 4 Nov",
+            "Morning Digest — Thu 5 Nov",
+            "Evening briefing",
+        ])
+    }
+
     @Test func everyChapterKindHasAGlyph() {
         let kinds: [UpToSpeedChapter.Kind] = [
             .intro, .anomaly(domain: "health"), .anomaly(domain: nil), .digest(title: "Morning Digest"),
