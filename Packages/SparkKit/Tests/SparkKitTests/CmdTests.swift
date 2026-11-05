@@ -212,6 +212,24 @@ struct CmdTests {
         #expect(CmdPersonLinks.resolve([al], picks: ["al": .createNew]) == CmdPersonLinks(newNames: ["Al"]))
     }
 
+    @Test("a reflection answer offers Undo while it is open")
+    func reflectionUndoToken() throws {
+        func decode(_ json: String) throws -> LogEndpoint.ReflectionResponse {
+            try JSONDecoder().decode(LogEndpoint.ReflectionResponse.self, from: Data(json.utf8))
+        }
+        let open = try decode(
+            #"{"status":"logged","events":[],"receipt":{"receipt_id":"r1","status":"succeeded","message":"Reflection logged","undo":{"available":true}}}"#)
+        #expect(open.undoToken == "r1")
+
+        // A retry after Undo: the receipt is there, but nothing is left to undo.
+        let undone = try decode(
+            #"{"status":"logged","events":[],"receipt":{"receipt_id":"r1","status":"succeeded","undo":{"available":false}}}"#)
+        #expect(undone.undoToken == nil)
+
+        // An older server sends no receipt.
+        #expect(try decode(#"{"status":"logged","events":[]}"#).undoToken == nil)
+    }
+
     @Test("override is detected")
     func override() {
         #expect(CmdEntry(intent: .search, text: "x", classifiedAs: .log).wasOverridden)

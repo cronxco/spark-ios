@@ -53,7 +53,7 @@ public struct ServerCmdClassifier: CmdClassifying {
 
 /// Commits entries. A note for Flint is written by the server and a command
 /// runs through the action registry (or opens a screen). A free-text log is
-/// saved as a reflection.
+/// saved as a reflection, and the server's receipt for it is its Undo.
 public struct ServerCmdSubmitter: CmdSubmitting {
     private let apiClient: APIClient
 
@@ -88,8 +88,8 @@ public struct ServerCmdSubmitter: CmdSubmitting {
             idempotencyKey: entry.id.uuidString, body: entry.text, occurredAt: entry.createdAt,
             personIds: entry.personIds ?? [], newPeople: entry.newPeople ?? [])
         do {
-            _ = try await apiClient.request(LogEndpoint.reflection(request))
-            return .done(summary: "Logged", undoToken: nil)
+            let response = try await apiClient.request(LogEndpoint.reflection(request))
+            return .done(summary: "Logged", undoToken: response.undoToken)
         } catch let error as APIError {
             return Self.result(for: error, rejection: "Couldn't log")
         } catch {

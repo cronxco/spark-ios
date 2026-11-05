@@ -128,4 +128,110 @@ struct LinkedEventCardTests {
         #expect(kind.heroValue(24.8, unit: "GBP", displayValue: "£24.80") == "£24.80")
         #expect(kind.heroValue(12, unit: nil, displayValue: "12<span>%</span>") == "12%")
     }
+
+    // MARK: Layouts (design language §7.3)
+
+    private static let layoutsPayload = """
+    {
+      "date": "2026-11-05",
+      "block_count": 0,
+      "unanswered_question_count": 0,
+      "linked_events": [
+        {
+          "kind": "google-calendar.had_event",
+          "layout": "journey",
+          "event": {"id": "d0303fe9-174b-445f-a6a9-6423cb3273c1", "time": "2026-11-05T08:10:00+00:00", "service": "google-calendar", "domain": "knowledge", "action": "had_event", "value": 255, "unit": "minutes"},
+          "context": null,
+          "at_digest": null,
+          "details": {"flight": "BA2704", "from": "LGW", "to": "ACE", "route": "London to Lanzarote", "departs_at": "2026-11-05T08:10:00+00:00", "arrives_at": "2026-11-05T12:25:00+00:00", "departs_local": "08:10", "departs_zone": "GMT", "arrives_local": "12:25", "arrives_zone": "WET", "duration_minutes": 255},
+          "answer": null
+        },
+        {
+          "kind": "gocardless.payment_to",
+          "layout": "payment",
+          "event": {"id": "0fe98669-3178-4859-8239-a5888543a915", "time": "2026-11-04T12:58:53+00:00", "service": "gocardless", "domain": "money", "action": "payment_to", "value": 159, "unit": "GBP", "display_value": "£159.00"},
+          "context": null,
+          "at_digest": null,
+          "details": {"merchant": "Criterion Theatre Trust - Box Office", "account": "British Airways Premium Plus", "pending": true, "refund": false, "week": {"amounts": [420, 350, 15900], "index": 2, "caption": "Largest this week"}},
+          "answer": {"answer": "Theatre tickets or booking", "note": "Redcliffe, Sat 30 January with Dan"}
+        },
+        {
+          "kind": "newsletter.received_post",
+          "layout": "reading",
+          "event": {"id": "4c14bc4e-0fa2-450b-b7cc-6115215a465b", "time": "2026-11-05T07:01:16+00:00", "service": "newsletter", "domain": "knowledge", "action": "received_post"},
+          "context": null,
+          "at_digest": null,
+          "details": {"publication": "Klement on Investing", "headline": "China is decoupling from the West", "url": null, "read_minutes": 2, "takeaways": ["**China's trade is shifting:** imports come from China-aligned countries.", "**Brazil and Russia gained.**"]},
+          "answer": null
+        },
+        {
+          "kind": "oura.had_sleep_score",
+          "layout": "something_new",
+          "event": {"id": "c0720298-cb3c-4812-bca3-7b35767eee6f", "time": "2026-11-05T00:00:00+00:00", "service": "oura", "domain": "health", "action": "had_sleep_score", "value": 81, "unit": "percent"}
+        }
+      ]
+    }
+    """
+
+    private func layoutCards() throws -> [LinkedEventCard] {
+        try Self.decoder.decode(UpToSpeedFlintDigestSummary.self, from: Data(Self.layoutsPayload.utf8)).linkedEvents
+    }
+
+    @Test("a flight decodes as a journey card with its route and times")
+    func journeyLayout() throws {
+        let flight = try layoutCards()[0]
+
+        #expect(flight.layout == .journey)
+        #expect(flight.layout.isWide)
+        #expect(flight.label == "Flight BA2704")
+        #expect(flight.details?.from == "LGW")
+        #expect(flight.details?.to == "ACE")
+        #expect(flight.details?.durationMinutes == 255)
+        let departs = try #require(flight.details?.departsAt)
+        #expect(flight.details?.flightProgress(at: departs.addingTimeInterval(-60)) == nil)
+        let halfway = try #require(flight.details?.flightProgress(at: departs.addingTimeInterval(255 * 30)))
+        #expect(abs(halfway - 0.5) < 0.0001)
+    }
+
+    @Test("a payment decodes with its merchant, week and the reader's answer")
+    func paymentLayout() throws {
+        let payment = try layoutCards()[1]
+
+        #expect(payment.layout == .payment)
+        #expect(payment.label == "Payment")
+        #expect(payment.details?.pending == true)
+        #expect(payment.details?.week?.index == 2)
+        #expect(payment.details?.week?.amounts == [420, 350, 15900])
+        #expect(payment.answer?.text == "Redcliffe, Sat 30 January with Dan")
+        #expect(LinkedEventCard.Answer(answer: "A gift", note: "  ").text == "A gift")
+    }
+
+    @Test("an article decodes as a reading card with its takeaways")
+    func readingLayout() throws {
+        let article = try layoutCards()[2]
+
+        #expect(article.layout == .reading)
+        #expect(article.label == "Klement on Investing")
+        #expect(article.details?.headline == "China is decoupling from the West")
+        #expect(article.details?.takeaways?.count == 2)
+        #expect(article.liveValue == nil)
+    }
+
+    @Test("an unknown or missing layout falls back to the metric card")
+    func unknownLayout() throws {
+        let cards = try layoutCards()
+        #expect(cards[3].layout == .metric)
+        #expect(!cards[3].layout.isWide)
+        #expect(try summary().linkedEvents[0].layout == .metric)
+    }
+
+    @Test("a decoded card round-trips through the cache")
+    func roundTrip() throws {
+        let payment = try layoutCards()[1]
+        let data = try JSONEncoder().encode(payment)
+        let decoded = try JSONDecoder().decode(LinkedEventCard.self, from: data)
+        #expect(decoded.layout == .payment)
+        #expect(decoded.details?.merchant == payment.details?.merchant)
+        #expect(decoded.answer == payment.answer)
+    }
 }

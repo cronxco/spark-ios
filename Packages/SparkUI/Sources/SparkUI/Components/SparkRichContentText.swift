@@ -18,7 +18,7 @@ public struct SparkRichContentText: View {
         font: Font = SparkTypography.body,
         foregroundStyle: Color = .primary,
         lineSpacing: CGFloat = 6,
-        linkTint: Color = .sparkAccent,
+        linkTint: Color = .sparkHighlight,
         recognizesLink: ((URL) -> Bool)? = nil
     ) {
         self.text = text
@@ -85,6 +85,13 @@ public struct SparkRichContentText: View {
         return AttributedString(trimmed)
     }
 
+    /// The text a reader sees, with markdown and HTML markup removed: for
+    /// places that show Flint's prose as a plain label, such as a list of
+    /// open questions, where a raw `[phrase](https://…)` would show as source.
+    public static func plainText(_ text: String) -> String {
+        String(rendered(text).characters)
+    }
+
     private static func looksLikeHTML(_ text: String) -> Bool {
         text.range(of: #"<[a-zA-Z][\s\S]*>"#, options: .regularExpression) != nil
     }
@@ -92,7 +99,10 @@ public struct SparkRichContentText: View {
 
 public struct SparkLongFormContentView: View {
     public let text: String
+    /// Decoration: the quote rule and bullet marks.
     public var tint: Color
+    /// Linked facts in the prose. One token whatever the domain (§3.3).
+    public var linkTint: Color
     public var paragraphFont: Font
 
     private var blocks: [SparkLongFormBlock] {
@@ -101,11 +111,13 @@ public struct SparkLongFormContentView: View {
 
     public init(
         text: String,
-        tint: Color = .sparkAccent,
+        tint: Color = .sparkHighlight,
+        linkTint: Color = .sparkHighlight,
         paragraphFont: Font = SparkTypography.longFormBody
     ) {
         self.text = text
         self.tint = tint
+        self.linkTint = linkTint
         self.paragraphFont = paragraphFont
     }
 
@@ -120,7 +132,8 @@ public struct SparkLongFormContentView: View {
                             ? SparkFonts.display(.title2, weight: .bold)
                             : SparkFonts.display(.title3, weight: .bold),
                         foregroundStyle: .primary,
-                        lineSpacing: 2
+                        lineSpacing: 2,
+                        linkTint: linkTint
                     )
                     .padding(.top, level == 1 ? SparkSpacing.sm : SparkSpacing.xs)
 
@@ -129,7 +142,8 @@ public struct SparkLongFormContentView: View {
                         text: text,
                         font: paragraphFont,
                         foregroundStyle: .primary,
-                        lineSpacing: 9
+                        lineSpacing: 9,
+                        linkTint: linkTint
                     )
 
                 case .quote(let text):
@@ -142,7 +156,8 @@ public struct SparkLongFormContentView: View {
                             text: text,
                             font: SparkTypography.longFormQuote,
                             foregroundStyle: .secondary,
-                            lineSpacing: 9
+                            lineSpacing: 9,
+                            linkTint: linkTint
                         )
                     }
 
@@ -157,7 +172,8 @@ public struct SparkLongFormContentView: View {
                                     text: bullet,
                                     font: paragraphFont,
                                     foregroundStyle: .primary,
-                                    lineSpacing: 7
+                                    lineSpacing: 7,
+                                    linkTint: linkTint
                                 )
                             }
                         }

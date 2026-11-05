@@ -13,7 +13,7 @@ jobs:
   test:
     runs-on: xcode-27
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Report toolchain
         run: |
@@ -24,7 +24,7 @@ jobs:
         run: brew install tuist
 
       - name: Cache DerivedData
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/Library/Developer/Xcode/DerivedData
           key: ${{ runner.os }}-deriveddata-${{ hashFiles('Project.swift', 'Packages/**/Package.swift') }}
@@ -32,7 +32,7 @@ jobs:
             ${{ runner.os }}-deriveddata-
 
       - name: Cache SPM packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/Library/Caches/org.swift.swiftpm

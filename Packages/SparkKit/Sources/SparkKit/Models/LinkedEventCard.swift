@@ -1,6 +1,6 @@
 import Foundation
 
-/// A metric event a Flint digest's prose links to, shaped as a card.
+/// An event a Flint digest's prose links to, shaped as a card.
 ///
 /// Flint writes each number it quotes as a link to its event ("a [sleep
 /// score of 66](https://spark.cronx.co/events/…)"). The backend resolves
@@ -17,8 +17,161 @@ public struct LinkedEventCard: Codable, Sendable, Hashable, Identifiable {
     /// written. Cards show the live value and say "Updated from …".
     public let atDigest: AtDigest?
 
+    /// Which card this event gets (design language §7.3). Daily metrics keep
+    /// the compact metric card; one-off events get a card that says what
+    /// they are. Unknown layouts from a newer backend fall back to `.metric`.
+    public let layout: Layout
+    /// The facts the layout shows; `nil` for `.metric`.
+    public let details: Details?
+    /// The reader's answer to a Flint question in the same digest that links
+    /// this event.
+    public let answer: Answer?
+
     public var id: String { event.id }
     public var kind: EventKind { EventKind(kindKey) }
+
+    public enum Layout: String, Codable, Sendable, Hashable {
+        case metric, journey, calendar, payment, reading
+
+        /// Every layout but a metric takes the whole row.
+        public var isWide: Bool { self != .metric }
+    }
+
+    /// Layout-specific facts, decoded flat: each layout fills its own keys
+    /// and leaves the rest `nil`. Instants stay ISO 8601 strings so a cached
+    /// payload round-trips whatever date strategy decoded it.
+    public struct Details: Codable, Sendable, Hashable {
+        // Journey
+        public let flight: String?
+        public let from: String?
+        public let to: String?
+        public let route: String?
+        public let departsAtText: String?
+        public let arrivesAtText: String?
+        public let departsLocal: String?
+        public let departsZone: String?
+        public let arrivesLocal: String?
+        public let arrivesZone: String?
+        public let durationMinutes: Int?
+        // Calendar
+        public let title: String?
+        public let startsAtText: String?
+        public let endsAtText: String?
+        public let allDay: Bool?
+        // Payment
+        public let merchant: String?
+        public let account: String?
+        public let pending: Bool?
+        public let refund: Bool?
+        public let week: Week?
+        // Reading
+        public let publication: String?
+        public let headline: String?
+        public let url: String?
+        public let readMinutes: Int?
+        public let takeaways: [String]?
+
+        enum CodingKeys: String, CodingKey {
+            case flight, from, to, route, title, merchant, account, pending, refund, week, publication, headline, url, takeaways
+            case departsAtText = "departs_at"
+            case arrivesAtText = "arrives_at"
+            case departsLocal = "departs_local"
+            case departsZone = "departs_zone"
+            case arrivesLocal = "arrives_local"
+            case arrivesZone = "arrives_zone"
+            case durationMinutes = "duration_minutes"
+            case startsAtText = "starts_at"
+            case endsAtText = "ends_at"
+            case allDay = "all_day"
+            case readMinutes = "read_minutes"
+        }
+
+        public init(
+            flight: String? = nil, from: String? = nil, to: String? = nil, route: String? = nil,
+            departsAtText: String? = nil, arrivesAtText: String? = nil,
+            departsLocal: String? = nil, departsZone: String? = nil, arrivesLocal: String? = nil, arrivesZone: String? = nil,
+            durationMinutes: Int? = nil,
+            title: String? = nil, startsAtText: String? = nil, endsAtText: String? = nil, allDay: Bool? = nil,
+            merchant: String? = nil, account: String? = nil, pending: Bool? = nil, refund: Bool? = nil, week: Week? = nil,
+            publication: String? = nil, headline: String? = nil, url: String? = nil, readMinutes: Int? = nil, takeaways: [String]? = nil
+        ) {
+            self.flight = flight
+            self.from = from
+            self.to = to
+            self.route = route
+            self.departsAtText = departsAtText
+            self.arrivesAtText = arrivesAtText
+            self.departsLocal = departsLocal
+            self.departsZone = departsZone
+            self.arrivesLocal = arrivesLocal
+            self.arrivesZone = arrivesZone
+            self.durationMinutes = durationMinutes
+            self.title = title
+            self.startsAtText = startsAtText
+            self.endsAtText = endsAtText
+            self.allDay = allDay
+            self.merchant = merchant
+            self.account = account
+            self.pending = pending
+            self.refund = refund
+            self.week = week
+            self.publication = publication
+            self.headline = headline
+            self.url = url
+            self.readMinutes = readMinutes
+            self.takeaways = takeaways
+        }
+
+        public var departsAt: Date? { departsAtText.flatMap(Self.instant) }
+        public var arrivesAt: Date? { arrivesAtText.flatMap(Self.instant) }
+        public var startsAt: Date? { startsAtText.flatMap(Self.instant) }
+        public var endsAt: Date? { endsAtText.flatMap(Self.instant) }
+
+        /// How far through the flight `now` is, 0...1; `nil` before
+        /// departure, after arrival or without both times.
+        public func flightProgress(at now: Date) -> Double? {
+            guard let departsAt, let arrivesAt, arrivesAt > departsAt, now > departsAt, now < arrivesAt else { return nil }
+            return now.timeIntervalSince(departsAt) / arrivesAt.timeIntervalSince(departsAt)
+        }
+
+        private static func instant(_ text: String) -> Date? {
+            let formatter = ISO8601DateFormatter()
+            if let date = formatter.date(from: text) { return date }
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            return formatter.date(from: text)
+        }
+    }
+
+    /// This payment among the week's spending: amounts in pence in time
+    /// order, which bar is this payment, and a caption when it stands out.
+    public struct Week: Codable, Sendable, Hashable {
+        public let amounts: [Double]
+        public let index: Int
+        public let caption: String?
+
+        public init(amounts: [Double], index: Int, caption: String?) {
+            self.amounts = amounts
+            self.index = index
+            self.caption = caption
+        }
+    }
+
+    public struct Answer: Codable, Sendable, Hashable {
+        public let answer: String
+        public let note: String?
+
+        public init(answer: String, note: String?) {
+            self.answer = answer
+            self.note = note
+        }
+
+        /// The note when the reader wrote one, which says more than the
+        /// option they picked.
+        public var text: String {
+            guard let note, !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return answer }
+            return note
+        }
+    }
 
     /// One line comparing the live value with the reader's 30d baseline:
     /// "12 below 30d trend", or "35m above 30d avg" for kinds drawn against
@@ -86,16 +239,27 @@ public struct LinkedEventCard: Codable, Sendable, Hashable, Identifiable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case event, context
+        case event, context, layout, details, answer
         case kindKey = "kind"
         case atDigest = "at_digest"
     }
 
-    public init(kindKey: String, event: Event, context: Context? = nil, atDigest: AtDigest? = nil) {
+    public init(
+        kindKey: String,
+        event: Event,
+        context: Context? = nil,
+        atDigest: AtDigest? = nil,
+        layout: Layout = .metric,
+        details: Details? = nil,
+        answer: Answer? = nil
+    ) {
         self.kindKey = kindKey
         self.event = event
         self.context = context
         self.atDigest = atDigest
+        self.layout = layout
+        self.details = details
+        self.answer = answer
     }
 
     public init(from decoder: Decoder) throws {
@@ -104,6 +268,9 @@ public struct LinkedEventCard: Codable, Sendable, Hashable, Identifiable {
         kindKey = try c.decodeIfPresent(String.self, forKey: .kindKey) ?? "\(event.service).\(event.action)"
         context = try? c.decodeIfPresent(Context.self, forKey: .context)
         atDigest = try? c.decodeIfPresent(AtDigest.self, forKey: .atDigest)
+        layout = (try? c.decodeIfPresent(String.self, forKey: .layout)).flatMap(Layout.init(rawValue:)) ?? .metric
+        details = try? c.decodeIfPresent(Details.self, forKey: .details)
+        answer = try? c.decodeIfPresent(Answer.self, forKey: .answer)
     }
 
     /// The live value as a number, if the event has one.
@@ -135,7 +302,13 @@ public struct LinkedEventCard: Codable, Sendable, Hashable, Identifiable {
     /// The eyebrow label: the kind's short label, else the action's own
     /// display name from the backend.
     public var label: String {
-        kind.shortLabel ?? event.displayName ?? "Event"
+        switch layout {
+        case .journey: details?.flight.map { "Flight \($0)" } ?? "Flight"
+        case .calendar: "Calendar"
+        case .payment: details?.refund == true ? "Refund" : "Payment"
+        case .reading: details?.publication ?? "Article"
+        case .metric: kind.shortLabel ?? event.displayName ?? "Event"
+        }
     }
 
     // MARK: - Linking prose to cards

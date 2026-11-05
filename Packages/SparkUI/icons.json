@@ -52,6 +52,18 @@
     "resilience": "shield-heart",
     "breathing": "lungs",
     "stand": "child-reaching",
+    "news": "newspaper",
+    "checkIn": "clipboard-check",
+    "birthday": "cake-candles",
+
+    "weatherClear": "sun",
+    "weatherPartlyCloudy": "cloud-sun",
+    "weatherCloudy": "cloud",
+    "weatherRain": "cloud-rain",
+    "weatherStorm": "cloud-bolt",
+    "weatherSnow": "snowflake",
+    "weatherFog": "smog",
+    "weatherWind": "wind",
 
     "add": "plus",
     "edit": "pen",
