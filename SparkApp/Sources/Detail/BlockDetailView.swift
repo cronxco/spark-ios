@@ -185,7 +185,7 @@ struct BlockDetailView: View {
         let block = detail.block
         heroSection(for: detail)
 
-        if block.kind.isAIWritten, let text = block.content?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
+        if block.aiWritten ?? block.kind.isAIWritten, let text = block.content?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
                 HStack(spacing: SparkSpacing.xs) {
                     SparkGlyph(.flint, size: 12, relativeTo: .caption)

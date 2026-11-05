@@ -49,9 +49,18 @@ struct BlockGroupsTests {
         let groups = BlockGroups([
             Block(id: "1", blockType: "merchant_raw", title: "Raw", content: "{}", hidden: true),
             Block(id: "2", blockType: "heart_rate_summary", title: "Average", value: "62", unit: "bpm", hidden: true),
+            Block(
+                id: "3", blockType: "merchant", title: "Pret", hidden: true,
+                details: BlockDetails(["category": AnyCodable(.string("eating_out"))])
+            ),
+            Block(id: "4", blockType: "newsletter_key_takeaways", title: "Takeaways", content: "- One", hidden: true),
+            Block(id: "5", blockType: "newsletter_tldr", title: "TL;DR", content: "Short", hidden: true),
         ])
         #expect(groups.rows.isEmpty)
         #expect(groups.values.isEmpty)
+        #expect(groups.records.isEmpty)
+        #expect(groups.takeaways.isEmpty)
+        #expect(groups.summaries.isEmpty)
     }
 
     @Test("blocks with details read as record cards, even with a value")

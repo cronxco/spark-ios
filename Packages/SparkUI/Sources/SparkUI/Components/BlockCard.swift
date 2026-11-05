@@ -153,7 +153,7 @@ public struct BlockCard: View {
                     artwork(url)
                 }
 
-                if let content = nonEmpty(block.content), facts.isEmpty {
+                if let content = nonEmpty(block.content) {
                     SparkLongFormContentView(text: content, paragraphFont: SparkTypography.body)
                 }
 
@@ -176,13 +176,18 @@ public struct BlockCard: View {
 
     @ViewBuilder
     private var full: some View {
-        if !facts.isEmpty {
+        let content = nonEmpty(block.content)
+        if !facts.isEmpty || content != nil {
             surface(radius: SparkRadii.lg, padding: SparkSpacing.lg) {
-                BlockStatGrid(facts: facts)
-            }
-        } else if let content = nonEmpty(block.content) {
-            surface(radius: SparkRadii.lg, padding: SparkSpacing.lg) {
-                SparkLongFormContentView(text: content, paragraphFont: SparkTypography.longFormBody)
+                VStack(alignment: .leading, spacing: SparkSpacing.lg) {
+                    if !facts.isEmpty {
+                        BlockStatGrid(facts: facts)
+                    }
+                    if let content {
+                        SparkLongFormContentView(text: content, paragraphFont: SparkTypography.longFormBody)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }

@@ -58,9 +58,14 @@ struct BlockDetailsTests {
         let block = try decode("""
         {"id":"1","block_type":"exercise","title":"Bench","details":{"set_number":2,"reps":8,"weight":60,"unit":"kg","rpe":7.5}}
         """)
+        let plain = FloatingPointFormatStyle<Double>.number.precision(.fractionLength(0 ... 1))
 
-        #expect(block.facts.map(\.label) == ["Set", "Reps", "Weight", "RPE"])
-        #expect(block.facts.first { $0.label == "Weight" }?.value.hasSuffix(" kg") == true)
+        #expect(block.facts == [
+            BlockFact("Set", "2"),
+            BlockFact("Reps", "8"),
+            BlockFact("Weight", "\(60.0.formatted(plain)) kg"),
+            BlockFact("RPE", 7.5.formatted(plain)),
+        ])
         #expect(!block.isRecord, "Sets stay tiles; there are many to a workout")
     }
 
@@ -100,5 +105,16 @@ struct BlockDetailsTests {
         """)
 
         #expect(block.facts == [BlockFact("From", "Leeds, West Yorkshire")])
+    }
+
+    @Test("a whole number too big for Int reads as missing, not a crash")
+    func outOfRangeInt() throws {
+        let block = try decode("""
+        {"id":"1","block_type":"book","title":"Book","details":{"num_pages":1e19,"published_year":1000}}
+        """)
+
+        #expect(block.details?.int("num_pages") == nil)
+        #expect(block.details?.int("published_year") == 1000)
+        #expect(block.facts == [BlockFact("Published", "1000")])
     }
 }

@@ -27,7 +27,7 @@ public struct BlockStatGrid: View {
                         .font(SparkTypography.bodyStrong)
                         .monospacedDigit()
                         .foregroundStyle(.primary)
-                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityElement(children: .combine)
