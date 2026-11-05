@@ -141,16 +141,16 @@ public struct StoryScreenScaffold<Content: View>: View {
     // MARK: - Read indicator
 
     private var readIndicator: some View {
+        // A status line, not a chip (§12.9): nothing here needs acting on.
+        // The glyph carries the success colour; success is a fill in light
+        // mode and fails as text on the wash (§3.1).
         HStack(spacing: SparkSpacing.xs) {
-            Image(systemName: "checkmark")
-                .font(.system(size: 11, weight: .semibold))
+            SparkGlyph(.success, size: 12, relativeTo: .caption)
+                .foregroundStyle(Color.sparkSuccess)
             Text("Read")
                 .font(SparkTypography.caption)
+                .foregroundStyle(.secondary)
         }
-        .foregroundStyle(Color.sparkSuccess)
-        .padding(.horizontal, SparkSpacing.md)
-        .padding(.vertical, SparkSpacing.xs)
-        .background(Capsule().fill(Color.sparkSuccess.opacity(0.15)))
         .opacity(hasReachedBottom ? 1 : 0)
         .scaleEffect(reduceMotion ? 1 : (hasReachedBottom ? 1 : 0.8), anchor: .center)
         .animation(

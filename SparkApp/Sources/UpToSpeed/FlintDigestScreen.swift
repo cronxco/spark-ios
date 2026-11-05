@@ -176,10 +176,10 @@ struct FlintQuestionPage: View {
             supplement: supplement
         ) {
             VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-                Text(block.question ?? block.title)
-                    .font(SparkTypography.heroSmall)
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
+                FlintQuestionHeadline(
+                    text: block.question ?? block.title,
+                    references: block.references ?? []
+                )
 
                 if let submittedAnswer {
                     answeredView(answer: submittedAnswer, note: submittedNote)
@@ -246,5 +246,66 @@ struct FlintQuestionPage: View {
             submitError = (error as? LocalizedError)?.errorDescription ?? "Failed to submit."
         }
         isSubmitting = false
+    }
+}
+
+// MARK: - FlintQuestionHeadline
+
+/// A Flint question as the screen's headline. Flint links the fact it is
+/// asking about ("That [£159 Criterion Theatre Trust payment](https://…/events/…)
+/// is the one…"); the phrase takes the highlight token (§3.3) and a tap opens
+/// the event's peek card, whose button goes on to the event. Drawn as plain
+/// `Text`, the markdown showed as source with the event's UUID across four
+/// lines of the headline.
+struct FlintQuestionHeadline: View {
+    let text: String
+    var references: [EntityReference] = []
+
+    /// The flow's own handler: it routes Spark links and closes Up to Speed.
+    @Environment(\.openURL) private var openURL
+    @State private var peek: EntityReference?
+
+    private var attributed: AttributedString {
+        SparkRichContentText.rendered(text)
+    }
+
+    var body: some View {
+        SparkRichContentText(
+            text: text,
+            font: SparkTypography.heroSmall,
+            lineSpacing: 2,
+            linkTint: .sparkHighlight
+        )
+        .environment(\.openURL, OpenURLAction { url in
+            guard let reference = reference(for: url) else { return .systemAction }
+            peek = reference
+            return .handled
+        })
+        .sparkPeek(isPresented: Binding(
+            get: { peek != nil },
+            set: { if !$0 { peek = nil } }
+        )) {
+            if let peek {
+                EntityPeekCard(reference: peek) {
+                    self.peek = nil
+                    if let url = URL(string: "https://spark.cronx.co/events/\(peek.id)") {
+                        openURL(url)
+                    }
+                }
+            }
+        }
+    }
+
+    /// The event a link points at, described by the digest's own reference
+    /// when it has one, or by the linked phrase when it doesn't.
+    private func reference(for url: URL) -> EntityReference? {
+        guard case .event(let id) = DeepLink.parse(url) else { return nil }
+        if let known = references.first(where: { $0.type == .event && $0.id == id }) {
+            return known
+        }
+        let phrase = attributed.runs
+            .first { $0.link == url }
+            .map { String(attributed[$0.range].characters) }
+        return EntityReference(type: .event, id: id, title: phrase ?? "Event")
     }
 }

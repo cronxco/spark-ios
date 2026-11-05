@@ -75,7 +75,7 @@ struct FlintAnswerFormView: View {
                         } label: {
                             Text(option)
                                 .font(SparkTypography.captionStrong)
-                                .foregroundStyle(selectedAnswer == option ? Color.black : Color.primary)
+                                .foregroundStyle(selectedAnswer == option ? Color.sparkOnAccent : Color.primary)
                                 .padding(.horizontal, SparkSpacing.md)
                                 .padding(.vertical, SparkSpacing.sm)
                                 .background(
@@ -120,22 +120,14 @@ struct FlintAnswerFormView: View {
                 .frame(minHeight: 44)
             }
 
-            ViewThatFits(in: .horizontal) {
-                HStack {
-                    if let onNotRelevant {
-                        notRelevantButton(action: onNotRelevant)
-                    }
-                    Spacer(minLength: SparkSpacing.sm)
-                    answerButton
-                }
-
-                VStack(alignment: .leading) {
-                    answerButton
+            // The one action, full width under the options. It used to float
+            // alone on the right as a large glass button, which read as a
+            // grey slab while it waited for an answer.
+            VStack(spacing: SparkSpacing.sm) {
+                answerButton
+                if let onNotRelevant {
+                    notRelevantButton(action: onNotRelevant)
                         .frame(maxWidth: .infinity)
-                    if let onNotRelevant {
-                        notRelevantButton(action: onNotRelevant)
-                            .frame(maxWidth: .infinity)
-                    }
                 }
             }
         }
@@ -152,9 +144,11 @@ struct FlintAnswerFormView: View {
                 Text("Answer")
                     .font(SparkTypography.bodyStrong)
             }
-            .frame(minHeight: 44)
+            .foregroundStyle(Color.sparkOnAccent)
+            .frame(maxWidth: .infinity, minHeight: 44)
         }
-        .buttonStyle(.glassProminent)
+        .buttonStyle(.borderedProminent)
+        .buttonBorderShape(.capsule)
         .tint(.sparkAccent)
         .disabled(isSubmitting || submittedAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }

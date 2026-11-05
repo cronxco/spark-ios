@@ -54,6 +54,17 @@ public enum SparkIcon: String, CaseIterable, Sendable {
     case resilience
     case breathing
     case stand
+    case news
+    case checkIn
+    case birthday
+    case weatherClear
+    case weatherPartlyCloudy
+    case weatherCloudy
+    case weatherRain
+    case weatherStorm
+    case weatherSnow
+    case weatherFog
+    case weatherWind
     case add
     case edit
     case delete
@@ -139,6 +150,17 @@ public enum SparkIcon: String, CaseIterable, Sendable {
         case .resilience: "\u{e574}" // fas.shield-heart
         case .breathing: "\u{f604}" // fas.lungs
         case .stand: "\u{e59d}" // fas.child-reaching
+        case .news: "\u{f1ea}" // fas.newspaper
+        case .checkIn: "\u{f46c}" // fas.clipboard-check
+        case .birthday: "\u{f1fd}" // fas.cake-candles
+        case .weatherClear: "\u{f185}" // fas.sun
+        case .weatherPartlyCloudy: "\u{f6c4}" // fas.cloud-sun
+        case .weatherCloudy: "\u{f0c2}" // fas.cloud
+        case .weatherRain: "\u{f73d}" // fas.cloud-rain
+        case .weatherStorm: "\u{f76c}" // fas.cloud-bolt
+        case .weatherSnow: "\u{f2dc}" // fas.snowflake
+        case .weatherFog: "\u{f75f}" // fas.smog
+        case .weatherWind: "\u{f72e}" // fas.wind
         case .add: "\u{2b}" // fas.plus
         case .edit: "\u{f304}" // fas.pen
         case .delete: "\u{f1f8}" // fas.trash

@@ -14,24 +14,32 @@ struct DigestSupplementView: View {
     var body: some View {
         if let digest = viewModel.digestCache[item.id] {
             if recovered, let summary = digest.summary {
-                DisclosureGroup("Recovered digest detail", isExpanded: viewModel.disclosureBinding("\(item.id)-recovered")) {
+                DisclosureGroup(isExpanded: viewModel.disclosureBinding("\(item.id)-recovered")) {
                     SparkLongFormContentView(text: summary)
+                } label: {
+                    disclosureLabel("Recovered digest detail")
                 }
+                .tint(Color.sparkLink)
             }
             let notes = digest.blocks.filter {
                 $0.kind == .flintEditorialNote && $0.content?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
             }
             if !notes.isEmpty {
-                DisclosureGroup("Editorial note", isExpanded: viewModel.disclosureBinding("\(item.id)-editorial")) {
+                DisclosureGroup(isExpanded: viewModel.disclosureBinding("\(item.id)-editorial")) {
                     VStack(alignment: .leading, spacing: SparkSpacing.md) {
                         ForEach(notes) { note in
                             if notes.count > 1 { Text(note.title).font(SparkTypography.bodyStrong) }
-                            SparkLongFormContentView(text: note.content ?? "", tint: .sparkAccent)
+                            SparkLongFormContentView(text: note.content ?? "")
                             StoryReferences(references: note.references ?? [], sourceURL: note.url)
                         }
                     }
                     .padding(.top, SparkSpacing.md)
+                } label: {
+                    disclosureLabel("Editorial note")
                 }
+                // The accent role, like every disclosure link (§3.1). It
+                // inherited the app's amber tint, about 1.6:1 on the wash.
+                .tint(Color.sparkLink)
             }
         } else {
             VStack(alignment: .leading, spacing: SparkSpacing.sm) {
@@ -49,6 +57,15 @@ struct DigestSupplementView: View {
             }
         }
     }
+}
+
+/// A disclosure's title in the accent role. The chevron takes the same
+/// colour from the group's tint.
+@MainActor
+func disclosureLabel(_ title: String) -> some View {
+    Text(title)
+        .font(SparkTypography.bodySmall)
+        .foregroundStyle(Color.sparkLink)
 }
 
 struct StoryReferences: View {

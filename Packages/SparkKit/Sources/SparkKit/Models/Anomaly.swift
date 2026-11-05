@@ -32,6 +32,8 @@ public struct Anomaly: Codable, Sendable, Hashable, Identifiable {
     public let baselineDisplay: String?
     /// Set when the anomaly has been dismissed rather than merely read.
     public let acknowledgedAt: Date?
+    /// Days of readings the baseline is drawn from ("90d trend").
+    public let baselineWindowDays: Int?
 
     enum CodingKeys: String, CodingKey {
         case metric, type, direction, deviation, domain, service, unit, valence
@@ -44,6 +46,7 @@ public struct Anomaly: Codable, Sendable, Hashable, Identifiable {
         case currentDisplay = "current_display"
         case baselineDisplay = "baseline_display"
         case acknowledgedAt = "acknowledged_at"
+        case baselineWindowDays = "baseline_window_days"
     }
 
     public init(from decoder: Decoder) throws {
@@ -66,6 +69,7 @@ public struct Anomaly: Codable, Sendable, Hashable, Identifiable {
         currentDisplay = try c.decodeIfPresent(String.self, forKey: .currentDisplay)
         baselineDisplay = try c.decodeIfPresent(String.self, forKey: .baselineDisplay)
         acknowledgedAt = try c.decodeIfPresent(Date.self, forKey: .acknowledgedAt)
+        baselineWindowDays = try? c.decodeIfPresent(Int.self, forKey: .baselineWindowDays)
         let detectedStr = detectedAt.map { ISO8601DateFormatter().string(from: $0) } ?? "unknown"
         id = "\(metric ?? "anomaly")|\(detectedStr)"
     }
@@ -88,7 +92,8 @@ public struct Anomaly: Codable, Sendable, Hashable, Identifiable {
         isOrdinal: Bool = false,
         currentDisplay: String? = nil,
         baselineDisplay: String? = nil,
-        acknowledgedAt: Date? = nil
+        acknowledgedAt: Date? = nil,
+        baselineWindowDays: Int? = nil
     ) {
         self.id = id
         self.metric = metric
@@ -108,6 +113,7 @@ public struct Anomaly: Codable, Sendable, Hashable, Identifiable {
         self.currentDisplay = currentDisplay
         self.baselineDisplay = baselineDisplay
         self.acknowledgedAt = acknowledgedAt
+        self.baselineWindowDays = baselineWindowDays
     }
 
     /// The value to show for "now", preferring the server's formatting.

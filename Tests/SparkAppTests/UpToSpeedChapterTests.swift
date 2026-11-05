@@ -138,4 +138,19 @@ struct UpToSpeedChapterTests {
         #expect(chapters[1].title == "Already seen today")
         #expect(chapters[1].accent == .secondary)
     }
+
+    @Test func digestTitleDropsTheDateTheOpenerAlreadyShows() {
+        #expect(UpToSpeedChapter.withoutDateSuffix("Morning Digest — Thu 5 Nov") == "Morning Digest")
+        #expect(UpToSpeedChapter.withoutDateSuffix("Evening briefing - Friday 6 November") == "Evening briefing")
+        #expect(UpToSpeedChapter.withoutDateSuffix("Morning Digest") == "Morning Digest")
+        #expect(UpToSpeedChapter.withoutDateSuffix("Week ahead — the plan") == "Week ahead — the plan")
+    }
+
+    @Test func everyChapterKindHasAGlyph() {
+        let kinds: [UpToSpeedChapter.Kind] = [
+            .intro, .anomaly(domain: "health"), .anomaly(domain: nil), .digest(title: "Morning Digest"),
+            .news, .headlines, .checkIn, .wrap, .recap,
+        ]
+        #expect(kinds.map(\.glyph) == [.day, .health, .anomaly, .flint, .news, .article, .checkIn, .success, .pending])
+    }
 }

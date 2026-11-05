@@ -78,12 +78,13 @@ struct FlintOpenerScreen: View {
 
     private func chapterRow(_ chapter: UpToSpeedChapter) -> some View {
         HStack(spacing: SparkSpacing.md) {
-            Circle()
-                .fill(chapter.accent)
-                .frame(width: 7, height: 7)
+            // A glyph chip rather than a 7pt colour dot, which carried
+            // nothing a reader could recover (§6, §11).
+            DomainGlyph(chapter.kind.glyph, tint: chapter.kind.glyphTint, size: 30)
             Text(chapter.title)
                 .font(SparkTypography.body)
                 .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: SparkSpacing.sm)
             let label = countLabel(chapter)
             if !label.isEmpty {
@@ -92,10 +93,8 @@ struct FlintOpenerScreen: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
-                .accessibilityHidden(true)
+            SparkGlyph(.forward, size: 12, relativeTo: .caption)
+                .foregroundStyle(.secondary)
         }
         .padding(.horizontal, SparkSpacing.lg)
         .padding(.vertical, SparkSpacing.md)
@@ -117,7 +116,7 @@ struct FlintOpenerScreen: View {
                 return false
             }.count
             let sections = Self.count(chapter.cardCount - questions, "section")
-            return questions == 0 ? sections : "\(sections) · \(Self.count(questions, "question"))"
+            return questions == 0 ? sections : "\(sections), \(Self.count(questions, "question"))"
         case .intro, .recap: return Self.count(chapter.cardCount, "card")
         }
     }
