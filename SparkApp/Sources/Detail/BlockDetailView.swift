@@ -249,7 +249,7 @@ struct BlockDetailView: View {
     /// anything else is a row.
     @ViewBuilder
     private func siblingsSection(for detail: BlockDetail) -> some View {
-        let siblings = viewModel?.siblings ?? []
+        let siblings = (viewModel?.siblings ?? []).filter { !$0.hidden }
         if !siblings.isEmpty {
             let parent = parentEvent(for: detail)
             let contributors = siblings.filter(SparkDetailContributorList.isContributor)

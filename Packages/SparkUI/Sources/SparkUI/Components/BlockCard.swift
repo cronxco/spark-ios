@@ -58,8 +58,15 @@ public struct BlockCard: View {
         kind == .genericValue || kind == .genericContent ? tint : kind.tint
     }
 
-    /// Domain ink in light mode, amber in dark (§3.6).
-    private var heroColor: Color { .sparkHero(domain: kind.domain) }
+    /// Domain ink in light mode, amber in dark (§3.6). The plugin's domain
+    /// wins over the one the kind implies.
+    private var heroColor: Color { .sparkHero(domain: block.domain ?? kind.domain) }
+
+    /// The server says which text a model wrote; older servers don't, so
+    /// the kind decides.
+    private var isAIWritten: Bool { block.aiWritten ?? kind.isAIWritten }
+
+    private var facts: [BlockFact] { block.facts }
 
     private var row: some View {
         surface(radius: SparkRadii.md, padding: SparkSpacing.md) {
@@ -76,11 +83,11 @@ public struct BlockCard: View {
                         .foregroundStyle(.primary)
                         .lineLimit(1)
 
-                    if kind.isAIWritten {
+                    if isAIWritten {
                         summaryMarker
                     }
 
-                    if let preview = block.preview {
+                    if let preview = block.preview ?? factsPreview {
                         Text(preview)
                             .font(SparkTypography.bodySmall)
                             .foregroundStyle(.secondary)
@@ -137,7 +144,7 @@ public struct BlockCard: View {
                         .accessibilityHidden(true)
                     SectionLabel(heading, style: .dayHeading)
                     Spacer(minLength: SparkSpacing.sm)
-                    if kind.isAIWritten {
+                    if isAIWritten {
                         summaryMarker
                     }
                 }
@@ -146,8 +153,12 @@ public struct BlockCard: View {
                     artwork(url)
                 }
 
-                if let content = nonEmpty(block.content) {
+                if let content = nonEmpty(block.content), facts.isEmpty {
                     SparkLongFormContentView(text: content, paragraphFont: SparkTypography.body)
+                }
+
+                if !facts.isEmpty {
+                    BlockStatGrid(facts: facts)
                 }
 
                 if let value = block.displayValue {
@@ -165,11 +176,21 @@ public struct BlockCard: View {
 
     @ViewBuilder
     private var full: some View {
-        if let content = nonEmpty(block.content) {
+        if !facts.isEmpty {
+            surface(radius: SparkRadii.lg, padding: SparkSpacing.lg) {
+                BlockStatGrid(facts: facts)
+            }
+        } else if let content = nonEmpty(block.content) {
             surface(radius: SparkRadii.lg, padding: SparkSpacing.lg) {
                 SparkLongFormContentView(text: content, paragraphFont: SparkTypography.longFormBody)
             }
         }
+    }
+
+    /// The first two readings, for a row whose block has no text.
+    private var factsPreview: String? {
+        let first = facts.prefix(2).map(\.value)
+        return first.isEmpty ? nil : first.joined(separator: " · ")
     }
 
     // MARK: Parts
@@ -180,7 +201,7 @@ public struct BlockCard: View {
             Image(systemName: kind.systemImage)
                 .foregroundStyle(glyphTint)
                 .accessibilityHidden(true)
-            Text(kind.isAIWritten ? "Summary · \(heading)" : heading)
+            Text(isAIWritten ? "Summary · \(heading)" : heading)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
@@ -311,7 +332,7 @@ public struct BlockCard: View {
         padding: CGFloat,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        if kind.isAIWritten {
+        if isAIWritten {
             content()
                 .padding(padding)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -365,9 +386,12 @@ public struct BlockCard: View {
     }
     #endif
 
-    /// The block's title, or its type in words when the title is blank.
+    /// The block's title, or the plugin's name for its type when the title
+    /// is blank. The type in words is the last resort, for older servers.
     private var heading: String {
-        nonEmpty(block.title) ?? block.blockType.replacingOccurrences(of: "_", with: " ").capitalized
+        nonEmpty(block.title)
+            ?? nonEmpty(block.displayName)
+            ?? block.blockType.replacingOccurrences(of: "_", with: " ").capitalized
     }
 
     private func nonEmpty(_ text: String?) -> String? {
