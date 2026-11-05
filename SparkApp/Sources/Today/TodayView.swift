@@ -6,14 +6,6 @@ import SwiftUI
 struct TodayView: View {
     let date: Date
     var showsToolbar = true
-    /// True while the reader is scrolling down the page. The bar's items
-    /// fade out, but the bar itself stays, so the page's safe area never
-    /// changes under the scroll.
-    var isTopBarHidden = false
-    /// Called with `false` when the reader scrolls down the page and `true`
-    /// when they scroll back up or reach the top, so the pager can hide the
-    /// top bar while reading.
-    var onTopBarVisibilityChange: (@MainActor (Bool) -> Void)?
     @Environment(AppModel.self) private var appModel
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
@@ -24,12 +16,6 @@ struct TodayView: View {
     @State private var showUpToSpeed = false
     @State private var upToSpeedViewModel: UpToSpeedViewModel?
     @State private var selectedThread: FlintTopic?
-    /// Where the reader last changed scroll direction. A reference, so
-    /// moving it on every scroll frame doesn't redraw the page.
-    @State private var scrollTracker = ScrollDirectionTracker()
-    /// The height of the bar the page scrolls under, where the timeline's
-    /// hour labels pin.
-    @State private var topInset: CGFloat = 0
 
     private var isToday: Bool { Calendar.current.isDateInToday(date) }
 
@@ -111,7 +97,7 @@ struct TodayView: View {
                         ThreadsStrip(topics: vm.topics) { selectedThread = $0 }
                     }
 
-                    FeedSection(date: date, pinnedTop: topInset)
+                    FeedSection(date: date)
 
                     if !snapshot.hasAnyDomainData {
                         loadingOrEmptyState
@@ -131,22 +117,12 @@ struct TodayView: View {
             .scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
             // Clear the minimised tab bar at the end of the page.
             .contentMargins(.bottom, SparkSpacing.xxxl, for: .scrollContent)
-            .onScrollGeometryChange(for: CGFloat.self) { geometry in
-                geometry.contentOffset.y + geometry.contentInsets.top
-            } action: { old, new in
-                reportScroll(from: old, to: new)
-            }
-            .onScrollGeometryChange(for: CGFloat.self) { geometry in
-                geometry.contentInsets.top
-            } action: { _, new in
-                topInset = new
-            }
             .refreshable {
                 await viewModel?.refresh()
                 await checkInHistoryVM?.load()
             }
         }
-        .sparkMainAppToolbar(isVisible: showsToolbar && !isTopBarHidden)
+        .sparkMainAppToolbar(isVisible: showsToolbar)
         .sheet(item: $checkInSelection, onDismiss: {
             Task { await checkInHistoryVM?.load() }
         }) { selection in
@@ -221,17 +197,6 @@ struct TodayView: View {
             if newPhase == .active {
                 Task { await viewModel?.backgroundRevalidate() }
             }
-        }
-    }
-
-    // MARK: - Top bar
-
-    /// Measures movement from where the scroll last turned, not between
-    /// updates: a slow scroll arrives in steps smaller than the threshold.
-    private func reportScroll(from old: CGFloat, to new: CGFloat) {
-        guard showsToolbar, let onTopBarVisibilityChange else { return }
-        if let visible = scrollTracker.update(from: old, to: new, isShown: !isTopBarHidden) {
-            onTopBarVisibilityChange(visible)
         }
     }
 
@@ -460,29 +425,52 @@ private extension TodaySnapshot {
     }
 }
 
+/// Turns scroll offsets into "show the bar" or "hide the bar". Not wired
+/// up at the moment: hiding the bar's buttons on scroll froze the day page
+/// three times over, so the buttons stay put until there is a way to hide
+/// them that doesn't resize the bar.
+///
 /// Turns scroll offsets into "show the bar" or "hide the bar". While the
 /// bar shows, it measures down from the highest point reached since it
 /// appeared; while it is hidden, up from the lowest point. A slow scroll, or
 /// one that wobbles back a little as it goes, still adds up to the
 /// threshold.
+///
+/// Showing or hiding the bar's buttons can resize the bar, which moves the
+/// page by about the bar's height. Read as a scroll, that move flipped the
+/// bar straight back, every frame, and the page froze. So after each flip
+/// the tracker ignores offsets for a moment and then measures from wherever
+/// the page settled.
 @MainActor
 final class ScrollDirectionTracker {
     /// Scroll distance, in points, that counts as a change of direction.
     static let threshold: CGFloat = 8
     /// Near the top of the page the bar always shows.
     static let revealOffset: CGFloat = 40
+    /// How long after a flip offsets are ignored, in seconds: longer than
+    /// the bar's own animation.
+    static let settleTime: TimeInterval = 0.5
 
     /// The smallest offset since the bar last showed.
     private var low = CGFloat.infinity
     /// The largest offset since the bar last hid.
     private var high = -CGFloat.infinity
+    /// Offsets before this time are the page settling after a flip.
+    private var settlesAt: TimeInterval = -.infinity
 
     /// `true` to show the bar, `false` to hide it, `nil` to leave it.
     /// `isShown` is the bar's state now, which the pager can also change.
-    func update(from old: CGFloat, to new: CGFloat, isShown: Bool) -> Bool? {
+    func update(from old: CGFloat, to new: CGFloat, isShown: Bool, now: TimeInterval) -> Bool? {
+        if now < settlesAt {
+            low = new
+            high = new
+            return nil
+        }
         if new <= Self.revealOffset {
             low = new
             high = -.infinity
+            if isShown { return nil }
+            settlesAt = now + Self.settleTime
             return true
         }
         if isShown {
@@ -490,6 +478,7 @@ final class ScrollDirectionTracker {
             if new - low > Self.threshold {
                 high = new
                 low = .infinity
+                settlesAt = now + Self.settleTime
                 return false
             }
         } else {
@@ -497,6 +486,7 @@ final class ScrollDirectionTracker {
             if high - new > Self.threshold {
                 low = new
                 high = -.infinity
+                settlesAt = now + Self.settleTime
                 return true
             }
         }
