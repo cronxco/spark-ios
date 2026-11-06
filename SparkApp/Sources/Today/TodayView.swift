@@ -70,6 +70,8 @@ struct TodayView: View {
 
                     anomalySummary(for: snapshot)
 
+                    InsightsSection(insights: snapshot.insights)
+
                     if isToday, let vm = viewModel, !vm.recentQuestions.isEmpty {
                         FlintQuestionStack(
                             questions: vm.recentQuestions,
