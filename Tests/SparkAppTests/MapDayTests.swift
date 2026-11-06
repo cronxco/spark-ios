@@ -75,4 +75,16 @@ struct MapDayTests {
         let late = MapDataPoint(id: "late", kind: .transaction, lat: 0, lng: 0, title: "Late", time: at("2026-07-01T23:05:00Z"))
         #expect(late.stopTimeLabel(in: london) == "00:05")
     }
+
+    @Test("a failed load says what failed, not that the map is unavailable")
+    func failureWording() {
+        let url = URL(string: "https://spark.cronx.co/api/v1/mobile/map/data")!
+        let server = MapViewModel.failure(for: APIError.httpStatus(500, nil, url))
+        #expect(server.title == "Spark couldn’t load this day")
+        #expect(server.message.contains("HTTP 500"))
+
+        #expect(MapViewModel.failure(for: APIError.transport(URLError(.notConnectedToInternet))).title == "You’re offline")
+        #expect(MapViewModel.failure(for: APIError.unauthorized).title == "Signed out")
+        #expect(MapViewModel.failure(for: APIError.decoding(CocoaError(.coderReadCorrupt))).title == "Couldn’t read this day")
+    }
 }

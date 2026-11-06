@@ -201,8 +201,10 @@ private struct MapViewContent: View {
                 withAnimation(.snappy) { viewModel.selectStop(offset: offset) }
             }
             .transition(.opacity)
-        } else if let error = viewModel.lastError, viewModel.points.isEmpty {
-            MapMessageCard(title: "Map unavailable", message: error)
+        } else if let failure = viewModel.lastError, viewModel.points.isEmpty {
+            MapMessageCard(title: failure.title, message: failure.message, glyph: .warning) {
+                viewModel.retry()
+            }
         } else if viewModel.hasLoaded && viewModel.stops.isEmpty && viewModel.clusters.isEmpty {
             MapMessageCard(
                 title: "Nothing on the map",
@@ -430,17 +432,25 @@ private struct MapDaySummaryCard: View {
 private struct MapMessageCard: View {
     let title: String
     let message: String
+    var glyph: SparkIcon = .place
+    /// Shows a "Try again" pill when set.
+    var onRetry: (() -> Void)?
 
     var body: some View {
         VStack(spacing: SparkSpacing.xs) {
-            SparkGlyph(.place, size: 20)
+            SparkGlyph(glyph, size: 20)
                 .foregroundStyle(.secondary)
             Text(title)
                 .font(SparkTypography.bodyStrong)
+                .multilineTextAlignment(.center)
             Text(message)
                 .font(SparkTypography.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+            if let onRetry {
+                PillButton("Try again", action: onRetry)
+                    .padding(.top, SparkSpacing.xs)
+            }
         }
         .padding(SparkSpacing.lg)
         .frame(maxWidth: .infinity)

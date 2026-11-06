@@ -50,7 +50,7 @@ final class MapViewModel {
     private(set) var clusters: [MapCluster] = []
     private(set) var isLoading = false
     private(set) var hasLoaded = false
-    private(set) var lastError: String?
+    private(set) var lastError: LoadFailure?
 
     /// Above 500 points the backend sends clusters, so the map falls back
     /// to asking for the region in view.
@@ -195,7 +195,52 @@ final class MapViewModel {
         } catch {
             SparkObservability.captureHandled(error)
             logger.error("Map fetch failed: \(String(describing: error))")
-            lastError = "Couldn’t load the map."
+            lastError = Self.failure(for: error)
+        }
+    }
+
+    /// Fetch the day again after a failure.
+    func retry() {
+        lastError = nil
+        scheduleFetch(debounce: false)
+    }
+
+    // MARK: - Failure
+
+    /// Why the day's stops didn't load, in words for the card. The map tiles
+    /// come from Apple and load regardless, so this only ever describes the
+    /// Spark request.
+    struct LoadFailure: Equatable, Sendable {
+        let title: String
+        let message: String
+    }
+
+    nonisolated static func failure(for error: Error) -> LoadFailure {
+        guard let error = error as? APIError else {
+            return LoadFailure(title: "Couldn’t load this day", message: "Something went wrong fetching its stops.")
+        }
+        switch error {
+        case .transport:
+            return LoadFailure(title: "You’re offline", message: "Connect to the internet to load this day’s stops.")
+        case .unauthorized:
+            return LoadFailure(title: "Signed out", message: "Sign in again to load this day’s stops.")
+        case .httpStatus(let status, _, _) where status >= 500:
+            return LoadFailure(
+                title: "Spark couldn’t load this day",
+                message: "The server hit an error (HTTP \(status)). It’s been reported."
+            )
+        case .httpStatus(let status, _, _):
+            return LoadFailure(
+                title: "Spark couldn’t load this day",
+                message: "The server turned the request down (HTTP \(status))."
+            )
+        case .decoding:
+            return LoadFailure(
+                title: "Couldn’t read this day",
+                message: "The server’s reply wasn’t in the shape the app expects. Updating Spark may fix it."
+            )
+        case .invalidURL, .noData, .notModified:
+            return LoadFailure(title: "Couldn’t load this day", message: "Something went wrong fetching its stops.")
         }
     }
 
