@@ -18,6 +18,7 @@ struct TodaySnapshot {
     let media: MediaSnapshot?
     let knowledge: KnowledgeSnapshot?
     let anomalies: [Anomaly]
+    let insights: [DayInsight]
     let heatmapRows: [DomainHeatmapRow]
     let checkInStatus: CheckInDayStatus
 
@@ -30,6 +31,7 @@ struct TodaySnapshot {
         self.media = MediaSnapshot(summary?.sections.media?.objectValue)
         self.knowledge = KnowledgeSnapshot(summary?.sections.knowledge?.objectValue)
         self.anomalies = summary?.anomalies ?? []
+        self.insights = summary?.insights ?? []
         self.heatmapRows = Self.buildHeatmapRows()
         self.checkInStatus = checkInStatus
     }

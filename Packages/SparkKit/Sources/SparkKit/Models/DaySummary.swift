@@ -11,12 +11,14 @@ public struct DaySummary: Codable, Sendable, Hashable {
     public let syncStatus: SyncStatus
     public let sections: Sections
     public let anomalies: [Anomaly]
+    /// Comparisons worth a line: absent from older backends, so optional.
+    public let insights: [DayInsight]?
     /// Only present for a date after today: what the Looking ahead page
     /// renders in place of the backward-looking sections.
     public let ahead: DayAhead?
 
     enum CodingKeys: String, CodingKey {
-        case date, timezone, sections, anomalies, ahead
+        case date, timezone, sections, anomalies, insights, ahead
         case syncStatus = "sync_status"
     }
 
@@ -236,6 +238,7 @@ public struct DaySummary: Codable, Sendable, Hashable {
         syncStatus: SyncStatus,
         sections: Sections,
         anomalies: [Anomaly],
+        insights: [DayInsight]? = nil,
         ahead: DayAhead? = nil
     ) {
         self.date = date
@@ -243,6 +246,7 @@ public struct DaySummary: Codable, Sendable, Hashable {
         self.syncStatus = syncStatus
         self.sections = sections
         self.anomalies = anomalies
+        self.insights = insights
         self.ahead = ahead
     }
 }
