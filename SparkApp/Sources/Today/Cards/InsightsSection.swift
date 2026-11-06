@@ -25,9 +25,11 @@ struct InsightRow: View {
     var body: some View {
         GlassCard(radius: SparkRadii.md, padding: SparkSpacing.md, tint: tint?.opacity(0.08)) {
             HStack(alignment: .top, spacing: SparkSpacing.md) {
-                SparkGlyph(insight.isDown ? .decrease : .increase, size: 15)
-                    .foregroundStyle(tint ?? .secondary)
-                    .padding(.top, 3)
+                if insight.isUp || insight.isDown {
+                    SparkGlyph(insight.isDown ? .decrease : .increase, size: 15)
+                        .foregroundStyle(tint ?? .secondary)
+                        .padding(.top, 3)
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(insight.displayName ?? insight.metric ?? "Insight")
                         .font(SparkTypography.bodySmall)

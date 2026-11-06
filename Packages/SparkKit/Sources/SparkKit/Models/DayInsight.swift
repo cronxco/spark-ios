@@ -90,28 +90,44 @@ public struct DayInsight: Codable, Sendable, Hashable, Identifiable {
     }
 
     public var isDown: Bool { direction == "down" }
+    public var isUp: Bool { direction == "up" }
 
     /// The sentence under the metric's name. A week is compared as a daily
-    /// average, so the figure is worded "a day".
+    /// average, so the figure is worded "a day". A direction the server did
+    /// not give is never guessed: the wording stays neutral.
     public var sentence: String {
-        let current = currentDisplay ?? currentValue.map(Self.plain) ?? "—"
-        let delta = deltaDisplay.map { "\($0) \(isDown ? "less" : "more")" } ?? (isDown ? "lower" : "higher")
+        let current = Self.readable(currentDisplay) ?? currentValue.map(Self.plain) ?? "—"
+        let delta = Self.readable(deltaDisplay)
+        let relation: String
+        switch direction {
+        case "up": relation = delta == nil ? "higher than" : "more than"
+        case "down": relation = delta == nil ? "lower than" : "less than"
+        default: relation = "different from"
+        }
+        let gap = delta.map { "\($0) " } ?? ""
 
         switch kind {
         case "insight_period":
-            return "\(current) a day, \(delta) than the last 4 weeks"
+            return "\(current) a day, \(gap)\(relation) the last 4 weeks"
         case "insight_shift":
-            return "\(current) a day this week, \(delta) than usual"
+            return "\(current) a day this week, \(gap)\(relation) usual"
         default:
             let day = dayLabel.map { " for \($0)" } ?? ""
-            return "\(current), \(delta) than usual\(day)"
+            return "\(current), \(gap)\(relation) usual\(day)"
         }
+    }
+
+    /// Count metrics arrive as "12,583 count"; the unit adds nothing.
+    private static func readable(_ display: String?) -> String? {
+        guard var text = display?.trimmingCharacters(in: .whitespaces), !text.isEmpty else { return nil }
+        if text.hasSuffix(" count") {
+            text.removeLast(" count".count)
+        }
+        return text
     }
 
     private static func plain(_ value: Double) -> String {
         guard value.isFinite else { return "—" }
-        return value == value.rounded()
-            ? String(format: "%.0f", value)
-            : String(format: "%.1f", value)
+        return value.formatted(.number.precision(.fractionLength(0...1)))
     }
 }

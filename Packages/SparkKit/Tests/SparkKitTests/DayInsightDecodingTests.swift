@@ -31,7 +31,7 @@ struct DayInsightDecodingTests {
         let insight = try #require(decoded.insights?.first)
         #expect(insight.valence == .good)
         #expect(!insight.isDown)
-        #expect(insight.sentence == "12,583 count a day, 4,682 count more than the last 4 weeks")
+        #expect(insight.sentence == "12,583 a day, 4,682 more than the last 4 weeks")
     }
 
     @Test("a typical insight names the day only when the server did")
@@ -46,6 +46,13 @@ struct DayInsightDecodingTests {
             id: "t2", kind: "insight_typical", direction: "up", currentDisplay: "£432", deltaDisplay: "£364"
         )
         #expect(withoutDay.sentence == "£432, £364 more than usual")
+    }
+
+    @Test("an unknown direction is worded neutrally")
+    func unknownDirection() {
+        let insight = DayInsight(id: "u1", kind: "insight_typical", currentDisplay: "62%", deltaDisplay: "14%")
+        #expect(!insight.isUp && !insight.isDown)
+        #expect(insight.sentence == "62%, 14% different from usual")
     }
 
     @Test("missing display strings fall back to the raw numbers")
