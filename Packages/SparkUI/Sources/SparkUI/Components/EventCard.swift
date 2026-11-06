@@ -29,6 +29,8 @@ public extension EventKind {
 /// - `.calendar`: a calendar entry's title and time span.
 /// - `.payment`: amount, merchant, account and Pending, with a strip of the
 ///   week's payments.
+/// - `.transfer`: amount, then "**Mortgage** into Current Account" on one
+///   line, and Pending. No week strip: a transfer isn't spending.
 /// - `.reading`: publication, the article's own headline, read time and up
 ///   to four takeaways.
 ///
@@ -75,6 +77,7 @@ public struct EventCard: View {
             case .journey: journey
             case .calendar: calendar
             case .payment: payment
+            case .transfer: transfer
             case .reading: reading
             }
             if let answer = card.answer {
@@ -139,7 +142,7 @@ public struct EventCard: View {
         switch card.layout {
         case .journey: "airplane"
         case .calendar: "calendar"
-        case .payment: "sterlingsign"
+        case .payment, .transfer: "sterlingsign"
         case .reading: "newspaper.fill"
         case .metric: kind.systemImage(domain: domain)
         }
@@ -150,7 +153,7 @@ public struct EventCard: View {
         switch card.layout {
         case .journey, .calendar:
             return Calendar.current.isDateInToday(time) ? "Today" : time.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
-        case .payment:
+        case .payment, .transfer:
             return time.formatted(.dateTime.weekday(.abbreviated).hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
         case .reading:
             return time.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
@@ -287,6 +290,58 @@ public struct EventCard: View {
         }
     }
 
+    // MARK: Transfer
+
+    private var transfer: some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.xs) {
+            Text(card.heroValue)
+                .font(SparkFonts.display(size: heroSize, weight: .bold))
+                .monospacedDigit()
+                .foregroundStyle(Color.sparkHero(domain: domain))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            HStack(spacing: SparkSpacing.sm) {
+                if let line = transferLine {
+                    Text(line)
+                        .font(SparkTypography.body)
+                        .lineLimit(2)
+                }
+                if details?.pending == true {
+                    pendingChip
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// "**Mortgage** into Current Account": the other party in bold, then
+    /// the account in secondary, as one line.
+    private var transferLine: AttributedString? {
+        var parts: [AttributedString] = []
+        if let counterparty = details?.counterparty, !counterparty.isEmpty {
+            var bold = AttributedString(counterparty)
+            bold.font = SparkTypography.bodyStrong
+            bold.foregroundColor = Color.primary
+            parts.append(bold)
+        }
+        if let account = details?.transferAccountText {
+            var rest = AttributedString(account)
+            rest.foregroundColor = Color.secondary
+            parts.append(rest)
+        }
+        guard !parts.isEmpty else { return nil }
+        return parts.dropFirst().reduce(parts[0]) { $0 + AttributedString(" ") + $1 }
+    }
+
+    private var pendingChip: some View {
+        Text("Pending")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(Color.primary.opacity(0.08)))
+    }
+
     // MARK: Payment
 
     private var payment: some View {
@@ -312,12 +367,7 @@ public struct EventCard: View {
                             .lineLimit(1)
                     }
                     if details?.pending == true {
-                        Text("Pending")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 3)
-                            .background(Capsule().fill(Color.primary.opacity(0.08)))
+                        pendingChip
                     }
                 }
             }
@@ -478,6 +528,10 @@ public struct EventCard: View {
             parts.append(details?.merchant)
             parts.append(details?.pending == true ? "pending" : nil)
             parts.append(details?.week?.caption)
+        case .transfer:
+            parts.append(card.heroValue)
+            parts.append([details?.counterparty, details?.transferAccountText].compactMap { $0 }.joined(separator: " "))
+            parts.append(details?.pending == true ? "pending" : nil)
         case .reading:
             parts.append(details?.headline)
             parts.append(details?.readMinutes.map { "\($0) minute read" })

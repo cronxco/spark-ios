@@ -266,4 +266,18 @@ struct UpToSpeedParsingTests {
     func headingOnlySectionIsDropped() {
         #expect(UpToSpeedParsing.digestCards(from: "DRIVING THE DAY").isEmpty)
     }
+
+    @Test("a card's capitals heading splits from its prose without the trailing dash")
+    func headingAndBody() {
+        let card = "THE NOVEMBER TRANSFER IS DONE \u{2014}\n\nThe [£1,500 transfer](https://spark.cronx.co/events/5fd356ae-ef8b-477b-880c-b9feb1aa966b) arrived."
+        let parts = UpToSpeedParsing.headingAndBody(of: card)
+        #expect(parts.heading == "THE NOVEMBER TRANSFER IS DONE")
+        #expect(parts.body.hasPrefix("The [£1,500 transfer]"))
+
+        let plain = UpToSpeedParsing.headingAndBody(of: "Lanzarote continues.")
+        #expect(plain.heading == nil)
+        #expect(plain.body == "Lanzarote continues.")
+
+        #expect(UpToSpeedParsing.headingAndBody(of: "## DRIVING THE DAY\n\nProse.").heading == "DRIVING THE DAY")
+    }
 }

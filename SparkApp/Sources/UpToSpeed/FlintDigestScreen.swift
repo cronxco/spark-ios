@@ -107,13 +107,29 @@ struct LinkedParagraph: View {
         LinkedEventCard.cards(linkedFrom: text, in: linkedEvents)
     }
 
+    private var parts: (heading: String?, body: String) {
+        UpToSpeedParsing.headingAndBody(of: text)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-            SparkLongFormContentView(
-                text: text,
-                tint: .sparkHighlight,
-                paragraphFont: SparkTypography.longFormBody
-            )
+            // Flint's Playbook-style heading stays in capitals, as a serif
+            // headline above the prose (design language §7.3).
+            if let heading = parts.heading {
+                Text(heading)
+                    .font(SparkTypography.longFormHeadline)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+            }
+
+            if !parts.body.isEmpty {
+                SparkLongFormContentView(
+                    text: parts.body,
+                    tint: .sparkHighlight,
+                    paragraphFont: SparkTypography.longFormBody
+                )
+            }
 
             EventCardRow(cards) { card in
                 if let url = URL(string: "https://spark.cronx.co/events/\(card.event.id)") {
