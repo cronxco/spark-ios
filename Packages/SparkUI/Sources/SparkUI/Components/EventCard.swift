@@ -350,7 +350,7 @@ public struct EventCard: View {
                             Text(Self.inline(takeaway))
                                 .font(SparkTypography.bodySmall)
                                 .foregroundStyle(.primary)
-                                .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }
