@@ -1,0 +1,35 @@
+name: Search contract fixtures
+
+# The fixtures under Fixtures/SearchContract/v1 are copies of spark's
+# tests/Fixtures/search-contract/v1. The server pins the response keys against
+# them and SearchContractFixtureTests decodes them here, so the two sets must
+# stay identical. Needs the SPARK_REPO_TOKEN secret (read access to cronxco/spark).
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+jobs:
+  fixtures-match:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out spark fixtures
+        uses: actions/checkout@v4
+        with:
+          repository: cronxco/spark
+          ref: dev
+          token: ${{ secrets.SPARK_REPO_TOKEN }}
+          path: spark
+          sparse-checkout: tests/Fixtures/search-contract/v1
+
+      - name: Compare fixtures
+        run: |
+          set -eu
+          ours=Packages/SparkKit/Tests/SparkKitTests/Fixtures/SearchContract/v1
+          theirs=spark/tests/Fixtures/search-contract/v1
+          # Each side has its own README, so only the JSON is compared.
+          diff -r --exclude=README.md "$ours" "$theirs" \
+            || { echo "::error::Search contract fixtures differ from cronxco/spark dev. Change both together."; exit 1; }
