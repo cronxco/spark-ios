@@ -31,6 +31,9 @@ public extension EventKind {
 ///   week's payments.
 /// - `.reading`: publication, the article's own headline, read time and up
 ///   to four takeaways.
+/// - `.digest`: one of Flint's own digests (news roundup, reading list):
+///   its name, counts, then every story with its outlets or every pick with
+///   its read time.
 ///
 /// Every card sits on its domain-tinted fill, still opaque content (§5.3),
 /// and ends with the reader's answer when they answered a Flint question
@@ -76,6 +79,7 @@ public struct EventCard: View {
             case .calendar: calendar
             case .payment: payment
             case .reading: reading
+            case .digest: digest
             }
             if let answer = card.answer {
                 answerView(answer)
@@ -141,6 +145,7 @@ public struct EventCard: View {
         case .calendar: "calendar"
         case .payment: "sterlingsign"
         case .reading: "newspaper.fill"
+        case .digest: digestGlyph
         case .metric: kind.systemImage(domain: domain)
         }
     }
@@ -154,9 +159,19 @@ public struct EventCard: View {
             return time.formatted(.dateTime.weekday(.abbreviated).hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
         case .reading:
             return time.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
-        case .metric:
+        case .digest, .metric:
             return nil
         }
+    }
+
+    /// The digest's kind from its name: a newspaper for the news roundup,
+    /// a book for the reading list, a pound for money reviews.
+    private var digestGlyph: String {
+        let name = details?.name ?? ""
+        if name.hasPrefix("News") { return "newspaper.fill" }
+        if name.hasPrefix("Reading") { return "book.fill" }
+        if name.hasPrefix("Money") { return "sterlingsign" }
+        return "doc.text.fill"
     }
 
     // MARK: Metric
@@ -360,6 +375,50 @@ public struct EventCard: View {
         }
     }
 
+    // MARK: Digest
+
+    /// Every story or pick, never cut short (Will, 7 Nov 2026), each its
+    /// headline in serif with its outlets or read time under it.
+    private var digest: some View {
+        VStack(alignment: .leading, spacing: SparkSpacing.sm) {
+            if let counts = details?.facts, !counts.isEmpty {
+                facts(counts)
+            }
+            if let items = details?.items, !items.isEmpty {
+                VStack(alignment: .leading, spacing: SparkSpacing.md) {
+                    ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                        HStack(alignment: .firstTextBaseline, spacing: SparkSpacing.sm) {
+                            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                                .fill(fill)
+                                .frame(width: 6, height: 6)
+                                .alignmentGuide(.firstTextBaseline) { $0[.bottom] + 3 }
+                            VStack(alignment: .leading, spacing: SparkSpacing.xxs) {
+                                Text(item.title)
+                                    .font(.system(.subheadline, design: .serif).weight(.semibold))
+                                    .foregroundStyle(.primary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                if let caption = Self.digestCaption(item) {
+                                    Text(caption)
+                                        .font(SparkTypography.caption)
+                                        .foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.top, SparkSpacing.sm)
+                .overlay(alignment: .top) { Rectangle().fill(Color.primary.opacity(0.1)).frame(height: 1) }
+            }
+        }
+    }
+
+    /// "BBC News, The Guardian" for a story, "12 min read" for a pick.
+    static func digestCaption(_ item: LinkedEventCard.DigestItem) -> String? {
+        if !item.sources.isEmpty { return item.sources.joined(separator: ", ") }
+        return item.readMinutes.map { "\($0) min read" }
+    }
+
     // MARK: Shared pieces
 
     private func facts(_ items: [String?]) -> some View {
@@ -484,6 +543,14 @@ public struct EventCard: View {
             if let takeaways = details?.takeaways, !takeaways.isEmpty {
                 parts.append("Takeaways: " + takeaways.prefix(4).map { String(Self.inline($0).characters) }.joined(separator: ". "))
             }
+        case .digest:
+            parts.append(contentsOf: details?.facts ?? [])
+            let items = (details?.items ?? []).map { item in
+                [item.title, Self.digestCaption(item)].compactMap { $0 }.joined(separator: ", ")
+            }
+            if !items.isEmpty {
+                parts.append("Stories: " + items.joined(separator: ". "))
+            }
         }
         if let answer = card.answer {
             parts.append("You answered \(answer.text)")
@@ -601,7 +668,7 @@ struct MeanBar: View {
 /// (design language §7.3).
 ///
 /// Metric cards go two or three across, with "+N more" in the third slot
-/// past three; a lone metric card takes the row. Flights, calendar entries,
+/// past three; a lone metric card takes the row. Flights, calendar entries, digests,
 /// payments and articles always take a row each. When the row first appears
 /// the cards rise in 70ms apart and their rings, bars and routes draw once;
 /// under Reduce Motion they are simply there. Tapping a card gives a light
