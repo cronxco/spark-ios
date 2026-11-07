@@ -545,9 +545,12 @@ public struct EventCard: View {
             }
         case .digest:
             parts.append(contentsOf: details?.facts ?? [])
-            parts.append(contentsOf: (details?.items ?? []).map { item in
+            let items = (details?.items ?? []).map { item in
                 [item.title, Self.digestCaption(item)].compactMap { $0 }.joined(separator: ", ")
-            })
+            }
+            if !items.isEmpty {
+                parts.append("Stories: " + items.joined(separator: ". "))
+            }
         }
         if let answer = card.answer {
             parts.append("You answered \(answer.text)")
