@@ -31,7 +31,7 @@ public struct LinkedEventCard: Codable, Sendable, Hashable, Identifiable {
     public var kind: EventKind { EventKind(kindKey) }
 
     public enum Layout: String, Codable, Sendable, Hashable {
-        case metric, journey, calendar, payment, reading, digest
+        case metric, journey, calendar, payment, transfer, reading, digest
 
         /// Every layout but a metric takes the whole row.
         public var isWide: Bool { self != .metric }
@@ -64,6 +64,12 @@ public struct LinkedEventCard: Codable, Sendable, Hashable, Identifiable {
         public let pending: Bool?
         public let refund: Bool?
         public let week: Week?
+        // Transfer (account and pending are shared with Payment)
+        /// `in` or `out`.
+        public let direction: String?
+        /// The other party in display case: a pot, a person, or the bank
+        /// reference ("Mortgage").
+        public let counterparty: String?
         // Reading
         public let publication: String?
         public let headline: String?
@@ -76,7 +82,7 @@ public struct LinkedEventCard: Codable, Sendable, Hashable, Identifiable {
         public let items: [DigestItem]?
 
         enum CodingKeys: String, CodingKey {
-            case flight, from, to, route, title, merchant, account, pending, refund, week, publication, headline, url, takeaways
+            case flight, from, to, route, title, merchant, account, pending, refund, week, direction, counterparty, publication, headline, url, takeaways
             case name, facts, items
             case departsAtText = "departs_at"
             case arrivesAtText = "arrives_at"
@@ -98,6 +104,7 @@ public struct LinkedEventCard: Codable, Sendable, Hashable, Identifiable {
             durationMinutes: Int? = nil,
             title: String? = nil, startsAtText: String? = nil, endsAtText: String? = nil, allDay: Bool? = nil,
             merchant: String? = nil, account: String? = nil, pending: Bool? = nil, refund: Bool? = nil, week: Week? = nil,
+            direction: String? = nil, counterparty: String? = nil,
             publication: String? = nil, headline: String? = nil, url: String? = nil, readMinutes: Int? = nil, takeaways: [String]? = nil,
             name: String? = nil, facts: [String]? = nil, items: [DigestItem]? = nil
         ) {
@@ -121,6 +128,8 @@ public struct LinkedEventCard: Codable, Sendable, Hashable, Identifiable {
             self.pending = pending
             self.refund = refund
             self.week = week
+            self.direction = direction
+            self.counterparty = counterparty
             self.publication = publication
             self.headline = headline
             self.url = url
@@ -129,6 +138,16 @@ public struct LinkedEventCard: Codable, Sendable, Hashable, Identifiable {
             self.name = name
             self.facts = facts
             self.items = items
+        }
+
+        /// Money going out of the reader's account.
+        public var isOutgoing: Bool { direction == "out" }
+
+        /// "into Current Account", or "from Current Account" for money going
+        /// out; read after the counterparty in bold (Will, 6 Nov 2026).
+        public var transferAccountText: String? {
+            guard let account, !account.isEmpty else { return nil }
+            return isOutgoing ? "from \(account)" : "into \(account)"
         }
 
         public var departsAt: Date? { departsAtText.flatMap(Self.instant) }
@@ -341,6 +360,7 @@ public struct LinkedEventCard: Codable, Sendable, Hashable, Identifiable {
         case .journey: details?.flight.map { "Flight \($0)" } ?? "Flight"
         case .calendar: "Calendar"
         case .payment: details?.refund == true ? "Refund" : "Payment"
+        case .transfer: details?.isOutgoing == true ? "Transfer out" : "Transfer in"
         case .reading: details?.publication ?? "Article"
         case .digest: details?.name ?? "Digest"
         case .metric: kind.shortLabel ?? event.displayName ?? "Event"

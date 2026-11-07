@@ -396,6 +396,31 @@ public enum UpToSpeedParsing {
             .joined(separator: "\n\n")
     }
 
+    /// A digest card split into its section heading, when it opens with one,
+    /// and the prose after it. Flint writes Playbook-style headings in
+    /// capitals ("THE NOVEMBER TRANSFER IS DONE —"); the card draws them as a
+    /// serif headline, still in capitals (Will, 6 Nov 2026). The heading loses
+    /// a `## ` marker, Markdown emphasis and the trailing dash that led into
+    /// the paragraph, since it now stands on its own line.
+    public static func headingAndBody(of card: String) -> (heading: String?, body: String) {
+        let parts = chunks(of: card)
+        guard let first = parts.first, isSectionHeading(first) else { return (nil, card) }
+
+        var heading = first.hasPrefix("## ") ? String(first.dropFirst(3)) : first
+        heading = heading.trimmingCharacters(in: .whitespacesAndNewlines)
+        for marker in ["**", "__"] where heading.count > marker.count * 2 && heading.hasPrefix(marker) && heading.hasSuffix(marker) {
+            let inner = String(heading.dropFirst(marker.count).dropLast(marker.count))
+            if !inner.contains(marker) {
+                heading = inner.trimmingCharacters(in: .whitespaces)
+            }
+        }
+        while let last = heading.last, last == "\u{2014}" || last == "\u{2013}" || last == "-" || last == ":" {
+            heading = String(heading.dropLast()).trimmingCharacters(in: .whitespaces)
+        }
+
+        return (heading.isEmpty ? nil : heading, parts.dropFirst().joined(separator: "\n\n"))
+    }
+
     private static func isSectionHeading(_ chunk: String) -> Bool {
         guard chunk.count < 80 else { return false }
         if chunk.hasPrefix("## ") { return true }

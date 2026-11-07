@@ -181,6 +181,21 @@ struct LinkedEventCardTests {
             {"title": "The quiet death of the high street", "read_minutes": 12}
           ]},
           "answer": null
+        },
+        {
+          "kind": "monzo.bank_transfer_from",
+          "layout": "transfer",
+          "event": {"id": "5fd356ae-ef8b-477b-880c-b9feb1aa966b", "time": "2026-11-05T09:02:54+00:00", "service": "monzo", "domain": "money", "action": "bank_transfer_from", "value": 1500, "unit": "GBP", "display_value": "£1,500.00"},
+          "context": null,
+          "at_digest": null,
+          "details": {"direction": "in", "counterparty": "Mortgage", "account": "Current Account", "pending": false},
+          "answer": null
+        },
+        {
+          "kind": "monzo.pot_transfer_to",
+          "layout": "transfer",
+          "event": {"id": "7a1c2e30-5b8d-4f61-9e2a-0c3d4b5a6f70", "time": "2026-11-05T10:00:00+00:00", "service": "monzo", "domain": "money", "action": "pot_transfer_to", "value": 50, "unit": "GBP"},
+          "details": {"direction": "out", "counterparty": "Holiday", "account": "Current Account", "pending": true}
         }
       ]
     }
@@ -217,6 +232,24 @@ struct LinkedEventCardTests {
         #expect(payment.details?.week?.amounts == [420, 350, 15900])
         #expect(payment.answer?.text == "Redcliffe, Sat 30 January with Dan")
         #expect(LinkedEventCard.Answer(answer: "A gift", note: "  ").text == "A gift")
+    }
+
+    @Test("a transfer decodes with its direction, the other party and the account")
+    func transferLayout() throws {
+        let cards = try layoutCards()
+        let incoming = cards[5]
+        let outgoing = cards[6]
+
+        #expect(incoming.layout == .transfer)
+        #expect(incoming.layout.isWide)
+        #expect(incoming.label == "Transfer in")
+        #expect(incoming.details?.counterparty == "Mortgage")
+        #expect(incoming.details?.transferAccountText == "into Current Account")
+        #expect(incoming.details?.week == nil)
+
+        #expect(outgoing.label == "Transfer out")
+        #expect(outgoing.details?.transferAccountText == "from Current Account")
+        #expect(outgoing.details?.pending == true)
     }
 
     @Test("an article decodes as a reading card with its takeaways")
