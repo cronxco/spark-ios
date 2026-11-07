@@ -416,7 +416,7 @@ struct EventDetailView: View {
             }
         }
 
-        ForEach(groups.takeaways + groups.media) { block in
+        ForEach(groups.takeaways + groups.media + groups.records) { block in
             NavigationLink {
                 BlockDetailView(blockId: block.id, parent: loadedEvent)
             } label: {
@@ -680,6 +680,9 @@ struct BlockGroups {
     var takeaways = [Block]()
     /// Artwork and photos, drawn as images whatever value the source sent.
     var media = [Block]()
+    /// Blocks with typed details (a merchant, a book, a beer), read in place
+    /// as a card with a stat grid.
+    var records = [Block]()
     var rows = [Block]()
     var summaries = [Block]()
     var values = [Block]()
@@ -689,7 +692,7 @@ struct BlockGroups {
     var sectionCount: Int { rows.count + summaries.count + values.count }
 
     init(_ blocks: [Block]) {
-        for block in blocks {
+        for block in blocks where !block.hidden {
             if SparkDetailContributorList.isContributor(block) {
                 contributors.append(block)
                 continue
@@ -700,11 +703,20 @@ struct BlockGroups {
             case .albumArt, .bookCover, .image, .immichPhoto:
                 media.append(block)
                 continue
-            case .track:
+            case .receiptLineItem:
+                // A receipt reads as a list, not a grid of prices.
                 rows.append(block)
                 continue
             default:
                 break
+            }
+            if block.isRecord {
+                records.append(block)
+                continue
+            }
+            if block.kind == .track {
+                rows.append(block)
+                continue
             }
             if block.displayValue != nil {
                 values.append(block)
