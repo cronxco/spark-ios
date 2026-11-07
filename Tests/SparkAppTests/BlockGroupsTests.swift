@@ -43,4 +43,50 @@ struct BlockGroupsTests {
         #expect(groups.rows.map(\.id) == ["1", "2"])
         #expect(groups.summaries.isEmpty)
     }
+
+    @Test("hidden blocks never show")
+    func hiddenBlocks() {
+        let groups = BlockGroups([
+            Block(id: "1", blockType: "merchant_raw", title: "Raw", content: "{}", hidden: true),
+            Block(id: "2", blockType: "heart_rate_summary", title: "Average", value: "62", unit: "bpm", hidden: true),
+            Block(
+                id: "3", blockType: "merchant", title: "Pret", hidden: true,
+                details: BlockDetails(["category": AnyCodable(.string("eating_out"))])
+            ),
+            Block(id: "4", blockType: "newsletter_key_takeaways", title: "Takeaways", content: "- One", hidden: true),
+            Block(id: "5", blockType: "newsletter_tldr", title: "TL;DR", content: "Short", hidden: true),
+        ])
+        #expect(groups.rows.isEmpty)
+        #expect(groups.values.isEmpty)
+        #expect(groups.records.isEmpty)
+        #expect(groups.takeaways.isEmpty)
+        #expect(groups.summaries.isEmpty)
+    }
+
+    @Test("blocks with details read as record cards, even with a value")
+    func recordsAreCards() {
+        let merchant = Block(
+            id: "1", blockType: "merchant", title: "Pret", value: "4.50", unit: "GBP",
+            details: BlockDetails(["category": AnyCodable(.string("eating_out"))])
+        )
+        let groups = BlockGroups([merchant])
+        #expect(groups.records.map(\.id) == ["1"])
+        #expect(groups.values.isEmpty)
+    }
+
+    @Test("receipt lines stay a list, Hevy sets stay tiles")
+    func linesAndSets() {
+        let line = Block(
+            id: "1", blockType: "receipt_line_item", title: "Bread", value: "250", unit: "GBP",
+            details: BlockDetails(["quantity": AnyCodable(.int(2))])
+        )
+        let set = Block(
+            id: "2", blockType: "exercise", title: "Bench", value: "60", unit: "kg",
+            details: BlockDetails(["reps": AnyCodable(.int(8))])
+        )
+        let groups = BlockGroups([line, set])
+        #expect(groups.rows.map(\.id) == ["1"])
+        #expect(groups.values.map(\.id) == ["2"])
+        #expect(groups.records.isEmpty)
+    }
 }

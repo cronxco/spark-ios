@@ -65,7 +65,10 @@ public struct AnyCodable: Codable, Sendable, Hashable {
     public var intValue: Int? {
         switch value {
         case let .int(v): return v
-        case let .double(v): return Int(v)
+        case let .double(v):
+            // Int(_:) traps outside Int's range; JSON can carry 1e19.
+            guard v.isFinite, v >= Double(Int.min), v < Double(Int.max) else { return nil }
+            return Int(v)
         default: return nil
         }
     }
