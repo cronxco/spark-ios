@@ -105,7 +105,7 @@ public struct LinkedEventCard: Codable, Sendable, Hashable, Identifiable {
             title: String? = nil, startsAtText: String? = nil, endsAtText: String? = nil, allDay: Bool? = nil,
             merchant: String? = nil, account: String? = nil, pending: Bool? = nil, refund: Bool? = nil, week: Week? = nil,
             direction: String? = nil, counterparty: String? = nil,
-            publication: String? = nil, headline: String? = nil, url: String? = nil, readMinutes: Int? = nil, takeaways: [String]? = nil
+            publication: String? = nil, headline: String? = nil, url: String? = nil, readMinutes: Int? = nil, takeaways: [String]? = nil,
             name: String? = nil, facts: [String]? = nil, items: [DigestItem]? = nil
         ) {
             self.flight = flight

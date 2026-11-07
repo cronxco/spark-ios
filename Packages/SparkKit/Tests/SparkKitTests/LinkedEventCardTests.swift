@@ -170,6 +170,19 @@ struct LinkedEventCardTests {
           "event": {"id": "c0720298-cb3c-4812-bca3-7b35767eee6f", "time": "2026-11-05T00:00:00+00:00", "service": "oura", "domain": "health", "action": "had_sleep_score", "value": 81, "unit": "percent"}
         },
         {
+          "kind": "flint.had_summary",
+          "layout": "digest",
+          "event": {"id": "9dd7d1ad-1e42-42ca-82c5-3e62222e5da9", "time": "2026-11-07T00:00:00+00:00", "service": "flint", "domain": "knowledge", "action": "had_summary", "value": 4, "display_name": "Had Digest"},
+          "context": null,
+          "at_digest": null,
+          "details": {"name": "News roundup", "facts": ["3 stories", "4 sources"], "items": [
+            {"title": "Police protection scheme to cover more than 1,100 former MPs", "sources": ["BBC News", "The Guardian"], "read_minutes": null},
+            {"title": "Scottish data-centre plans face scrutiny over power and water risks", "sources": ["The Ferret"], "read_minutes": null},
+            {"title": "The quiet death of the high street", "read_minutes": 12}
+          ]},
+          "answer": null
+        },
+        {
           "kind": "monzo.bank_transfer_from",
           "layout": "transfer",
           "event": {"id": "5fd356ae-ef8b-477b-880c-b9feb1aa966b", "time": "2026-11-05T09:02:54+00:00", "service": "monzo", "domain": "money", "action": "bank_transfer_from", "value": 1500, "unit": "GBP", "display_value": "£1,500.00"},
@@ -183,19 +196,6 @@ struct LinkedEventCardTests {
           "layout": "transfer",
           "event": {"id": "7a1c2e30-5b8d-4f61-9e2a-0c3d4b5a6f70", "time": "2026-11-05T10:00:00+00:00", "service": "monzo", "domain": "money", "action": "pot_transfer_to", "value": 50, "unit": "GBP"},
           "details": {"direction": "out", "counterparty": "Holiday", "account": "Current Account", "pending": true}
-        },
-        {
-          "kind": "flint.had_summary",
-          "layout": "digest",
-          "event": {"id": "9dd7d1ad-1e42-42ca-82c5-3e62222e5da9", "time": "2026-11-07T00:00:00+00:00", "service": "flint", "domain": "knowledge", "action": "had_summary", "value": 4, "display_name": "Had Digest"},
-          "context": null,
-          "at_digest": null,
-          "details": {"name": "News roundup", "facts": ["3 stories", "4 sources"], "items": [
-            {"title": "Police protection scheme to cover more than 1,100 former MPs", "sources": ["BBC News", "The Guardian"], "read_minutes": null},
-            {"title": "Scottish data-centre plans face scrutiny over power and water risks", "sources": ["The Ferret"], "read_minutes": null},
-            {"title": "The quiet death of the high street", "read_minutes": 12}
-          ]},
-          "answer": null
         }
       ]
     }
@@ -237,8 +237,8 @@ struct LinkedEventCardTests {
     @Test("a transfer decodes with its direction, the other party and the account")
     func transferLayout() throws {
         let cards = try layoutCards()
-        let incoming = cards[4]
-        let outgoing = cards[5]
+        let incoming = cards[5]
+        let outgoing = cards[6]
 
         #expect(incoming.layout == .transfer)
         #expect(incoming.layout.isWide)
