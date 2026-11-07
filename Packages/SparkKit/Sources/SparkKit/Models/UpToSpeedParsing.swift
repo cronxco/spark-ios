@@ -407,8 +407,11 @@ public enum UpToSpeedParsing {
         guard let first = parts.first, isSectionHeading(first) else { return (nil, card) }
 
         var heading = first.hasPrefix("## ") ? String(first.dropFirst(3)) : first
-        heading = heading.replacingOccurrences(of: "**", with: "").replacingOccurrences(of: "__", with: "")
         heading = heading.trimmingCharacters(in: .whitespacesAndNewlines)
+        for marker in ["**", "__"] where heading.count > marker.count * 2 && heading.hasPrefix(marker) && heading.hasSuffix(marker) {
+            heading = String(heading.dropFirst(marker.count).dropLast(marker.count))
+                .trimmingCharacters(in: .whitespaces)
+        }
         while let last = heading.last, last == "\u{2014}" || last == "\u{2013}" || last == "-" || last == ":" {
             heading = String(heading.dropLast()).trimmingCharacters(in: .whitespaces)
         }

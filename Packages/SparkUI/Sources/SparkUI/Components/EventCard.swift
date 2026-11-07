@@ -315,18 +315,32 @@ public struct EventCard: View {
                 .foregroundStyle(Color.sparkHero(domain: domain))
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-            HStack(spacing: SparkSpacing.sm) {
-                if let line = transferLine {
-                    Text(line)
-                        .font(SparkTypography.body)
-                        .lineLimit(2)
+            // The chip sits beside the line when both fit, and drops below
+            // it otherwise, so a long account name is never cut short.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: SparkSpacing.sm) {
+                    transferText.fixedSize()
+                    if details?.pending == true {
+                        pendingChip
+                    }
                 }
-                if details?.pending == true {
-                    pendingChip
+                VStack(alignment: .leading, spacing: SparkSpacing.xs) {
+                    transferText.fixedSize(horizontal: false, vertical: true)
+                    if details?.pending == true {
+                        pendingChip
+                    }
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var transferText: some View {
+        if let line = transferLine {
+            Text(line)
+                .font(SparkTypography.body)
+        }
     }
 
     /// "**Mortgage** into Current Account": the other party in bold, then
@@ -591,6 +605,7 @@ public struct EventCard: View {
             parts.append(card.heroValue)
             parts.append([details?.counterparty, details?.transferAccountText].compactMap { $0 }.joined(separator: " "))
             parts.append(details?.pending == true ? "pending" : nil)
+            parts.append(eyebrowTime)
         case .reading:
             parts.append(details?.headline)
             parts.append(details?.readMinutes.map { "\($0) minute read" })

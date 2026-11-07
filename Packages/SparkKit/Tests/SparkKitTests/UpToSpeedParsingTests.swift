@@ -279,5 +279,7 @@ struct UpToSpeedParsingTests {
         #expect(plain.body == "Lanzarote continues.")
 
         #expect(UpToSpeedParsing.headingAndBody(of: "## DRIVING THE DAY\n\nProse.").heading == "DRIVING THE DAY")
+        #expect(UpToSpeedParsing.headingAndBody(of: "**DRIVING THE DAY**\n\nProse.").heading == "DRIVING THE DAY")
+        #expect(UpToSpeedParsing.headingAndBody(of: "**RENT** AND **BILLS**\n\nProse.").heading == "**RENT** AND **BILLS**")
     }
 }

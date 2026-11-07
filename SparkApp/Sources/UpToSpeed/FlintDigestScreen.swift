@@ -111,13 +111,20 @@ struct LinkedParagraph: View {
         UpToSpeedParsing.headingAndBody(of: text)
     }
 
+    /// Keeps any link or emphasis Flint put in the heading.
+    private static func inlineMarkdown(_ heading: String) -> AttributedString {
+        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        return (try? AttributedString(markdown: heading, options: options)) ?? AttributedString(heading)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: SparkSpacing.lg) {
             // Flint's Playbook-style heading stays in capitals, as a serif
             // headline above the prose (design language §7.3).
             if let heading = parts.heading {
-                Text(heading)
+                Text(Self.inlineMarkdown(heading))
                     .font(SparkTypography.longFormHeadline)
+                    .tint(.sparkHighlight)
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
