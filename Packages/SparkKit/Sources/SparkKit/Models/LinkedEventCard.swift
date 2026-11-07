@@ -31,7 +31,7 @@ public struct LinkedEventCard: Codable, Sendable, Hashable, Identifiable {
     public var kind: EventKind { EventKind(kindKey) }
 
     public enum Layout: String, Codable, Sendable, Hashable {
-        case metric, journey, calendar, payment, transfer, reading
+        case metric, journey, calendar, payment, transfer, reading, digest
 
         /// Every layout but a metric takes the whole row.
         public var isWide: Bool { self != .metric }
@@ -76,9 +76,14 @@ public struct LinkedEventCard: Codable, Sendable, Hashable, Identifiable {
         public let url: String?
         public let readMinutes: Int?
         public let takeaways: [String]?
+        // Digest
+        public let name: String?
+        public let facts: [String]?
+        public let items: [DigestItem]?
 
         enum CodingKeys: String, CodingKey {
             case flight, from, to, route, title, merchant, account, pending, refund, week, direction, counterparty, publication, headline, url, takeaways
+            case name, facts, items
             case departsAtText = "departs_at"
             case arrivesAtText = "arrives_at"
             case departsLocal = "departs_local"
@@ -101,6 +106,7 @@ public struct LinkedEventCard: Codable, Sendable, Hashable, Identifiable {
             merchant: String? = nil, account: String? = nil, pending: Bool? = nil, refund: Bool? = nil, week: Week? = nil,
             direction: String? = nil, counterparty: String? = nil,
             publication: String? = nil, headline: String? = nil, url: String? = nil, readMinutes: Int? = nil, takeaways: [String]? = nil
+            name: String? = nil, facts: [String]? = nil, items: [DigestItem]? = nil
         ) {
             self.flight = flight
             self.from = from
@@ -129,6 +135,9 @@ public struct LinkedEventCard: Codable, Sendable, Hashable, Identifiable {
             self.url = url
             self.readMinutes = readMinutes
             self.takeaways = takeaways
+            self.name = name
+            self.facts = facts
+            self.items = items
         }
 
         /// Money going out of the reader's account.
@@ -158,6 +167,32 @@ public struct LinkedEventCard: Codable, Sendable, Hashable, Identifiable {
             if let date = formatter.date(from: text) { return date }
             formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
             return formatter.date(from: text)
+        }
+    }
+
+    /// One story or pick in a Flint digest: its headline, the outlets that
+    /// covered a story, and a reading pick's read time.
+    public struct DigestItem: Codable, Sendable, Hashable {
+        public let title: String
+        public let sources: [String]
+        public let readMinutes: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case title, sources
+            case readMinutes = "read_minutes"
+        }
+
+        public init(title: String, sources: [String] = [], readMinutes: Int? = nil) {
+            self.title = title
+            self.sources = sources
+            self.readMinutes = readMinutes
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            title = try c.decode(String.self, forKey: .title)
+            sources = (try? c.decodeIfPresent([String].self, forKey: .sources)) ?? []
+            readMinutes = try? c.decodeIfPresent(Int.self, forKey: .readMinutes)
         }
     }
 
@@ -327,6 +362,7 @@ public struct LinkedEventCard: Codable, Sendable, Hashable, Identifiable {
         case .payment: details?.refund == true ? "Refund" : "Payment"
         case .transfer: details?.isOutgoing == true ? "Transfer out" : "Transfer in"
         case .reading: details?.publication ?? "Article"
+        case .digest: details?.name ?? "Digest"
         case .metric: kind.shortLabel ?? event.displayName ?? "Event"
         }
     }

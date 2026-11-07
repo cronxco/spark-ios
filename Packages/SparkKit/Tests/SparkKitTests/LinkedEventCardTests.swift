@@ -183,6 +183,19 @@ struct LinkedEventCardTests {
           "layout": "transfer",
           "event": {"id": "7a1c2e30-5b8d-4f61-9e2a-0c3d4b5a6f70", "time": "2026-11-05T10:00:00+00:00", "service": "monzo", "domain": "money", "action": "pot_transfer_to", "value": 50, "unit": "GBP"},
           "details": {"direction": "out", "counterparty": "Holiday", "account": "Current Account", "pending": true}
+        },
+        {
+          "kind": "flint.had_summary",
+          "layout": "digest",
+          "event": {"id": "9dd7d1ad-1e42-42ca-82c5-3e62222e5da9", "time": "2026-11-07T00:00:00+00:00", "service": "flint", "domain": "knowledge", "action": "had_summary", "value": 4, "display_name": "Had Digest"},
+          "context": null,
+          "at_digest": null,
+          "details": {"name": "News roundup", "facts": ["3 stories", "4 sources"], "items": [
+            {"title": "Police protection scheme to cover more than 1,100 former MPs", "sources": ["BBC News", "The Guardian"], "read_minutes": null},
+            {"title": "Scottish data-centre plans face scrutiny over power and water risks", "sources": ["The Ferret"], "read_minutes": null},
+            {"title": "The quiet death of the high street", "read_minutes": 12}
+          ]},
+          "answer": null
         }
       ]
     }
@@ -248,6 +261,20 @@ struct LinkedEventCardTests {
         #expect(article.details?.headline == "China is decoupling from the West")
         #expect(article.details?.takeaways?.count == 2)
         #expect(article.liveValue == nil)
+    }
+
+    @Test("a Flint digest decodes as a digest card listing every item")
+    func digestLayout() throws {
+        let digest = try layoutCards()[4]
+
+        #expect(digest.layout == .digest)
+        #expect(digest.layout.isWide)
+        #expect(digest.label == "News roundup")
+        #expect(digest.details?.facts == ["3 stories", "4 sources"])
+        #expect(digest.details?.items?.count == 3)
+        #expect(digest.details?.items?.first?.sources == ["BBC News", "The Guardian"])
+        #expect(digest.details?.items?.last?.sources == [])
+        #expect(digest.details?.items?.last?.readMinutes == 12)
     }
 
     @Test("an unknown or missing layout falls back to the metric card")
