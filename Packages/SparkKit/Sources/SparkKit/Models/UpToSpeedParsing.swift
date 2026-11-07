@@ -409,8 +409,10 @@ public enum UpToSpeedParsing {
         var heading = first.hasPrefix("## ") ? String(first.dropFirst(3)) : first
         heading = heading.trimmingCharacters(in: .whitespacesAndNewlines)
         for marker in ["**", "__"] where heading.count > marker.count * 2 && heading.hasPrefix(marker) && heading.hasSuffix(marker) {
-            heading = String(heading.dropFirst(marker.count).dropLast(marker.count))
-                .trimmingCharacters(in: .whitespaces)
+            let inner = String(heading.dropFirst(marker.count).dropLast(marker.count))
+            if !inner.contains(marker) {
+                heading = inner.trimmingCharacters(in: .whitespaces)
+            }
         }
         while let last = heading.last, last == "\u{2014}" || last == "\u{2013}" || last == "-" || last == ":" {
             heading = String(heading.dropLast()).trimmingCharacters(in: .whitespaces)
