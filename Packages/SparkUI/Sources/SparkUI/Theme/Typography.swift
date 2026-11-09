@@ -33,6 +33,8 @@ public enum SparkTypography {
 
     // Long-form reading — New York-style system serif for article/digest prose.
     public static let longFormBody = Font.system(.title3, design: .serif)
+    /// Flint's capitals section headings in a briefing (design language §7.3).
+    public static let longFormHeadline = Font.system(.title2, design: .serif).weight(.bold)
     public static let longFormBodySmall = Font.system(.body, design: .serif)
     public static let longFormQuote = Font.system(.title3, design: .serif).italic()
 
