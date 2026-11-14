@@ -140,6 +140,47 @@ struct AskFlintViewModelTests {
         #expect(await service.undone.count == 2)
     }
 
+    @Test("an undo the server did not apply leaves the change and says so")
+    func undoNotApplied() async throws {
+        let change = Self.change(receipt: "r-1")
+        let service = StubAskService(script: [.events([.change(change), .done(Self.answer("Done.", changes: [change]))])])
+        let model = AskFlintViewModel(service: service)
+        await model.ask("Tag it")?.value
+
+        await service.setUndoApplies(false)
+        await model.undo(change)
+
+        let kept = try #require(model.turns.last?.changes.first)
+        #expect(!kept.undo.undone)
+        #expect(kept.canUndo())
+        #expect(model.errorMessage == "Couldn't undo that. Try again.")
+    }
+
+    @Test("nothing can be asked while a past conversation loads, and a load that was left is dropped")
+    func staleHistoryLoad() async {
+        let service = StubAskService(script: [])
+        await service.setHistory([FlintAskMessage(id: "m-1", role: .user, text: "Old question")])
+        await service.setHistoryDelay(.milliseconds(150))
+        let model = AskFlintViewModel(service: service)
+
+        let load = Task { await model.open(FlintAskConversation(id: "c-old", title: "Old")) }
+        while !model.isLoadingConversation { await Task.yield() }
+
+        model.draft = "A question"
+        #expect(!model.canSend)
+        #expect(model.send() == nil)
+        #expect(model.ask("A question") == nil)
+
+        model.startNewConversation()
+        #expect(!model.isLoadingConversation)
+        await load.value
+
+        #expect(model.turns.isEmpty)
+        #expect(model.conversationId == nil)
+        #expect(!model.isLoadingConversation)
+        #expect(await service.asked.isEmpty)
+    }
+
     @Test("opening a past conversation loads its turns and continues that thread")
     func openConversation() async {
         let service = StubAskService(script: [.events([.done(Self.answer("Still 82.", conversation: "c-9"))])])
@@ -194,6 +235,8 @@ private actor StubAskService: AskFlintServing {
 
     private var script: [Response]
     private var undoFails = false
+    private var undoApplies = true
+    private var historyDelay: Duration?
     private var history: [FlintAskMessage] = []
     private(set) var asked: [Asked] = []
     private(set) var undone: [String] = []
@@ -203,6 +246,8 @@ private actor StubAskService: AskFlintServing {
     }
 
     func setUndoFails(_ fails: Bool) { undoFails = fails }
+    func setUndoApplies(_ applies: Bool) { undoApplies = applies }
+    func setHistoryDelay(_ delay: Duration?) { historyDelay = delay }
     func setHistory(_ messages: [FlintAskMessage]) { history = messages }
 
     func stream(message: String, conversationId: String?) async throws -> AsyncThrowingStream<FlintAskStreamEvent, Error> {
@@ -223,11 +268,14 @@ private actor StubAskService: AskFlintServing {
     func undo(receiptId: String) async throws -> Bool {
         undone.append(receiptId)
         if undoFails { throw APIError.noData }
-        return true
+        return undoApplies
     }
 
     func conversations() async throws -> [FlintAskConversation] { [] }
-    func messages(conversationId: String) async throws -> [FlintAskMessage] { history }
+    func messages(conversationId: String) async throws -> [FlintAskMessage] {
+        if let historyDelay { try? await Task.sleep(for: historyDelay) }
+        return history
+    }
     func delete(conversationId: String) async throws {}
 }
 

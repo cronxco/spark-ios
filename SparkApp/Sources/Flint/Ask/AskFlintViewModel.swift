@@ -47,6 +47,9 @@ final class AskFlintViewModel {
     private let service: any AskFlintServing
     private let localAnswerer: (any AskFlintLocalAnswering)?
     private var responseTask: Task<Void, Never>?
+    /// The history load whose result may still be shown. A newer selection
+    /// or a new conversation replaces it, so a slow earlier load is dropped.
+    private var historyLoadID: UUID?
 
     init(service: any AskFlintServing, localAnswerer: (any AskFlintLocalAnswering)? = nil) {
         self.service = service
@@ -54,7 +57,8 @@ final class AskFlintViewModel {
     }
 
     var canSend: Bool {
-        !isResponding && !trimmedDraft.isEmpty && trimmedDraft.count <= FlintAskEndpoint.maximumMessageLength
+        !isResponding && !isLoadingConversation && !trimmedDraft.isEmpty
+            && trimmedDraft.count <= FlintAskEndpoint.maximumMessageLength
     }
 
     private var trimmedDraft: String {
@@ -75,7 +79,9 @@ final class AskFlintViewModel {
 
     @discardableResult
     func ask(_ question: String) -> Task<Void, Never>? {
-        guard !isResponding else { return nil }
+        // While a past conversation loads, a question would go to the
+        // thread on screen and then be replaced by the one arriving.
+        guard !isResponding, !isLoadingConversation else { return nil }
 
         errorMessage = nil
         isResponding = true
@@ -238,7 +244,10 @@ final class AskFlintViewModel {
         defer { undoingReceiptIDs.remove(receiptId) }
 
         do {
-            _ = try await service.undo(receiptId: receiptId)
+            guard try await service.undo(receiptId: receiptId) else {
+                errorMessage = "Couldn't undo that. Try again."
+                return
+            }
             errorMessage = nil
             for index in turns.indices {
                 turns[index].changes = turns[index].changes.map { $0.id == change.id ? $0.markedUndone() : $0 }
@@ -252,6 +261,8 @@ final class AskFlintViewModel {
 
     func startNewConversation() {
         stop()
+        historyLoadID = nil
+        isLoadingConversation = false
         turns = []
         conversationId = nil
         errorMessage = nil
@@ -270,11 +281,19 @@ final class AskFlintViewModel {
 
     func open(_ conversation: FlintAskConversation) async {
         stop()
+        let loadID = UUID()
+        historyLoadID = loadID
         isLoadingConversation = true
-        defer { isLoadingConversation = false }
+        defer {
+            if historyLoadID == loadID {
+                historyLoadID = nil
+                isLoadingConversation = false
+            }
+        }
 
         do {
             let messages = try await service.messages(conversationId: conversation.id)
+            guard historyLoadID == loadID else { return }
             conversationId = conversation.id
             errorMessage = nil
             turns = messages.map { message in
@@ -288,6 +307,7 @@ final class AskFlintViewModel {
                 )
             }
         } catch {
+            guard historyLoadID == loadID else { return }
             errorMessage = Self.message(for: error)
         }
     }

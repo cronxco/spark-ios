@@ -44,13 +44,37 @@ struct AskFlintAPIService: AskFlintServing {
         return receipt.undo?.available == false
     }
 
+    /// Every conversation, newest first, up to `maximumPages` pages.
     func conversations() async throws -> [FlintAskConversation] {
-        try await apiClient.request(FlintAskEndpoint.conversations()).data
+        var all: [FlintAskConversation] = []
+        var cursor: String?
+        for _ in 0..<Self.maximumPages {
+            let page = try await apiClient.request(FlintAskEndpoint.conversations(cursor: cursor))
+            all.append(contentsOf: page.data)
+            guard page.hasMore, let next = page.nextCursor else { break }
+            cursor = next
+        }
+        return all
     }
 
+    /// The whole thread, oldest first. The server pages back from the newest
+    /// messages, so each older page goes in front of what is already held.
     func messages(conversationId: String) async throws -> [FlintAskMessage] {
-        try await apiClient.request(FlintAskEndpoint.messages(conversationId: conversationId)).data
+        var all: [FlintAskMessage] = []
+        var cursor: String?
+        for _ in 0..<Self.maximumPages {
+            let page = try await apiClient.request(
+                FlintAskEndpoint.messages(conversationId: conversationId, cursor: cursor))
+            all.insert(contentsOf: page.data, at: 0)
+            guard page.hasMore, let next = page.nextCursor else { break }
+            cursor = next
+        }
+        return all
     }
+
+    /// Stops a server that never ends its pages from looping forever: 400
+    /// conversations, or 600 messages of one thread.
+    private static let maximumPages = 20
 
     func delete(conversationId: String) async throws {
         _ = try await apiClient.request(FlintAskEndpoint.deleteConversation(id: conversationId))

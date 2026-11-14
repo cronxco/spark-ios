@@ -187,6 +187,11 @@ final class CmdViewModel {
         recents = recentStore.record(text: text, intent: intent)
         reset()
         if intent == .ask {
+            // A log still being read must not open its sheet over Ask Flint.
+            if let reading = logReadID {
+                logReadID = nil
+                if receipt?.id == reading { receipt = nil }
+            }
             pendingAsk = text
             return
         }

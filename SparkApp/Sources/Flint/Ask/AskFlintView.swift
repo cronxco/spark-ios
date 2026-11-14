@@ -334,6 +334,8 @@ private struct AskFlintChangeCard: View {
             }
         }
         .task(id: change.id) {
+            // The card may reappear after its Undo ran out while off screen.
+            now = .now
             guard let expiresAt = change.undo.expiresAt, expiresAt > .now else { return }
             try? await Task.sleep(for: .seconds(expiresAt.timeIntervalSinceNow + 0.5))
             now = .now

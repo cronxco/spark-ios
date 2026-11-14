@@ -36,6 +36,16 @@ struct FlintAskTests {
         #expect(json["stream"] as? Bool == false)
     }
 
+    @Test("questions and answers are kept out of captured telemetry bodies")
+    func telemetryOmitsConversationBodies() {
+        #expect(APITelemetryRedactor.omitsBody(forPath: "/flint/ask"))
+        #expect(APITelemetryRedactor.omitsBody(forPath: "/flint/ask/conversations"))
+        #expect(APITelemetryRedactor.omitsBody(forPath: "/flint/ask/conversations/c-1"))
+        #expect(APITelemetryRedactor.omitsBody(forPath: "/flint/notes/n-1"))
+        #expect(!APITelemetryRedactor.omitsBody(forPath: "/flint/asking"))
+        #expect(!APITelemetryRedactor.omitsBody(forPath: "/feed"))
+    }
+
     @Test("a streamed ask sets the stream flag and omits an absent conversation")
     func streamingRequestShape() throws {
         let endpoint = FlintAskEndpoint.askStreaming(message: "Tag it")
