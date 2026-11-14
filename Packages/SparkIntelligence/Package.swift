@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "SparkIntelligence",
-    platforms: [.macOS(.v27), .iOS(.v27)],
+    platforms: [.macOS("27.3"), .iOS("27.3")],
     products: [.library(name: "SparkIntelligence", targets: ["SparkIntelligence"])],
     dependencies: [.package(path: "../SparkKit")],
     targets: [

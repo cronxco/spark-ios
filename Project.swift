@@ -9,7 +9,7 @@ let bundleIdBase = "co.cronx.sparkapp"
 let appGroup = "group.co.cronx.sparkapp"
 let keychainGroup = "\(appIdentifierPrefix)\(bundleIdBase)"
 let associatedDomain = "applinks:spark.cronx.co"
-let iosDeploymentTarget: DeploymentTargets = .iOS("27.0")
+let iosDeploymentTarget: DeploymentTargets = .iOS("27.3")
 let watchDeploymentTarget: DeploymentTargets = .watchOS("27.0")
 
 // MARK: - Entitlements builders

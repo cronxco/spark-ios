@@ -16,8 +16,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Tech Stack
 
 - **Language**: Swift 6.2 with strict concurrency enforcement (`SWIFT_STRICT_CONCURRENCY=complete`)
-- **Minimum OS**: iOS 27.0 (also watchOS 27.0 for Phase 5)
-- **AI / Siri**: iOS 27 Foundation Models (on-device + Private Cloud Compute), App Intents with `AppEntity`/`IndexedEntity` semantic indexing for the rebuilt Siri
+- **Minimum OS**: iOS 27.3 (also watchOS 27.0 for Phase 5)
+- **AI / Siri**: iOS 27 Foundation Models (on-device + Private Cloud Compute), App Intents with `AppEntity`/`IndexedEntity` semantic indexing for the rebuilt Siri, and `@AppIntent(.tool)` intents for Siri AI (27.3 Developer Preview: development and internal TestFlight builds only)
 - **Project generation**: Tuist 4.x (not native Xcode workspace)
 - **Package management**: SPM (Swift Package Manager) with 6 local packages + Sentry remote dependency
 - **Data persistence**: SwiftData with App Group shared container
@@ -119,7 +119,7 @@ tuist generate
 xcodebuild build \
   -workspace Spark.xcworkspace \
   -scheme SparkApp \
-  -destination 'platform=iOS Simulator,name=iPhone 18 Pro Max,OS=27.0' \
+  -destination 'platform=iOS Simulator,name=iPhone 18 Pro Max,OS=27.3' \
   -configuration Debug
 
 # Build from Xcode
@@ -136,7 +136,7 @@ cd Packages/SparkKit && swift test
 xcodebuild \
   -workspace Spark.xcworkspace \
   -scheme SparkApp \
-  -destination 'platform=iOS Simulator,name=iPhone 18 Pro Max,OS=27.0' \
+  -destination 'platform=iOS Simulator,name=iPhone 18 Pro Max,OS=27.3' \
   -skipPackagePluginValidation \
   -skipMacroValidation \
   test
@@ -155,7 +155,7 @@ swiftformat --lint .
 xcodebuild \
   -workspace Spark.xcworkspace \
   -scheme SparkApp \
-  -destination 'platform=iOS Simulator,name=iPhone 18 Pro Max,OS=27.0' \
+  -destination 'platform=iOS Simulator,name=iPhone 18 Pro Max,OS=27.3' \
   build \
   -skipPackagePluginValidation
 ```
@@ -294,7 +294,7 @@ Tests cover:
 xcodebuild \
   -workspace Spark.xcworkspace \
   -scheme SparkApp \
-  -destination 'platform=iOS Simulator,name=iPhone 18 Pro Max,OS=27.0' \
+  -destination 'platform=iOS Simulator,name=iPhone 18 Pro Max,OS=27.3' \
   test
 ```
 
@@ -311,7 +311,7 @@ Test every family × size class × light/dark × extreme Dynamic Type before eac
 - Runs on every push to `main` / `dev` and every PR
 - Caches DerivedData + SPM packages
 - Runs `swift test` on SparkKit
-- Runs `xcodebuild test` on SparkApp (iPhone 18 Pro Max, iOS 27.0 simulator)
+- Runs `xcodebuild test` on SparkApp (iPhone 18 Pro Max, iOS 27.3 simulator)
 - Uploads xcresult on failure
 
 ## Version & Release
