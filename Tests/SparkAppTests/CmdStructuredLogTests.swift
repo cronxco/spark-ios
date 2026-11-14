@@ -30,10 +30,10 @@ struct CmdStructuredLogTests {
         let defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
         return CmdViewModel(
-            classifier: HeuristicCmdClassifier(),
             submitter: submitter,
             queue: CmdQueue(defaults: defaults),
             recentStore: CmdRecentStore(defaults: defaults),
+            route: { _ in .log },
             structuredLog: structuredLog
         )
     }
@@ -79,19 +79,13 @@ struct CmdStructuredLogTests {
         #expect(submitter.submitted.isEmpty)
     }
 
-    @Test("without the model a line is still a note, with its @mentions as people")
+    @Test("without the model a line is still a note, as typed")
     func modelUnavailableFallsBackToNote() {
-        let mentions = [
-            CmdMention(name: "dan", state: .likely, matches: [.init(id: "p1", name: "Daniel")]),
-            CmdMention(name: "sam", state: .new, matches: []),
-            CmdMention(name: "jo", state: .ambiguous, matches: [.init(id: "p2", name: "Joanna"), .init(id: "p3", name: "Joseph")]),
-        ]
-
-        let note = CmdViewModel.note("Lunch with @dan @sam @jo", mentions: mentions)
+        let note = CmdViewModel.note("Lunch with @dan @sam @jo")
 
         #expect(note.kind == .reflection)
         #expect(note.body == "Lunch with @dan @sam @jo")
-        #expect(note.people == ["Daniel", "Sam", "Jo"])
+        #expect(note.people == nil)
     }
 
     @Test("a log the sheet couldn't send is queued under its idempotency key")
@@ -102,8 +96,8 @@ struct CmdStructuredLogTests {
         defaults.removePersistentDomain(forName: suite)
         let queue = CmdQueue(defaults: defaults)
         let model = CmdViewModel(
-            classifier: HeuristicCmdClassifier(), submitter: submitter, queue: queue,
-            recentStore: CmdRecentStore(defaults: defaults), structuredLog: { _ in nil })
+            submitter: submitter, queue: queue,
+            recentStore: CmdRecentStore(defaults: defaults), route: { _ in .log }, structuredLog: { _ in nil })
         let key = UUID()
         let request = LogRequest(kind: .tv, idempotencyKey: key.uuidString, title: "The Diplomat", episodes: [7, 8])
 
@@ -134,19 +128,19 @@ struct CmdStructuredLogTests {
         #expect(model.logPrefill?.text == "Second line")
     }
 
-    @Test("a note for Flint is never read as a log")
-    func flintNoteSkipsReading() async {
+    @Test("a line for Flint is never read as a log")
+    func flintLineSkipsReading() async {
         let submitter = RecordingSubmitter()
         let model = makeModel(submitter: submitter) { _ in
-            Issue.record("A Flint note should not be read as a log")
+            Issue.record("A line for Flint should not be read as a log")
             return LogRequest(kind: .tv, title: "x", episodes: [1])
         }
 
         model.input = "@flint remember to watch The Diplomat"
-        model.submit()
-        await settle(model) { !submitter.submitted.isEmpty }
+        await model.submit()?.value
 
-        #expect(submitter.submitted.map(\.intent) == [.flintNote])
+        #expect(model.pendingAsk == "@flint remember to watch The Diplomat")
+        #expect(submitter.submitted.isEmpty)
         #expect(model.logPrefill == nil)
     }
 }

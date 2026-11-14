@@ -6,25 +6,21 @@ struct CmdView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel: CmdViewModel
-    @State private var path = NavigationPath()
+    @State private var chat: FlintChatRequest?
     @FocusState private var focused: Bool
 
     init(apiClient: APIClient) {
-        _viewModel = State(
-            initialValue: CmdViewModel(
-                classifier: ServerCmdClassifier(apiClient: apiClient),
-                submitter: ServerCmdSubmitter(apiClient: apiClient)
-            ))
+        _viewModel = State(initialValue: CmdViewModel(submitter: ServerCmdSubmitter(apiClient: apiClient)))
     }
 
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: SparkSpacing.md) {
                     SparkMainPageHeader(title: "Command")
                         .padding(.horizontal, SparkSpacing.lg)
                         .padding(.top, SparkSpacing.md)
-                    AskFlintEntry { path.append(CmdRoute.ask(question: nil)) }
+                    AskFlintEntry { chat = FlintChatRequest(question: nil) }
                         .padding(.horizontal, SparkSpacing.lg)
                     recentsList
                 }
@@ -34,19 +30,13 @@ struct CmdView: View {
             .sparkAppBackground()
             .safeAreaInset(edge: .bottom, spacing: 0) { inputBar }
             .sparkMainAppToolbar()
-            .sparkDetailDestinations()
-            .navigationDestination(for: CmdRoute.self) { route in
-                switch route {
-                case .ask(let question):
-                    AskFlintView(apiClient: appModel.apiClient, initialQuestion: question) { path.append($0) }
-                }
-            }
         }
-        .sparkOpensDetailRoutes(on: $path)
         .sheet(item: searchBinding) { query in
             SearchView(initialQuery: query.text)
         }
-        .sheet(isPresented: $viewModel.isAsking) { askSheet }
+        .sheet(item: $chat) { request in
+            FlintChatSheet(apiClient: appModel.apiClient, question: request.question)
+        }
         .sheet(item: $viewModel.logPrefill) { prefill in
             LogSheetView(apiClient: appModel.apiClient, prefill: prefill) { request in
                 viewModel.queueLog(request, text: prefill.text)
@@ -64,7 +54,7 @@ struct CmdView: View {
             guard let question else { return }
             viewModel.pendingAsk = nil
             focused = false
-            path.append(CmdRoute.ask(question: question))
+            chat = FlintChatRequest(question: question)
         }
         .onChange(of: viewModel.pendingNavigation) { _, destination in
             guard let destination else { return }
@@ -122,12 +112,6 @@ struct CmdView: View {
     private var inputBar: some View {
         VStack(spacing: SparkSpacing.sm) {
             if let receipt = viewModel.receipt { receiptRow(receipt) }
-            if let summary = viewModel.mentionSummary {
-                Text(summary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
             if viewModel.queuedCount > 0 {
                 Text("\(viewModel.queuedCount) queued")
                     .font(.caption)
@@ -141,40 +125,25 @@ struct CmdView: View {
                 }
                 .accessibilityLabel("Search")
 
-                TextField("Log, note, command…", text: $viewModel.input, axis: .vertical)
+                TextField("Log it, go to, or ask Flint…", text: $viewModel.input, axis: .vertical)
                     .lineLimit(1...4)
                     .focused($focused)
                     .submitLabel(.send)
-                    .onSubmit { viewModel.submit() }
+                    .onSubmit { _ = viewModel.submit() }
                     .onChange(of: viewModel.input) { old, _ in viewModel.inputChanged(from: old) }
                     .textInputAutocapitalization(.sentences)
 
-                intentChip
+                if viewModel.isRouting {
+                    ProgressView()
+                        .controlSize(.small)
+                        .accessibilityLabel("Working out where that goes")
+                }
             }
             .padding(SparkSpacing.md)
             .glassEffect(.regular, in: Capsule())
         }
         .padding(.horizontal, SparkSpacing.lg)
         .padding(.bottom, SparkSpacing.sm)
-    }
-
-    @ViewBuilder
-    private var intentChip: some View {
-        if let intent = viewModel.effectiveIntent {
-            Menu {
-                ForEach(CmdIntent.allCases, id: \.self) { option in
-                    Button {
-                        viewModel.choose(option)
-                    } label: {
-                        Label(option.label, systemImage: option.systemImage)
-                    }
-                }
-            } label: {
-                Label(intent.label, systemImage: intent.systemImage)
-                    .font(.caption.weight(.semibold))
-            }
-            .accessibilityLabel("Intent: \(intent.label)")
-        }
     }
 
     private func receiptRow(_ receipt: CmdViewModel.Receipt) -> some View {
@@ -198,38 +167,36 @@ struct CmdView: View {
         .padding(SparkSpacing.md)
         .glassEffect(.regular, in: Capsule())
     }
-
-    // MARK: Ask sheet
-
-    /// Low confidence: nothing is written until one of these is tapped.
-    private var askSheet: some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.md) {
-            Text("Which one?")
-                .font(.headline)
-            Text(viewModel.classification?.text ?? "")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(3)
-            ForEach(CmdIntent.allCases, id: \.self) { intent in
-                Button {
-                    viewModel.resolveAsk(intent)
-                } label: {
-                    Label(intent.label, systemImage: intent.systemImage)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.bordered)
-            }
-        }
-        .padding(SparkSpacing.lg)
-        .presentationDetents([.medium])
-    }
 }
 
-/// Screens the Command tab pushes on its own stack.
-enum CmdRoute: Hashable {
-    /// The Ask Flint conversation, opened on a question typed into the
-    /// command line, or empty from the Ask Flint row.
-    case ask(question: String?)
+/// One opening of the Flint chat from Command: on a line that was routed to
+/// Flint, or empty from the Ask Flint row.
+private struct FlintChatRequest: Identifiable {
+    let id = UUID()
+    let question: String?
+}
+
+/// The Flint conversation as a sheet over Command, on its own stack so the
+/// records Flint links to open inside it.
+private struct FlintChatSheet: View {
+    let apiClient: APIClient
+    let question: String?
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var path = NavigationPath()
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            AskFlintView(apiClient: apiClient, initialQuestion: question) { path.append($0) }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { dismiss() }
+                    }
+                }
+                .sparkDetailDestinations()
+        }
+        .sparkOpensDetailRoutes(on: $path)
+    }
 }
 
 private struct SearchRequest: Identifiable, Equatable {
