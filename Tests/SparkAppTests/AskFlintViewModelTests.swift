@@ -79,13 +79,33 @@ struct AskFlintViewModelTests {
         let service = StubAskService(script: [.refuse(APIError.httpStatus(404, nil, url))])
         let model = AskFlintViewModel(service: service, localAnswerer: StubLocalAnswerer(reply: "Should not be used."))
 
-        await model.ask("And then?")?.value
+        await model.ask("How did I sleep?")?.value
 
         let answer = try #require(model.turns.last)
         #expect(answer.failed)
         #expect(answer.source == .spark)
+        // A first question names no conversation, so a 404 is the server
+        // lacking Ask Flint, and the message is shown once, in the answer.
+        #expect(answer.text == "Ask Flint isn't available on this Spark server yet. It needs updating.")
+        #expect(model.errorMessage == nil)
+    }
+
+    @Test("a 404 while continuing a conversation says the conversation has gone")
+    func missingConversation() async throws {
+        let url = try #require(URL(string: "https://spark.test/flint/ask"))
+        let service = StubAskService(script: [
+            .events([.done(Self.answer("82.", conversation: "c-1"))]),
+            .refuse(APIError.httpStatus(404, nil, url)),
+        ])
+        let model = AskFlintViewModel(service: service)
+        await model.ask("How did I sleep?")?.value
+
+        await model.ask("And then?")?.value
+
+        let answer = try #require(model.turns.last)
+        #expect(answer.failed)
         #expect(answer.text == "That conversation is no longer available. Start a new one.")
-        #expect(model.errorMessage == answer.text)
+        #expect(model.errorMessage == nil)
     }
 
     @Test("the local fallback covers unreachable, unavailable and out-of-allowance, nothing else")

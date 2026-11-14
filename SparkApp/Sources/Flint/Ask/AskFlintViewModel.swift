@@ -199,7 +199,7 @@ final class AskFlintViewModel {
             }
         }
 
-        fail(answerID, message: Self.message(for: error))
+        fail(answerID, message: Self.message(for: error, inConversation: conversationId != nil))
     }
 
     /// A local answer is offered when the server can't be reached, is
@@ -217,7 +217,10 @@ final class AskFlintViewModel {
         }
     }
 
-    static func message(for error: Error) -> String {
+    /// `inConversation` says whether the request named a conversation: a 404
+    /// then means that thread has gone. Without one, a 404 can only mean the
+    /// server has no Ask Flint routes, which is a server still to be updated.
+    static func message(for error: Error, inConversation: Bool = true) -> String {
         guard let apiError = error as? APIError else {
             return "Flint couldn't answer that just now."
         }
@@ -225,7 +228,9 @@ final class AskFlintViewModel {
         case .httpStatus(429, _, _):
             return "Flint has used today's AI allowance. Try again tomorrow."
         case .httpStatus(404, _, _):
-            return "That conversation is no longer available. Start a new one."
+            return inConversation
+                ? "That conversation is no longer available. Start a new one."
+                : "Ask Flint isn't available on this Spark server yet. It needs updating."
         case .unauthorized:
             return "Sign in again to ask Flint."
         case .transport:
@@ -275,7 +280,7 @@ final class AskFlintViewModel {
             conversations = try await service.conversations()
             historyState = .loaded
         } catch {
-            historyState = .error(Self.message(for: error))
+            historyState = .error(Self.message(for: error, inConversation: false))
         }
     }
 
@@ -341,6 +346,8 @@ final class AskFlintViewModel {
             turn.failed = true
             if turn.text.isEmpty { turn.text = message }
         }
-        errorMessage = message
+        // An answer with nothing else in it shows the message itself; the
+        // banner is for one that got part-way and keeps what it wrote.
+        errorMessage = turns.first { $0.id == id }?.text == message ? nil : message
     }
 }

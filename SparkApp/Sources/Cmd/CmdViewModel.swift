@@ -14,33 +14,29 @@ final class CmdViewModel {
         var pendingConfirmation: CmdEntry? = nil
     }
 
-    var input: String = "" {
-        didSet { reclassify() }
-    }
-    private(set) var classification: CmdClassification?
-    /// Set when the user picks an intent on the chip or in the ask sheet.
-    private(set) var override: CmdIntent?
-    var isAsking = false
+    var input: String = ""
+    /// True while a line is being routed or read: the input bar shows it.
+    private(set) var isRouting = false
     /// Set once a log line has been read: the confirmation sheet opens on what was understood.
     var logPrefill: LogPrefill?
     var searchQuery: String?
     private(set) var receipt: Receipt?
-    /// Set by a navigation command; CmdView hands it to the app and clears it.
+    /// Set by a line that names a screen; CmdView hands it to the app and clears it.
     var pendingNavigation: CmdDestination?
-    /// Set when a line is for Flint to answer; CmdView opens the Ask Flint
-    /// conversation with it and clears it. Nothing is written or queued.
+    /// Set when a line is for Flint; CmdView opens the chat with it and
+    /// clears it. Nothing is written or queued.
     var pendingAsk: String?
     private(set) var recents: [CmdRecentStore.Item]
     private(set) var queuedCount: Int
 
-    private let classifier: any CmdClassifying
     private let submitter: any CmdSubmitting
     private let queue: CmdQueue
     private let recentStore: CmdRecentStore
+    private let route: @Sendable (String) async -> CmdRouteDecision?
     private let structuredLog: @Sendable (String) async -> LogRequest?
-    private var classifyTask: Task<Void, Never>?
-    /// The log read that may open the sheet. A newer line replaces it, so a slow older read can't overwrite it.
-    private var logReadID: UUID?
+    /// The line whose routing may still act. A newer line replaces it, so a
+    /// slow older one can't open its sheet or chat over the newer one.
+    private var routingID: UUID?
 
     /// Reads a line with the on-device model: TV, wine, beer, film or a board game, else a note, with the time
     /// and people it names. Nil when the model can't serve it.
@@ -49,15 +45,17 @@ final class CmdViewModel {
         return try? draft.request(text: text)
     }
 
+    /// `route` decides a line the rules aren't sure about; nil from it means
+    /// no model could, and the rules decide instead.
     init(
-        classifier: any CmdClassifying = HeuristicCmdClassifier(),
         submitter: any CmdSubmitting = StubCmdSubmitter(),
         queue: CmdQueue = CmdQueue(),
         recentStore: CmdRecentStore = CmdRecentStore(),
+        route: @escaping @Sendable (String) async -> CmdRouteDecision? = CmdRoutingService.route,
         structuredLog: @escaping @Sendable (String) async -> LogRequest? = CmdViewModel.readStructuredLog
     ) {
+        self.route = route
         self.structuredLog = structuredLog
-        self.classifier = classifier
         self.submitter = submitter
         self.queue = queue
         self.recentStore = recentStore
@@ -65,14 +63,9 @@ final class CmdViewModel {
         queuedCount = queue.load().count
     }
 
-    /// The intent that will run: the user's pick, else the classifier's.
-    var effectiveIntent: CmdIntent? { override ?? classification?.intent }
+    private var line: String { input.trimmingCharacters(in: .whitespacesAndNewlines) }
 
-    var canSubmit: Bool { effectiveIntent != nil }
-
-    func choose(_ intent: CmdIntent) {
-        override = intent
-    }
+    var canSubmit: Bool { !line.isEmpty }
 
     /// A vertical-axis field can insert a newline for return instead of calling
     /// onSubmit. Call this after `input` changed: a lone inserted newline is
@@ -86,34 +79,57 @@ final class CmdViewModel {
         submit()
     }
 
-    func submit() {
-        guard let classification else { return }
-        if override == nil, classification.needsAsk {
-            isAsking = true
-            return
-        }
-        send(intent: override ?? classification.intent, classification: classification)
+    /// Sends the line to be routed. Returns the task doing it, so a test can wait.
+    @discardableResult
+    func submit() -> Task<Void, Never>? {
+        let text = line
+        guard !text.isEmpty else { return nil }
+        input = ""
+        let id = UUID()
+        routingID = id
+        isRouting = true
+        return Task { await run(text, id: id) }
     }
 
-    /// The ask sheet's one-tap choice. Nothing was written before this.
-    func resolveAsk(_ intent: CmdIntent) {
-        isAsking = false
-        guard let classification else { return }
-        send(intent: intent, classification: classification)
-    }
-
-    /// One line under the input saying who a log will link to.
-    var mentionSummary: String? {
-        guard effectiveIntent == .log, let mentions = classification?.mentions, !mentions.isEmpty else { return nil }
-        let parts = mentions.map { mention -> String in
-            switch mention.state {
-            case .existing: return mention.matches.first?.name ?? mention.displayName
-            case .likely: return "\(mention.displayName) → \(mention.matches.first?.name ?? mention.displayName)"
-            case .ambiguous: return "\(mention.displayName)?"
-            case .new: return "\(mention.displayName) (new)"
+    /// Decides where the line goes and opens it: the Log sheet, a screen, or
+    /// the Flint chat. Nothing is written here; the sheet and the chat do that.
+    private func run(_ text: String, id: UUID) async {
+        defer {
+            if routingID == id {
+                routingID = nil
+                isRouting = false
             }
         }
-        return "With " + parts.joined(separator: ", ")
+
+        let decision: CmdRouteDecision
+        if let certain = CmdRouter.certain(text) {
+            decision = certain
+        } else if let routed = await route(text) {
+            decision = routed
+        } else {
+            decision = CmdRouter.fallback(text)
+        }
+        guard routingID == id else { return }
+
+        switch decision {
+        case .flint:
+            recents = recentStore.record(text: text, intent: .ask)
+            pendingAsk = text
+        case .navigate(let destination):
+            recents = recentStore.record(text: text, intent: .command)
+            pendingNavigation = destination
+        case .log:
+            recents = recentStore.record(text: text, intent: .log)
+            // The model reads what it was, when, and who with; the sheet
+            // checks the names. Without the model the line is a note.
+            let request = await structuredLog(text) ?? Self.note(text)
+            guard routingID == id else { return }
+            logPrefill = LogPrefill(text: text, request: request)
+        }
+    }
+
+    static func note(_ text: String) -> LogRequest {
+        LogRequest(kind: .reflection, title: "", body: text)
     }
 
     /// The confirmation sheet couldn't send a checked log: keep it and send it with the rest of the queue.
@@ -132,7 +148,6 @@ final class CmdViewModel {
 
     func useRecent(_ item: CmdRecentStore.Item) {
         input = item.text
-        override = item.intent
     }
 
     func undo() {
@@ -176,59 +191,6 @@ final class CmdViewModel {
         queuedCount = 0
     }
 
-    private func send(intent: CmdIntent, classification: CmdClassification) {
-        let text = classification.text
-        if intent == .search {
-            recents = recentStore.record(text: text, intent: .search)
-            reset()
-            openSearch(text)
-            return
-        }
-        recents = recentStore.record(text: text, intent: intent)
-        reset()
-        if intent == .ask {
-            // A log still being read must not open its sheet over Ask Flint.
-            if let reading = logReadID {
-                logReadID = nil
-                if receipt?.id == reading { receipt = nil }
-            }
-            pendingAsk = text
-            return
-        }
-        if intent == .log {
-            Task { await readLog(text, mentions: classification.mentions) }
-            return
-        }
-        let entry = CmdEntry(
-            intent: intent, text: text, classifiedAs: classification.intent, confidence: classification.confidence)
-        Task { await deliver(entry) }
-    }
-
-    /// Every log line opens the confirmation sheet before anything is written. The model reads what it was
-    /// (a note, TV, wine, beer, film, a board game), when, and who with; the sheet checks the names and any
-    /// match. When the model can't serve it, the line is a note with its `@mentions` as the people.
-    private func readLog(_ text: String, mentions: [CmdMention]) async {
-        let id = UUID()
-        logReadID = id
-        receipt = Receipt(id: id, summary: "Reading", undoToken: nil, isQueued: false)
-        let request = await structuredLog(text) ?? Self.note(text, mentions: mentions)
-        guard logReadID == id else { return }
-        logReadID = nil
-        if receipt?.id == id { receipt = nil }
-        logPrefill = LogPrefill(text: text, request: request)
-    }
-
-    static func note(_ text: String, mentions: [CmdMention]) -> LogRequest {
-        var names: [String] = []
-        for mention in mentions {
-            let name = mention.state == .existing || mention.state == .likely
-                ? mention.matches.first?.name ?? mention.displayName
-                : mention.displayName
-            if !names.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) { names.append(name) }
-        }
-        return LogRequest(kind: .reflection, title: "", people: names.isEmpty ? nil : names, body: text)
-    }
-
     private func deliver(_ entry: CmdEntry) async {
         switch await submitter.submit(entry) {
         case .done(let summary, let undoToken):
@@ -245,29 +207,6 @@ final class CmdViewModel {
         case .navigate(let destination):
             receipt = nil
             pendingNavigation = destination
-        }
-    }
-
-    private func reset() {
-        input = ""
-        override = nil
-        isAsking = false
-    }
-
-    private func reclassify() {
-        classifyTask?.cancel()
-        let text = input
-        guard !text.trimmingCharacters(in: .whitespaces).isEmpty else {
-            classification = nil
-            override = nil
-            return
-        }
-        // The chip answers at once from the rules; the classifier refines it.
-        classification = HeuristicCmdClassifier.classifySync(text)
-        classifyTask = Task { [classifier] in
-            let result = await classifier.classify(text)
-            guard !Task.isCancelled, let result else { return }
-            self.classification = result
         }
     }
 }
