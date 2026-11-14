@@ -169,8 +169,10 @@ public enum APITelemetryRedactor {
         "cookie",
     ]
 
+    /// Notes for Flint and Ask Flint conversations are free text about the
+    /// user's life, which key-name redaction can't make safe to capture.
     public static func omitsBody(forPath path: String) -> Bool {
-        path == "/flint/notes" || path.hasPrefix("/flint/notes/")
+        ["/flint/notes", "/flint/ask"].contains { path == $0 || path.hasPrefix($0 + "/") }
     }
 
     public static func headers(_ headers: [String: String]) -> [String: String] {

@@ -17,7 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Language**: Swift 6.2 with strict concurrency enforcement (`SWIFT_STRICT_CONCURRENCY=complete`)
 - **Minimum OS**: iOS 27.0 (also watchOS 27.0 for Phase 5)
-- **AI / Siri**: iOS 27 Foundation Models (on-device + Private Cloud Compute), App Intents with `AppEntity`/`IndexedEntity` semantic indexing for the rebuilt Siri
+- **AI / Siri**: iOS 27 Foundation Models (on-device + Private Cloud Compute), App Intents with `AppEntity`/`IndexedEntity` semantic indexing for the rebuilt Siri, and `@AppIntent(.tool)` intents for Siri AI. Those need the iOS 27.3 SDK (Xcode 27.3 beta), so they are gated: build with `SPARK_SIRI_AI_TOOLS=1` in the environment to compile them in (see `Packages/SparkIntelligence/Package.swift`). The Siri AI Developer Preview runs only in development and internal TestFlight builds
 - **Project generation**: Tuist 4.x (not native Xcode workspace)
 - **Package management**: SPM (Swift Package Manager) with 6 local packages + Sentry remote dependency
 - **Data persistence**: SwiftData with App Group shared container

@@ -21,6 +21,25 @@ struct CmdTests {
         #expect(HeuristicCmdClassifier.classifySync("coffee with @flinton")?.intent == .log)
     }
 
+    @Test("a question is for Flint, a ? prefix still searches, and statements still log")
+    func questions() {
+        let question = HeuristicCmdClassifier.classifySync("How did I sleep this week?")
+        #expect(question?.intent == .ask)
+        #expect(question?.needsAsk == false)
+        #expect(question?.text == "How did I sleep this week?")
+        #expect(HeuristicCmdClassifier.classifySync("what did I spend on coffee")?.intent == .ask)
+        #expect(HeuristicCmdClassifier.classifySync("?coffee")?.intent == .search)
+        #expect(HeuristicCmdClassifier.classifySync("was at the pub with Dan")?.intent == .log)
+        #expect(HeuristicCmdClassifier.classifySync("show sleep")?.intent == .command)
+        #expect(HeuristicCmdClassifier.classifySync("@flint why so many questions?")?.intent == .flintNote)
+    }
+
+    @Test("an ask is never written or queued by the submitter")
+    func askIsNotSubmitted() async {
+        let entry = CmdEntry(intent: .ask, text: "How did I sleep?", classifiedAs: .ask)
+        #expect(await StubCmdSubmitter().submit(entry) == .done(summary: "", undoToken: nil))
+    }
+
     @Test("short lines log, long or ambiguous lines ask")
     func confidence() {
         #expect(HeuristicCmdClassifier.classifySync("2 pints of Guinness")?.needsAsk == false)
