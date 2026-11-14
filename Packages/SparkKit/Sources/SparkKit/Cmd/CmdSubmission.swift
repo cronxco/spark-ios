@@ -75,7 +75,7 @@ public struct StubCmdSubmitter: CmdSubmitting {
         case .log: .done(summary: "Logged", undoToken: entry.id.uuidString)
         case .flintNote: .done(summary: "Noted for Flint", undoToken: entry.id.uuidString)
         case .command: .done(summary: "Done", undoToken: nil)
-        case .search: .done(summary: "", undoToken: nil)
+        case .search, .ask: .done(summary: "", undoToken: nil)
         }
     }
 

@@ -6,6 +6,7 @@ struct CmdView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel: CmdViewModel
+    @State private var path = NavigationPath()
     @FocusState private var focused: Bool
 
     init(apiClient: APIClient) {
@@ -17,12 +18,14 @@ struct CmdView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: SparkSpacing.md) {
                     SparkMainPageHeader(title: "Command")
                         .padding(.horizontal, SparkSpacing.lg)
                         .padding(.top, SparkSpacing.md)
+                    AskFlintEntry { path.append(CmdRoute.ask(question: nil)) }
+                        .padding(.horizontal, SparkSpacing.lg)
                     recentsList
                 }
             }
@@ -31,7 +34,15 @@ struct CmdView: View {
             .sparkAppBackground()
             .safeAreaInset(edge: .bottom, spacing: 0) { inputBar }
             .sparkMainAppToolbar()
+            .sparkDetailDestinations()
+            .navigationDestination(for: CmdRoute.self) { route in
+                switch route {
+                case .ask(let question):
+                    AskFlintView(apiClient: appModel.apiClient, initialQuestion: question) { path.append($0) }
+                }
+            }
         }
+        .sparkOpensDetailRoutes(on: $path)
         .sheet(item: searchBinding) { query in
             SearchView(initialQuery: query.text)
         }
@@ -49,6 +60,12 @@ struct CmdView: View {
             if phase == .active { Task { await viewModel.flushQueue() } }
         }
         .onChange(of: appModel.pendingSearchQuery) { _, _ in consumePendingSearch() }
+        .onChange(of: viewModel.pendingAsk) { _, question in
+            guard let question else { return }
+            viewModel.pendingAsk = nil
+            focused = false
+            path.append(CmdRoute.ask(question: question))
+        }
         .onChange(of: viewModel.pendingNavigation) { _, destination in
             guard let destination else { return }
             viewModel.pendingNavigation = nil
@@ -206,6 +223,13 @@ struct CmdView: View {
         .padding(SparkSpacing.lg)
         .presentationDetents([.medium])
     }
+}
+
+/// Screens the Command tab pushes on its own stack.
+enum CmdRoute: Hashable {
+    /// The Ask Flint conversation, opened on a question typed into the
+    /// command line, or empty from the Ask Flint row.
+    case ask(question: String?)
 }
 
 private struct SearchRequest: Identifiable, Equatable {

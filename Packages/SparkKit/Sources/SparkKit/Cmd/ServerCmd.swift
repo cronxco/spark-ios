@@ -15,6 +15,10 @@ public struct ServerCmdClassifier: CmdClassifying {
     public func classify(_ input: String) async -> CmdClassification? {
         let local = HeuristicCmdClassifier.classifySync(input)
         guard let local else { return nil }
+        // A question for Flint is decided by the local rules: the server's
+        // classifier settles log, command and search, and writes nothing
+        // for an ask.
+        if local.intent == .ask { return local }
         // Cancelled by the next keystroke before anything is sent.
         do { try await Task.sleep(for: debounce) } catch { return local }
 
@@ -70,7 +74,7 @@ public struct ServerCmdSubmitter: CmdSubmitting {
             return await logReflection(entry)
         case .command:
             return await runCommand(entry)
-        case .search:
+        case .search, .ask:
             return .done(summary: "", undoToken: nil)
         }
     }

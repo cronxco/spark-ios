@@ -6,6 +6,8 @@ public enum CmdIntent: String, Codable, CaseIterable, Sendable {
     case flintNote
     case command
     case search
+    /// A question or request for Flint: opens the Ask Flint conversation.
+    case ask
 
     /// Terse chip label.
     public var label: String {
@@ -14,6 +16,7 @@ public enum CmdIntent: String, Codable, CaseIterable, Sendable {
         case .flintNote: "Flint"
         case .command: "Command"
         case .search: "Search"
+        case .ask: "Ask"
         }
     }
 
@@ -23,6 +26,7 @@ public enum CmdIntent: String, Codable, CaseIterable, Sendable {
         case .flintNote: "sparkles"
         case .command: "chevron.left.forwardslash.chevron.right"
         case .search: "magnifyingglass"
+        case .ask: "bubble.left.and.text.bubble.right"
         }
     }
 }
@@ -65,11 +69,18 @@ public enum CmdClassifier {
     public static let askThreshold = 0.7
 }
 
-/// Rules only: prefixes, `@flint`, a few command verbs, and a short-line
-/// default to Log. Anything else lands under the threshold and asks.
+/// Rules only: prefixes, `@flint`, a few command verbs, a question for Ask,
+/// and a short-line default to Log. Anything else lands under the threshold
+/// and asks.
 public struct HeuristicCmdClassifier: CmdClassifying {
     private static let commandVerbs: Set<String> = ["sync", "refresh", "open", "show", "pause", "resume", "reprocess"]
     private static let ambiguousVerbs: Set<String> = ["run", "tag", "delete", "go"]
+    /// First words that make a line a question for Flint. Words that also
+    /// start a log line ("was at the pub", "have lunch", "do laundry") are
+    /// left out: those need the question mark.
+    private static let questionWords: Set<String> = [
+        "what", "what's", "whats", "how", "when", "where", "who", "why", "which", "did", "does",
+    ]
 
     public init() {}
 
@@ -104,8 +115,9 @@ public struct HeuristicCmdClassifier: CmdClassifying {
         if words.count >= 2, ambiguousVerbs.contains(first) {
             return CmdClassification(intent: .command, confidence: 0.5, text: trimmed)
         }
-        if trimmed.hasSuffix("?") {
-            return CmdClassification(intent: .search, confidence: 0.7, text: trimmed)
+        // A question goes to Flint. Search keeps its `?` prefix, above.
+        if trimmed.hasSuffix("?") || (words.count >= 3 && questionWords.contains(first)) {
+            return CmdClassification(intent: .ask, confidence: 0.75, text: trimmed)
         }
         if words.count <= 12 {
             return CmdClassification(intent: .log, confidence: 0.75, text: trimmed)

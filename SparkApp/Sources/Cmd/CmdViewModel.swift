@@ -27,6 +27,9 @@ final class CmdViewModel {
     private(set) var receipt: Receipt?
     /// Set by a navigation command; CmdView hands it to the app and clears it.
     var pendingNavigation: CmdDestination?
+    /// Set when a line is for Flint to answer; CmdView opens the Ask Flint
+    /// conversation with it and clears it. Nothing is written or queued.
+    var pendingAsk: String?
     private(set) var recents: [CmdRecentStore.Item]
     private(set) var queuedCount: Int
 
@@ -183,6 +186,10 @@ final class CmdViewModel {
         }
         recents = recentStore.record(text: text, intent: intent)
         reset()
+        if intent == .ask {
+            pendingAsk = text
+            return
+        }
         if intent == .log {
             Task { await readLog(text, mentions: classification.mentions) }
             return

@@ -211,6 +211,98 @@ public actor APIClient {
         return try await refreshTokens().accessToken
     }
 
+    // MARK: - Server-sent events
+
+    /// Opens `endpoint` as a server-sent event stream and yields each event as
+    /// it arrives. Throws before returning when the request is rejected
+    /// (`APIError.httpStatus`, with the response body), so a caller can tell a
+    /// refusal from a stream that started and then failed. Cancelling the
+    /// consuming task closes the connection.
+    public func events<Response>(
+        for endpoint: Endpoint<Response>,
+        timeout: TimeInterval = 120
+    ) async throws -> AsyncThrowingStream<ServerSentEvent, Error> {
+        try await openEventStream(endpoint, timeout: timeout, allowRefresh: true)
+    }
+
+    private func openEventStream<Response>(
+        _ endpoint: Endpoint<Response>,
+        timeout: TimeInterval,
+        allowRefresh: Bool
+    ) async throws -> AsyncThrowingStream<ServerSentEvent, Error> {
+        let url = try buildURL(endpoint: endpoint, absoluteBase: false)
+        var request = URLRequest(url: url)
+        request.httpMethod = endpoint.method.rawValue
+        request.timeoutInterval = timeout
+        if let body = endpoint.body {
+            request.httpBody = body
+            request.setValue(endpoint.contentType ?? "application/json", forHTTPHeaderField: "Content-Type")
+        }
+        let accessToken = endpoint.requiresAuth
+            ? try await accessTokenRefreshingIfNeeded()
+            : nil
+        guard !endpoint.requiresAuth || accessToken?.isEmpty == false else {
+            throw APIError.unauthorized
+        }
+        if let accessToken {
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        }
+        for (field, value) in endpoint.headers {
+            request.setValue(value, forHTTPHeaderField: field)
+        }
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+
+        let bytes: URLSession.AsyncBytes
+        let response: URLResponse
+        do {
+            (bytes, response) = try await session.bytes(for: request)
+        } catch {
+            throw APIError.transport(error)
+        }
+
+        guard let http = response as? HTTPURLResponse else {
+            throw APIError.noData
+        }
+
+        if http.statusCode == 401 {
+            guard allowRefresh, endpoint.requiresAuth else { throw APIError.unauthorized }
+            _ = try await accessTokenRefreshingIfNeeded(forceRefresh: true)
+            return try await openEventStream(endpoint, timeout: timeout, allowRefresh: false)
+        }
+
+        guard (200..<300).contains(http.statusCode) else {
+            // A refusal is a short JSON body, not a stream; read it for the
+            // server's message, bounded in case it is not.
+            var body = Data()
+            do {
+                for try await byte in bytes {
+                    body.append(byte)
+                    if body.count >= 65_536 { break }
+                }
+            } catch {
+                logger.debug("Could not read the body of a refused event stream")
+            }
+            throw APIError.httpStatus(http.statusCode, body, url)
+        }
+
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                var parser = ServerSentEventParser()
+                do {
+                    for try await line in bytes.lines {
+                        if let event = parser.consume(line) {
+                            continuation.yield(event)
+                        }
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: APIError.transport(error))
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
     // MARK: - Core
 
     private func perform<Response>(
