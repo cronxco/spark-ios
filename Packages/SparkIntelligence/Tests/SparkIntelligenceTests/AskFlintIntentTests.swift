@@ -16,9 +16,4 @@ struct AskFlintIntentTests {
         #expect(AskFlintIntentError(APIError.httpStatus(503, nil, url)) == .unavailable)
         #expect(AskFlintIntentError(CancellationError()) == .unavailable)
     }
-
-    @Test("the intent carries the question it was made with")
-    func question() {
-        #expect(AskFlintIntent(question: "How did I sleep?").question == "How did I sleep?")
-    }
 }

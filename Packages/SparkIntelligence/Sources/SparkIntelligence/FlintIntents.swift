@@ -4,17 +4,25 @@ import SparkKit
 
 // MARK: - Ask Flint
 
-/// Ask Flint from Siri, Shortcuts and Spotlight.
+/// Ask Flint from Shortcuts and Spotlight, and from Siri AI where the build
+/// allows it.
 ///
 /// `@AppIntent(.tool)` (iOS 27.3, Siri AI Developer Preview) makes this a
 /// tool Siri can call for a request that fits no app schema: "ask Spark how
 /// I slept this week". Siri reads the title and the descriptions below to
-/// decide when to call it, so they are written for a model.
+/// decide when to call it, so they are written for a model. The macro needs
+/// the iOS 27.3 SDK, so it is compiled in only under `SPARK_SIRI_AI_TOOLS`
+/// (see `Package.swift`); such a build offers the intent on iOS 27.3 and
+/// later. Without the flag this is an ordinary intent on every iOS 27.
 ///
-/// A Siri ask is read-only: the server withholds Flint's write tools for the
-/// turn, because nothing here can show the Undo a change comes with. The
-/// answer can hold money and health details, so the device must be unlocked.
+/// An ask from here is read-only: the server withholds Flint's write tools
+/// for the turn, because nothing here can show the Undo a change comes with.
+/// The answer can hold money and health details, so the device running the
+/// intent must itself be unlocked.
+#if SPARK_SIRI_AI_TOOLS
+@available(iOS 27.3, macOS 27.3, *)
 @AppIntent(.tool)
+#endif
 public struct AskFlintIntent: AppIntent {
     public static let title: LocalizedStringResource = "Ask Flint"
     public static let description = IntentDescription(
@@ -22,7 +30,7 @@ public struct AskFlintIntent: AppIntent {
             "Asks Flint, the assistant in Spark, a question about the person's own data: sleep, activity and other health metrics, spending and transactions, what they watched, read or listened to, places they went, and summaries of a day or week. Returns a short written answer. It only reads data and can't change anything."
         )
     )
-    public static let authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication
+    public static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
 
     @Parameter(
         title: "Question",
