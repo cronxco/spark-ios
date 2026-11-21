@@ -9,7 +9,8 @@ protocol AskFlintServing: Sendable {
     func stream(message: String, conversationId: String?) async throws -> AsyncThrowingStream<FlintAskStreamEvent, Error>
     /// Undoes one change. Returns whether the receipt now reads as undone.
     func undo(receiptId: String) async throws -> Bool
-    func conversations() async throws -> [FlintAskConversation]
+    /// Newest first. `search` matches the title and what was said.
+    func conversations(search: String?) async throws -> [FlintAskConversation]
     func messages(conversationId: String) async throws -> [FlintAskMessage]
     func delete(conversationId: String) async throws
 }
@@ -45,11 +46,11 @@ struct AskFlintAPIService: AskFlintServing {
     }
 
     /// Every conversation, newest first, up to `maximumPages` pages.
-    func conversations() async throws -> [FlintAskConversation] {
+    func conversations(search: String?) async throws -> [FlintAskConversation] {
         var all: [FlintAskConversation] = []
         var cursor: String?
         for _ in 0..<Self.maximumPages {
-            let page = try await apiClient.request(FlintAskEndpoint.conversations(cursor: cursor))
+            let page = try await apiClient.request(FlintAskEndpoint.conversations(cursor: cursor, search: search))
             all.append(contentsOf: page.data)
             guard page.hasMore, let next = page.nextCursor else { break }
             cursor = next

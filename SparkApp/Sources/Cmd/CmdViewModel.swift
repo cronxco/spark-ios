@@ -21,9 +21,9 @@ final class CmdViewModel {
     var logPrefill: LogPrefill?
     var searchQuery: String?
     private(set) var receipt: Receipt?
-    /// Set by a line that names a screen; CmdView hands it to the app and clears it.
+    /// Set by a line that names a screen; the Chat home hands it to the app and clears it.
     var pendingNavigation: CmdDestination?
-    /// Set when a line is for Flint; CmdView opens the chat with it and
+    /// Set when a line is for Flint; the Chat home opens a new conversation with it and
     /// clears it. Nothing is written or queued.
     var pendingAsk: String?
     private(set) var recents: [CmdRecentStore.Item]
@@ -140,6 +140,17 @@ final class CmdViewModel {
             classifiedAs: .log, log: request)
         queue.enqueue(entry)
         queuedCount = queue.load().count
+    }
+
+    /// The lines logged from Chat, newest first: the home's Logged section.
+    var loggedRecents: [CmdRecentStore.Item] {
+        recents.filter { $0.intent == .log }
+    }
+
+    /// The Log sheet wrote a line: its Logged row now opens the first event.
+    func logged(_ events: [LoggedEvent], text: String) {
+        guard let first = events.first else { return }
+        recents = recentStore.attach(eventId: first.id, toLog: text)
     }
 
     func openSearch(_ query: String = "") {

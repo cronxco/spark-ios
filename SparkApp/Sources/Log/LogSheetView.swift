@@ -14,10 +14,12 @@ struct LogPrefill: Identifiable {
 /// and a TV entry that needs a series or season asks first.
 struct LogSheetView: View {
     let apiClient: APIClient
-    /// A line already read elsewhere (the CMD tab): the sheet opens on its preview.
+    /// A line already read elsewhere (the Chat tab): the sheet opens on its preview.
     var prefill: LogPrefill?
-    /// Set by CMD: a log that can't be sent now goes to its offline queue.
+    /// Set by Chat: a log that can't be sent now goes to its offline queue.
     var onQueue: ((LogRequest) -> Void)?
+    /// Set by Chat: the events a line wrote.
+    var onLogged: (([LoggedEvent]) -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @State private var model = LogViewModel()
@@ -65,6 +67,7 @@ struct LogSheetView: View {
             }
             .onAppear {
                 model.onQueue = onQueue
+                model.onLogged = onLogged
                 if let prefill {
                     model.start(text: prefill.text, request: prefill.request)
                 } else {

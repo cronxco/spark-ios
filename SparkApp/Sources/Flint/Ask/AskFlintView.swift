@@ -2,17 +2,19 @@ import SparkKit
 import SparkUI
 import SwiftUI
 
-/// Ask Flint: a conversation with the user's Spark data. Flint can search it
-/// and change it; every change it makes shows here with an Undo.
+/// One Chat conversation with Flint, pushed full screen from the Chat home.
+/// Flint can search the user's Spark data and change it; every change it
+/// makes shows here with an Undo.
 struct AskFlintView: View {
     let apiClient: APIClient
-    /// A question typed into the command line: asked once, as the screen opens.
+    /// A past conversation to show and carry on. Nil starts a new one.
+    var conversation: FlintAskConversation?
+    /// The line typed on the Chat home: asked once, as the screen opens.
     var initialQuestion: String?
     /// Opens a record Flint linked to, on the stack that hosts this screen.
     let onOpen: (DetailRoute) -> Void
 
     @State private var viewModel: AskFlintViewModel?
-    @State private var showsHistory = false
     @FocusState private var composerFocused: Bool
 
     private static let suggestions = [
@@ -30,23 +32,9 @@ struct AskFlintView: View {
             }
         }
         .sparkAppBackground()
-        .navigationTitle("Ask Flint")
+        .navigationTitle(conversation?.title ?? "New chat")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button("History", systemImage: "clock.arrow.circlepath") { showsHistory = true }
-                Button("New conversation", systemImage: "square.and.pencil") {
-                    viewModel?.startNewConversation()
-                    composerFocused = true
-                }
-                .disabled(viewModel?.turns.isEmpty ?? true)
-            }
-        }
-        .sheet(isPresented: $showsHistory) {
-            if let viewModel {
-                AskFlintHistoryView(viewModel: viewModel)
-            }
-        }
+        .toolbar(.hidden, for: .tabBar)
         .environment(\.openURL, OpenURLAction { url in
             if let route = DeepLink.parse(url)?.detailRoute {
                 onOpen(route)
@@ -61,7 +49,13 @@ struct AskFlintView: View {
                     localAnswerer: AskFlintLocalAnswerer()
                 )
                 viewModel = model
-                if let initialQuestion { model.ask(initialQuestion) }
+                if let conversation {
+                    await model.open(conversation)
+                } else if let initialQuestion {
+                    model.ask(initialQuestion)
+                } else {
+                    composerFocused = true
+                }
             }
         }
     }
@@ -362,108 +356,5 @@ private enum AskFlintGlyph {
         case "block": "square.stack"
         default: "calendar"
         }
-    }
-}
-
-// MARK: - History
-
-private struct AskFlintHistoryView: View {
-    let viewModel: AskFlintViewModel
-
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            Group {
-                switch viewModel.historyState {
-                case .idle, .loading:
-                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-                case .error(let message):
-                    EmptyState(
-                        systemImage: "wifi.exclamationmark",
-                        title: "Couldn't load conversations",
-                        message: message,
-                        actionTitle: "Retry",
-                        action: { Task { await viewModel.loadConversations() } }
-                    )
-                case .loaded where viewModel.conversations.isEmpty:
-                    EmptyState(
-                        systemImage: "bubble.left.and.bubble.right",
-                        title: "No conversations yet",
-                        message: "Questions you ask Flint are kept here."
-                    )
-                case .loaded:
-                    List {
-                        ForEach(viewModel.conversations) { conversation in
-                            Button {
-                                Task {
-                                    await viewModel.open(conversation)
-                                    dismiss()
-                                }
-                            } label: {
-                                VStack(alignment: .leading, spacing: SparkSpacing.xxs) {
-                                    Text(conversation.title)
-                                        .font(SparkTypography.body)
-                                        .foregroundStyle(.primary)
-                                        .lineLimit(2)
-                                    if let updatedAt = conversation.updatedAt {
-                                        Text(updatedAt, format: .relative(presentation: .named))
-                                            .font(SparkTypography.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                            }
-                            .swipeActions {
-                                Button("Delete", systemImage: "trash", role: .destructive) {
-                                    Task { await viewModel.delete(conversation) }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Conversations")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } }
-            }
-            .task { await viewModel.loadConversations() }
-        }
-    }
-}
-
-// MARK: - Entry
-
-/// The way into Ask Flint from the Command tab: it reads as a question field
-/// and opens the conversation, with its history.
-struct AskFlintEntry: View {
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: SparkSpacing.md) {
-                FlintAvatar(size: .md)
-                VStack(alignment: .leading, spacing: SparkSpacing.xxs) {
-                    Text("Ask Flint")
-                        .font(SparkTypography.bodyStrong)
-                    Text("Questions, changes and past conversations")
-                        .font(SparkTypography.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: SparkSpacing.sm)
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
-            }
-            .padding(.horizontal, SparkSpacing.lg)
-            .padding(.vertical, SparkSpacing.sm)
-            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
-            .sparkGlass(.roundedRect(SparkRadii.lg))
-        }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .combine)
-        .accessibilityHint("Ask a question about your data, or ask Flint to change something")
     }
 }

@@ -95,6 +95,23 @@ struct CmdTests {
         #expect(later.load().isEmpty)
     }
 
+    @Test("a logged line keeps the event it wrote, and older recents decode without one")
+    func recentsKeepLoggedEvent() throws {
+        let defaults = UserDefaults(suiteName: "cmd-tests-\(UUID().uuidString)")!
+        let store = CmdRecentStore(defaults: defaults)
+        store.record(text: "2 pints with Dan", intent: .log)
+        store.record(text: "how did I sleep", intent: .ask)
+
+        let items = store.attach(eventId: "e-1", toLog: "2 pints with Dan ")
+        #expect(items.first { $0.intent == .log }?.eventId == "e-1")
+        #expect(items.first { $0.intent == .ask }?.eventId == nil)
+        #expect(store.load().first { $0.intent == .log }?.eventId == "e-1")
+
+        let old = #"[{"text":"a","intent":"log","at":0}]"#
+        let decoded = try JSONDecoder().decode([CmdRecentStore.Item].self, from: Data(old.utf8))
+        #expect(decoded.first?.eventId == nil)
+    }
+
     @Test("wire names round-trip")
     func wireNames() {
         #expect(ServerCmdClassifier.wire(.flintNote) == "flint_note")

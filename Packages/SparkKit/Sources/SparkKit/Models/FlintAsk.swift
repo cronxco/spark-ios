@@ -159,23 +159,49 @@ public struct FlintAskAnswer: Codable, Equatable, Sendable {
     }
 }
 
-public struct FlintAskConversation: Codable, Equatable, Sendable, Identifiable {
+public struct FlintAskConversation: Codable, Equatable, Sendable, Identifiable, Hashable {
     public let id: String
     public let title: String
     public let createdAt: Date?
     public let updatedAt: Date?
+    /// The latest answer's opening sentence or two, as plain text.
+    public let preview: String?
+    /// The domains of the records the latest answer linked: `health`,
+    /// `money` and so on. Empty for a conversation that linked nothing.
+    public let domains: [String]
+    /// How many changes Flint made in the conversation.
+    public let changeCount: Int
 
-    public init(id: String, title: String, createdAt: Date? = nil, updatedAt: Date? = nil) {
+    public init(
+        id: String, title: String, createdAt: Date? = nil, updatedAt: Date? = nil,
+        preview: String? = nil, domains: [String] = [], changeCount: Int = 0
+    ) {
         self.id = id
         self.title = title
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.preview = preview
+        self.domains = domains
+        self.changeCount = changeCount
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, title
+        case id, title, preview, domains
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case changeCount = "change_count"
+    }
+
+    /// Contract 1 servers send only the id, title and dates.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
+        preview = try container.decodeIfPresent(String.self, forKey: .preview)
+        domains = try container.decodeIfPresent([String].self, forKey: .domains) ?? []
+        changeCount = try container.decodeIfPresent(Int.self, forKey: .changeCount) ?? 0
     }
 }
 

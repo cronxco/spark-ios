@@ -291,7 +291,7 @@ private actor StubAskService: AskFlintServing {
         return undoApplies
     }
 
-    func conversations() async throws -> [FlintAskConversation] { [] }
+    func conversations(search: String?) async throws -> [FlintAskConversation] { [] }
     func messages(conversationId: String) async throws -> [FlintAskMessage] {
         if let historyDelay { try? await Task.sleep(for: historyDelay) }
         return history
