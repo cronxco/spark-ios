@@ -33,7 +33,7 @@ struct MainTabView: View {
             }
             .onChange(of: model.pendingSearchQuery, initial: true) { _, new in
                 guard new != nil else { return }
-                selection = .cmd
+                selection = .chat
             }
     }
 
@@ -59,10 +59,10 @@ struct MainTabView: View {
             } label: {
                 tabLabel("Flint", .flint)
             }
-            Tab(value: AppTab.cmd) {
-                CmdView(apiClient: model.apiClient)
+            Tab(value: AppTab.chat) {
+                ChatHomeView(apiClient: model.apiClient)
             } label: {
-                tabLabel("CMD", .command)
+                tabLabel("Chat", .chat)
             }
         }
     }
@@ -80,5 +80,5 @@ private func tabLabel(_ title: String, _ icon: SparkIcon) -> some View {
 }
 
 enum AppTab: Hashable {
-    case day, explore, knowledge, flint, cmd
+    case day, explore, knowledge, flint, chat
 }

@@ -25,13 +25,6 @@ final class AskFlintViewModel {
         var source: Source = .spark
     }
 
-    enum HistoryState: Equatable {
-        case idle
-        case loading
-        case loaded
-        case error(String)
-    }
-
     private(set) var turns: [Turn] = []
     private(set) var conversationId: String?
     private(set) var isResponding = false
@@ -39,8 +32,6 @@ final class AskFlintViewModel {
     private(set) var activity: String?
     private(set) var errorMessage: String?
     private(set) var undoingReceiptIDs: Set<String> = []
-    private(set) var conversations: [FlintAskConversation] = []
-    private(set) var historyState: HistoryState = .idle
     private(set) var isLoadingConversation = false
     var draft = ""
 
@@ -274,16 +265,6 @@ final class AskFlintViewModel {
         draft = ""
     }
 
-    func loadConversations() async {
-        historyState = .loading
-        do {
-            conversations = try await service.conversations()
-            historyState = .loaded
-        } catch {
-            historyState = .error(Self.message(for: error, inConversation: false))
-        }
-    }
-
     func open(_ conversation: FlintAskConversation) async {
         stop()
         let loadID = UUID()
@@ -314,18 +295,6 @@ final class AskFlintViewModel {
         } catch {
             guard historyLoadID == loadID else { return }
             errorMessage = Self.message(for: error)
-        }
-    }
-
-    func delete(_ conversation: FlintAskConversation) async {
-        do {
-            try await service.delete(conversationId: conversation.id)
-            conversations.removeAll { $0.id == conversation.id }
-            if conversationId == conversation.id {
-                startNewConversation()
-            }
-        } catch {
-            historyState = .error(Self.message(for: error))
         }
     }
 

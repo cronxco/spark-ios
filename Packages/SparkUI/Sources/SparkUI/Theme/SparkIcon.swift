@@ -94,7 +94,7 @@ public enum SparkIcon: String, CaseIterable, Sendable {
     case home
     case day
     case explore
-    case command
+    case chat
     case notifications
     case share
 
@@ -190,7 +190,7 @@ public enum SparkIcon: String, CaseIterable, Sendable {
         case .home: "\u{f015}" // fas.house
         case .day: "\u{f185}" // fas.sun
         case .explore: "\u{f14e}" // fas.compass
-        case .command: "\u{f120}" // fas.terminal
+        case .chat: "\u{f075}" // fas.comment
         case .notifications: "\u{f0f3}" // fas.bell
         case .share: "\u{e09a}" // fas.arrow-up-from-bracket
         }

@@ -67,6 +67,10 @@ struct FlintAskTests {
         #expect(messages.path == "/flint/ask/conversations/c-1")
         #expect(messages.query == [URLQueryItem(name: "limit", value: "30")])
 
+        let searched = FlintAskEndpoint.conversations(search: "  sleep ")
+        #expect(searched.query.contains(URLQueryItem(name: "q", value: "sleep")))
+        #expect(!FlintAskEndpoint.conversations(search: "  ").query.contains { $0.name == "q" })
+
         let delete = FlintAskEndpoint.deleteConversation(id: "c-1")
         #expect(delete.method == .delete)
         #expect(delete.path == "/flint/ask/conversations/c-1")
@@ -119,6 +123,24 @@ struct FlintAskTests {
         #expect(message.references.isEmpty)
         #expect(message.changes.isEmpty)
         #expect(message.status == "completed")
+    }
+
+    @Test("a conversation decodes its preview, domains and changes, and a contract 1 one without them")
+    func conversationDecodes() throws {
+        let json = """
+        {"id": "c-1", "title": "How did I sleep?", "updated_at": "2026-11-21T08:10:00+00:00",
+         "preview": "You slept 7h 55m.", "domains": ["health"], "change_count": 2}
+        """
+        let conversation = try decoder.decode(FlintAskConversation.self, from: Data(json.utf8))
+        #expect(conversation.preview == "You slept 7h 55m.")
+        #expect(conversation.domains == ["health"])
+        #expect(conversation.changeCount == 2)
+        #expect(conversation.updatedAt != nil)
+
+        let old = try decoder.decode(FlintAskConversation.self, from: Data(#"{"id": "c-2", "title": "Old"}"#.utf8))
+        #expect(old.preview == nil)
+        #expect(old.domains.isEmpty)
+        #expect(old.changeCount == 0)
     }
 
     // MARK: - Undo

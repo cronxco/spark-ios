@@ -48,10 +48,16 @@ public enum FlintAskEndpoint {
         )
     }
 
-    /// GET /flint/ask/conversations — newest first.
-    public static func conversations(cursor: String? = nil, limit: Int = 20) -> Endpoint<FlintAskConversationsPage> {
+    /// GET /flint/ask/conversations — newest first. `search` matches the
+    /// title and what was said in the conversation.
+    public static func conversations(
+        cursor: String? = nil, limit: Int = 20, search: String? = nil
+    ) -> Endpoint<FlintAskConversationsPage> {
         var query = [URLQueryItem(name: "limit", value: String(limit))]
         if let cursor { query.append(URLQueryItem(name: "cursor", value: cursor)) }
+        if let search = search?.trimmingCharacters(in: .whitespacesAndNewlines), !search.isEmpty {
+            query.append(URLQueryItem(name: "q", value: search))
+        }
         return Endpoint(method: .get, path: "/flint/ask/conversations", query: query)
     }
 

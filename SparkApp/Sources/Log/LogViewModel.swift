@@ -55,6 +55,8 @@ final class LogViewModel {
 
     /// Set by CMD: a checked log that can't be sent now is handed over to its offline queue instead of failing.
     var onQueue: ((LogRequest) -> Void)?
+    /// Set by Chat: told the events a line wrote, so its Logged row can open them.
+    var onLogged: (([LoggedEvent]) -> Void)?
 
     private let extract: @Sendable (String) async throws -> LogDraft
 
@@ -175,7 +177,7 @@ final class LogViewModel {
         phase = .preview
     }
 
-    /// Opens straight on the preview for a line that was already read, such as one typed into the CMD tab.
+    /// Opens straight on the preview for a line that was already read, such as one typed into the Chat tab.
     func start(text: String, request: LogRequest) {
         guard case .idle = phase else { return }
         updateText(text)
@@ -383,6 +385,7 @@ final class LogViewModel {
             case .logged(let events, let missingEpisodes, let people):
                 pending = nil
                 phase = .logged(Outcome(events: events, missingEpisodes: missingEpisodes, people: people))
+                onLogged?(events)
             case .needsClarification(let question, _):
                 phase = .question(question)
             case .preview:

@@ -312,7 +312,7 @@ struct SparkMainAppToolbarModifier: ViewModifier {
         content
             .toolbar {
                 if isVisible {
-                    // Logging lives in Command now, so the bar keeps only
+                    // Logging lives in Chat now, so the bar keeps only
                     // settings and notifications.
                     ToolbarItemGroup(placement: .topBarTrailing) {
                         Button {

@@ -95,7 +95,7 @@
 
     "day": "sun",
     "explore": "compass",
-    "command": "terminal",
+    "chat": "comment",
     "notifications": "bell",
     "share": "arrow-up-from-bracket"
   }

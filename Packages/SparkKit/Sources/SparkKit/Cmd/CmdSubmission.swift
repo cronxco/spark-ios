@@ -148,11 +148,15 @@ public struct CmdRecentStore {
         public let text: String
         public let intent: CmdIntent
         public let at: Date
+        /// The event a log line wrote, once the server has written it: the
+        /// Chat home's Logged row opens it.
+        public var eventId: String?
 
-        public init(text: String, intent: CmdIntent, at: Date) {
+        public init(text: String, intent: CmdIntent, at: Date, eventId: String? = nil) {
             self.text = text
             self.intent = intent
             self.at = at
+            self.eventId = eventId
         }
     }
 
@@ -180,6 +184,18 @@ public struct CmdRecentStore {
         items.removeAll { $0.text == clean && $0.intent == intent }
         items.insert(Item(text: clean, intent: intent, at: now()), at: 0)
         items = Array(items.prefix(Self.maxCount))
+        if let data = try? JSONEncoder().encode(items) { defaults.set(data, forKey: Self.defaultsKey) }
+        return items
+    }
+
+    /// Notes the event a log line wrote on its newest entry, so the line
+    /// can open what it logged.
+    @discardableResult
+    public func attach(eventId: String, toLog text: String) -> [Item] {
+        let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var items = load()
+        guard let index = items.firstIndex(where: { $0.text == clean && $0.intent == .log }) else { return items }
+        items[index].eventId = eventId
         if let data = try? JSONEncoder().encode(items) { defaults.set(data, forKey: Self.defaultsKey) }
         return items
     }
