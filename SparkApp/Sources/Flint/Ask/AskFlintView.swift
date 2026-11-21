@@ -121,6 +121,9 @@ struct AskFlintView: View {
                 }
             }
         }
+        // A light tap on send, undo and failure; success once a change is
+        // confirmed; a soft tap when the answer is written (§7.6).
+        .sensoryFeedback(trigger: viewModel.feedback) { _, new in new?.kind.sensoryFeedback }
         .safeAreaInset(edge: .bottom) {
             composer(viewModel)
         }
@@ -191,6 +194,17 @@ struct AskFlintView: View {
         .frame(maxWidth: 720)
         .padding(.horizontal, SparkSpacing.lg)
         .padding(.vertical, SparkSpacing.sm)
+    }
+}
+
+extension AskFlintViewModel.Feedback.Kind {
+    var sensoryFeedback: SensoryFeedback {
+        switch self {
+        case .sent, .undone: .impact(weight: .light)
+        case .changed: .success
+        case .failed: .error
+        case .answered: .impact(flexibility: .soft, intensity: 0.5)
+        }
     }
 }
 

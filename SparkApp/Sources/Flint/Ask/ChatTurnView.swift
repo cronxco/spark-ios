@@ -18,6 +18,8 @@ struct ChatTurnView: View {
     let onUndo: (FlintAskChange) -> Void
     let onFollowUp: (String) -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         switch turn.role {
         case .user: question
@@ -80,9 +82,11 @@ struct ChatTurnView: View {
 
             if isLatest, !turn.isStreaming, !turn.followUps.isEmpty {
                 followUps
+                    .transition(.opacity.combined(with: .offset(y: 6)))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.24), value: turn.isStreaming)
     }
 
     private var followUps: some View {
