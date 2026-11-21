@@ -146,7 +146,9 @@ public enum MarkdownBlocks {
             switch block.kind {
             case .heading:
                 var heading = block.content
-                heading.inlinePresentationIntent = .stronglyEmphasized
+                for run in heading.runs {
+                    heading[run.range].inlinePresentationIntent = (run.inlinePresentationIntent ?? []).union(.stronglyEmphasized)
+                }
                 result.append(heading)
             case .listItem(let marker, let depth):
                 let indent = String(repeating: "    ", count: depth - 1)
@@ -183,15 +185,23 @@ public enum MarkdownBlocks {
         guard lines.count > 1 else { return text }
 
         var output: [String] = []
-        var inFence = false
+        var openFence: (character: Character, length: Int)?
 
         for (index, line) in lines.enumerated() {
             let trimmedLine = line.trimmingCharacters(in: .whitespaces)
-            if trimmedLine.hasPrefix("```") || trimmedLine.hasPrefix("~~~") {
-                inFence.toggle()
+            if let marker = fence(in: trimmedLine) {
+                if let open = openFence {
+                    let closes = marker.character == open.character
+                        && marker.length >= open.length
+                        && trimmedLine.dropFirst(marker.length).allSatisfy(\.isWhitespace)
+                    if closes { openFence = nil }
+                } else {
+                    openFence = marker
+                }
                 output.append(line)
                 continue
             }
+            let inFence = openFence != nil
 
             let next = index + 1 < lines.count ? lines[index + 1].trimmingCharacters(in: .whitespaces) : ""
             let breaks = !inFence
@@ -210,8 +220,21 @@ public enum MarkdownBlocks {
         return output.joined(separator: "\n")
     }
 
+    /// The fence character and run length when the line opens or closes a
+    /// fenced code block: three or more backticks or tildes.
+    private static func fence(in line: String) -> (character: Character, length: Int)? {
+        guard let first = line.first, first == "`" || first == "~" else { return nil }
+        let length = line.prefix(while: { $0 == first }).count
+        return length >= 3 ? (first, length) : nil
+    }
+
+    /// An ATX heading: one to six `#` and then a space or the end of the line.
+    private static func isHeading(_ line: String) -> Bool {
+        line.range(of: #"^#{1,6}(\s|$)"#, options: .regularExpression) != nil
+    }
+
     private static func startsBlock(_ line: String) -> Bool {
-        if line.hasPrefix("#") || line.hasPrefix(">") || line.hasPrefix("|") || line.hasPrefix("```") || line.hasPrefix("~~~") {
+        if isHeading(line) || line.hasPrefix(">") || line.hasPrefix("|") || line.hasPrefix("```") || line.hasPrefix("~~~") {
             return true
         }
         if ["- ", "* ", "+ "].contains(where: { line.hasPrefix($0) }) { return true }
@@ -220,7 +243,7 @@ public enum MarkdownBlocks {
     }
 
     private static func isHeadingOrRule(_ line: String) -> Bool {
-        line.hasPrefix("#") || line.range(of: #"^([-*_])(\s*\1){2,}\s*$"#, options: .regularExpression) != nil
+        isHeading(line) || line.range(of: #"^([-*_])(\s*\1){2,}\s*$"#, options: .regularExpression) != nil
     }
 
     private static func isSetextUnderline(_ line: String) -> Bool {

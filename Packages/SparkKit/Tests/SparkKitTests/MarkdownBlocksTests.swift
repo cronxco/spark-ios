@@ -131,4 +131,25 @@ struct MarkdownBlocksTests {
         #expect(MarkdownBlocks.withLineBreaks("# Title\nbody") == "# Title\nbody")
         #expect(MarkdownBlocks.withLineBreaks("Title\n===") == "Title\n===")
     }
+
+    @Test("a hashtag line is running text, not a heading")
+    func hashtagIsNotHeading() {
+        #expect(MarkdownBlocks.withLineBreaks("one\n#release\ntwo") == "one  \n#release  \ntwo")
+        #expect(MarkdownBlocks.withLineBreaks("one\n####### seven") == "one  \n####### seven")
+    }
+
+    @Test("a shorter fence inside a longer one stays code")
+    func nestedFence() {
+        let text = "````\n```\na\nb\n````\nafter\nmore"
+        #expect(MarkdownBlocks.withLineBreaks(text) == "````\n```\na\nb\n````\nafter  \nmore")
+        #expect(MarkdownBlocks.withLineBreaks("~~~\n```\nx\ny\n~~~") == "~~~\n```\nx\ny\n~~~")
+    }
+
+    @Test("a heading keeps its own emphasis when bolded")
+    func headingKeepsEmphasis() {
+        let flat = MarkdownBlocks.flattened(MarkdownBlocks.parse("## The *quiet* week"))
+
+        #expect(flat.runs.allSatisfy { $0.inlinePresentationIntent?.contains(.stronglyEmphasized) == true })
+        #expect(flat.runs.contains { $0.inlinePresentationIntent?.contains(.emphasized) == true })
+    }
 }
