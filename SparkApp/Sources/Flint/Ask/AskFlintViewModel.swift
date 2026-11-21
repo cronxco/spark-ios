@@ -132,6 +132,10 @@ final class AskFlintViewModel {
                     if step.status == .running { activity = step.label }
                     update(answerID) { turn in
                         if let index = turn.steps.firstIndex(where: { $0.id == step.id }) {
+                            // A finishing frame may leave out the detail
+                            // streamed earlier, such as a reasoning summary.
+                            var step = step
+                            if step.detail == nil { step.detail = turn.steps[index].detail }
                             turn.steps[index] = step
                         } else {
                             turn.steps.append(step)
@@ -160,11 +164,7 @@ final class AskFlintViewModel {
                         // The finished message's steps are the stored record;
                         // a server that sends none keeps the ones streamed.
                         if !answer.message.steps.isEmpty { turn.steps = answer.message.steps }
-                        turn.steps = turn.steps.map { step in
-                            var step = step
-                            if step.status == .running { step.status = .done }
-                            return step
-                        }
+                        turn.steps = Self.settled(turn.steps, completed: answer.message.status == "completed")
                         turn.cards = answer.message.cards
                         turn.followUps = answer.message.followUps
                         turn.elapsedMs = answer.message.elapsedMs
@@ -326,7 +326,7 @@ final class AskFlintViewModel {
                     text: message.text,
                     references: message.references,
                     changes: message.changes,
-                    steps: message.steps,
+                    steps: Self.settled(message.steps, completed: message.status == "completed"),
                     cards: message.cards,
                     followUps: message.followUps,
                     elapsedMs: message.elapsedMs,
@@ -362,11 +362,12 @@ final class AskFlintViewModel {
         errorMessage = turns.first { $0.id == id }?.text == message ? nil : message
     }
 
-    /// Steps still running when the answer stopped never finished.
-    static func settled(_ steps: [FlintAskStep]) -> [FlintAskStep] {
+    /// Steps still running when the answer ended: done when it completed,
+    /// failed when it stopped, failed or paused.
+    static func settled(_ steps: [FlintAskStep], completed: Bool = false) -> [FlintAskStep] {
         steps.map { step in
             var step = step
-            if step.status == .running { step.status = .failed }
+            if step.status == .running { step.status = completed ? .done : .failed }
             return step
         }
     }

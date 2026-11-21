@@ -185,6 +185,34 @@ struct AskFlintViewModelTests {
         #expect(answer.steps[0].status == .done)
     }
 
+    @Test("a finishing step frame without detail keeps the reasoning streamed into it")
+    func stepKeepsDetail() async throws {
+        let finishing = FlintAskStep(id: "s-1", kind: .reasoning, label: "Thought it through", status: .done)
+        let service = StubAskService(script: [
+            .events([.reasoning(id: "s-1", text: "Check Thursday."), .step(finishing), .delta("Yes."), .done(Self.answer("Yes."))]),
+        ])
+        let model = AskFlintViewModel(service: service)
+
+        await model.ask("Was Thursday busy?")?.value
+
+        let answer = try #require(model.turns.last)
+        #expect(answer.steps.first?.detail == "Check Thursday.")
+    }
+
+    @Test("a failed finished message marks its running steps failed")
+    func failedMessageSettlesSteps() async throws {
+        let running = FlintAskStep(id: "s-1", label: "Searching", status: .running)
+        let failed = FlintAskAnswer(
+            conversationId: nil,
+            message: FlintAskMessage(id: "m-1", role: .assistant, text: "Couldn't finish.", status: "failed"))
+        let service = StubAskService(script: [.events([.step(running), .done(failed)])])
+        let model = AskFlintViewModel(service: service)
+
+        await model.ask("Any refunds?")?.value
+
+        #expect(model.turns.last?.steps.map(\.status) == [.failed])
+    }
+
     @Test("steps still running when an answer stops are marked failed")
     func settledSteps() {
         let steps = [
@@ -192,6 +220,7 @@ struct AskFlintViewModelTests {
             FlintAskStep(id: "b", label: "Reading", status: .running),
         ]
         #expect(AskFlintViewModel.settled(steps).map(\.status) == [.done, .failed])
+        #expect(AskFlintViewModel.settled(steps, completed: true).map(\.status) == [.done, .done])
     }
 
     @Test("undo marks the change undone, and a failed undo leaves it and says so")
