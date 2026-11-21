@@ -78,8 +78,13 @@ public struct SparkRichContentText: View {
         }
         #endif
 
-        if let attributed = try? AttributedString(markdown: trimmed) {
-            return attributed
+        // Full Markdown parsing drops the breaks between paragraphs and list
+        // items, and `Text` ignores the block structure it leaves instead, so
+        // a list ran into the sentence before it. The blocks are read out and
+        // joined with their breaks put back.
+        let blocks = MarkdownBlocks.parse(trimmed)
+        if !blocks.isEmpty {
+            return MarkdownBlocks.flattened(blocks)
         }
 
         return AttributedString(trimmed)
