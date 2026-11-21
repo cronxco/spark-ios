@@ -2,7 +2,7 @@ import Foundation
 
 // Ask Flint: a conversation with the server-side Flint agent, which can
 // search Spark and change it. Mirrors `POST /flint/ask` and the
-// `/flint/ask/conversations` endpoints (contract version 1).
+// `/flint/ask/conversations` endpoints (contract version 2).
 
 /// A record an answer links to, checked server-side against the user's data.
 public struct FlintAskReference: Codable, Equatable, Sendable, Identifiable {
@@ -96,6 +96,80 @@ public struct FlintAskChange: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
+/// One thing Flint did on the way to an answer, in the reader's words: a
+/// tool it used ("Searched events for “flight”"), with what it covered, what
+/// it found and the records it found, or a short summary of its reasoning.
+public struct FlintAskStep: Codable, Equatable, Sendable, Identifiable {
+    public enum Kind: String, Codable, Sendable {
+        case tool
+        case reasoning
+    }
+
+    public enum Status: String, Codable, Sendable {
+        case running
+        case done
+        case failed
+    }
+
+    public let id: String
+    public let kind: Kind
+    /// The tool's name, for a tool step.
+    public let tool: String?
+    /// A Font Awesome name from the server ("magnifying-glass").
+    public let glyph: String?
+    public let label: String
+    /// What a tool covered ("Sun 22 to Sat 28 Nov"), or a reasoning summary.
+    public var detail: String?
+    public var status: Status
+    /// What a tool found ("3 matches").
+    public var result: String?
+    public var records: [FlintAskReference]
+    public var durationMs: Int?
+
+    public init(
+        id: String, kind: Kind = .tool, tool: String? = nil, glyph: String? = nil, label: String,
+        detail: String? = nil, status: Status = .done, result: String? = nil,
+        records: [FlintAskReference] = [], durationMs: Int? = nil
+    ) {
+        self.id = id
+        self.kind = kind
+        self.tool = tool
+        self.glyph = glyph
+        self.label = label
+        self.detail = detail
+        self.status = status
+        self.result = result
+        self.records = records
+        self.durationMs = durationMs
+    }
+
+    /// A reasoning step as its summary starts to arrive.
+    public static func reasoning(id: String, text: String) -> FlintAskStep {
+        FlintAskStep(id: id, kind: .reasoning, glyph: "lightbulb", label: "Thought it through", detail: text)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, tool, glyph, label, detail, status, result, records
+        case kind = "type"
+        case durationMs = "duration_ms"
+    }
+
+    /// Unknown kinds and statuses from a newer server read as a finished tool step.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        kind = (try? container.decodeIfPresent(Kind.self, forKey: .kind)) ?? .tool
+        tool = try container.decodeIfPresent(String.self, forKey: .tool)
+        glyph = try container.decodeIfPresent(String.self, forKey: .glyph)
+        label = try container.decode(String.self, forKey: .label)
+        detail = try container.decodeIfPresent(String.self, forKey: .detail)
+        status = (try? container.decodeIfPresent(Status.self, forKey: .status)) ?? .done
+        result = try container.decodeIfPresent(String.self, forKey: .result)
+        records = (try? container.decodeIfPresent([FlintAskReference].self, forKey: .records)) ?? []
+        durationMs = try container.decodeIfPresent(Int.self, forKey: .durationMs)
+    }
+}
+
 public struct FlintAskMessage: Codable, Equatable, Sendable {
     public enum Role: String, Codable, Sendable {
         case user
@@ -109,28 +183,45 @@ public struct FlintAskMessage: Codable, Equatable, Sendable {
     public let text: String
     public let references: [FlintAskReference]
     public let changes: [FlintAskChange]
+    /// What Flint did to answer, in order. Empty on a user's message.
+    public let steps: [FlintAskStep]
+    /// Cards for the events the answer links, in the order it first links them.
+    public let cards: [LinkedEventCard]
+    /// Up to two questions Flint suggests asking next.
+    public let followUps: [String]
+    /// How long the answer took, when it was timed.
+    public let elapsedMs: Int?
     /// `completed`, `failed` or `paused`.
     public let status: String
     public let createdAt: Date?
 
     public init(
         id: String?, role: Role, text: String, references: [FlintAskReference] = [],
-        changes: [FlintAskChange] = [], status: String = "completed", createdAt: Date? = nil
+        changes: [FlintAskChange] = [], steps: [FlintAskStep] = [], cards: [LinkedEventCard] = [],
+        followUps: [String] = [], elapsedMs: Int? = nil, status: String = "completed", createdAt: Date? = nil
     ) {
         self.id = id
         self.role = role
         self.text = text
         self.references = references
         self.changes = changes
+        self.steps = steps
+        self.cards = cards
+        self.followUps = followUps
+        self.elapsedMs = elapsedMs
         self.status = status
         self.createdAt = createdAt
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, role, text, references, changes, status
+        case id, role, text, references, changes, steps, cards, status
+        case followUps = "follow_ups"
+        case elapsedMs = "elapsed_ms"
         case createdAt = "created_at"
     }
 
+    /// Contract 1 messages have no steps, cards or follow-ups. One malformed
+    /// step or card is dropped rather than failing the message.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decodeIfPresent(String.self, forKey: .id)
@@ -138,8 +229,23 @@ public struct FlintAskMessage: Codable, Equatable, Sendable {
         text = try container.decode(String.self, forKey: .text)
         references = try container.decodeIfPresent([FlintAskReference].self, forKey: .references) ?? []
         changes = try container.decodeIfPresent([FlintAskChange].self, forKey: .changes) ?? []
+        steps = (try? container.decodeIfPresent([FlintAskLossy<FlintAskStep>].self, forKey: .steps))?
+            .compactMap(\.value) ?? []
+        cards = (try? container.decodeIfPresent([FlintAskLossy<LinkedEventCard>].self, forKey: .cards))?
+            .compactMap(\.value) ?? []
+        followUps = (try? container.decodeIfPresent([String].self, forKey: .followUps)) ?? []
+        elapsedMs = try? container.decodeIfPresent(Int.self, forKey: .elapsedMs)
         status = try container.decodeIfPresent(String.self, forKey: .status) ?? "completed"
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
+    }
+}
+
+/// One element of an array, or nothing, so a bad element doesn't fail the rest.
+private struct FlintAskLossy<Value: Decodable>: Decodable {
+    let value: Value?
+
+    init(from decoder: Decoder) throws {
+        value = try? Value(from: decoder)
     }
 }
 
@@ -239,6 +345,10 @@ public enum FlintAskStreamEvent: Equatable, Sendable {
     case delta(String)
     /// Flint started using a tool; `label` is what to show ("Searching Spark").
     case activity(label: String)
+    /// A step started (`running`) or finished. The same id arrives twice.
+    case step(FlintAskStep)
+    /// The next piece of a reasoning summary, for the reasoning step `id`.
+    case reasoning(id: String, text: String)
     /// A change was applied.
     case change(FlintAskChange)
     /// The finished message. Its text replaces the accumulated deltas.
@@ -261,6 +371,10 @@ public enum FlintAskStreamEvent: Equatable, Sendable {
             return (try? decoder.decode(ActivityFrame.self, from: data)).map { .activity(label: $0.label) }
         case "change":
             return (try? decoder.decode(FlintAskChange.self, from: data)).map { .change($0) }
+        case "step":
+            return (try? decoder.decode(FlintAskStep.self, from: data)).map { .step($0) }
+        case "reasoning":
+            return (try? decoder.decode(ReasoningFrame.self, from: data)).map { .reasoning(id: $0.id, text: $0.text) }
         case "done":
             return (try? decoder.decode(FlintAskAnswer.self, from: data)).map { .done($0) }
         case "error":
@@ -278,6 +392,7 @@ public enum FlintAskStreamEvent: Equatable, Sendable {
     private struct DeltaFrame: Decodable { let text: String }
     private struct ActivityFrame: Decodable { let label: String }
     private struct ErrorFrame: Decodable { let message: String }
+    private struct ReasoningFrame: Decodable { let id: String; let text: String }
 }
 
 enum FlintAskCoding {

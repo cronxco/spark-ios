@@ -125,6 +125,59 @@ struct FlintAskTests {
         #expect(message.status == "completed")
     }
 
+    @Test("a contract 2 answer decodes its steps, cards, follow-ups and time, dropping a bad step or card")
+    func contractTwoMessageDecodes() throws {
+        let json = """
+        {
+          "id": "m-1", "role": "assistant", "text": "You had [lunch at Pret](/events/e-1).",
+          "steps": [
+            {"id": "s-1", "type": "reasoning", "label": "Thought it through", "detail": "Look at Thursday's payments."},
+            {"id": "s-2", "type": "tool", "tool": "search-events", "glyph": "magnifying-glass",
+             "label": "Searched payments", "detail": "Thu 19 Nov", "status": "done", "result": "1 match",
+             "records": [{"kind": "event", "id": "e-1", "title": "Pret"}], "duration_ms": 412},
+            {"id": "s-3", "type": "from-the-future", "label": "Did something new", "status": "pondering"},
+            {"type": "tool"}
+          ],
+          "cards": [
+            {"kind": "monzo.card_payment_to", "layout": "metric",
+             "event": {"id": "e-1", "time": "2026-11-19T12:30:00+00:00", "service": "monzo", "domain": "money", "action": "card_payment_to", "value": 6.4, "unit": "GBP"}},
+            {"layout": "metric"}
+          ],
+          "follow_ups": ["How much on lunch this month?", "Tag it as work lunch"],
+          "elapsed_ms": 4210,
+          "status": "completed"
+        }
+        """
+
+        let message = try decoder.decode(FlintAskMessage.self, from: Data(json.utf8))
+
+        #expect(message.steps.map(\.id) == ["s-1", "s-2", "s-3"])
+        #expect(message.steps[0].kind == .reasoning)
+        #expect(message.steps[0].status == .done)
+        let search = message.steps[1]
+        #expect(search.tool == "search-events")
+        #expect(search.result == "1 match")
+        #expect(search.records.map(\.id) == ["e-1"])
+        #expect(search.durationMs == 412)
+        #expect(message.steps[2].kind == .tool)
+        #expect(message.steps[2].status == .done)
+        #expect(message.cards.map(\.id) == ["e-1"])
+        #expect(message.followUps == ["How much on lunch this month?", "Tag it as work lunch"])
+        #expect(message.elapsedMs == 4210)
+    }
+
+    @Test("a contract 1 message has no steps, cards or follow-ups")
+    func contractOneMessageDecodes() throws {
+        let json = #"{"id": "m-1", "role": "assistant", "text": "Done.", "follow_ups": "not a list"}"#
+
+        let message = try decoder.decode(FlintAskMessage.self, from: Data(json.utf8))
+
+        #expect(message.steps.isEmpty)
+        #expect(message.cards.isEmpty)
+        #expect(message.followUps.isEmpty)
+        #expect(message.elapsedMs == nil)
+    }
+
     @Test("a conversation decodes its preview, domains and changes, and a contract 1 one without them")
     func conversationDecodes() throws {
         let json = """
@@ -205,6 +258,10 @@ struct FlintAskTests {
         #expect(FlintAskStreamEvent.decode(.init(name: "delta", data: #"{"text":"Hi"}"#)) == .delta("Hi"))
         #expect(FlintAskStreamEvent.decode(.init(name: "activity", data: #"{"tool":"search-events","label":"Searching Spark"}"#)) == .activity(label: "Searching Spark"))
         #expect(FlintAskStreamEvent.decode(.init(name: "error", data: #"{"message":"Nope"}"#)) == .failed(message: "Nope"))
+        #expect(FlintAskStreamEvent.decode(.init(name: "reasoning", data: #"{"id":"s-1","text":"Check Thursday"}"#)) == .reasoning(id: "s-1", text: "Check Thursday"))
+        #expect(FlintAskStreamEvent.decode(.init(
+            name: "step", data: #"{"id":"s-2","type":"tool","glyph":"sun","label":"Read your day","status":"running"}"#
+        )) == .step(FlintAskStep(id: "s-2", glyph: "sun", label: "Read your day", status: .running)))
         #expect(FlintAskStreamEvent.decode(.init(name: "from-the-future", data: "{}")) == nil)
         #expect(FlintAskStreamEvent.decode(.init(name: "delta", data: "not json")) == nil)
 

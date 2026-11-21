@@ -15,6 +15,8 @@ struct AskFlintView: View {
     let onOpen: (DetailRoute) -> Void
 
     @State private var viewModel: AskFlintViewModel?
+    /// The question last asked here, held at the top of the screen.
+    @State private var pinnedQuestionID: String?
     @FocusState private var composerFocused: Bool
 
     private static let suggestions = [
@@ -61,47 +63,62 @@ struct AskFlintView: View {
     }
 
     private func thread(_ viewModel: AskFlintViewModel) -> some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: SparkSpacing.lg) {
-                    if viewModel.turns.isEmpty {
-                        introduction(viewModel)
+        GeometryReader { viewport in
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: SparkSpacing.xl) {
+                        if viewModel.turns.isEmpty, !viewModel.isLoadingConversation {
+                            introduction(viewModel)
+                        }
+                        ForEach(viewModel.turns) { turn in
+                            ChatTurnView(
+                                turn: turn,
+                                isLatest: turn.id == viewModel.turns.last?.id,
+                                activity: turn.isStreaming ? viewModel.activity : nil,
+                                undoingReceiptIDs: viewModel.undoingReceiptIDs,
+                                onOpen: onOpen,
+                                onUndo: { change in Task { await viewModel.undo(change) } },
+                                onFollowUp: { question in viewModel.ask(question) }
+                            )
+                            .id(turn.id)
+                        }
+                        if let errorMessage = viewModel.errorMessage, !viewModel.isResponding {
+                            Label(errorMessage, systemImage: "exclamationmark.triangle")
+                                .font(SparkTypography.caption)
+                                .foregroundStyle(Color.sparkError)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        // Room under a new question, so it can sit at the top
+                        // while its answer is written below it.
+                        if pinnedQuestionID != nil {
+                            Color.clear.frame(height: max(0, viewport.size.height * 0.6))
+                        }
+                        Color.clear.frame(height: 1).id(Self.bottomAnchor)
                     }
-                    ForEach(viewModel.turns) { turn in
-                        AskFlintTurnView(
-                            turn: turn,
-                            activity: turn.isStreaming ? viewModel.activity : nil,
-                            undoingReceiptIDs: viewModel.undoingReceiptIDs,
-                            onOpen: onOpen,
-                            onUndo: { change in Task { await viewModel.undo(change) } }
-                        )
-                        .id(turn.id)
-                    }
-                    if let errorMessage = viewModel.errorMessage, !viewModel.isResponding {
-                        Label(errorMessage, systemImage: "exclamationmark.triangle")
-                            .font(SparkTypography.caption)
-                            .foregroundStyle(Color.sparkError)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Color.clear.frame(height: 1).id(Self.bottomAnchor)
+                    .frame(maxWidth: 720, alignment: .leading)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, SparkSpacing.lg)
+                    .padding(.vertical, SparkSpacing.lg)
                 }
-                .frame(maxWidth: 720, alignment: .leading)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, SparkSpacing.lg)
-                .padding(.top, SparkSpacing.lg)
-                .padding(.bottom, SparkSpacing.lg)
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .overlay {
-                if viewModel.isLoadingConversation {
-                    ProgressView()
+                .scrollDismissesKeyboard(.interactively)
+                .overlay {
+                    if viewModel.isLoadingConversation {
+                        ProgressView()
+                    }
                 }
-            }
-            .onChange(of: viewModel.turns.last?.text) {
-                proxy.scrollTo(Self.bottomAnchor, anchor: .bottom)
-            }
-            .onChange(of: viewModel.turns.count) {
-                withAnimation(.snappy) { proxy.scrollTo(Self.bottomAnchor, anchor: .bottom) }
+                .onChange(of: viewModel.turns.count) {
+                    // A question just asked moves to the top; the answer
+                    // grows under it without pulling the page along.
+                    guard let question = viewModel.turns.last(where: { $0.role == .user }),
+                        viewModel.turns.last?.isStreaming == true
+                    else { return }
+                    pinnedQuestionID = question.id
+                    withAnimation(.snappy) { proxy.scrollTo(question.id, anchor: .top) }
+                }
+                .onChange(of: viewModel.isLoadingConversation) { _, isLoading in
+                    guard !isLoading else { return }
+                    proxy.scrollTo(Self.bottomAnchor, anchor: .bottom)
+                }
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -177,107 +194,9 @@ struct AskFlintView: View {
     }
 }
 
-// MARK: - A turn
-
-private struct AskFlintTurnView: View {
-    let turn: AskFlintViewModel.Turn
-    let activity: String?
-    let undoingReceiptIDs: Set<String>
-    let onOpen: (DetailRoute) -> Void
-    let onUndo: (FlintAskChange) -> Void
-
-    var body: some View {
-        switch turn.role {
-        case .user: question
-        case .assistant: answer
-        }
-    }
-
-    private var question: some View {
-        HStack {
-            Spacer(minLength: SparkSpacing.xxl)
-            Text(turn.text)
-                .font(SparkTypography.body)
-                .padding(.horizontal, SparkSpacing.md)
-                .padding(.vertical, SparkSpacing.sm)
-                .background(Color.sparkAccent.opacity(0.18), in: RoundedRectangle(cornerRadius: SparkRadii.md, style: .continuous))
-                .textSelection(.enabled)
-        }
-        .accessibilityLabel("You asked: \(turn.text)")
-    }
-
-    private var answer: some View {
-        VStack(alignment: .leading, spacing: SparkSpacing.md) {
-            FlintByline(meta: turn.source == .local ? "On this device" : nil)
-
-            if !turn.text.isEmpty {
-                SparkRichContentText(
-                    text: FlintAskText.linkified(turn.text),
-                    foregroundStyle: turn.failed ? Color.sparkError : .primary
-                )
-                .textSelection(.enabled)
-            }
-
-            if turn.isStreaming {
-                HStack(spacing: SparkSpacing.sm) {
-                    ProgressView().controlSize(.small)
-                    Text(activity ?? (turn.text.isEmpty ? "Thinking" : "Writing"))
-                        .font(SparkTypography.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .accessibilityElement(children: .combine)
-            }
-
-            if turn.source == .local {
-                Text("Answered from what this device could read. Flint can't make changes until Spark is reachable.")
-                    .font(SparkTypography.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            ForEach(turn.changes) { change in
-                AskFlintChangeCard(
-                    change: change,
-                    isUndoing: change.receiptId.map(undoingReceiptIDs.contains) ?? false,
-                    onOpen: onOpen,
-                    onUndo: { onUndo(change) }
-                )
-            }
-
-            if !turn.isStreaming, !turn.references.isEmpty {
-                references
-            }
-        }
-        .padding(SparkSpacing.lg)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .sparkGeneratedSurface()
-    }
-
-    private var references: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: SparkSpacing.sm) {
-                ForEach(turn.references) { reference in
-                    Button {
-                        if let route = reference.deepLink?.detailRoute { onOpen(route) }
-                    } label: {
-                        Label(reference.title, systemImage: AskFlintGlyph.kind(reference.kind))
-                            .font(SparkTypography.caption)
-                            .lineLimit(1)
-                            .padding(.horizontal, SparkSpacing.md)
-                            .frame(minHeight: 36)
-                            .sparkGlass(.capsule)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityHint("Opens this record")
-                }
-            }
-        }
-    }
-}
-
 // MARK: - A change
 
-private struct AskFlintChangeCard: View {
+struct AskFlintChangeCard: View {
     let change: FlintAskChange
     let isUndoing: Bool
     let onOpen: (DetailRoute) -> Void
@@ -338,7 +257,7 @@ private struct AskFlintChangeCard: View {
     }
 }
 
-private enum AskFlintGlyph {
+enum AskFlintGlyph {
     static func operation(_ operation: String) -> String {
         switch operation {
         case "tag": "tag"
