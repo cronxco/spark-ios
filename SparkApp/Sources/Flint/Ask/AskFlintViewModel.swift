@@ -20,6 +20,13 @@ final class AskFlintViewModel {
         var text: String
         var references: [FlintAskReference] = []
         var changes: [FlintAskChange] = []
+        /// What Flint did to answer: shown live, then folded.
+        var steps: [FlintAskStep] = []
+        /// Cards for the events the answer links.
+        var cards: [LinkedEventCard] = []
+        /// Up to two questions to ask next.
+        var followUps: [String] = []
+        var elapsedMs: Int?
         var isStreaming = false
         var failed = false
         var source: Source = .spark
@@ -121,6 +128,27 @@ final class AskFlintViewModel {
                     update(answerID) { $0.text += text }
                 case .activity(let label):
                     activity = label
+                case .step(let step):
+                    if step.status == .running { activity = step.label }
+                    update(answerID) { turn in
+                        if let index = turn.steps.firstIndex(where: { $0.id == step.id }) {
+                            // A finishing frame may leave out the detail
+                            // streamed earlier, such as a reasoning summary.
+                            var step = step
+                            if step.detail == nil { step.detail = turn.steps[index].detail }
+                            turn.steps[index] = step
+                        } else {
+                            turn.steps.append(step)
+                        }
+                    }
+                case .reasoning(let id, let text):
+                    update(answerID) { turn in
+                        if let index = turn.steps.firstIndex(where: { $0.id == id }) {
+                            turn.steps[index].detail = (turn.steps[index].detail ?? "") + text
+                        } else {
+                            turn.steps.append(.reasoning(id: id, text: text))
+                        }
+                    }
                 case .change(let change):
                     update(answerID) { turn in
                         if !turn.changes.contains(where: { $0.id == change.id }) {
@@ -133,6 +161,13 @@ final class AskFlintViewModel {
                     update(answerID) { turn in
                         turn.text = answer.message.text
                         turn.references = answer.message.references
+                        // The finished message's steps are the stored record;
+                        // a server that sends none keeps the ones streamed.
+                        if !answer.message.steps.isEmpty { turn.steps = answer.message.steps }
+                        turn.steps = Self.settled(turn.steps, completed: answer.message.status == "completed")
+                        turn.cards = answer.message.cards
+                        turn.followUps = answer.message.followUps
+                        turn.elapsedMs = answer.message.elapsedMs
                         // The finished message carries every change; keep any
                         // Undo already run on this device.
                         turn.changes = answer.message.changes.map { change in
@@ -150,6 +185,7 @@ final class AskFlintViewModel {
                 finished = true
                 update(answerID) { turn in
                     turn.isStreaming = false
+                    turn.steps = Self.settled(turn.steps)
                     if turn.text.isEmpty { turn.text = "Stopped." }
                 }
             } else {
@@ -162,6 +198,7 @@ final class AskFlintViewModel {
             if Task.isCancelled {
                 update(answerID) { turn in
                     turn.isStreaming = false
+                    turn.steps = Self.settled(turn.steps)
                     if turn.text.isEmpty { turn.text = "Stopped." }
                 }
             } else {
@@ -289,6 +326,10 @@ final class AskFlintViewModel {
                     text: message.text,
                     references: message.references,
                     changes: message.changes,
+                    steps: Self.settled(message.steps, completed: message.status == "completed"),
+                    cards: message.cards,
+                    followUps: message.followUps,
+                    elapsedMs: message.elapsedMs,
                     failed: message.status == "failed"
                 )
             }
@@ -313,10 +354,21 @@ final class AskFlintViewModel {
         update(id) { turn in
             turn.isStreaming = false
             turn.failed = true
+            turn.steps = Self.settled(turn.steps)
             if turn.text.isEmpty { turn.text = message }
         }
         // An answer with nothing else in it shows the message itself; the
         // banner is for one that got part-way and keeps what it wrote.
         errorMessage = turns.first { $0.id == id }?.text == message ? nil : message
+    }
+
+    /// Steps still running when the answer ended: done when it completed,
+    /// failed when it stopped, failed or paused.
+    static func settled(_ steps: [FlintAskStep], completed: Bool = false) -> [FlintAskStep] {
+        steps.map { step in
+            var step = step
+            if step.status == .running { step.status = completed ? .done : .failed }
+            return step
+        }
     }
 }

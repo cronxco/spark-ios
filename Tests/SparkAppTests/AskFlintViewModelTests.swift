@@ -136,6 +136,93 @@ struct AskFlintViewModelTests {
         #expect(!model.isResponding)
     }
 
+    @Test("steps arrive live and are replaced by the finished message's, with its cards and follow-ups")
+    func streamedSteps() async throws {
+        let running = FlintAskStep(id: "s-2", glyph: "sun", label: "Reading your day", status: .running)
+        let done = FlintAskStep(id: "s-2", glyph: "sun", label: "Read your day", status: .done, result: "12 events")
+        let stored = [
+            FlintAskStep.reasoning(id: "s-1", text: "Check the morning."),
+            done,
+        ]
+        let finished = FlintAskAnswer(
+            conversationId: "c-1",
+            message: FlintAskMessage(
+                id: "m-1", role: .assistant, text: "A quiet day.", steps: stored,
+                followUps: ["And tomorrow?"], elapsedMs: 3100))
+        let service = StubAskService(script: [
+            .events([.reasoning(id: "s-1", text: "Check "), .reasoning(id: "s-1", text: "the morning."), .step(running)]),
+            .events([.step(running), .step(done), .delta("A quiet day."), .done(finished)]),
+        ])
+        let model = AskFlintViewModel(service: service)
+
+        await model.ask("How was today?")?.value
+        let stopped = try #require(model.turns.last)
+        #expect(stopped.steps.map(\.id) == ["s-1", "s-2"])
+        #expect(stopped.steps[0].kind == .reasoning)
+        #expect(stopped.steps[0].detail == "Check the morning.")
+        #expect(stopped.steps[1].status == .failed)
+
+        await model.ask("How was today?")?.value
+        let answer = try #require(model.turns.last)
+        #expect(answer.steps == stored)
+        #expect(answer.followUps == ["And tomorrow?"])
+        #expect(answer.elapsedMs == 3100)
+        #expect(!answer.isStreaming)
+    }
+
+    @Test("a finished message with no steps keeps the streamed ones, marked done")
+    func streamedStepsKept() async throws {
+        let running = FlintAskStep(id: "s-1", label: "Searching payments", status: .running)
+        let service = StubAskService(script: [
+            .events([.step(running), .delta("None."), .done(Self.answer("None."))]),
+        ])
+        let model = AskFlintViewModel(service: service)
+
+        await model.ask("Any refunds?")?.value
+
+        let answer = try #require(model.turns.last)
+        #expect(answer.steps.map(\.id) == ["s-1"])
+        #expect(answer.steps[0].status == .done)
+    }
+
+    @Test("a finishing step frame without detail keeps the reasoning streamed into it")
+    func stepKeepsDetail() async throws {
+        let finishing = FlintAskStep(id: "s-1", kind: .reasoning, label: "Thought it through", status: .done)
+        let service = StubAskService(script: [
+            .events([.reasoning(id: "s-1", text: "Check Thursday."), .step(finishing), .delta("Yes."), .done(Self.answer("Yes."))]),
+        ])
+        let model = AskFlintViewModel(service: service)
+
+        await model.ask("Was Thursday busy?")?.value
+
+        let answer = try #require(model.turns.last)
+        #expect(answer.steps.first?.detail == "Check Thursday.")
+    }
+
+    @Test("a failed finished message marks its running steps failed")
+    func failedMessageSettlesSteps() async throws {
+        let running = FlintAskStep(id: "s-1", label: "Searching", status: .running)
+        let failed = FlintAskAnswer(
+            conversationId: nil,
+            message: FlintAskMessage(id: "m-1", role: .assistant, text: "Couldn't finish.", status: "failed"))
+        let service = StubAskService(script: [.events([.step(running), .done(failed)])])
+        let model = AskFlintViewModel(service: service)
+
+        await model.ask("Any refunds?")?.value
+
+        #expect(model.turns.last?.steps.map(\.status) == [.failed])
+    }
+
+    @Test("steps still running when an answer stops are marked failed")
+    func settledSteps() {
+        let steps = [
+            FlintAskStep(id: "a", label: "Searched", status: .done),
+            FlintAskStep(id: "b", label: "Reading", status: .running),
+        ]
+        #expect(AskFlintViewModel.settled(steps).map(\.status) == [.done, .failed])
+        #expect(AskFlintViewModel.settled(steps, completed: true).map(\.status) == [.done, .done])
+    }
+
     @Test("undo marks the change undone, and a failed undo leaves it and says so")
     func undo() async throws {
         let change = Self.change(receipt: "r-1")
