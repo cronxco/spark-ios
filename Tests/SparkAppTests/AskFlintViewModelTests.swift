@@ -213,6 +213,28 @@ struct AskFlintViewModelTests {
         #expect(model.turns.last?.steps.map(\.status) == [.failed])
     }
 
+    @Test("the hand feels an answer finish, a failure, and an undo")
+    func feedback() async throws {
+        let change = Self.change(receipt: "r-1")
+        let service = StubAskService(script: [
+            .events([.change(change), .done(Self.answer("Tagged.", changes: [change]))]),
+            .events([.failed(message: "Flint could not finish that answer.")]),
+        ])
+        let model = AskFlintViewModel(service: service)
+        #expect(model.feedback == nil)
+
+        await model.ask("Tag it")?.value
+        #expect(model.feedback?.kind == .answered)
+
+        let answered = try #require(model.feedback)
+        await model.undo(change)
+        #expect(model.feedback?.kind == .undone)
+        #expect(model.feedback != answered)
+
+        await model.ask("And again")?.value
+        #expect(model.feedback?.kind == .failed)
+    }
+
     @Test("steps still running when an answer stops are marked failed")
     func settledSteps() {
         let steps = [

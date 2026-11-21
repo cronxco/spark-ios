@@ -32,7 +32,28 @@ final class AskFlintViewModel {
         var source: Source = .spark
     }
 
+    /// A moment the hand should feel (design language §10.4, §7.6). Each
+    /// one is new, so two of the same kind in a row are both felt.
+    struct Feedback: Equatable {
+        enum Kind: Equatable {
+            /// A question was sent.
+            case sent
+            /// Flint confirmed a change it made.
+            case changed
+            /// An Undo was confirmed.
+            case undone
+            /// The answer or an Undo failed.
+            case failed
+            /// The answer finished.
+            case answered
+        }
+
+        let kind: Kind
+        let id = UUID()
+    }
+
     private(set) var turns: [Turn] = []
+    private(set) var feedback: Feedback?
     private(set) var conversationId: String?
     private(set) var isResponding = false
     /// What Flint is doing right now, e.g. "Searching Spark".
@@ -85,6 +106,7 @@ final class AskFlintViewModel {
         isResponding = true
         activity = nil
         turns.append(Turn(id: UUID().uuidString, role: .user, text: question))
+        feedback = Feedback(kind: .sent)
         let answerID = UUID().uuidString
         turns.append(Turn(id: answerID, role: .assistant, text: "", isStreaming: true))
 
@@ -150,11 +172,13 @@ final class AskFlintViewModel {
                         }
                     }
                 case .change(let change):
+                    let isNew = turns.first { $0.id == answerID }?.changes.contains { $0.id == change.id } == false
                     update(answerID) { turn in
                         if !turn.changes.contains(where: { $0.id == change.id }) {
                             turn.changes.append(change)
                         }
                     }
+                    if isNew { feedback = Feedback(kind: .changed) }
                 case .done(let answer):
                     finished = true
                     conversationId = answer.conversationId ?? conversationId
@@ -175,6 +199,7 @@ final class AskFlintViewModel {
                         }
                         turn.isStreaming = false
                     }
+                    if answer.message.status == "completed" { feedback = Feedback(kind: .answered) }
                 case .failed(let message):
                     finished = true
                     fail(answerID, message: message)
@@ -279,14 +304,17 @@ final class AskFlintViewModel {
         do {
             guard try await service.undo(receiptId: receiptId) else {
                 errorMessage = "Couldn't undo that. Try again."
+                feedback = Feedback(kind: .failed)
                 return
             }
             errorMessage = nil
+            feedback = Feedback(kind: .undone)
             for index in turns.indices {
                 turns[index].changes = turns[index].changes.map { $0.id == change.id ? $0.markedUndone() : $0 }
             }
         } catch {
             errorMessage = "Couldn't undo that. \(Self.message(for: error))"
+            feedback = Feedback(kind: .failed)
         }
     }
 
@@ -351,6 +379,7 @@ final class AskFlintViewModel {
     }
 
     private func fail(_ id: String, message: String) {
+        feedback = Feedback(kind: .failed)
         update(id) { turn in
             turn.isStreaming = false
             turn.failed = true
