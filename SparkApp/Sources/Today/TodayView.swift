@@ -195,6 +195,12 @@ struct TodayView: View {
         .onChange(of: appModel.lastSyncAt) {
             Task { await viewModel?.backgroundRevalidate() }
         }
+        .onChange(of: appModel.timezoneRefreshRevision) {
+            Task {
+                await viewModel?.load()
+                await upToSpeedViewModel?.reloadQueue()
+            }
+        }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
                 Task { await viewModel?.backgroundRevalidate() }

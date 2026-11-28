@@ -32,6 +32,25 @@ enum AppRoute: Hashable {
     case tag(name: String, type: String?)
 }
 
+/// A device timezone that differs from the one Spark uses, waiting for the
+/// user to say whether Spark should follow it (CRX-724).
+struct TimezoneChangePrompt: Identifiable, Equatable {
+    let acknowledgedTimezone: String
+    let deviceTimezone: String
+    var id: String {
+        TimezoneChangePolicy.rejectionKey(
+            acknowledgedTimezone: acknowledgedTimezone,
+            deviceTimezone: deviceTimezone
+        )
+    }
+}
+
+struct TimezoneUpdateError: Identifiable, Equatable {
+    let prompt: TimezoneChangePrompt
+    let message: String
+    let id = UUID()
+}
+
 @MainActor
 @Observable
 final class AppModel {
@@ -69,6 +88,13 @@ final class AppModel {
     var pendingDestination: CmdDestination?
     /// Query handed over by the Search Spark intent, applied by SearchView.
     var pendingSearchQuery: String?
+    var timezonePrompt: TimezoneChangePrompt?
+    var timezoneUpdateError: TimezoneUpdateError?
+    /// The timezone Spark uses: the latest acknowledgement, or the profile
+    /// fallback when there is none.
+    private(set) var timezoneState: CheckInTimezone?
+    /// Bumped after an acknowledgement so timezone-sensitive screens reload.
+    private(set) var timezoneRefreshRevision = 0
     private(set) var lastSyncAt: Date = .distantPast
     private(set) var profile: UserProfile? {
         didSet {
@@ -82,6 +108,9 @@ final class AppModel {
     private var foregroundIndexTask: Task<Void, Never>?
     private var isSigningOut = false
     private var deviceRegistrationTokenInFlight: String?
+    private var isCheckingTimezone = false
+    private var timezoneObserver: NSObjectProtocol?
+    private static let rejectedTimezonePairKey = "spark.timezone.rejectedPair"
     private let purgeDataStore: @MainActor (ModelContainer) throws -> Void
     private let purgeSpotlight: @MainActor () async throws -> Void
 
@@ -154,6 +183,15 @@ final class AppModel {
         if let cachedName = UserDefaults.sparkAppGroup.string(forKey: "spark.profile.name"), !cachedName.isEmpty {
             self.profile = UserProfile(id: "", name: cachedName, email: "")
         }
+        timezoneObserver = NotificationCenter.default.addObserver(
+            forName: .NSSystemTimeZoneDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                await self?.checkForTimezoneChange()
+            }
+        }
     }
 
     func bootstrap() async {
@@ -171,6 +209,7 @@ final class AppModel {
             consumePendingIntentRoute()
             await wireReverbHandler()
             await reverbConnect()
+            await checkForTimezoneChange()
         } else {
             session = .loggedOut
         }
@@ -361,12 +400,90 @@ final class AppModel {
         _ = try await apiClient.request(DevicesEndpoint.sendTestPush())
     }
 
+    // MARK: - Timezone acknowledgement (CRX-724)
+
+    /// Compares the device's IANA timezone with the one Spark uses and asks
+    /// the user when they differ, unless they already declined this exact pair.
+    /// `forcePrompt` ignores an earlier decline (Profile → Reconsider).
+    func checkForTimezoneChange(forcePrompt: Bool = false) async {
+        guard session == .loggedIn, !isSigningOut, !isCheckingTimezone else { return }
+        isCheckingTimezone = true
+        defer { isCheckingTimezone = false }
+
+        do {
+            let state = try await apiClient.request(CheckInsEndpoint.timezone())
+            timezoneState = state
+            let deviceTimezone = TimeZone.autoupdatingCurrent.identifier
+            let rejectedKey = forcePrompt
+                ? nil
+                : UserDefaults.sparkAppGroup.string(forKey: Self.rejectedTimezonePairKey)
+
+            if TimezoneChangePolicy.shouldPrompt(
+                acknowledgedTimezone: state.timezone,
+                deviceTimezone: deviceTimezone,
+                rejectedKey: rejectedKey
+            ) {
+                timezonePrompt = TimezoneChangePrompt(
+                    acknowledgedTimezone: state.timezone,
+                    deviceTimezone: deviceTimezone
+                )
+            } else {
+                timezonePrompt = nil
+            }
+        } catch is CancellationError {
+        } catch APIError.transport(let underlying)
+            where (underlying as? URLError)?.code == .cancelled {
+        } catch {
+            SparkObservability.captureHandled(error)
+        }
+    }
+
+    func rejectTimezoneChange(_ prompt: TimezoneChangePrompt) {
+        UserDefaults.sparkAppGroup.set(prompt.id, forKey: Self.rejectedTimezonePairKey)
+        timezonePrompt = nil
+    }
+
+    /// Records the device timezone as Spark's timezone, then refreshes the
+    /// screens and widgets that depend on it. Keeps the server's answer rather
+    /// than assuming the POST did what was asked.
+    func acceptTimezoneChange(_ prompt: TimezoneChangePrompt) async {
+        timezonePrompt = nil
+        timezoneUpdateError = nil
+
+        do {
+            let state = try await apiClient.request(
+                CheckInsEndpoint.setTimezone(
+                    prompt.deviceTimezone,
+                    previous: prompt.acknowledgedTimezone,
+                    deviceID: UserDefaults.sparkAppGroup.string(forKey: "spark.apnsDeviceId")
+                )
+            )
+            timezoneState = state
+            UserDefaults.sparkAppGroup.removeObject(forKey: Self.rejectedTimezonePairKey)
+            await etagCache.clearAll()
+            timezoneRefreshRevision += 1
+            WidgetCenter.shared.reloadAllTimelines()
+        } catch {
+            SparkObservability.captureHandled(error)
+            timezoneUpdateError = TimezoneUpdateError(
+                prompt: prompt,
+                message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            )
+        }
+    }
+
+    func reconsiderTimezoneChange() async {
+        UserDefaults.sparkAppGroup.removeObject(forKey: Self.rejectedTimezonePairKey)
+        await checkForTimezoneChange(forcePrompt: true)
+    }
+
     func signIn(anchor: ASPresentationAnchorHandle) async {
         do {
             try await authService.signIn(presentationAnchor: anchor.value)
             session = .loggedIn
             await fetchAndCacheUserId()
             await registerDevice()
+            await checkForTimezoneChange()
             lastError = nil
         } catch AuthenticationError.cancelled {
             lastError = nil
@@ -501,6 +618,10 @@ final class AppModel {
         #endif
         profile = nil
         pendingRoute = nil
+        timezoneState = nil
+        timezonePrompt = nil
+        timezoneUpdateError = nil
+        UserDefaults.sparkAppGroup.removeObject(forKey: Self.rejectedTimezonePairKey)
 
         await endAllLiveActivities()
         await reverbDisconnect()
