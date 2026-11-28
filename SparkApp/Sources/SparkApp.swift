@@ -51,6 +51,7 @@ struct SparkApp: App {
                     SparkAppDelegate.flushReceipts()
                     SparkShortcuts.updateAppShortcutParameters()
                     await model.reverbConnect()
+                    await model.checkForTimezoneChange()
                     await model.indexSpotlightIfDue()
                 case .background, .inactive:
                     await model.reverbDisconnect()
